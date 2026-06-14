@@ -87,3 +87,135 @@ pub struct InterpretResult {
     /// Every image painted (XObject or inline), in content order.
     pub images: Vec<ImageRef>,
 }
+
+// === M2c — the PyMuPDF-shaped TextPage model =============================
+//
+// Everything below lives in **PyMuPDF page/device space** (origin top-left, y
+// down, `/Rotate` already applied; PRD §8.6.1). The grouping that produces it
+// is in `layout.rs`; serialization to text/words/blocks/dict/rawdict is M2d.
+
+/// PyMuPDF span-flag bits (Tier-A documented values; PRD §8.6.2, §8.5).
+///
+/// `flags = SUPERSCRIPT|ITALIC|SERIF|MONO|BOLD`. Bit 0 (superscript) is a
+/// layout-derived property; bits 1–4 are font properties.
+pub mod flags {
+    /// Bit 0 (value 1): the span sits on a raised baseline (super/subscript).
+    pub const SUPERSCRIPT: u32 = 1;
+    /// Bit 1 (value 2): italic / oblique.
+    pub const ITALIC: u32 = 1 << 1;
+    /// Bit 2 (value 4): serifed.
+    pub const SERIF: u32 = 1 << 2;
+    /// Bit 3 (value 8): monospaced.
+    pub const MONO: u32 = 1 << 3;
+    /// Bit 4 (value 16): bold.
+    pub const BOLD: u32 = 1 << 4;
+}
+
+/// The kind of a [`Block`]: a run of text lines, or a placed image.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BlockKind {
+    /// A text block (PyMuPDF block `type` 0): carries [`Block::lines`].
+    Text,
+    /// An image block (PyMuPDF block `type` 1): carries [`Block::image`].
+    Image,
+}
+
+/// One character with its device-space geometry (PyMuPDF rawdict `char`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Char {
+    /// The glyph origin (baseline, left edge) in device space.
+    pub origin: Point,
+    /// The axis-aligned glyph bounding box in device space.
+    pub bbox: Rect,
+    /// The Unicode scalar this glyph maps to (`\u{FFFD}` for unmapped codes,
+    /// matching PyMuPDF's replacement behavior).
+    pub c: char,
+}
+
+/// A contiguous same-style run of characters (PyMuPDF dict/rawdict `span`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Span {
+    /// The span bounding box (union of its char bboxes), device space.
+    pub bbox: Rect,
+    /// The font name (resource name, or resolved BaseFont when available).
+    pub font: SmolStr,
+    /// The font size `Tfs` in effect for the span.
+    pub size: f64,
+    /// The PyMuPDF span-flag bitfield (see [`flags`]).
+    pub flags: u32,
+    /// The fill color packed as `0x00RRGGBB` sRGB.
+    pub color: u32,
+    /// The per-character detail (rawdict-level).
+    pub chars: Vec<Char>,
+    /// The span text (concatenation of `chars[i].c`), the dict-level field.
+    pub text: String,
+}
+
+/// One line of text: a baseline-aligned, advance-ordered run of spans
+/// (PyMuPDF dict/rawdict `line`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Line {
+    /// The line bounding box (union of its span bboxes), device space.
+    pub bbox: Rect,
+    /// The writing mode: 0 horizontal, 1 vertical.
+    pub wmode: u8,
+    /// The writing-direction unit vector `(cos, sin)` (PyMuPDF line `dir`).
+    pub dir: (f64, f64),
+    /// The spans of this line, in advance order.
+    pub spans: Vec<Span>,
+}
+
+/// An image placed on the page (PyMuPDF image block), device-space bbox only;
+/// pixel data is deferred to M5.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ImageBlock {
+    /// The XObject resource name, or `None` for an inline image.
+    pub name: Option<SmolStr>,
+    /// Declared pixel width (`/Width` / `/W`), if present.
+    pub width: Option<u32>,
+    /// Declared pixel height (`/Height` / `/H`), if present.
+    pub height: Option<u32>,
+}
+
+/// A paragraph-ish grouping of lines, or an image (PyMuPDF dict/rawdict
+/// `block`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Block {
+    /// The block bounding box (union of its content), device space.
+    pub bbox: Rect,
+    /// Whether this is a text or image block.
+    pub kind: BlockKind,
+    /// The lines (empty for an image block), in reading order.
+    pub lines: Vec<Line>,
+    /// The image payload (`Some` iff [`BlockKind::Image`]).
+    pub image: Option<ImageBlock>,
+    /// The reading-order block number (PyMuPDF block `number`).
+    pub number: usize,
+}
+
+/// The full layout-reconstructed page (PyMuPDF `TextPage`), device space.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct TextPage {
+    /// The page width in device space (rotated-page width).
+    pub width: f64,
+    /// The page height in device space (rotated-page height).
+    pub height: f64,
+    /// The blocks in reading order.
+    pub blocks: Vec<Block>,
+}
+
+/// One word produced by the word segmenter: a device-space bbox, its text, and
+/// the `(block, line, word)` index triple (PyMuPDF `get_text("words")` shape).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Word {
+    /// The word bounding box (union of its char bboxes), device space.
+    pub bbox: Rect,
+    /// The word text.
+    pub text: String,
+    /// The owning block's reading-order number.
+    pub block_no: usize,
+    /// The line index within the block.
+    pub line_no: usize,
+    /// The word index within the line (resets per line).
+    pub word_no: usize,
+}

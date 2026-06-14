@@ -16,15 +16,22 @@
 //!   (the form-recursion / testing entry point).
 
 pub mod interp;
+pub mod layout;
 pub mod model;
 pub mod state;
 pub mod tokenizer;
+pub mod words;
 
 use pdf_core::geom::Matrix;
 use pdf_core::{Dict, DocumentStore};
 
 pub use interp::ContentInterpreter;
-pub use model::{ImageRef, InterpretResult, PositionedGlyph, WritingDir};
+pub use layout::{build_textpage, page_size, page_transform, textpage_from_glyphs};
+pub use model::{
+    flags, Block, BlockKind, Char, ImageBlock, ImageRef, InterpretResult, Line, PositionedGlyph,
+    Span, TextPage, Word, WritingDir,
+};
+pub use words::words;
 
 /// Interprets a page dictionary into positioned glyphs + an image inventory
 /// (PDF user space). Convenience wrapper over [`ContentInterpreter::run_page`].

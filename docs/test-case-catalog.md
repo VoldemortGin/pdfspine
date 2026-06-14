@@ -911,3 +911,104 @@ font fixtures only (we control every byte; no PyMuPDF files). Tests live in
 |---|---|---|---|
 | `INTERP-E2E-001` | 1-page PDF, two words on two lines → unicode seq + positions | PRD §8.6 | green |
 | `INTERP-E2E-002` | `interpret_page` resolves `/Contents` array + `/Resources` | PRD §8.6 | green |
+
+---
+
+## M2c — Layout reconstruction → `TextPage` model (`pdf-text`)
+
+Spec source of truth: PRD §8.6 (text extraction & layout), §8.6.1 (device/page
+transform incl. `/Rotate`), §8.6.2 (glyphs→spans→lines→blocks, reading order,
+word segmentation, flags), §10.7 (`WORDS-*` shape + dict/rawdict nesting). M2c
+groups the interpreter's `Vec<PositionedGlyph>` (PDF user space) into a
+PyMuPDF-shaped `TextPage` in **device space** (origin top-left, y down, `/Rotate`
+applied), plus a word segmenter — **no serialization (M2d), no search (M2e)**.
+Tests live in `crates/pdf-text/tests/layout_*.rs`; glyph lists + small
+self-built PDFs (reuse `tests/common`). No PyMuPDF files.
+
+### Device/page transform (`layout.rs`) — `LAYOUT-DEVICE-*` / `COORD-ROT-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `LAYOUT-DEVICE-001` | y-flip: glyph near page top has small device y | PRD §8.6.1 | green |
+| `LAYOUT-DEVICE-002` | `page_transform(r=0)` == `[1,0,0,-1,-x0,y1]`; size `w×h` | PRD §8.6.1 | green |
+| `COORD-ROT-0-PAGE` | r=0 device coords inside `[0,w]×[0,h]` | PRD §8.6.1 | green |
+| `COORD-ROT-90-PAGE` | `page_transform(r=90)` == `[0,1,1,0,-y0,-x0]`; size `h×w` | PRD §8.6.1 | green |
+| `COORD-ROT-180-PAGE` | `page_transform(r=180)` == `[-1,0,0,1,x1,-y0]`; size `w×h` | PRD §8.6.1 | green |
+| `COORD-ROT-270-PAGE` | `page_transform(r=270)` == `[0,-1,-1,0,y1,x1]`; size `h×w` | PRD §8.6.1 | green |
+| `COORD-ROT-MEDIABOX` | non-zero MediaBox origin baked into transform | PRD §8.6.1 | green |
+| `LAYOUT-DEVICE-003` | TextPage width/height match rotated page size | PRD §8.6.1 | green |
+
+### Line grouping (`layout.rs`) — `LAYOUT-LINE-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `LAYOUT-LINE-001` | glyphs on one baseline → one line | PRD §8.6.2 | green |
+| `LAYOUT-LINE-002` | two distinct baselines → two lines | PRD §8.6.2 | green |
+| `LAYOUT-LINE-003` | small super/sub rise stays on same line | PRD §8.6.2 | green |
+| `LAYOUT-LINE-004` | large vertical gap → separate lines | PRD §8.6.2 | green |
+| `LAYOUT-LINE-005` | within a line glyphs sorted by advance order | PRD §8.6.2 | green |
+
+### Span splitting (`layout.rs`) — `LAYOUT-SPAN-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `LAYOUT-SPAN-001` | contiguous same-style glyphs merge to one span | PRD §8.6.2 | green |
+| `LAYOUT-SPAN-002` | font-name change splits spans | PRD §8.6.2 | green |
+| `LAYOUT-SPAN-003` | font-size change splits spans | PRD §8.6.2 | green |
+| `LAYOUT-SPAN-004` | color change splits spans | PRD §8.6.2 | green |
+| `LAYOUT-SPAN-005` | span text == concatenation of its chars | PRD §10.7 | green |
+
+### Block grouping + reading order (`layout.rs`) — `LAYOUT-BLOCK-*` / `LAYOUT-ORDER-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `LAYOUT-BLOCK-001` | lines with small vertical gap group into one block | PRD §8.6.2 | green |
+| `LAYOUT-BLOCK-002` | large vertical gap → separate blocks | PRD §8.6.2 | green |
+| `LAYOUT-BLOCK-003` | image inventory → image blocks (device bbox) | PRD §8.6.2 | green |
+| `LAYOUT-ORDER-001` | single column blocks ordered top-to-bottom | PRD §8.6.2 | green |
+| `LAYOUT-ORDER-002` | two-column page → XY-cut yields column-by-column order | PRD §8.6.2 | green |
+| `LAYOUT-ORDER-003` | block numbers monotonic in reading order | PRD §8.6.2 | green |
+
+### Word segmentation (`words.rs`) — `WORDS-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `WORDS-001` | split a line on literal space chars | PRD §10.7 | green |
+| `WORDS-002` | `TJ`-kerned gap with no space char → still split | PRD §8.6.2 | green |
+| `WORDS-003` | small inter-glyph gap does NOT split a word | PRD §8.6.2 | green |
+| `WORDS-004` | per-word bbox is the union of its char bboxes | PRD §10.7 | green |
+| `WORDS-005` | `(block_no, line_no, word_no)` monotonic, word_no resets | PRD §10.7 | green |
+| `WORDS-006` | NBSP (`0xA0`) treated as a separator | PRD §8.6.2 | green |
+
+### Span flags (`layout.rs`) — `LAYOUT-FLAGS-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `LAYOUT-FLAGS-001` | bold font-name heuristic sets bit4 (16) | PRD §8.6.2 | green |
+| `LAYOUT-FLAGS-002` | italic/oblique name sets bit1 (2) | PRD §8.6.2 | green |
+| `LAYOUT-FLAGS-003` | serif name sets bit2 (4); mono sets bit3 (8) | PRD §8.6.2 | green |
+| `LAYOUT-FLAGS-004` | superscript rise sets bit0 (1) | PRD §8.6.2 | green |
+
+### Edge cases (`layout.rs`) — `LAYOUT-EDGE-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `LAYOUT-EDGE-001` | rotated text grouped along its own axis (`dir`) | PRD §8.6.2 | green |
+| `LAYOUT-EDGE-002` | vertical writing → wmode=1, grouped along y | PRD §8.6.2 | green |
+| `LAYOUT-EDGE-003` | predominantly-RTL run → visual (right-to-left) order | PRD §8.6.2 | green |
+| `LAYOUT-EDGE-004` | empty glyph list → empty TextPage, no panic | PRD §8.6.2 | green |
+
+### Property / containment (`layout_property.rs`) — `LAYOUT-PROP-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `LAYOUT-PROP-001` | char bbox ⊆ span ⊆ line ⊆ block (containment) | PRD §8.6.2 | green |
+| `LAYOUT-PROP-002` | words-concat (space-joined) ≈ text-mode whitespace-normalized | PRD §8.6.2 | green |
+| `LAYOUT-PROP-003` | arbitrary glyph list never panics; finite bboxes | PRD §8.1 | green |
+
+### End-to-end (`layout_e2e.rs`) — `LAYOUT-E2E-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `LAYOUT-E2E-001` | 2-line/2-word PDF → exact block/line/span/word + text | PRD §8.6 | green |
+| `LAYOUT-E2E-002` | `build_textpage` from a real page → device-space structure | PRD §8.6 | green |
