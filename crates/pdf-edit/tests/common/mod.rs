@@ -451,6 +451,119 @@ fn collect_child_refs(obj: &Object, out: &mut Vec<ObjRef>) {
     }
 }
 
+// === M4b annotation helpers (PRD §8.8) ====================================
+
+/// Saves `doc` and reopens it (alias for [`save_reopen`], spelled out for the
+/// annotation tests' reparse-oracle assertions).
+pub fn save_reopen_annot(doc: &DocumentStore) -> DocumentStore {
+    save_reopen(doc)
+}
+
+/// Resolves the dictionaries of all `/Annots` entries on the page at `index`
+/// (through the overlay), in array order. Reopen-safe (resolves references).
+pub fn annot_dicts(doc: &DocumentStore, index: usize) -> Vec<Dict> {
+    let leaf = pdf_core::pagetree::page_refs(doc)[index];
+    let page = pdf_core::pagetree::page_dict(doc, leaf).expect("page dict");
+    let annots = match page.get(&Name::new("Annots")) {
+        Some(Object::Array(a)) => a.clone(),
+        Some(Object::Reference(r)) => doc
+            .resolve(*r)
+            .ok()
+            .and_then(|o| o.as_array().map(<[Object]>::to_vec))
+            .unwrap_or_default(),
+        _ => return Vec::new(),
+    };
+    annots
+        .iter()
+        .filter_map(|o| match o {
+            Object::Dictionary(d) => Some(d.clone()),
+            Object::Reference(r) => doc.resolve(*r).ok().and_then(|o| o.as_dict().cloned()),
+            _ => None,
+        })
+        .collect()
+}
+
+/// The decoded bytes of an annotation dict's `/AP /N` Form XObject content
+/// stream (empty if absent). Used to grep the appearance for color/path ops.
+pub fn annot_ap_bytes(doc: &DocumentStore, annot: &Dict) -> Vec<u8> {
+    let ap = match annot.get(&Name::new("AP")) {
+        Some(Object::Dictionary(d)) => d.clone(),
+        Some(Object::Reference(r)) => match doc.resolve(*r).ok().and_then(|o| o.as_dict().cloned())
+        {
+            Some(d) => d,
+            None => return Vec::new(),
+        },
+        _ => return Vec::new(),
+    };
+    let n_ref = match ap.get(&Name::new("N")) {
+        Some(Object::Reference(r)) => *r,
+        _ => return Vec::new(),
+    };
+    let Ok(obj) = doc.resolve(n_ref) else {
+        return Vec::new();
+    };
+    let Some(stream) = obj.as_stream() else {
+        return Vec::new();
+    };
+    doc.decode_stream(stream)
+        .and_then(|o| o.into_decoded())
+        .unwrap_or_default()
+}
+
+/// The `/AP /N` Form XObject *dict* of an annotation (for `/BBox` / `/Subtype`
+/// assertions), if present.
+pub fn annot_ap_dict(doc: &DocumentStore, annot: &Dict) -> Option<Dict> {
+    let ap = match annot.get(&Name::new("AP")) {
+        Some(Object::Dictionary(d)) => d.clone(),
+        Some(Object::Reference(r)) => doc.resolve(*r).ok().and_then(|o| o.as_dict().cloned())?,
+        _ => return None,
+    };
+    let n_ref = ap.get(&Name::new("N")).and_then(Object::as_reference)?;
+    doc.resolve(n_ref).ok().and_then(|o| o.as_dict().cloned())
+}
+
+/// The `/Subtype` name of an annotation dict (as a `String`).
+pub fn annot_subtype(annot: &Dict) -> String {
+    annot
+        .get(&Name::new("Subtype"))
+        .and_then(Object::as_name)
+        .map(|n| String::from_utf8_lossy(n.as_bytes()).into_owned())
+        .unwrap_or_default()
+}
+
+/// Runs `qpdf --check` over `bytes`, returning `Some(true)` for a clean/warn
+/// result (exit 0/3), `Some(false)` for an error, and `None` when qpdf is
+/// absent (so callers can skip). Cross-platform binary discovery.
+pub fn qpdf_check(bytes: &[u8]) -> Option<bool> {
+    use std::io::Write;
+    use std::process::Command;
+    let qpdf = [
+        "qpdf",
+        "qpdf.exe",
+        "/opt/homebrew/bin/qpdf",
+        "/usr/local/bin/qpdf",
+    ]
+    .into_iter()
+    .find(|c| Command::new(c).arg("--version").output().is_ok())?;
+    let mut tmp = std::env::temp_dir();
+    tmp.push(format!(
+        "oxipdf_m4b_qpdf_{}_{}.pdf",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0)
+    ));
+    {
+        let mut f = std::fs::File::create(&tmp).ok()?;
+        f.write_all(bytes).ok()?;
+    }
+    let out = Command::new(qpdf).arg("--check").arg(&tmp).output().ok()?;
+    let _ = std::fs::remove_file(&tmp);
+    let code = out.status.code().unwrap_or(-1);
+    Some(code == 0 || code == 3)
+}
+
 /// Parses a single indirect object from `bytes` (test convenience).
 pub fn parse_one_indirect(bytes: &[u8]) -> (ObjRef, Object) {
     let mut p = Parser::new(bytes);

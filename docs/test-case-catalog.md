@@ -1713,3 +1713,69 @@ M2 pipeline**: insert → full save → reopen → `pdf_text::interpret_page` /
 | `INSERT-PROP-003` | a saved file with inserted content reparses clean (no dangling refs; valid xref) | PRD §8.8 | green |
 | `INSERT-PROP-003-QPDF` | mixed text+image+vector save passes `qpdf --check` (skipped if qpdf absent) | PRD §8.8 | green |
 | `INSERT-PROP-004` | repeated insertions on the same page accumulate (idempotent resource-name allocation) | PRD §8.8 | green |
+
+---
+
+## M4b — Annotations + `/AP /N` appearance streams (`pdf-edit`)
+
+Spec source of truth: PRD §8.8 (annotation family + `/AP` generation) and §12 M4
+exit (each subtype reopens with subtype/geometry/`/AP /N`; `update()` reflects
+color in AP). Annotations are indirect dicts in the page `/Annots` array added
+via the ChangeSet; each `add_*_annot` sets `/Subtype` + geometry + defaults,
+generates a `/AP /N` Form XObject (reusing the `drawing.rs` / `content.rs`
+operator emitters), and appends to `/Annots`. The correctness oracle is
+**round-trip through full save → reopen**: subtype, geometry (rect / quadpoints /
+vertices / line / inklist) and a present-and-non-empty `/AP /N` Form XObject are
+asserted on the reopened document; `update()` is verified by grepping the decoded
+AP for the new color operator; `qpdf --check` gates the saved file (qpdf 12.3.2).
+Tests live in `crates/pdf-edit/tests/annot_e2e.rs`.
+
+### per-subtype create → reopen → `/Subtype` + geometry + `/AP /N` — `ANNOT-<TYPE>-001`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `ANNOT-TEXT-001` | `add_text_annot` → `/Text` + note-icon `/AP /N`; `/Contents` preserved | PRD §8.8 | green |
+| `ANNOT-FREETEXT-001` | `add_freetext_annot` → `/FreeText` + bordered box + text (`BT…Tj`) AP | PRD §8.8 | green |
+| `ANNOT-HIGHLIGHT-001` | `add_highlight_annot` → `/Highlight` + 8-num QuadPoints + filled-quad AP w/ Multiply ExtGState | PRD §8.8 | green |
+| `ANNOT-UNDERLINE-001` | `add_underline_annot` → `/Underline` + baseline line AP (`m l S`) | PRD §8.8 | green |
+| `ANNOT-STRIKEOUT-001` | `add_strikeout_annot` → `/StrikeOut` + mid-line AP | PRD §8.8 | green |
+| `ANNOT-SQUIGGLY-001` | `add_squiggly_annot` → `/Squiggly` + zig-zag polyline AP | PRD §8.8 | green |
+| `ANNOT-SQUARE-001` | `add_rect_annot` → `/Square` + stroked+filled `re` AP (inset by border) | PRD §8.8 | green |
+| `ANNOT-CIRCLE-001` | `add_circle_annot` → `/Circle` + 4-Bézier ellipse AP | PRD §8.8 | green |
+| `ANNOT-LINE-001` | `add_line_annot` → `/Line` + `/L` endpoints + segment AP | PRD §8.8 | green |
+| `ANNOT-POLYGON-001` | `add_polygon_annot` → `/Polygon` + `/Vertices` + closed-path (`h`) AP | PRD §8.8 | green |
+| `ANNOT-POLYLINE-001` | `add_polyline_annot` → `/PolyLine` + `/Vertices` + open-path AP | PRD §8.8 | green |
+| `ANNOT-INK-001` | `add_ink_annot` → `/Ink` + `/InkList` (per stroke) + multi-path AP | PRD §8.8 | green |
+| `ANNOT-STAMP-001` | `add_stamp_annot` → `/Stamp` + bordered label-box AP with text | PRD §8.8 | green |
+| `ANNOT-REDACT-001` | `add_redact_annot` → `/Redact` + QuadPoints + OverlayText (create only; apply is M4d) | PRD §8.8 | green |
+| `ANNOT-FILE-001` | `add_file_annot` → `/FileAttachment` + `/AP /N`; embedded bytes extractable | PRD §8.8 | green |
+
+### `update()` reflects properties in AP — `ANNOT-UPDATE-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `ANNOT-UPDATE-001` | change `/C` + `update()` → reopen → AP stroke op shows the new color; stale color gone | PRD §12 M4 | green |
+| `ANNOT-UPDATE-002` | `set_opacity` + `update()` writes `/CA`; reopen reflects it | PRD §8.8 | green |
+
+### CRUD over `/Annots` — `ANNOT-CRUD-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `ANNOT-CRUD-001` | `annot_count` after adds; `delete_annot` removes one; iterate order preserved on reopen | PRD §8.8 | green |
+| `ANNOT-CRUD-002` | `first_annot` / `annot_names` reflect added annots + `/NM` | PRD §8.8 | green |
+| `ANNOT-CRUD-003` | `delete_annot` frees the `/AP /N` stream object (resolves to Null) | PRD §8.8 | green |
+
+### text-markup quadpoints geometry — `ANNOT-MARKUP-QUAD-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `ANNOT-MARKUP-QUAD-001` | multi-quad highlight: 16-num QuadPoints (Acrobat order) + AP fills each quad | PRD §8.8 | green |
+
+### robustness / preservation — `ANNOT-PROP-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `ANNOT-PROP-001` | adding annots preserves existing page content/text (still extractable after reopen) | PRD §8.8 | green |
+| `ANNOT-PROP-002` | degenerate inputs (empty quads/vertices/strokes/box) never panic; reopen clean | PRD §8.8 | green |
+| `ANNOT-PROP-003-QPDF` | mixed-subtype annotated save passes `qpdf --check` (skipped if qpdf absent) | PRD §12 M4 | green |
+| `ANNOT-PROP-004` | `Annot` accessors/mutators round-trip (color/fill/opacity/border/flags/info) never panic | PRD §8.8 | green |

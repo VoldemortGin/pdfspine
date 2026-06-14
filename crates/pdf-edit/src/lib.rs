@@ -12,6 +12,7 @@
 //! ([`drawing`]) over the shared content plumbing in [`content`], plus user-TTF
 //! font embedding ([`fontfile`]) (PRD §8.8 / §8.5.2).
 
+pub mod annot;
 pub mod color;
 pub mod content;
 pub mod dest;
@@ -26,6 +27,12 @@ pub mod pagelabel;
 pub mod text;
 pub mod toc;
 
+pub use annot::{
+    add_circle_annot, add_file_annot, add_freetext_annot, add_highlight_annot, add_ink_annot,
+    add_line_annot, add_polygon_annot, add_polyline_annot, add_rect_annot, add_redact_annot,
+    add_squiggly_annot, add_stamp_annot, add_strikeout_annot, add_text_annot, add_underline_annot,
+    annot_count, annot_names, annot_refs, annots, delete_annot, first_annot, Annot, AnnotType,
+};
 pub use color::Color;
 pub use content::PageContent;
 pub use dest::{resolve_link, resolve_named};
