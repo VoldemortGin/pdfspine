@@ -646,3 +646,69 @@ integration, `--features encryption`). Fixtures are **self-generated** via
 | `CRYPT-DOC-003` | `authenticate("")` then `decode_stream()` yields decrypted bytes | PRD §8.4 | green |
 | `CRYPT-DOC-004` | unencrypted doc: `needs_pass()` false, resolve unchanged | PRD §9.1 | green |
 | `CRYPT-DOC-005` | default build (no `encryption` feature) compiles & opens plain docs | PRD §9.1 | green |
+
+---
+
+## M1f — Page tree + Document/Page facade + PyO3 + fitz shim
+
+Spec source: PRD §7 (M1 rows), §8.6.1 (rotation), §9.2 (`Page` shape), §9.4
+(PyO3 handle/index), §9.5 (fitz shim). Rust tests live in
+`crates/pdf-core/tests/pagetree_unit.rs` and
+`crates/pdf-api/tests/document_unit.rs`; Python tests in `python/tests/`.
+
+### Page tree + inheritance — `PAGE-*` (`pdf-core::pagetree`)
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `PAGE-COUNT-001` | `page_count` via nested `/Kids` + `/Count` (multi-level tree) | PRD §7 | green |
+| `PAGE-COUNT-002` | `page_refs` order is document order across subtrees | PRD §7 | green |
+| `PAGE-INHERIT-001` | leaf inherits `/MediaBox` from ancestor `/Pages` | PRD §8.2 | green |
+| `PAGE-INHERIT-002` | leaf inherits `/Rotate` from ancestor; own value overrides | PRD §8.2 | green |
+| `PAGE-INHERIT-003` | leaf `/MediaBox` overrides inherited ancestor box | PRD §8.2 | green |
+| `PAGE-BOX-001` | `rect`/`bound` == `CropBox ∩ MediaBox` | PRD §9.2 | green |
+| `PAGE-BOX-002` | absent `/MediaBox` → US Letter default (612×792) | PRD §9.2 | green |
+| `PAGE-BOX-003` | absent `/CropBox` → equals `MediaBox` | PRD §9.2 | green |
+| `PAGE-ROT-001` | rotation normalizes `-90/450 → 270/90`; non-multiple-of-90 → 0 | PRD §8.6.1 | green |
+| `PAGE-LIMITS-001` | `/Kids` cycle is broken (no hang); depth/count bounded | PRD §9.6 | green |
+
+### Broken page-tree fallback — `PAGETREE-FALLBACK-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `PAGETREE-FALLBACK-001` | unreachable `/Pages` → scan `/Type /Page` recovers pages | PRD §8.2 | green |
+| `PAGETREE-FALLBACK-002` | recovered pages are in object-number order | PRD §8.2 | green |
+
+### Document/Page facade — `DOC-*` (`pdf-api`)
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `DOC-OPEN-001` | `Document::open_bytes` opens; `page_count`/`load_page` work | PRD §7 | green |
+| `DOC-OPEN-002` | `Document::open` (path) opens a self-written file | PRD §7 | green |
+| `DOC-PAGE-001` | `load_page` out of range → typed error, no panic | PRD §7 | green |
+| `DOC-PAGE-002` | `pages()` iterator yields every page with correct `number` | PRD §7 | green |
+| `DOC-META-001` | `metadata` parses `/Info` (title/author/producer/dates) | PRD §7 | green |
+| `DOC-META-002` | `metadata.format` == `"PDF 1.7"`; absent fields empty | PRD §7 | green |
+| `DOC-META-003` | UTF-16BE BOM `/Info` value decodes to text | PRD §8.7 | green |
+| `DOC-REPAIR-001` | broken file → `is_repaired()` true after repair open | PRD §8.2 | green |
+| `DOC-XREF-001` | `xref_length` == `/Size`; `xref_object` round-trips a dict | PRD §7 | green |
+| `DOC-XREF-002` | `xref_get_key`/`xref_is_stream`/`xref_stream` on a stream | PRD §7 | green |
+
+### Encrypted Document flow (`--features encryption`) — `DOC-CRYPT-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `DOC-CRYPT-001` | encrypted doc: `is_encrypted`/`needs_pass` true; `permissions` | PRD §8.4 | green |
+| `DOC-CRYPT-002` | `authenticate("")` → `needs_pass` false; pages load | PRD §8.4 | green |
+| `DOC-CRYPT-003` | wrong password → `authenticate` false, no panic | PRD §8.4 | green |
+
+### Python wheel (`oxipdf` / `fitz`) — `PYDOC-*` / `PYFITZ-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `PYDOC-001` | `oxipdf.open(path)`: `page_count`/`len`/index/`load_page` | PRD §9.4 | green |
+| `PYDOC-002` | `page.rect`/`rotation`/`number`/`bound()`/`mediabox`/`cropbox` | PRD §9.2 | green |
+| `PYDOC-003` | `doc.metadata` dict has all PyMuPDF keys | PRD §9.5 | green |
+| `PYDOC-004` | unimplemented known method raises `PdfUnsupportedError` | PRD §9.5 | green |
+| `PYFITZ-001` | `fitz.open(...)`: `page_count`/`doc[n]`/`metadata`/geometry | PRD §9.5 | green |
+| `PYFITZ-002` | encrypted: `needs_pass`→`authenticate`→pages (fitz names) | PRD §8.4 | green |
+| `PYFITZ-003` | `fitz.Rect`/`Matrix` value types match PyMuPDF arithmetic | PRD §9.5 | green |

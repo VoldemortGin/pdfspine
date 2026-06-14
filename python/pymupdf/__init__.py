@@ -1,8 +1,22 @@
-"""``pymupdf`` alias package for oxipdf.
+"""``pymupdf`` alias package for oxipdf (PRD §9.5).
 
 PyMuPDF can also be imported as ``import pymupdf``; this mirrors the :mod:`fitz`
-shim. Full surface lands in M5 (PRD §9.5).
+shim by re-exporting it wholesale, so ``pymupdf.open`` / ``pymupdf.Rect`` / the
+exception aliases all resolve to the same objects.
 """
 
-from oxipdf import *  # noqa: F401,F403
-from oxipdf import __version__  # noqa: F401
+from __future__ import annotations
+
+from fitz import *  # noqa: F401,F403
+from fitz import (  # noqa: F401
+    Document,
+    Matrix,
+    Page,
+    PdfError,
+    PdfPasswordError,
+    PdfUnsupportedError,
+    Rect,
+    __getattr__,
+    __version__,
+    open,
+)

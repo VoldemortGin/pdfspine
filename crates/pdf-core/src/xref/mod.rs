@@ -97,6 +97,18 @@ impl XrefTable {
         self.entries.is_empty()
     }
 
+    /// The recorded object numbers, **sorted ascending**. The page-tree fallback
+    /// scan ([`crate::pagetree`]) uses this to enumerate candidate `/Type /Page`
+    /// objects in object-number order when the `/Pages` tree is unreachable
+    /// (PRD §8.2 step 3). The order is deterministic so the recovered page list
+    /// is stable.
+    #[must_use]
+    pub fn object_numbers(&self) -> Vec<u32> {
+        let mut nums: Vec<u32> = self.entries.keys().copied().collect();
+        nums.sort_unstable();
+        nums
+    }
+
     /// Inserts an entry **only if absent** — the newest-wins merge primitive.
     /// When walking newest → oldest, the first writer of an object number is the
     /// newest revision and must not be overwritten by an older section.

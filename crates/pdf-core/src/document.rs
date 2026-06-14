@@ -513,6 +513,113 @@ impl DocumentStore {
         self.arena.read().map(|a| a.len()).unwrap_or(0)
     }
 
+    // --- low-level xref read API (PRD §7 P1; pikepdf-style users) ----------
+
+    /// The cross-reference length: one past the largest recorded object number
+    /// (PyMuPDF `xref_length()` == `/Size`). Object numbers `1..xref_length()`
+    /// are the addressable range; index 0 is the free-list head.
+    #[must_use]
+    pub fn xref_length(&self) -> u32 {
+        // Prefer the trailer `/Size` (authoritative), but never trust it blindly:
+        // take the max of `/Size` and (highest recorded object number + 1) so a
+        // too-small `/Size` still exposes every object (repaired files lie).
+        let by_size = self
+            .trailer
+            .get(&Name::new("Size"))
+            .and_then(Object::as_i64)
+            .and_then(|v| u32::try_from(v).ok())
+            .unwrap_or(0);
+        let by_max = self
+            .xref
+            .object_numbers()
+            .last()
+            .map(|n| n.saturating_add(1))
+            .unwrap_or(0);
+        by_size.max(by_max)
+    }
+
+    /// The **serialized** source of object `num` — its resolved value rendered
+    /// back to canonical PDF syntax (PyMuPDF `xref_object(num)`). For a stream the
+    /// dictionary is serialized (the body is fetched with [`Self::xref_stream`]).
+    /// A free / absent object yields `"null"`.
+    ///
+    /// # Errors
+    ///
+    /// Parse / decode errors from resolving the object propagate.
+    pub fn xref_object(&self, num: u32) -> Result<String> {
+        match self.get_object(num, 0) {
+            Ok(obj) => {
+                let bytes = crate::serialize::write_object(obj.as_ref());
+                Ok(String::from_utf8_lossy(&bytes).into_owned())
+            }
+            Err(Error::MissingObject { .. }) => Ok("null".to_string()),
+            Err(e) => Err(e),
+        }
+    }
+
+    /// The value of dictionary key `key` on object `num`, serialized to PDF
+    /// syntax (PyMuPDF `xref_get_key`). Returns `None` if the object is not a
+    /// dictionary/stream or the key is absent.
+    ///
+    /// # Errors
+    ///
+    /// Resolution errors propagate.
+    pub fn xref_get_key(&self, num: u32, key: &str) -> Result<Option<String>> {
+        let obj = match self.get_object(num, 0) {
+            Ok(o) => o,
+            Err(Error::MissingObject { .. }) => return Ok(None),
+            Err(e) => return Err(e),
+        };
+        let Some(dict) = obj.as_dict() else {
+            return Ok(None);
+        };
+        Ok(dict
+            .get(&Name::new(key))
+            .map(|v| String::from_utf8_lossy(&crate::serialize::write_object(v)).into_owned()))
+    }
+
+    /// Whether object `num` is a stream (PyMuPDF `xref_is_stream`).
+    ///
+    /// # Errors
+    ///
+    /// Resolution errors propagate; a missing object is `Ok(false)`.
+    pub fn xref_is_stream(&self, num: u32) -> Result<bool> {
+        match self.get_object(num, 0) {
+            Ok(obj) => Ok(obj.as_stream().is_some()),
+            Err(Error::MissingObject { .. }) => Ok(false),
+            Err(e) => Err(e),
+        }
+    }
+
+    /// The **decoded** stream body of object `num` (PyMuPDF `xref_stream`): the
+    /// full `/Filter` chain applied (and decrypted, if authenticated).
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Unsupported`] if `num` is not a stream; decode errors propagate.
+    pub fn xref_stream(&self, num: u32) -> Result<Vec<u8>> {
+        let obj = self.get_object(num, 0)?;
+        let stream = obj
+            .as_stream()
+            .ok_or(Error::Unsupported("object is not a stream"))?;
+        self.decode_stream(stream)?.into_decoded()
+    }
+
+    /// The **raw** (still filter-encoded) stream body of object `num` (PyMuPDF
+    /// `xref_stream_raw`).
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Unsupported`] if `num` is not a stream; source-range errors
+    /// propagate.
+    pub fn xref_stream_raw(&self, num: u32) -> Result<Vec<u8>> {
+        let obj = self.get_object(num, 0)?;
+        let stream = obj
+            .as_stream()
+            .ok_or(Error::Unsupported("object is not a stream"))?;
+        Ok(self.stream_raw_bytes(stream)?.to_vec())
+    }
+
     // --- encryption (PRD §8.4) -------------------------------------------
 
     /// Whether the document is encrypted (has a usable `/Encrypt` handler).
