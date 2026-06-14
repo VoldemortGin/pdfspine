@@ -1203,3 +1203,74 @@ Normalized-Levenshtein similarity of `get_text("text")` vs known ground truth.
 | `ACCURACY-GT-001` | ASCII multi-line PDF → similarity ≥ 0.98 | PRD §12 (~971) | green |
 | `ACCURACY-GT-002` | WinAnsi specials PDF → similarity ≥ 0.98 | PRD §12 (~971) | green |
 | `ACCURACY-GT-003` | Type0/Identity-H CID + ToUnicode PDF → similarity ≥ 0.95 | PRD §12 (~971) | green |
+
+---
+
+## M3a — PDF writer / full save + object-edit API (`pdf-core::changeset`, `pdf-core::writer`)
+
+Spec source of truth: PRD §8.7 (object-edit API + full save), §9.2 (`ChangeSet`
+on `DocumentStore`), §9.3 (typed errors). The primary correctness oracle is our
+own reparse (open → edit → save → reopen → assert); an optional `qpdf --check`
+runs only when `qpdf` is on `PATH`. Tests live in
+`crates/pdf-core/tests/changeset_unit.rs`, `crates/pdf-core/tests/writer_unit.rs`
+and `crates/pdf-core/tests/save_e2e.rs`.
+
+### ChangeSet object-edit API (`changeset.rs`) — `EDIT-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `EDIT-001` | `add_object` allocates a fresh number past current max; `is_dirty` flips | PRD §8.7/§9.2 | green |
+| `EDIT-002` | `add_object` then `resolve` returns the new value (no save) | PRD §8.7 | green |
+| `EDIT-003` | `add_object` then save → reopen → object present + equal | PRD §8.7 | green |
+| `EDIT-004` | `update_object` reflected by an immediate `resolve` | PRD §8.7 | green |
+| `EDIT-005` | `update_object` reflected after save → reopen | PRD §8.7 | green |
+| `EDIT-006` | `update_stream` (deflate off) body round-trips after save → reopen | PRD §8.7 | green |
+| `EDIT-007` | `update_stream` (deflate on) body decodes to original after reopen | PRD §8.7 | green |
+| `EDIT-008` | `delete_object` → `resolve` yields Null; gone after save → reopen | PRD §8.7 | green |
+| `EDIT-009` | edit on an unmodified doc: `is_dirty` false, `changes` empty | PRD §9.2 | green |
+| `EDIT-010` | `update_object` on a never-resolved original num overlays correctly | PRD §8.7 | green |
+| `EDIT-011` | add/update/delete reflected in `changes()` list (M3b basis) | PRD §9.2 | green |
+
+### Full save / Writer (`writer.rs`) — `SAVE-FULL-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `SAVE-FULL-001` | `save_to_vec` of a simple doc → reopen → equal `page_count` | PRD §8.7 | green |
+| `SAVE-FULL-002` | every original in-use object survives save → reopen (value-equal) | PRD §8.7 | green |
+| `SAVE-FULL-003` | extracted text equal across save → reopen | PRD §8.7 | green |
+| `SAVE-FULL-004` | output begins with `%PDF-` + binary-comment line | PRD §8.7 | green |
+| `SAVE-FULL-005` | trailer `/Root` preserved; `/Size` == max obj num + 1 | PRD §8.7 | green |
+| `SAVE-FULL-006` | `/ID` present, 2 elements (both 16-byte hex strings) | PRD §8.7 | green |
+| `SAVE-FULL-007` | `/Info` ref carried over when present | PRD §8.7 | green |
+| `SAVE-FULL-008` | minimal/empty-page doc saves and reopens | PRD §8.7 | green |
+| `SAVE-FULL-009` | save → reopen → save again: identical live-object set (idempotent) | PRD §8.7 | green |
+| `SAVE-FULL-010` | `xref_style=Table` output ends with `startxref`/`%%EOF` | PRD §8.7 | green |
+
+### Stream deflate policy (`writer.rs`) — `SAVE-STREAM-DEFLATE-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `SAVE-STREAM-DEFLATE-001` | a plain stream saved with `deflate=true` carries `/FlateDecode` | PRD §8.7 | green |
+| `SAVE-STREAM-DEFLATE-002` | deflated stream reopens + decodes to the original bytes | PRD §8.7 | green |
+| `SAVE-STREAM-DEFLATE-003` | already-`/FlateDecode` stream not double-deflated | PRD §8.7 | green |
+| `SAVE-STREAM-DEFLATE-004` | image-filtered stream (`/DCTDecode`) left untouched | PRD §8.7 | green |
+| `SAVE-STREAM-DEFLATE-005` | `deflate=false` keeps bodies as-is; `/Length` recomputed | PRD §8.7 | green |
+
+### Xref-style output (`writer.rs`) — `SAVE-XREF-*` / `SAVE-XREFSTREAM-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `SAVE-XREF-001` | classic table has object-0 free head (gen 65535 f) | PRD §8.7 | green |
+| `SAVE-XREF-002` | classic-table output reopens; objects intact | PRD §8.7 | green |
+| `SAVE-XREFSTREAM-001` | xref-stream output has `/Type /XRef`, `/W`, `/Size` | PRD §8.7 | green |
+| `SAVE-XREFSTREAM-002` | xref-stream output is parseable by the M1c xref-stream reader | PRD §8.7 | green |
+| `SAVE-XREFSTREAM-003` | xref-stream output reopens via `DocumentStore`; objects intact | PRD §8.7 | green |
+
+### Save robustness / determinism (`writer.rs`) — `SAVE-PROP-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `SAVE-PROP-001` | `Table, deflate=false` is deterministic for same input+options | PRD §8.7 | green |
+| `SAVE-PROP-002` | save never panics on a freshly-opened simple doc (both styles) | PRD §8.7 | green |
+| `SAVE-PROP-003` | first `/ID` element stable per doc; second varies per save | PRD §8.7 | green |
+| `SAVE-PROP-004` | optional `qpdf --check` passes on a saved file (skipped if absent) | PRD §8.7 | green |

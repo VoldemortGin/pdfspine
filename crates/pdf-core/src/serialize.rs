@@ -26,6 +26,21 @@ pub fn write_indirect(r: ObjRef, obj: &Object) -> Vec<u8> {
     out
 }
 
+/// Serializes a stream **dictionary** (no `stream`/`endstream` keywords, no
+/// body) with `/Length` forced to `length`, overriding any stale value. The
+/// writer ([`crate::writer`]) owns the body bytes (it may deflate them), so it
+/// emits the dict with the right `/Length` here, then the body itself. The
+/// `dict` passed in should already carry any `/Filter`/`/DecodeParms` the writer
+/// chose.
+#[must_use]
+pub fn write_stream_dict_with_length(dict: &Dict, length: usize) -> Vec<u8> {
+    let mut out = Vec::new();
+    let mut d = dict.clone();
+    d.insert(Name::new("Length"), Object::Integer(length as i64));
+    write_dict(&mut out, &d);
+    out
+}
+
 fn write_object_into(out: &mut Vec<u8>, obj: &Object) {
     match obj {
         Object::Null => out.extend_from_slice(b"null"),

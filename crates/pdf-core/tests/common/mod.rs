@@ -479,3 +479,69 @@ pub fn find_first(hay: &[u8], needle: &[u8]) -> Option<usize> {
     }
     hay.windows(needle.len()).position(|w| w == needle)
 }
+
+// --- M3a save/edit fixtures (self-built; PRD §10) -------------------------
+
+/// The content-stream body used by [`simple_doc`] (a tiny `BT … Tj … ET`). Tests
+/// assert this survives a save → reopen round-trip.
+pub const SIMPLE_CONTENT: &[u8] = b"BT /F1 12 Tf 72 720 Td (Hello oxipdf) Tj ET";
+
+/// Builds a minimal but *fully openable* one-page PDF with a classic xref:
+///
+/// - 1: catalog `/Type /Catalog /Pages 2 0 R`
+/// - 2: pages   `/Type /Pages /Kids [3 0 R] /Count 1`
+/// - 3: page    `/Type /Page /Parent 2 0 R /MediaBox [...] /Contents 4 0 R /Resources <</Font <</F1 5 0 R>>>>`
+/// - 4: content stream ([`SIMPLE_CONTENT`])
+/// - 5: font    `/Type /Font /Subtype /Type1 /BaseFont /Helvetica`
+///
+/// Passes the document open validation gate (`/Root → /Catalog → /Pages`), so it
+/// round-trips through `DocumentStore::open` → `save` → reopen.
+pub fn simple_doc() -> Vec<u8> {
+    let media = Object::Array(vec![
+        Object::Integer(0),
+        Object::Integer(0),
+        Object::Integer(612),
+        Object::Integer(792),
+    ]);
+    let font = Object::Dictionary(dict([
+        ("Type", name_obj("Font")),
+        ("Subtype", name_obj("Type1")),
+        ("BaseFont", name_obj("Helvetica")),
+    ]));
+    let resources = Object::Dictionary(dict([(
+        "Font",
+        Object::Dictionary(dict([("F1", rref(5, 0))])),
+    )]));
+    let page = Object::Dictionary(dict([
+        ("Type", name_obj("Page")),
+        ("Parent", rref(2, 0)),
+        ("MediaBox", media),
+        ("Contents", rref(4, 0)),
+        ("Resources", resources),
+    ]));
+    let content = Object::Stream(StreamObj::new_encoded(
+        dict([("Length", Object::Integer(SIMPLE_CONTENT.len() as i64))]),
+        SIMPLE_CONTENT.to_vec(),
+    ));
+
+    Pdf::new()
+        .obj(
+            1,
+            0,
+            Object::Dictionary(dict([("Type", name_obj("Catalog")), ("Pages", rref(2, 0))])),
+        )
+        .obj(
+            2,
+            0,
+            Object::Dictionary(dict([
+                ("Type", name_obj("Pages")),
+                ("Kids", Object::Array(vec![rref(3, 0)])),
+                ("Count", Object::Integer(1)),
+            ])),
+        )
+        .obj(3, 0, page)
+        .obj(4, 0, content)
+        .obj(5, 0, font)
+        .root(1, 0)
+        .build()
+}

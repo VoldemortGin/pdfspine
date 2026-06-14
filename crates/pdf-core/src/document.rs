@@ -21,6 +21,7 @@ use std::sync::{Arc, RwLock};
 
 use bytes::Bytes;
 
+use crate::changeset::{Change, ChangeSet};
 use crate::error::{Error, LimitKind, Result};
 use crate::interner::NameInterner;
 use crate::lexer::Lexer;
@@ -57,6 +58,9 @@ pub struct DocumentStore {
     interner: RwLock<NameInterner>,
     /// Lazy object arena: object number → cached resolved object (PRD §9.2).
     arena: RwLock<HashMap<u32, Arc<Object>>>,
+    /// Pending edits overlaid on the original cross-reference (PRD §8.7/§9.2).
+    /// Empty after open; consulted by `get_object`/`resolve` before the arena.
+    changes: RwLock<ChangeSet>,
     /// The Standard Security Handler, present iff the trailer has `/Encrypt`
     /// (PRD §8.4). `None` for an unencrypted document. Behind the `encryption`
     /// feature so the default build does not depend on `pdf-crypto` (PRD §9.1).
@@ -291,6 +295,7 @@ impl DocumentStore {
             limits,
             interner: RwLock::new(NameInterner::new()),
             arena: RwLock::new(HashMap::new()),
+            changes: RwLock::new(ChangeSet::new()),
             #[cfg(feature = "encryption")]
             decryptor: RwLock::new(decryptor),
             #[cfg(feature = "encryption")]
@@ -705,6 +710,16 @@ impl DocumentStore {
     /// [`Error::MissingObject`] when there is no usable entry; [`Error::Xref`] /
     /// parse / decode errors propagate.
     pub fn get_object(&self, num: u32, _gen: u16) -> Result<Arc<Object>> {
+        // The pending-edit overlay takes precedence over the arena / original
+        // (PRD §8.7: a `resolve` after `update_object` returns the new value).
+        if let Ok(changes) = self.changes.read() {
+            match changes.get(num) {
+                Some(Change::Set(obj)) => return Ok(Arc::clone(obj)),
+                // A deleted object reads back as Null (its slot is freed on save).
+                Some(Change::Deleted) => return Ok(Arc::new(Object::Null)),
+                None => {}
+            }
+        }
         if let Some(cached) = self.arena.read().ok().and_then(|a| a.get(&num).cloned()) {
             return Ok(cached);
         }
@@ -772,6 +787,133 @@ impl DocumentStore {
             Some(Object::Reference(r)) => self.resolve(*r).map(Some),
             Some(direct) => Ok(Some(Arc::new(direct.clone()))),
         }
+    }
+
+    // --- object-edit API (PRD §8.7 / §9.2) --------------------------------
+
+    /// Whether any edit is pending (PRD §9.2: `is_dirty`). `false` immediately
+    /// after open.
+    #[must_use]
+    pub fn is_dirty(&self) -> bool {
+        self.changes.read().map(|c| c.is_dirty()).unwrap_or(false)
+    }
+
+    /// Creates a new indirect object, allocating a fresh object number past the
+    /// current maximum, and returns its reference (PRD §8.7 `add_object`). A
+    /// subsequent `resolve` of the returned reference yields the new value.
+    pub fn add_object(&self, obj: Object) -> Result<ObjRef> {
+        let size = self.xref_length();
+        let mut changes = self
+            .changes
+            .write()
+            .map_err(|_| Error::Unsupported("change-set lock poisoned"))?;
+        changes.seed(size);
+        Ok(changes.allocate(obj))
+    }
+
+    /// Replaces the value of an existing (or newly created) object number
+    /// (PRD §8.7 `update_object`). Reflected immediately by `resolve`/`get_object`
+    /// and after `save`.
+    pub fn update_object(&self, r: ObjRef, obj: Object) -> Result<()> {
+        let size = self.xref_length();
+        let mut changes = self
+            .changes
+            .write()
+            .map_err(|_| Error::Unsupported("change-set lock poisoned"))?;
+        changes.seed(size);
+        changes.set(r.num, obj);
+        Ok(())
+    }
+
+    /// Replaces a stream object's dictionary and body (PRD §8.7 `update_stream`).
+    ///
+    /// `encoded = false` (the common case) treats `body` as **decoded** plain
+    /// bytes that the writer will Flate-deflate on save when `deflate` is on (and
+    /// `/Filter`/`/Length` are managed by the writer). `encoded = true` treats
+    /// `body` as **already filter-encoded** bytes written verbatim; in that case
+    /// `dict` must already name the matching `/Filter`.
+    pub fn update_stream(
+        &self,
+        r: ObjRef,
+        dict: Dict,
+        body: impl Into<Vec<u8>>,
+        encoded: bool,
+    ) -> Result<()> {
+        let size = self.xref_length();
+        let mut changes = self
+            .changes
+            .write()
+            .map_err(|_| Error::Unsupported("change-set lock poisoned"))?;
+        changes.seed(size);
+        changes.set_stream(r.num, dict, body.into(), encoded);
+        Ok(())
+    }
+
+    /// Deletes (frees) an object (PRD §8.7 `delete_object`). A subsequent
+    /// `resolve` yields `Null`; a full save omits the object (its slot is free).
+    pub fn delete_object(&self, r: ObjRef) -> Result<()> {
+        let mut changes = self
+            .changes
+            .write()
+            .map_err(|_| Error::Unsupported("change-set lock poisoned"))?;
+        changes.delete(r.num);
+        Ok(())
+    }
+
+    /// A snapshot of the pending changes (object number → [`Change`]) in
+    /// object-number order — the basis for M3b incremental save (PRD §9.2). The
+    /// writer uses this to enumerate newly created objects.
+    #[must_use]
+    pub fn changes_snapshot(&self) -> Vec<(u32, Change)> {
+        self.changes
+            .read()
+            .map(|c| {
+                c.changes()
+                    .iter()
+                    .map(|(&num, change)| (num, change.clone()))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// The pending change for object `num`, if any (writer overlay lookup).
+    #[must_use]
+    pub(crate) fn change_get(&self, num: u32) -> Option<Change> {
+        self.changes.read().ok().and_then(|c| c.get(num).cloned())
+    }
+
+    // --- full save (PRD §8.7) ---------------------------------------------
+
+    /// Serializes the whole effective document (original live objects overlaid by
+    /// the change set) to a fresh, valid PDF byte stream per `opts` (PRD §8.7
+    /// "Full save"). PyMuPDF `tobytes` / `write` map onto this.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Xref`] if the document has no `/Root`; resolution/decode errors
+    /// propagate for objects the writer must materialize.
+    pub fn save_to_vec(&self, opts: &crate::writer::SaveOptions) -> Result<Vec<u8>> {
+        crate::writer::save_to_vec(self, opts)
+    }
+
+    /// Convenience alias for [`DocumentStore::save_to_vec`] (PyMuPDF `tobytes`).
+    ///
+    /// # Errors
+    ///
+    /// See [`DocumentStore::save_to_vec`].
+    pub fn tobytes(&self, opts: &crate::writer::SaveOptions) -> Result<Vec<u8>> {
+        self.save_to_vec(opts)
+    }
+
+    /// Saves the document to `path` (PRD §8.7 `save`). Full save only (M3a).
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Io`] on a write failure, plus [`DocumentStore::save_to_vec`]
+    /// errors.
+    pub fn save(&self, path: impl AsRef<Path>, opts: &crate::writer::SaveOptions) -> Result<()> {
+        let bytes = self.save_to_vec(opts)?;
+        std::fs::write(path, bytes).map_err(Error::from)
     }
 
     // --- stream bodies ----------------------------------------------------
