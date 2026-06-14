@@ -551,8 +551,98 @@ Strict/Lenient modes + `parse_was_repaired`), §9.3 (stable error/warning kinds)
 
 ---
 
-## M1+ (placeholder)
+## M1e — Encryption: Standard Security Handler READ path (`pdf-crypto`)
 
-Catalogs for `CRYPT-*` (M1e), `WORDS-*` / text formats (M2),
-etc. are enumerated at the start of each milestone per PRD §10.1.1 before
-implementation begins.
+Spec source of truth: PRD §8.4 (Standard Security Handler R2–R6; per-object key
+`min(len+5,16)`; `sAlT` for AESV2 only; R5-read / R6-write; `/ID`-absent
+fallback; exemptions), §9.1 (`pdf-core` uses `pdf-crypto` behind the
+`encryption` feature), §6.4 (RustCrypto licenses). Tests live in
+`crates/pdf-crypto/tests/{kdf_unit,roundtrip_unit,perobj_unit,auth_unit,crypto_property}.rs`
+(crypto engine) and `crates/pdf-core/tests/encryption_unit.rs` (DocumentStore
+integration, `--features encryption`). Fixtures are **self-generated** via
+`pdf_crypto::testsupport` (no external/AGPL files).
+
+### Primitives & KDF known-answers — `CRYPT-KDF-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `CRYPT-KDF-001` | MD5 / SHA-256 / SHA-384 / SHA-512 known-answer vectors | RustCrypto | green |
+| `CRYPT-KDF-002` | hand-rolled RC4 matches standard test vectors | ISO 32000 §7.6.2 | green |
+| `CRYPT-KDF-003` | AES-128/256-CBC PKCS#7 round-trip; no-pad round-trip | NIST CBC | green |
+| `CRYPT-KDF-004` | 32-byte password pad (Algorithm 2 step a) | PRD §8.4 | green |
+| `CRYPT-KDF-005` | R2 file key = first 5 bytes of single MD5 | PRD §8.4 | green |
+| `CRYPT-KDF-006` | R3/R4 file key iterates MD5 50× to `/Length`/8 | PRD §8.4 | green |
+| `CRYPT-KDF-007` | R4 `!EncryptMetadata` appends `0xFFFFFFFF` (key differs) | PRD §8.4 | green |
+| `CRYPT-KDF-008` | R6 Algorithm 2.B hardened hash is deterministic / stable len | PRD §8.4 | green |
+| `CRYPT-KDF-009` | R5 single-SHA-256 hash differs from R6 hardened hash | PRD §8.4 | green |
+| `CRYPT-KDF-010` | `/UE` AES-256 no-pad unwrap recovers the planted file key (user) | PRD §8.4 | green |
+| `CRYPT-KDF-011` | `/OE` AES-256 no-pad unwrap recovers the planted file key (owner) | PRD §8.4 | green |
+
+### Per-object key derivation — `CRYPT-PEROBJ-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `CRYPT-PEROBJ-001` | RC4 object key = `min(len+5,16)` of MD5(key‖num‖gen) (no sAlT) | PRD §8.4 | green |
+| `CRYPT-PEROBJ-002` | AESV2 object key appends `"sAlT"` → differs from the RC4 key | PRD §8.4 | green |
+| `CRYPT-PEROBJ-003` | object key truncation caps at 16 bytes for a 16-byte file key | PRD §8.4 | green |
+| `CRYPT-PEROBJ-004` | AESV3 uses the file key directly (no per-object derivation) | PRD §8.4 | green |
+| `CRYPT-PEROBJ-005` | num/gen are little-endian 3/2 bytes (object-number sensitivity) | PRD §8.4 | green |
+
+### Round-trip decrypt (encrypt → reopen → authenticate → bytes equal) — `CRYPT-{RC4,AESV2,AESV3,R5}-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `CRYPT-RC4-40-001` | R2 RC4-40: string + stream round-trip, empty pwd | PRD §8.4 | green |
+| `CRYPT-RC4-128-001` | R3 RC4-128: string + stream round-trip, empty pwd | PRD §8.4 | green |
+| `CRYPT-RC4-128-002` | R4 RC4-128 via crypt filters (`/StmF`=`/StrF`=`StdCF` V2) | PRD §8.4 | green |
+| `CRYPT-AESV2-001` | R4 AES-128: IV-prepended, PKCS#7 round-trip, empty pwd | PRD §8.4 | green |
+| `CRYPT-AESV2-002` | R4 AES-128: distinct objects use distinct per-object keys | PRD §8.4 | green |
+| `CRYPT-AESV3-R6-001` | R6 AES-256: string + stream round-trip, empty pwd | PRD §8.4 | green |
+| `CRYPT-AESV3-R6-002` | R6 AES-256: non-empty user password round-trip | PRD §8.4 | green |
+| `CRYPT-R5-001` | R5 AES-256 transitional: round-trip decrypt (read-only) | PRD §8.4 | green |
+
+### Authentication roles — `CRYPT-OWNER-*` / `CRYPT-WRONGPW-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `CRYPT-OWNER-001` | R3/R4: owner password authenticates as `Owner` | PRD §8.4 | green |
+| `CRYPT-OWNER-002` | R6: owner password authenticates as `Owner`, recovers key | PRD §8.4 | green |
+| `CRYPT-OWNER-003` | user password authenticates as `User` (role reported) | PRD §8.4 | green |
+| `CRYPT-WRONGPW-001` | R4: wrong password → `Err(NeedsPassword)`, no panic | PRD §8.4 | green |
+| `CRYPT-WRONGPW-002` | R6: wrong password → `Err(NeedsPassword)`, no panic | PRD §8.4 | green |
+| `CRYPT-WRONGPW-003` | decrypt before authenticate → `Err(NeedsPassword)` | PRD §8.4 | green |
+
+### `/ID`-absent fallback — `CRYPT-ID-ABSENT-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `CRYPT-ID-ABSENT-001` | R3 with empty `/ID[0]` still derives a key & round-trips | PRD §8.4 | green |
+
+### Exemptions (what is NOT decrypted) — `CRYPT-EXEMPT-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `CRYPT-EXEMPT-001` | `/Identity` crypt method is a verbatim no-op | PRD §8.4 | green |
+| `CRYPT-EXEMPT-002` | DocumentStore: `/Encrypt` dict strings (`/O`/`/U`) not decrypted | PRD §8.4 | green |
+| `CRYPT-EXEMPT-003` | DocumentStore: XRef stream (`/Type /XRef`) not decrypted | PRD §8.4 | green |
+| `CRYPT-EXEMPT-004` | `EncryptMetadata=false` leaves the `/Metadata` stream clear | PRD §8.4 | green |
+| `CRYPT-EXEMPT-005` | strings inside an ObjStm are decrypted via the container only | PRD §8.4 | green |
+
+### Never-panic / typed-error (proptest) — `CRYPT-PANIC-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `CRYPT-PANIC-001` | garbage `/Encrypt` fields → typed error, never panic | PRD §9.6 | green |
+| `CRYPT-PANIC-002` | random key material / data → decrypt is typed `Err` or bytes, no panic | PRD §9.6 | green |
+| `CRYPT-PANIC-003` | random AES object data (< IV, bad padding) → typed `Err`, no panic | PRD §9.6 | green |
+| `CRYPT-PANIC-004` | arbitrary password against a valid fixture → `Ok`/`NeedsPassword`, no panic | PRD §9.6 | green |
+
+### DocumentStore integration (`--features encryption`) — `CRYPT-DOC-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `CRYPT-DOC-001` | encrypted doc opens; `needs_pass()` true before authenticate | PRD §9.1 | green |
+| `CRYPT-DOC-002` | `authenticate("")` then `resolve()` yields decrypted strings | PRD §8.4 | green |
+| `CRYPT-DOC-003` | `authenticate("")` then `decode_stream()` yields decrypted bytes | PRD §8.4 | green |
+| `CRYPT-DOC-004` | unencrypted doc: `needs_pass()` false, resolve unchanged | PRD §9.1 | green |
+| `CRYPT-DOC-005` | default build (no `encryption` feature) compiles & opens plain docs | PRD §9.1 | green |

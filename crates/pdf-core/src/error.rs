@@ -149,6 +149,30 @@ pub enum Error {
     /// A construct that is valid PDF but not yet implemented in this unit.
     #[error("unsupported: {0}")]
     Unsupported(&'static str),
+
+    /// The document is encrypted and must be authenticated before objects can be
+    /// resolved (PRD §8.4). Carries the stable `pdf-crypto` discriminant.
+    #[cfg(feature = "encryption")]
+    #[error("needs password: {0}")]
+    NeedsPassword(&'static str),
+
+    /// A security-handler / decryption failure (malformed `/Encrypt`, wrong
+    /// password, cipher error). Always a typed error — never a panic (PRD §8.4).
+    #[cfg(feature = "encryption")]
+    #[error("crypto error: {0}")]
+    Crypto(pdf_crypto::CryptoError),
+}
+
+#[cfg(feature = "encryption")]
+impl From<pdf_crypto::CryptoError> for Error {
+    fn from(e: pdf_crypto::CryptoError) -> Self {
+        match e {
+            pdf_crypto::CryptoError::NeedsPassword => {
+                Error::NeedsPassword("document is encrypted; call authenticate()")
+            }
+            other => Error::Crypto(other),
+        }
+    }
 }
 
 impl Error {
@@ -203,6 +227,10 @@ impl Error {
             Error::MissingObject { .. } => "missing-object",
             Error::ReferenceCycle { .. } => "reference-cycle",
             Error::Unsupported(_) => "unsupported",
+            #[cfg(feature = "encryption")]
+            Error::NeedsPassword(_) => "needs-password",
+            #[cfg(feature = "encryption")]
+            Error::Crypto(_) => "crypto",
         }
     }
 }

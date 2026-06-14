@@ -57,6 +57,15 @@ pub struct DocumentStore {
     interner: RwLock<NameInterner>,
     /// Lazy object arena: object number → cached resolved object (PRD §9.2).
     arena: RwLock<HashMap<u32, Arc<Object>>>,
+    /// The Standard Security Handler, present iff the trailer has `/Encrypt`
+    /// (PRD §8.4). `None` for an unencrypted document. Behind the `encryption`
+    /// feature so the default build does not depend on `pdf-crypto` (PRD §9.1).
+    #[cfg(feature = "encryption")]
+    decryptor: RwLock<Option<pdf_crypto::Decryptor>>,
+    /// The object number of the `/Encrypt` dictionary, if it is an indirect
+    /// reference (so its own strings are never decrypted — PRD §8.4 exemption).
+    #[cfg(feature = "encryption")]
+    encrypt_obj_num: Option<u32>,
 }
 
 impl DocumentStore {
@@ -264,6 +273,12 @@ impl DocumentStore {
         diagnostics: Diagnostics,
         limits: Limits,
     ) -> Self {
+        // Build the security handler from `/Encrypt` (if present) before the
+        // store is finalized, so subsequent resolves see it (PRD §8.4).
+        #[cfg(feature = "encryption")]
+        let (decryptor, encrypt_obj_num) =
+            Self::build_decryptor(&source, &trailer, &xref, &limits, mode);
+
         let mut store = DocumentStore {
             source,
             xref,
@@ -276,10 +291,72 @@ impl DocumentStore {
             limits,
             interner: RwLock::new(NameInterner::new()),
             arena: RwLock::new(HashMap::new()),
+            #[cfg(feature = "encryption")]
+            decryptor: RwLock::new(decryptor),
+            #[cfg(feature = "encryption")]
+            encrypt_obj_num,
         };
         // The catalog `/Version`, if present, overrides the header (PRD §8.2).
         store.apply_catalog_version();
         store
+    }
+
+    /// Builds the Standard Security Handler from the trailer `/Encrypt` entry
+    /// (PRD §8.4). Returns `(Some(decryptor), Some(encrypt_obj_num))` for an
+    /// encrypted document, `(None, None)` otherwise. A malformed `/Encrypt` is
+    /// non-fatal here — the document still opens (lenient) and a later resolve
+    /// surfaces the typed error; in Strict mode resolution will reflect it too.
+    ///
+    /// The `/Encrypt` dict may be direct or an indirect reference. We load it
+    /// from the xref/source directly (the store is not yet finalized).
+    #[cfg(feature = "encryption")]
+    fn build_decryptor(
+        source: &Source,
+        trailer: &Dict,
+        xref: &XrefTable,
+        limits: &Limits,
+        _mode: ParseMode,
+    ) -> (Option<pdf_crypto::Decryptor>, Option<u32>) {
+        let Some(enc_obj) = trailer.get(&Name::new("Encrypt")) else {
+            return (None, None);
+        };
+        // Resolve a possible indirect reference to the encrypt dict.
+        let (enc_dict, enc_num) = match enc_obj {
+            Object::Reference(r) => match Self::load_encrypt_object(source, xref, limits, r.num) {
+                Some(Object::Dictionary(d)) => (d, Some(r.num)),
+                Some(Object::Stream(s)) => (s.dict, Some(r.num)),
+                _ => return (None, None),
+            },
+            Object::Dictionary(d) => (d.clone(), None),
+            _ => return (None, None),
+        };
+
+        let id0 = crate::encrypt::id0_from_trailer(trailer);
+        match crate::encrypt::parse_encrypt_dict(&enc_dict, id0) {
+            Ok(config) => match pdf_crypto::Decryptor::new(config) {
+                Ok(d) => (Some(d), enc_num),
+                Err(_) => (None, enc_num),
+            },
+            Err(_) => (None, enc_num),
+        }
+    }
+
+    /// Loads the `/Encrypt` object by number, **without** the arena and without
+    /// any decryption (the `/Encrypt` dict is exempt — PRD §8.4).
+    #[cfg(feature = "encryption")]
+    fn load_encrypt_object(
+        source: &Source,
+        xref: &XrefTable,
+        _limits: &Limits,
+        num: u32,
+    ) -> Option<Object> {
+        let XrefEntry::Uncompressed { offset, .. } = xref.get(num)? else {
+            return None; // /Encrypt is never inside an ObjStm
+        };
+        let tail = source.slice_from(offset).ok()?;
+        let mut parser = Parser::from_lexer(Lexer::new(tail));
+        let (_r, obj) = parser.parse_indirect_object().ok()?;
+        Some(obj)
     }
 
     /// The validation gate (PRD §8.2 step 7): `trailer.Root` must resolve to a
@@ -436,6 +513,69 @@ impl DocumentStore {
         self.arena.read().map(|a| a.len()).unwrap_or(0)
     }
 
+    // --- encryption (PRD §8.4) -------------------------------------------
+
+    /// Whether the document is encrypted (has a usable `/Encrypt` handler).
+    #[cfg(feature = "encryption")]
+    #[must_use]
+    pub fn is_encrypted(&self) -> bool {
+        self.decryptor.read().map(|d| d.is_some()).unwrap_or(false)
+    }
+
+    /// Whether a password is still required: the document is encrypted and not
+    /// yet authenticated (PRD §8.4). `false` for an unencrypted document.
+    #[cfg(feature = "encryption")]
+    #[must_use]
+    pub fn needs_pass(&self) -> bool {
+        self.decryptor
+            .read()
+            .ok()
+            .and_then(|guard| guard.as_ref().map(pdf_crypto::Decryptor::needs_pass))
+            .unwrap_or(false)
+    }
+
+    /// The advisory permission flags (`/P`) for an encrypted document, if any
+    /// (PRD §8.4 — exposed, never enforced for extraction).
+    #[cfg(feature = "encryption")]
+    #[must_use]
+    pub fn permissions(&self) -> Option<i32> {
+        self.decryptor
+            .read()
+            .ok()
+            .and_then(|guard| guard.as_ref().map(pdf_crypto::Decryptor::permissions))
+    }
+
+    /// Authenticates `password` against the security handler, trying the user
+    /// role then the owner role (PRD §8.4). On success, subsequent `resolve()` /
+    /// `decode_stream()` calls decrypt transparently. Pass `b""` for the common
+    /// empty-user-password case.
+    ///
+    /// Clears the object arena on success so any objects cached before
+    /// authentication (none are decrypted yet) are re-read and decrypted.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Crypto`] (wrapping `NeedsPassword`) when the password matches no
+    /// role; [`Error::Unsupported`] if the document is not encrypted.
+    #[cfg(feature = "encryption")]
+    pub fn authenticate(&self, password: &[u8]) -> Result<pdf_crypto::AuthRole> {
+        let mut guard = self
+            .decryptor
+            .write()
+            .map_err(|_| Error::Unsupported("decryptor lock poisoned"))?;
+        let dec = guard
+            .as_mut()
+            .ok_or(Error::Unsupported("document is not encrypted"))?;
+        let role = dec.authenticate(password)?;
+        drop(guard);
+        // Drop any cached objects parsed before authentication so they re-load
+        // through the decrypting path.
+        if let Ok(mut a) = self.arena.write() {
+            a.clear();
+        }
+        Ok(role)
+    }
+
     /// Interns `name` against the document-wide pool (PRD §9.2).
     pub fn intern_name(&self, name: &Name) -> Name {
         match self.interner.write() {
@@ -573,6 +713,12 @@ impl DocumentStore {
 
     /// Parses an uncompressed object at absolute `offset`, converting a stream's
     /// body to a source-backed [`StreamData::Raw`] payload (lazy bytes, PRD §9.2).
+    ///
+    /// When the document is encrypted **and authenticated**, this also decrypts
+    /// the object's strings and (for non-exempt streams) the stream body, once,
+    /// at load time (PRD §8.4). An encrypted stream body is materialized to an
+    /// owned, still-filter-encoded [`StreamData::Encoded`] payload so the rest of
+    /// the decode pipeline is unchanged.
     fn load_uncompressed(&self, num: u32, offset: usize) -> Result<Object> {
         let tail = self.source.slice_from(offset)?;
         let mut parser = Parser::from_lexer(Lexer::new(tail));
@@ -581,25 +727,76 @@ impl DocumentStore {
             .map_err(|_| Error::xref(offset, "malformed object at xref offset"))?;
         // Object number sanity (lenient: tolerate a mismatch, real files lie).
         let _ = r.num == num;
+        let gen = r.gen;
 
         // Convert an owned stream body into a source-backed `Raw` payload so the
         // bytes are sliced lazily and not duplicated in the arena (PRD §9.2).
-        if let Object::Stream(stream) = obj {
+        // `mut` is needed by the encryption decrypt-in-place pass below.
+        #[cfg_attr(not(feature = "encryption"), allow(unused_mut))]
+        let mut obj = if let Object::Stream(stream) = obj {
             if let Some((body_off, body_len)) = parser.last_stream_body() {
                 let abs = offset.saturating_add(body_off);
                 // Validate the range against the source up-front (never trust it).
                 let _ = self.source.slice(abs, body_len)?;
-                return Ok(Object::Stream(StreamObj {
+                Object::Stream(StreamObj {
                     dict: stream.dict,
                     data: StreamData::Raw {
                         offset: abs,
                         len: body_len,
                     },
-                }));
+                })
+            } else {
+                Object::Stream(stream)
             }
-            return Ok(Object::Stream(stream));
-        }
+        } else {
+            obj
+        };
+
+        #[cfg(feature = "encryption")]
+        self.decrypt_uncompressed(&mut obj, num, gen)?;
+        #[cfg(not(feature = "encryption"))]
+        let _ = gen;
+
         Ok(obj)
+    }
+
+    /// Applies the security handler to a freshly parsed uncompressed object
+    /// (PRD §8.4): decrypts strings in place and, for non-exempt streams,
+    /// decrypts the body (materializing it to an owned `Encoded` payload). A
+    /// no-op when the document is unencrypted, not yet authenticated, or the
+    /// object is exempt (the `/Encrypt` dict, an XRef stream, or `/Metadata`
+    /// when `EncryptMetadata=false`).
+    #[cfg(feature = "encryption")]
+    fn decrypt_uncompressed(&self, obj: &mut Object, num: u32, gen: u16) -> Result<()> {
+        // Snapshot the decryptor: if absent or not yet authenticated, do nothing.
+        let guard = self
+            .decryptor
+            .read()
+            .map_err(|_| Error::Unsupported("decryptor lock poisoned"))?;
+        let Some(dec) = guard.as_ref() else {
+            return Ok(());
+        };
+        if dec.needs_pass() {
+            return Ok(());
+        }
+        // Exemption: the /Encrypt dict object itself is never decrypted.
+        if crate::encrypt::is_encrypt_object(num, self.encrypt_obj_num) {
+            return Ok(());
+        }
+        let encrypt_metadata = dec.config().encrypt_metadata;
+
+        // Decrypt the stream body first (so the dict's /Length etc. are intact),
+        // unless the stream is exempt.
+        if let Object::Stream(stream) = obj {
+            if !crate::encrypt::is_exempt_stream(&stream.dict, encrypt_metadata) {
+                let raw = self.stream_raw_bytes(stream)?;
+                let plain = dec.decrypt_stream(num, gen, &raw)?;
+                stream.data = StreamData::Encoded(Bytes::from(plain));
+            }
+        }
+        // Decrypt every string in the object graph (dict values, array members).
+        crate::encrypt::decrypt_strings_in_place(obj, dec, num, gen);
+        Ok(())
     }
 
     /// Parses object `num` from its containing object stream `objstm_num` at

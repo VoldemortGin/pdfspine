@@ -12,9 +12,14 @@
 //! [`document`]`::DocumentStore`. M1d adds the [`repair`] subsystem
 //! (full-file object scan / synthetic xref / trailer reconstruction) wired into
 //! the document open path as a fallback, plus the `Strict`/`Lenient`
-//! [`repair::ParseMode`]. Encryption and pages land in later M1 units per PRD §7.
+//! [`repair::ParseMode`]. M1e adds transparent decryption behind the
+//! `encryption` feature: the `encrypt` module parses `/Encrypt` into a
+//! `pdf-crypto` handler and the `DocumentStore` decrypts strings/streams in
+//! `resolve()` once authenticated. Pages land in M1f per PRD §7.
 
 pub mod document;
+#[cfg(feature = "encryption")]
+pub mod encrypt;
 pub mod error;
 pub mod filters;
 pub mod geom;

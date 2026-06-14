@@ -17,6 +17,10 @@ pdf-crypto = { workspace = true, optional = true }
 
 [dev-dependencies]
 proptest.workspace = true
+# The encryption integration tests build self-generated encrypted fixtures via
+# `pdf_crypto::testsupport`, which lives behind `pdf-crypto`'s `test-support`
+# feature. Only exercised under `--features encryption`.
+pdf-crypto = { workspace = true, features = ["test-support"] }
 
 [features]
 default = []

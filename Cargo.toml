@@ -47,6 +47,15 @@ bytes = "1"
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 # Pure-Rust LZW (PDF/TIFF variants) for LZWDecode (PRD §8.3).
 weezl = "0.2"
+# --- pdf-crypto: RustCrypto (all MIT/Apache-2.0, pure-Rust) — PRD §6.4 / §8.4 ---
+# Stable 0.8/0.10/0.4 generation pinned for toolchain 1.96. RC4 is hand-rolled
+# in pdf-crypto (the `rc4` crate cannot take a runtime-length key, which PDF
+# requires — 5..=16 bytes); AES/CBC/hashes are RustCrypto.
+aes = "0.8"
+cbc = "0.1"
+sha2 = "0.10"
+md-5 = "0.10"
+cipher = { version = "0.4", features = ["block-padding"] }
 
 # --- shared dev-deps ---
 proptest = "1"
