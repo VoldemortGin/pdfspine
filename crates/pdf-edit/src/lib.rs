@@ -18,6 +18,7 @@ pub mod content;
 pub mod dest;
 pub mod drawing;
 pub mod fontfile;
+pub mod form;
 pub mod image;
 pub mod links;
 pub mod merge;
@@ -40,6 +41,10 @@ pub use drawing::{
     draw_bezier, draw_circle, draw_curve, draw_line, draw_oval, draw_polyline, draw_rect, Shape,
 };
 pub use fontfile::EmbeddedFont;
+pub use form::{
+    acroform_dict, default_appearance, fill, first_widget, flatten, form_fields, is_form_pdf,
+    need_appearances, terminal_field_refs, widget_refs, widgets, Field, FieldType, Widget,
+};
 pub use image::{insert_image_jpeg, insert_image_rgb};
 pub use links::{delete_link, get_links, insert_link, update_link, Link, LinkKind};
 pub use merge::{extract_pages, insert_pdf, InsertOptions};

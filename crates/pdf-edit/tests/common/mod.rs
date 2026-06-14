@@ -786,6 +786,414 @@ pub fn cyclic_doc() -> Vec<u8> {
     assemble_classic(&objects, ObjRef::new(1, 0))
 }
 
+// === M4c form (AcroForm) helpers (PRD §8.8) ===============================
+
+/// A trivial empty Form XObject stream with the given `/BBox` (used as a
+/// checkbox/radio on-state `/AP /N` appearance with a recognizable body).
+fn ap_stream(marker: &str, w: i64, h: i64) -> Object {
+    // A tiny body that draws a filled square — enough to be a non-empty,
+    // bakeable appearance and to grep for the marker in the decompressed corpus.
+    let body = format!("q 0 0 0 rg 1 1 {} {} re f Q % {marker}", w - 2, h - 2).into_bytes();
+    Object::Stream(StreamObj::new_encoded(
+        dict([
+            ("Type", name_obj("XObject")),
+            ("Subtype", name_obj("Form")),
+            ("FormType", Object::Integer(1)),
+            (
+                "BBox",
+                Object::Array(vec![
+                    Object::Integer(0),
+                    Object::Integer(0),
+                    Object::Integer(w),
+                    Object::Integer(h),
+                ]),
+            ),
+            ("Length", Object::Integer(0)),
+        ]),
+        body,
+    ))
+}
+
+/// A literal PDF string object.
+fn pstr(s: &str) -> Object {
+    Object::String(pdf_core::PdfString {
+        bytes: s.as_bytes().to_vec(),
+        kind: pdf_core::StringKind::Literal,
+    })
+}
+
+fn rect_obj(x0: i64, y0: i64, x1: i64, y1: i64) -> Object {
+    Object::Array(vec![
+        Object::Integer(x0),
+        Object::Integer(y0),
+        Object::Integer(x1),
+        Object::Integer(y1),
+    ])
+}
+
+/// A single-page AcroForm fixture exercising all field types (PRD §8.8). Layout:
+///
+/// - 1: catalog (`/AcroForm` ref 10)
+/// - 2: pages
+/// - 3: page leaf (`/Annots` = all widgets)
+/// - 4: page content (empty)
+/// - 5: shared font (Helvetica)
+/// - 10: AcroForm (`/Fields` [11 12 15 18], `/DR`, `/DA`, `/NeedAppearances false`)
+/// - 11: **text field** `tx1` (merged widget, `/FT /Tx`, `/V (init)`, `/Q 0`)
+/// - 12: **checkbox** `cb1` (merged widget, `/FT /Btn`, `/AP /N <</On 13 /Off 14>>`, `/AS /Off`)
+/// - 13/14: checkbox On/Off appearance streams
+/// - 15: **radio group** `rg1` (`/FT /Btn`, `/Ff 32768`, `/Kids [16 17]`)
+/// - 16: radio kid A (widget, `/AP /N <</A 20 /Off 21>>`, `/AS /Off`)
+/// - 17: radio kid B (widget, `/AP /N <</B 22 /Off 23>>`, `/AS /Off`)
+/// - 20..23: radio appearance streams
+/// - 18: **combo box** `ch1` (merged widget, `/FT /Ch`, `/Ff 131072`, `/Opt [a b c]`)
+///
+/// Widgets on the page `/Annots`: 11, 12, 16, 17, 18 (the radio group node 15 is
+/// not a widget; its kids are).
+pub fn acroform_doc() -> Vec<u8> {
+    let widget = |extra: Dict| -> Dict {
+        let mut d = dict([
+            ("Type", name_obj("Annot")),
+            ("Subtype", name_obj("Widget")),
+            ("P", rref(3)),
+        ]);
+        for (k, v) in extra {
+            d.insert(k, v);
+        }
+        d
+    };
+
+    // 11: text field (merged field+widget).
+    let text_field = {
+        let mut d = widget(dict([
+            ("FT", name_obj("Tx")),
+            ("T", pstr("tx1")),
+            ("TU", pstr("Text One")),
+            ("Rect", rect_obj(72, 700, 272, 720)),
+            ("V", pstr("init")),
+            ("DA", pstr("0 0 1 rg /Helv 12 Tf")),
+            ("Q", Object::Integer(0)),
+        ]));
+        d.insert(Name::new("Type"), name_obj("Annot"));
+        Object::Dictionary(d)
+    };
+
+    // 12: checkbox (merged), /AP /N <</On 13 /Off 14>>, /AS /Off.
+    let checkbox = {
+        let ap_n = dict([("On", rref(13)), ("Off", rref(14))]);
+        let ap = dict([("N", Object::Dictionary(ap_n))]);
+        Object::Dictionary(widget(dict([
+            ("FT", name_obj("Btn")),
+            ("T", pstr("cb1")),
+            ("Rect", rect_obj(72, 660, 92, 680)),
+            ("AP", Object::Dictionary(ap)),
+            ("AS", name_obj("Off")),
+            ("V", name_obj("Off")),
+        ])))
+    };
+
+    // 15: radio group node (NOT a widget) with kids 16, 17.
+    let radio_group = Object::Dictionary(dict([
+        ("FT", name_obj("Btn")),
+        ("Ff", Object::Integer(32768)),
+        ("T", pstr("rg1")),
+        ("Kids", Object::Array(vec![rref(16), rref(17)])),
+        ("V", name_obj("Off")),
+    ]));
+    // 16: radio kid A — on-state "A".
+    let radio_a = {
+        let ap_n = dict([("A", rref(20)), ("Off", rref(21))]);
+        let ap = dict([("N", Object::Dictionary(ap_n))]);
+        Object::Dictionary(dict([
+            ("Type", name_obj("Annot")),
+            ("Subtype", name_obj("Widget")),
+            ("P", rref(3)),
+            ("Parent", rref(15)),
+            ("Rect", rect_obj(72, 620, 92, 640)),
+            ("AP", Object::Dictionary(ap)),
+            ("AS", name_obj("Off")),
+        ]))
+    };
+    // 17: radio kid B — on-state "B".
+    let radio_b = {
+        let ap_n = dict([("B", rref(22)), ("Off", rref(23))]);
+        let ap = dict([("N", Object::Dictionary(ap_n))]);
+        Object::Dictionary(dict([
+            ("Type", name_obj("Annot")),
+            ("Subtype", name_obj("Widget")),
+            ("P", rref(3)),
+            ("Parent", rref(15)),
+            ("Rect", rect_obj(120, 620, 140, 640)),
+            ("AP", Object::Dictionary(ap)),
+            ("AS", name_obj("Off")),
+        ]))
+    };
+
+    // 18: combo box (merged), /Opt [a b c].
+    let combo = Object::Dictionary(widget(dict([
+        ("FT", name_obj("Ch")),
+        ("Ff", Object::Integer(131072)),
+        ("T", pstr("ch1")),
+        ("Rect", rect_obj(72, 580, 272, 600)),
+        (
+            "Opt",
+            Object::Array(vec![pstr("alpha"), pstr("beta"), pstr("gamma")]),
+        ),
+        ("DA", pstr("0 g /Helv 11 Tf")),
+    ])));
+
+    // 10: AcroForm.
+    let mut dr_font = Dict::new();
+    dr_font.insert(Name::new("Helv"), rref(5));
+    let dr = dict([("Font", Object::Dictionary(dr_font))]);
+    let acroform = Object::Dictionary(dict([
+        (
+            "Fields",
+            Object::Array(vec![rref(11), rref(12), rref(15), rref(18)]),
+        ),
+        ("NeedAppearances", Object::Boolean(false)),
+        ("DA", pstr("0 0 0 rg /Helv 12 Tf")),
+        ("DR", Object::Dictionary(dr)),
+    ]));
+
+    let page = Object::Dictionary(dict([
+        ("Type", name_obj("Page")),
+        ("Parent", rref(2)),
+        ("MediaBox", rect_obj(0, 0, 612, 792)),
+        ("Contents", rref(4)),
+        (
+            "Resources",
+            Object::Dictionary(dict([(
+                "Font",
+                Object::Dictionary(dict([("Helv", rref(5))])),
+            )])),
+        ),
+        (
+            "Annots",
+            Object::Array(vec![rref(11), rref(12), rref(16), rref(17), rref(18)]),
+        ),
+    ]));
+
+    let helv = Object::Dictionary(dict([
+        ("Type", name_obj("Font")),
+        ("Subtype", name_obj("Type1")),
+        ("BaseFont", name_obj("Helvetica")),
+        ("Encoding", name_obj("WinAnsiEncoding")),
+    ]));
+
+    let objects: Vec<(u32, Object)> = vec![
+        (
+            1,
+            Object::Dictionary(dict([
+                ("Type", name_obj("Catalog")),
+                ("Pages", rref(2)),
+                ("AcroForm", rref(10)),
+            ])),
+        ),
+        (
+            2,
+            Object::Dictionary(dict([
+                ("Type", name_obj("Pages")),
+                ("Kids", Object::Array(vec![rref(3)])),
+                ("Count", Object::Integer(1)),
+            ])),
+        ),
+        (3, page),
+        (
+            4,
+            Object::Stream(StreamObj::new_encoded(
+                dict([("Length", Object::Integer(0))]),
+                Vec::new(),
+            )),
+        ),
+        (5, helv),
+        (10, acroform),
+        (11, text_field),
+        (12, checkbox),
+        (13, ap_stream("cb-on", 20, 20)),
+        (14, ap_stream("cb-off", 20, 20)),
+        (15, radio_group),
+        (16, radio_a),
+        (17, radio_b),
+        (18, combo),
+        (20, ap_stream("ra-on", 20, 20)),
+        (21, ap_stream("ra-off", 20, 20)),
+        (22, ap_stream("rb-on", 20, 20)),
+        (23, ap_stream("rb-off", 20, 20)),
+    ];
+    assemble_classic(&objects, ObjRef::new(1, 0))
+}
+
+/// A form fixture with a **hierarchical** field name: a non-terminal parent
+/// field `addr` whose kid is the terminal text field `city`, so the FQN is
+/// `addr.city`. Layout:
+/// - 1 catalog (/AcroForm 10), 2 pages, 3 page (/Annots [12]), 4 content, 5 font
+/// - 10 AcroForm (/Fields [11])
+/// - 11 parent field `addr` (/T addr, /Kids [12]) — non-terminal
+/// - 12 terminal text widget `city` (/FT /Tx, /T city, /Parent 11, /V ...)
+pub fn acroform_hierarchical_doc() -> Vec<u8> {
+    let parent = Object::Dictionary(dict([
+        ("T", pstr("addr")),
+        ("Kids", Object::Array(vec![rref(12)])),
+    ]));
+    let city = Object::Dictionary(dict([
+        ("Type", name_obj("Annot")),
+        ("Subtype", name_obj("Widget")),
+        ("P", rref(3)),
+        ("Parent", rref(11)),
+        ("FT", name_obj("Tx")),
+        ("T", pstr("city")),
+        ("Rect", rect_obj(72, 700, 272, 720)),
+        ("V", pstr("Paris")),
+        ("DA", pstr("0 g /Helv 12 Tf")),
+    ]));
+    let acroform = Object::Dictionary(dict([("Fields", Object::Array(vec![rref(11)]))]));
+    let page = Object::Dictionary(dict([
+        ("Type", name_obj("Page")),
+        ("Parent", rref(2)),
+        ("MediaBox", rect_obj(0, 0, 612, 792)),
+        ("Contents", rref(4)),
+        (
+            "Resources",
+            Object::Dictionary(dict([(
+                "Font",
+                Object::Dictionary(dict([("Helv", rref(5))])),
+            )])),
+        ),
+        ("Annots", Object::Array(vec![rref(12)])),
+    ]));
+    let helv = Object::Dictionary(dict([
+        ("Type", name_obj("Font")),
+        ("Subtype", name_obj("Type1")),
+        ("BaseFont", name_obj("Helvetica")),
+        ("Encoding", name_obj("WinAnsiEncoding")),
+    ]));
+    let objects: Vec<(u32, Object)> = vec![
+        (
+            1,
+            Object::Dictionary(dict([
+                ("Type", name_obj("Catalog")),
+                ("Pages", rref(2)),
+                ("AcroForm", rref(10)),
+            ])),
+        ),
+        (
+            2,
+            Object::Dictionary(dict([
+                ("Type", name_obj("Pages")),
+                ("Kids", Object::Array(vec![rref(3)])),
+                ("Count", Object::Integer(1)),
+            ])),
+        ),
+        (3, page),
+        (
+            4,
+            Object::Stream(StreamObj::new_encoded(
+                dict([("Length", Object::Integer(0))]),
+                Vec::new(),
+            )),
+        ),
+        (5, helv),
+        (10, acroform),
+        (11, parent),
+        (12, city),
+    ];
+    assemble_classic(&objects, ObjRef::new(1, 0))
+}
+
+/// Resolves the dict of an object number through the overlay (reopen-safe).
+pub fn obj_dict(doc: &DocumentStore, num: u32) -> Dict {
+    doc.get_object(num, 0)
+        .ok()
+        .and_then(|o| o.as_dict().cloned())
+        .unwrap_or_default()
+}
+
+/// The decoded `/AP /N` bytes of a *text/choice* widget dict (single appearance
+/// stream). Empty if `/N` is a state sub-dict or absent.
+pub fn widget_ap_n_bytes(doc: &DocumentStore, widget: &Dict) -> Vec<u8> {
+    let ap = match widget.get(&Name::new("AP")) {
+        Some(Object::Dictionary(d)) => d.clone(),
+        Some(Object::Reference(r)) => match doc.resolve(*r).ok().and_then(|o| o.as_dict().cloned())
+        {
+            Some(d) => d,
+            None => return Vec::new(),
+        },
+        _ => return Vec::new(),
+    };
+    let n = match ap.get(&Name::new("N")) {
+        Some(Object::Reference(r)) => *r,
+        _ => return Vec::new(),
+    };
+    doc.resolve(n)
+        .ok()
+        .and_then(|o| o.as_stream().cloned())
+        .and_then(|s| doc.decode_stream(&s).ok()?.into_decoded().ok())
+        .unwrap_or_default()
+}
+
+/// The `/V` value of a field object number as a name string (for `/AS`/`/V` name
+/// assertions), or empty.
+pub fn name_value(doc: &DocumentStore, num: u32, key: &str) -> String {
+    obj_dict(doc, num)
+        .get(&Name::new(key))
+        .and_then(Object::as_name)
+        .map(|n| String::from_utf8_lossy(n.as_bytes()).into_owned())
+        .unwrap_or_default()
+}
+
+/// Counts objects resolving to a dict whose `/Subtype` == `Widget`.
+pub fn count_widgets(doc: &DocumentStore) -> usize {
+    let mut count = 0;
+    for num in doc.xref().object_numbers() {
+        if num == 0 {
+            continue;
+        }
+        if let Ok(obj) = doc.get_object(num, 0) {
+            if let Some(d) = obj.as_dict() {
+                if d.get(&Name::new("Subtype"))
+                    .and_then(Object::as_name)
+                    .is_some_and(|t| t.as_bytes() == b"Widget")
+                {
+                    count += 1;
+                }
+            }
+        }
+    }
+    count
+}
+
+/// Reopens `bytes` and concatenates the **decoded** body of every stream object
+/// plus the raw bytes, forming a decompressed corpus a test can byte-grep (the
+/// M4 decompressed-corpus discipline: a compressed-only grep is a false pass).
+pub fn decompress_corpus(bytes: &[u8]) -> Vec<u8> {
+    let doc = open(bytes);
+    let mut corpus = bytes.to_vec();
+    for num in doc.xref().object_numbers() {
+        if num == 0 {
+            continue;
+        }
+        if let Ok(obj) = doc.get_object(num, 0) {
+            if let Some(s) = obj.as_stream() {
+                if let Ok(decoded) = doc.decode_stream(s).and_then(|o| o.into_decoded()) {
+                    corpus.extend_from_slice(&decoded);
+                    corpus.push(b'\n');
+                }
+            }
+        }
+    }
+    corpus
+}
+
+/// Whether the catalog still carries an `/AcroForm` entry.
+pub fn catalog_has_acroform(doc: &DocumentStore) -> bool {
+    doc.root()
+        .and_then(|r| doc.resolve(r).ok())
+        .and_then(|o| o.as_dict().cloned())
+        .map(|c| c.contains_key(&Name::new("AcroForm")))
+        .unwrap_or(false)
+}
+
 /// Counts objects that resolve to a stream whose `/Subtype` == `subtype`.
 pub fn count_streams_of_subtype(doc: &DocumentStore, subtype: &str) -> usize {
     let mut count = 0;

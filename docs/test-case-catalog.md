@@ -1779,3 +1779,79 @@ Tests live in `crates/pdf-edit/tests/annot_e2e.rs`.
 | `ANNOT-PROP-002` | degenerate inputs (empty quads/vertices/strokes/box) never panic; reopen clean | PRD §8.8 | green |
 | `ANNOT-PROP-003-QPDF` | mixed-subtype annotated save passes `qpdf --check` (skipped if qpdf absent) | PRD §12 M4 | green |
 | `ANNOT-PROP-004` | `Annot` accessors/mutators round-trip (color/fill/opacity/border/flags/info) never panic | PRD §8.8 | green |
+
+---
+
+## M4c — AcroForm forms (read / fill / flatten) + `Widget` API (`pdf-edit`)
+
+Spec source of truth: PRD §8.8 (forms / `Widget` API) and §12 M4 exit. Self-built
+AcroForm fixtures only (PRD §10): a text field, a checkbox with `/AP /N
+<</On …/Off …>>`, a radio group with two kids, a combo/list choice. Tests live in
+`crates/pdf-edit/tests/form_e2e.rs`; oracle = reparse + `qpdf --check`.
+
+### AcroForm read: field tree, FQN, type, flags — `FORM-READ-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `FORM-READ-001` | `doc.form_fields()` enumerates all fields (incl. `/Kids`-nested) | PRD §8.8 | green |
+| `FORM-READ-002` | fully-qualified name joins `/T` up the `/Parent` chain with `.` | PRD §8.8 | green |
+| `FORM-READ-003` | field-type detection: `Tx`/`Btn`/`Ch`/`Sig` from `/FT` (inherited) | PRD §8.8 | green |
+| `FORM-READ-004` | button sub-type: checkbox vs radio (`/Ff` 32768) vs pushbutton (`/Ff` 65536) | PRD §8.8 | green |
+| `FORM-READ-005` | choice sub-type: combo (`/Ff` 131072) vs list | PRD §8.8 | green |
+| `FORM-READ-006` | current value `/V`, default `/DV`, flags `/Ff` readable | PRD §8.8 | green |
+| `FORM-READ-007` | `/NeedAppearances`, `/DA`, `/DR` parsed off `/AcroForm` | PRD §8.8 | green |
+
+### Widget API — `WIDGET-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `WIDGET-001` | `page.widgets()` iterator + `page.first_widget` return `/Widget` annots | PRD §8.8 | green |
+| `WIDGET-002` | `field_type`/`field_type_string`/`field_name`/`field_value`/`field_flags`/`rect`/`xref` | PRD §8.8 | green |
+| `WIDGET-003` | `field_label` (`/TU`), `choice_values` (Ch), `button_states` (on-states from `/AP /N`) | PRD §8.8 | green |
+| `WIDGET-004` | `doc.is_form_pdf` true for AcroForm; `false` + empty list for non-form | PRD §8.8 | green |
+
+### Fill text field — `FORM-TEXT-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `FORM-TEXT-001` | set value → `/V` updated; reopen persists | PRD §12 M4 | green |
+| `FORM-TEXT-002` | `/AP /N` regenerated; decoded AP contains the text (`Tj`) | PRD §8.8 | green |
+| `FORM-TEXT-003` | `/Q` alignment (left/center/right) reflected in AP `Tm` x | PRD §8.8 | green |
+| `FORM-TEXT-004` | multiline (`/Ff` 4096) wraps to multiple `Tj` lines | PRD §8.8 | green |
+
+### Checkbox — `FORM-CHECK-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `FORM-CHECK-001` | check → `/V` + `/AS` == on-state name discovered from `/AP /N` (not assumed `/Yes`) | PRD §12 M4 | green |
+| `FORM-CHECK-002` | uncheck → `/V` + `/AS` == `/Off` | PRD §12 M4 | green |
+
+### Radio group — `FORM-RADIO-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `FORM-RADIO-001` | select one kid → group `/V` == on-state; only that kid `/AS` on, others `/Off` | PRD §12 M4 | green |
+
+### Choice (combo / list) — `FORM-CHOICE-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `FORM-CHOICE-001` | set combo `/V`; `choice_values` readable; AP shows selected | PRD §8.8 | green |
+| `FORM-CHOICE-002` | set list `/V`; reopen persists | PRD §8.8 | green |
+
+### Flatten — `FORM-FLATTEN-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `FORM-FLATTEN-001` | flatten removes `/Root /AcroForm` and all `/Widget` annots | PRD §12 M4 | green |
+| `FORM-FLATTEN-002` | filled value baked into page content (widget `/AP` drawn as Form XObject `Do`); value visible | PRD §12 M4 | green |
+| `FORM-FLATTEN-003` | flattened output reopens valid + passes `qpdf --check` (skipped if absent) | PRD §12 M4 | green |
+
+### Robustness / policy — `FORM-PROP-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `FORM-PROP-001` | non-form PDF: `is_form_pdf` false, `form_fields()`/`widgets()` empty; never panics | PRD §8.8 | green |
+| `FORM-PROP-002` | read-only field (`/Ff` 1) set → typed error; value unchanged | PRD §8.8 | green |
+| `FORM-PROP-003` | degenerate dicts (missing `/FT`, `/Rect`, `/AP`) never panic | PRD §8.8 | green |
+| `FORM-PROP-004-QPDF` | filled form full-save passes `qpdf --check` (skipped if qpdf absent) | PRD §12 M4 | green |
