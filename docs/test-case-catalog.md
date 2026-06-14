@@ -1274,3 +1274,100 @@ and `crates/pdf-core/tests/save_e2e.rs`.
 | `SAVE-PROP-002` | save never panics on a freshly-opened simple doc (both styles) | PRD §8.7 | green |
 | `SAVE-PROP-003` | first `/ID` element stable per doc; second varies per save | PRD §8.7 | green |
 | `SAVE-PROP-004` | optional `qpdf --check` passes on a saved file (skipped if absent) | PRD §8.7 | green |
+
+## M3b — Incremental save + garbage collection (`pdf-core::writer`, `pdf-core::gc`)
+
+Spec source of truth: PRD §8.7 (incremental save, clean-parse precondition),
+§8.7.1 (GC level-3 dedup exclusion list + COW-unshare), §12 M3 exit gate. The
+primary correctness oracle is our own reparse (open → edit → save_incremental /
+save(garbage=N) → reopen → assert) plus a byte-exactness assertion
+`out[..orig.len()] == orig`; an optional `qpdf --check` runs only when `qpdf` is
+on `PATH`. Tests live in `crates/pdf-core/tests/incremental_e2e.rs` and
+`crates/pdf-core/tests/gc_e2e.rs`.
+
+### Incremental save — byte exactness (`writer.rs`) — `INCR-BYTES-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `INCR-BYTES-001` | after `update_object`, `out[..orig.len()] == orig` (prefix byte-exact) | PRD §8.7 | green |
+| `INCR-BYTES-002` | after `add_object`, `out[..orig.len()] == orig`; new obj appended | PRD §8.7 | green |
+| `INCR-BYTES-003` | after `delete_object`, `out[..orig.len()] == orig`; deleted obj freed | PRD §8.7 | green |
+| `INCR-BYTES-004` | no-op (no edits) incremental save still byte-exact-prefixes the original | PRD §8.7 | green |
+| `INCR-BYTES-005` | a single small edit appends little (`out.len() - orig.len()` bounded) | PRD §8.7 | green |
+| `INCR-BYTES-006` | xref-stream style: `out[..orig.len()] == orig` holds too | PRD §8.7 | green |
+
+### Incremental save — `/Prev` chain + multi-revision (`writer.rs`) — `INCR-PREV-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `INCR-PREV-001` | new section `/Prev` == prior `startxref` (table style) | PRD §8.7 | green |
+| `INCR-PREV-002` | both revisions reopen; updated object resolves to the NEW value | PRD §8.7 | green |
+| `INCR-PREV-003` | the new `startxref` points at the appended xref section | PRD §8.7 | green |
+| `INCR-PREV-004` | new trailer carries `/Root`, `/Size` = max+1, two-element `/ID` | PRD §8.7 | green |
+| `INCR-PREV-005` | xref-stream style: `/Prev` == prior `startxref`; reopens to new value | PRD §8.7 | green |
+| `INCR-PREV-006` | added object resolves after reopen; new number continues from max | PRD §8.7 | green |
+| `INCR-PREV-007` | two successive incremental saves chain `/Prev` correctly; reopen final | PRD §8.7 | green |
+
+### Incremental save — clean-parse precondition (`writer.rs`) — `INCR-CLEAN-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `INCR-CLEAN-001` | clean parse → `can_save_incrementally()` true; succeeds | PRD §8.7 | green |
+| `INCR-CLEAN-002` | repaired doc → `can_save_incrementally()` false | PRD §8.7 | green |
+| `INCR-CLEAN-003` | repaired doc + `on_repaired: Reject` → typed `IncrementalRequiresCleanParse` | PRD §8.7 | green |
+| `INCR-CLEAN-004` | repaired doc + `on_repaired: Upgrade` → full save fallback (reopens) | PRD §8.7 | green |
+
+### Incremental save — signature preservation (`writer.rs`) — `INCR-SIG-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `INCR-SIG-001` | clean signed-marker doc edited incrementally: signed byte range bytes unchanged | PRD §8.7 | green |
+| `INCR-SIG-002` | the `/ByteRange`-covered prefix is identical pre/post incremental edit | PRD §8.7 | green |
+
+### GC level 1 — mark & sweep (`gc.rs`) — `GC-1-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `GC-1-001` | unreachable orphan object dropped; object count falls | PRD §8.7 | green |
+| `GC-1-002` | reachable set preserved; page_count + extracted text unchanged after reopen | PRD §8.7 | green |
+| `GC-1-003` | `/Info` / `/ID` trailer roots kept reachable | PRD §8.7 | green |
+
+### GC level 2 — compact / renumber (`gc.rs`) — `GC-2-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `GC-2-001` | object numbers densified (no gaps) after dropping orphans | PRD §8.7 | green |
+| `GC-2-002` | all refs remapped consistently; reopen → text + page_count intact | PRD §8.7 | green |
+| `GC-2-003` | `/Size` == survivor count + 1 (dense) | PRD §8.7 | green |
+
+### GC level 3 — dedup identical objects + exclusion (`gc.rs`) — `GC-3-*` / `GC3-EXCLUDE-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `GC-3-001` | two identical non-excluded dicts merge to one; count falls vs level 2 | PRD §8.7.1 | green |
+| `GC-3-002` | reachability + text preserved after dedup → reopen | PRD §8.7.1 | green |
+| `GC3-EXCLUDE-001` | two identical-content `/Type /Page` objects are NOT merged | PRD §8.7.1 | green |
+| `GC3-EXCLUDE-002` | `/Type /Pages` and the Catalog are NOT merged | PRD §8.7.1 | green |
+
+### GC level 4 — dedup identical streams (`gc.rs`) — `GC-4-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `GC-4-001` | two identical streams (dict+body) merge to one; count falls vs level 3 | PRD §8.7 | green |
+| `GC-4-002` | reachability + decoded stream bytes preserved after reopen | PRD §8.7 | green |
+
+### GC COW-unshare after merge (`gc.rs`) — `GC3-COW-*` / `GC4-COW-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `GC3-COW-001` | save(garbage=3) leaves live model unmerged; `update_object` to one user doesn't affect other | PRD §8.7.1 | green |
+| `GC3-COW-002` | after such an edit, reopen confirms the two users are independent | PRD §8.7.1 | green |
+| `GC4-COW-001` | save(garbage=4) is save-time only; `update_stream` to one user doesn't affect other | PRD §8.7.1 | green |
+
+### GC properties (`gc.rs`) — `GC-PROP-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `GC-PROP-001` | GC never drops a reachable object (all roots survive every level) | PRD §8.7 | green |
+| `GC-PROP-002` | GC never panics across levels 0..=4 on a simple doc | PRD §8.7 | green |
+| `GC-PROP-003` | garbage=0 is identity (no objects dropped vs plain full save) | PRD §8.7 | green |

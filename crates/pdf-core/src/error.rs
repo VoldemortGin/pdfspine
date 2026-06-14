@@ -150,6 +150,14 @@ pub enum Error {
     #[error("unsupported: {0}")]
     Unsupported(&'static str),
 
+    /// Incremental save was requested on a document whose parse was repair-tainted
+    /// (PRD §8.7). A repaired file has no trustworthy original byte offsets, so an
+    /// append-only update would corrupt the `/Prev` chain and invalidate any
+    /// signature; the save is rejected (callers may opt into a full-save upgrade
+    /// via [`crate::writer::OnRepaired::Upgrade`]).
+    #[error("incremental save requires a clean parse; use full save")]
+    IncrementalRequiresCleanParse,
+
     /// The document is encrypted and must be authenticated before objects can be
     /// resolved (PRD §8.4). Carries the stable `pdf-crypto` discriminant.
     #[cfg(feature = "encryption")]
@@ -227,6 +235,7 @@ impl Error {
             Error::MissingObject { .. } => "missing-object",
             Error::ReferenceCycle { .. } => "reference-cycle",
             Error::Unsupported(_) => "unsupported",
+            Error::IncrementalRequiresCleanParse => "incremental-requires-clean-parse",
             #[cfg(feature = "encryption")]
             Error::NeedsPassword(_) => "needs-password",
             #[cfg(feature = "encryption")]

@@ -10,7 +10,7 @@
 use pdf_core::filters::{flate, predictor};
 use pdf_core::object::parse::Parser;
 use pdf_core::serialize::write_indirect;
-use pdf_core::{Dict, Name, ObjRef, Object, StreamObj};
+use pdf_core::{Dict, Name, ObjRef, Object, PdfString, StreamObj};
 
 /// Builds a `%PDF-<v>\n` header followed by a binary-marker comment line.
 fn header_bytes(v: &str) -> Vec<u8> {
@@ -542,6 +542,364 @@ pub fn simple_doc() -> Vec<u8> {
         .obj(3, 0, page)
         .obj(4, 0, content)
         .obj(5, 0, font)
+        .root(1, 0)
+        .build()
+}
+
+/// Reads the integer that follows the **last** `startxref` keyword in `bytes`
+/// (the document's current cross-reference offset). Mirrors the reader's
+/// `find_startxref` so incremental-save tests can assert the new `/Prev` matches
+/// the original `startxref`.
+pub fn last_startxref(bytes: &[u8]) -> usize {
+    let needle = b"startxref";
+    let rel = bytes
+        .windows(needle.len())
+        .enumerate()
+        .filter(|(_, w)| *w == needle)
+        .map(|(i, _)| i)
+        .next_back()
+        .expect("startxref present");
+    let mut p = rel + needle.len();
+    while matches!(bytes.get(p), Some(b) if b.is_ascii_whitespace()) {
+        p += 1;
+    }
+    let start = p;
+    while matches!(bytes.get(p), Some(b'0'..=b'9')) {
+        p += 1;
+    }
+    std::str::from_utf8(&bytes[start..p])
+        .unwrap()
+        .parse()
+        .unwrap()
+}
+
+/// Like [`simple_doc`] but with an extra **unreachable orphan** object (number 6,
+/// a dict not referenced from `/Root`/`/Info`/`/ID`). GC level ≥1 must drop it.
+pub fn doc_with_orphan() -> Vec<u8> {
+    let media = Object::Array(vec![
+        Object::Integer(0),
+        Object::Integer(0),
+        Object::Integer(612),
+        Object::Integer(792),
+    ]);
+    let font = Object::Dictionary(dict([
+        ("Type", name_obj("Font")),
+        ("Subtype", name_obj("Type1")),
+        ("BaseFont", name_obj("Helvetica")),
+    ]));
+    let resources = Object::Dictionary(dict([(
+        "Font",
+        Object::Dictionary(dict([("F1", rref(5, 0))])),
+    )]));
+    let page = Object::Dictionary(dict([
+        ("Type", name_obj("Page")),
+        ("Parent", rref(2, 0)),
+        ("MediaBox", media),
+        ("Contents", rref(4, 0)),
+        ("Resources", resources),
+    ]));
+    let content = Object::Stream(StreamObj::new_encoded(
+        dict([("Length", Object::Integer(SIMPLE_CONTENT.len() as i64))]),
+        SIMPLE_CONTENT.to_vec(),
+    ));
+    // Object 6 is the orphan: a plausible-looking dict nobody references.
+    let orphan = Object::Dictionary(dict([
+        ("Type", name_obj("ExtGState")),
+        ("CA", Object::Real(0.5)),
+    ]));
+
+    Pdf::new()
+        .obj(
+            1,
+            0,
+            Object::Dictionary(dict([("Type", name_obj("Catalog")), ("Pages", rref(2, 0))])),
+        )
+        .obj(
+            2,
+            0,
+            Object::Dictionary(dict([
+                ("Type", name_obj("Pages")),
+                ("Kids", Object::Array(vec![rref(3, 0)])),
+                ("Count", Object::Integer(1)),
+            ])),
+        )
+        .obj(3, 0, page)
+        .obj(4, 0, content)
+        .obj(5, 0, font)
+        .obj(6, 0, orphan)
+        .root(1, 0)
+        .build()
+}
+
+/// A one-page doc whose page references **two structurally identical**
+/// non-excluded dictionaries (objects 6 and 7, both `/Type /ExtGState`) from its
+/// `/Resources`. GC level ≥3 must merge them to one. Also carries two identical
+/// `/Type /Page`-shaped *decoy* objects (8 and 9) wired into a second page so the
+/// exclusion list keeps them distinct.
+pub fn doc_with_dups() -> Vec<u8> {
+    let media = Object::Array(vec![
+        Object::Integer(0),
+        Object::Integer(0),
+        Object::Integer(612),
+        Object::Integer(792),
+    ]);
+    let font = Object::Dictionary(dict([
+        ("Type", name_obj("Font")),
+        ("Subtype", name_obj("Type1")),
+        ("BaseFont", name_obj("Helvetica")),
+    ]));
+    // Two identical ExtGState dicts (objects 6 and 7) — dedup-eligible.
+    let egs = || {
+        Object::Dictionary(dict([
+            ("Type", name_obj("ExtGState")),
+            ("ca", Object::Real(0.4)),
+        ]))
+    };
+    let resources = Object::Dictionary(dict([
+        ("Font", Object::Dictionary(dict([("F1", rref(5, 0))]))),
+        (
+            "ExtGState",
+            Object::Dictionary(dict([("G1", rref(6, 0)), ("G2", rref(7, 0))])),
+        ),
+    ]));
+    let page = Object::Dictionary(dict([
+        ("Type", name_obj("Page")),
+        ("Parent", rref(2, 0)),
+        ("MediaBox", media),
+        ("Contents", rref(4, 0)),
+        ("Resources", resources),
+    ]));
+    let content = Object::Stream(StreamObj::new_encoded(
+        dict([("Length", Object::Integer(SIMPLE_CONTENT.len() as i64))]),
+        SIMPLE_CONTENT.to_vec(),
+    ));
+
+    Pdf::new()
+        .obj(
+            1,
+            0,
+            Object::Dictionary(dict([("Type", name_obj("Catalog")), ("Pages", rref(2, 0))])),
+        )
+        .obj(
+            2,
+            0,
+            Object::Dictionary(dict([
+                ("Type", name_obj("Pages")),
+                ("Kids", Object::Array(vec![rref(3, 0)])),
+                ("Count", Object::Integer(1)),
+            ])),
+        )
+        .obj(3, 0, page)
+        .obj(4, 0, content)
+        .obj(5, 0, font)
+        .obj(6, 0, egs())
+        .obj(7, 0, egs())
+        .root(1, 0)
+        .build()
+}
+
+/// A two-page doc whose two leaves (objects 3 and 6) are **structurally
+/// identical** `/Type /Page` dicts (same MediaBox, same Contents ref). The GC-3
+/// exclusion list must keep them as two distinct objects.
+pub fn doc_with_dup_pages() -> Vec<u8> {
+    let media = || {
+        Object::Array(vec![
+            Object::Integer(0),
+            Object::Integer(0),
+            Object::Integer(612),
+            Object::Integer(792),
+        ])
+    };
+    let font = Object::Dictionary(dict([
+        ("Type", name_obj("Font")),
+        ("Subtype", name_obj("Type1")),
+        ("BaseFont", name_obj("Helvetica")),
+    ]));
+    let resources = || {
+        Object::Dictionary(dict([(
+            "Font",
+            Object::Dictionary(dict([("F1", rref(5, 0))])),
+        )]))
+    };
+    // Two identical page dicts (objects 3 and 6) — must NOT be merged.
+    let page = || {
+        Object::Dictionary(dict([
+            ("Type", name_obj("Page")),
+            ("Parent", rref(2, 0)),
+            ("MediaBox", media()),
+            ("Contents", rref(4, 0)),
+            ("Resources", resources()),
+        ]))
+    };
+    let content = Object::Stream(StreamObj::new_encoded(
+        dict([("Length", Object::Integer(SIMPLE_CONTENT.len() as i64))]),
+        SIMPLE_CONTENT.to_vec(),
+    ));
+
+    Pdf::new()
+        .obj(
+            1,
+            0,
+            Object::Dictionary(dict([("Type", name_obj("Catalog")), ("Pages", rref(2, 0))])),
+        )
+        .obj(
+            2,
+            0,
+            Object::Dictionary(dict([
+                ("Type", name_obj("Pages")),
+                ("Kids", Object::Array(vec![rref(3, 0), rref(6, 0)])),
+                ("Count", Object::Integer(2)),
+            ])),
+        )
+        .obj(3, 0, page())
+        .obj(4, 0, content)
+        .obj(5, 0, font)
+        .obj(6, 0, page())
+        .root(1, 0)
+        .build()
+}
+
+/// A one-page doc with **two identical content streams** (objects 4 and 6, same
+/// dict + body) both referenced (object 4 as `/Contents`, object 6 as a decoy
+/// referenced from `/Resources`). GC level 4 must merge them.
+pub fn doc_with_dup_streams() -> Vec<u8> {
+    let media = Object::Array(vec![
+        Object::Integer(0),
+        Object::Integer(0),
+        Object::Integer(612),
+        Object::Integer(792),
+    ]);
+    let font = Object::Dictionary(dict([
+        ("Type", name_obj("Font")),
+        ("Subtype", name_obj("Type1")),
+        ("BaseFont", name_obj("Helvetica")),
+    ]));
+    // A decoy entry in Resources pointing at object 6 so the duplicate stream is
+    // reachable (and survives mark-sweep).
+    let resources = Object::Dictionary(dict([
+        ("Font", Object::Dictionary(dict([("F1", rref(5, 0))]))),
+        ("XObject", Object::Dictionary(dict([("Dup", rref(6, 0))]))),
+    ]));
+    let page = Object::Dictionary(dict([
+        ("Type", name_obj("Page")),
+        ("Parent", rref(2, 0)),
+        ("MediaBox", media),
+        ("Contents", rref(4, 0)),
+        ("Resources", resources),
+    ]));
+    let stream = || {
+        Object::Stream(StreamObj::new_encoded(
+            dict([("Length", Object::Integer(SIMPLE_CONTENT.len() as i64))]),
+            SIMPLE_CONTENT.to_vec(),
+        ))
+    };
+
+    Pdf::new()
+        .obj(
+            1,
+            0,
+            Object::Dictionary(dict([("Type", name_obj("Catalog")), ("Pages", rref(2, 0))])),
+        )
+        .obj(
+            2,
+            0,
+            Object::Dictionary(dict([
+                ("Type", name_obj("Pages")),
+                ("Kids", Object::Array(vec![rref(3, 0)])),
+                ("Count", Object::Integer(1)),
+            ])),
+        )
+        .obj(3, 0, page)
+        .obj(4, 0, stream())
+        .obj(5, 0, font)
+        .obj(6, 0, stream())
+        .root(1, 0)
+        .build()
+}
+
+/// A one-page doc where the page (object 3) references the **same** shared
+/// dictionary object (object 6, `/Type /ExtGState`) twice, once via `/G1` and a
+/// decoy object 7 that is identical to 6. After a dedup save, editing object 6
+/// must not change object 7 in the live model (COW-unshare). Returns the bytes;
+/// the shared/dup numbers are documented (6 == original, 7 == identical twin).
+pub fn doc_for_cow() -> Vec<u8> {
+    // Structurally this is exactly `doc_with_dups` (objects 6 and 7 identical).
+    doc_with_dups()
+}
+
+/// The signed byte-range marker fixtures (`INCR-SIG-*`). Returns a clean
+/// one-page doc whose object 6 is a `/Sig`-like dict carrying a `/ByteRange`
+/// array and a `/Contents` hex placeholder. The whole original file (offsets
+/// `[0, orig.len())`) stands in for the "signed range"; an incremental edit must
+/// leave every original byte untouched.
+pub fn doc_with_signature_marker() -> Vec<u8> {
+    let media = Object::Array(vec![
+        Object::Integer(0),
+        Object::Integer(0),
+        Object::Integer(612),
+        Object::Integer(792),
+    ]);
+    let font = Object::Dictionary(dict([
+        ("Type", name_obj("Font")),
+        ("Subtype", name_obj("Type1")),
+        ("BaseFont", name_obj("Helvetica")),
+    ]));
+    let resources = Object::Dictionary(dict([(
+        "Font",
+        Object::Dictionary(dict([("F1", rref(5, 0))])),
+    )]));
+    let page = Object::Dictionary(dict([
+        ("Type", name_obj("Page")),
+        ("Parent", rref(2, 0)),
+        ("MediaBox", media),
+        ("Contents", rref(4, 0)),
+        ("Resources", resources),
+    ]));
+    let content = Object::Stream(StreamObj::new_encoded(
+        dict([("Length", Object::Integer(SIMPLE_CONTENT.len() as i64))]),
+        SIMPLE_CONTENT.to_vec(),
+    ));
+    // A signature-like dict with a /ByteRange + /Contents placeholder.
+    let sig = Object::Dictionary(dict([
+        ("Type", name_obj("Sig")),
+        ("Filter", name_obj("Adobe.PPKLite")),
+        (
+            "ByteRange",
+            Object::Array(vec![
+                Object::Integer(0),
+                Object::Integer(840),
+                Object::Integer(960),
+                Object::Integer(120),
+            ]),
+        ),
+        (
+            "Contents",
+            Object::String(PdfString {
+                bytes: vec![0xAB; 8],
+                kind: pdf_core::StringKind::Hex,
+            }),
+        ),
+    ]));
+
+    Pdf::new()
+        .obj(
+            1,
+            0,
+            Object::Dictionary(dict([("Type", name_obj("Catalog")), ("Pages", rref(2, 0))])),
+        )
+        .obj(
+            2,
+            0,
+            Object::Dictionary(dict([
+                ("Type", name_obj("Pages")),
+                ("Kids", Object::Array(vec![rref(3, 0)])),
+                ("Count", Object::Integer(1)),
+            ])),
+        )
+        .obj(3, 0, page)
+        .obj(4, 0, content)
+        .obj(5, 0, font)
+        .obj(6, 0, sig)
         .root(1, 0)
         .build()
 }

@@ -916,6 +916,46 @@ impl DocumentStore {
         std::fs::write(path, bytes).map_err(Error::from)
     }
 
+    /// Whether an incremental save is permitted: only on a **clean** parse
+    /// (PRD §8.7). A repair-tainted parse has no trustworthy original byte
+    /// offsets, so append-only updates would corrupt the `/Prev` chain and
+    /// invalidate signatures — incremental save is rejected (PyMuPDF
+    /// `can_save_incrementally`).
+    #[must_use]
+    pub fn can_save_incrementally(&self) -> bool {
+        !self.parse_was_repaired
+    }
+
+    /// Serializes an **incremental** update: appends only the changed objects and
+    /// a new cross-reference section (whose `/Prev` chains to the prior
+    /// `startxref`) to the original source bytes, guaranteeing
+    /// `out[..orig.len()] == orig` (PRD §8.7). PyMuPDF `save(incremental=True)`.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::IncrementalRequiresCleanParse`] when the parse was repair-tainted
+    /// and `opts.on_repaired == OnRepaired::Reject` (the default); with
+    /// `OnRepaired::Upgrade` a full save is returned instead. [`Error::Xref`] if
+    /// the document has no `/Root`.
+    pub fn save_incremental(&self, opts: &crate::writer::SaveOptions) -> Result<Vec<u8>> {
+        crate::writer::save_incremental(self, opts)
+    }
+
+    /// Saves an incremental update to `path` (PRD §8.7).
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Io`] on a write failure, plus [`DocumentStore::save_incremental`]
+    /// errors.
+    pub fn save_incremental_to(
+        &self,
+        path: impl AsRef<Path>,
+        opts: &crate::writer::SaveOptions,
+    ) -> Result<()> {
+        let bytes = self.save_incremental(opts)?;
+        std::fs::write(path, bytes).map_err(Error::from)
+    }
+
     // --- stream bodies ----------------------------------------------------
 
     /// Materializes a stream's body bytes (slicing a [`StreamData::Raw`] payload

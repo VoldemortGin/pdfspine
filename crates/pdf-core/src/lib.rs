@@ -23,6 +23,7 @@ pub mod document;
 pub mod encrypt;
 pub mod error;
 pub mod filters;
+pub mod gc;
 pub mod geom;
 pub mod interner;
 pub mod lexer;
@@ -47,5 +48,5 @@ pub use object::{Dict, Name, ObjRef, Object, PdfString, StreamData, StreamObj, S
 pub use page::Page;
 pub use repair::{ParseMode, RepairAction, RepairKind, Warning, WarningKind};
 pub use source::{MmapMode, Source};
-pub use writer::{SaveOptions, XrefStyle};
+pub use writer::{OnRepaired, SaveOptions, XrefStyle};
 pub use xref::{XrefEntry, XrefTable};
