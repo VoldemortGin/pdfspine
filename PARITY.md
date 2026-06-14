@@ -35,39 +35,45 @@
 
 ## Summary / Progress Dashboard
 
-**Overall: 0 / 437 implemented (0% at start).**
+**Overall: 117 / 437 implemented (~27%).** Milestones M0 (geometry), M1 (PDF read core), and M2 (text
+extraction) are landed and test-backed; M3+ (save/edit/merge, content/annot/forms, image docs/Pixmap,
+rendering) remain catalogued.
 
 Counts are over catalogued public symbols (methods + properties + module-level functions + constant *families*
 counted as single rows; individual enum members are not double-counted).
 
 ### Per-milestone × priority matrix
 
-| Milestone | P0 | P1 | P2 | P3 | deferred | out-of-scope | **Total** |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| **M0** Geometry | 78 | 0 | 0 | 0 | 0 | 0 | **78** |
-| **M1** PDF read core | 31 | 24 | 0 | 1 | 0 | 0 | **56** |
-| **M2** Text extraction | 19 | 22 | 0 | 0 | 0 | 0 | **41** |
-| **M3** Save / edit / merge / metadata | 14 | 24 | 0 | 1 | 0 | 0 | **39** |
-| **M4** Content / annot / redaction / forms | 14 | 71 | 8 | 0 | 0 | 0 | **93** |
-| **M5** Image docs / codecs / Pixmap / shim | 12 | 6 | 11 | 0 | 0 | 0 | **29** |
-| **M6** Vector rendering (post-v1) | 0 | 0 | 0 | 0 | 14 | 0 | **14** |
-| **post-v1** | 0 | 0 | 0 | 60 | 0 | 0 | **60** |
-| **out-of-scope** | 0 | 0 | 0 | 8 | 0 | 20 | **28** |
-| **Totals** | **168** | **147** | **30** | **70** | **14** | **20** | **437** |
+| Milestone | P0 | P1 | P2 | P3 | deferred | out-of-scope | **Total** | **Implemented** |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| **M0** Geometry (+ paper sizes) | 78 | 0 | 0 | 0 | 0 | 0 | **78** | **81** |
+| **M1** PDF read core | 31 | 24 | 0 | 1 | 0 | 0 | **56** | **23** |
+| **M2** Text extraction | 19 | 22 | 0 | 0 | 0 | 0 | **41** | **13** |
+| **M3** Save / edit / merge / metadata | 14 | 24 | 0 | 1 | 0 | 0 | **39** | 0 |
+| **M4** Content / annot / redaction / forms | 14 | 71 | 8 | 0 | 0 | 0 | **93** | 0 |
+| **M5** Image docs / codecs / Pixmap / shim | 12 | 6 | 11 | 0 | 0 | 0 | **29** | 0 |
+| **M6** Vector rendering (post-v1) | 0 | 0 | 0 | 0 | 14 | 0 | **14** | 0 |
+| **post-v1** | 0 | 0 | 0 | 60 | 0 | 0 | **60** | 0 |
+| **out-of-scope** | 0 | 0 | 0 | 8 | 0 | 20 | **28** | 0 |
+| **Totals** | **168** | **147** | **30** | **70** | **14** | **20** | **437** | **117** |
+
+> **M0 Implemented = 81** counts the 78 geometry rows **plus** the 3 M0-milestone paper-size helpers
+> (`paper_size`/`paper_rect`/`paper_sizes`), which are catalogued under *Module-level functions* (their P1
+> home) rather than the geometry block — hence M0 Implemented (81) > M0 Total (78).
 
 ### Per-class catalogued counts
 
 | Class / group | Catalogued | Implemented |
 |---|---:|---:|
-| `Matrix` | 16 | 0 |
-| `Point` | 11 | 0 |
-| `Rect` | 30 | 0 |
-| `IRect` | 13 | 0 |
-| `Quad` | 11 | 0 |
-| Geometry constants/aliases | 3 | 0 |
-| `Document` | 110 | 0 |
-| `Page` | 96 | 0 |
-| `TextPage` | 15 | 0 |
+| `Matrix` | 16 | 16 |
+| `Point` | 11 | 11 |
+| `Rect` | 30 | 30 |
+| `IRect` | 13 | 13 |
+| `Quad` | 11 | 11 |
+| Geometry constants/aliases | 3 | 3 |
+| `Document` | 110 | 18 |
+| `Page` | 96 | 12 |
+| `TextPage` | 15 | 6 |
 | `Pixmap` | 38 | 0 |
 | `Annot` | 30 | 0 |
 | `Widget` | 14 | 0 |
@@ -79,10 +85,10 @@ counted as single rows; individual enum members are not double-counted).
 | `TextWriter` | 9 | 0 |
 | `Story` / `Xml` / `Archive` | 18 | 0 |
 | `Colorspace` | 4 | 0 |
-| Module-level functions | 22 | 0 |
+| Module-level functions | 22 | 3 |
 | `Tools` / `TOOLS` | 12 | 0 |
 | Constant families + exceptions | 24 | 0 |
-| **TOTAL** | **437** | **0** |
+| **TOTAL** | **437** | **117** |
 
 > The catalogued totals double-count a handful of symbols that legitimately appear on two surfaces
 > (e.g., `Annot.get_pixmap`, `Annot.get_text`, the `draw_*` family on both `Page` and `Shape`,
@@ -99,105 +105,105 @@ PRD §8.6.1 pins the row-vector convention `[a b c d e f]`, `x' = a·x + c·y + 
 
 ### `Matrix` — 2×3 affine transform `(a,b,c,d,e,f)`
 
-- [ ] `Matrix(...)` constructors — from 6 floats / `(sx,sy)` scale / `Matrix(deg)` rotation / copy / identity — **P0 · M0 · catalogued**
-- [ ] `concat(m1, m2)` — matrix multiplication — **P0 · M0 · catalogued**
-- [ ] `invert(m=None)` — inverse (returns 1 if degenerate) — **P0 · M0 · catalogued**
-- [ ] `norm()` — Euclidean norm — **P0 · M0 · catalogued**
-- [ ] `prerotate(deg)` — pre-multiply rotation (in place) — **P0 · M0 · catalogued**
-- [ ] `prescale(sx, sy)` — pre-multiply scale — **P0 · M0 · catalogued**
-- [ ] `preshear(h, v)` — pre-multiply shear — **P0 · M0 · catalogued**
-- [ ] `pretranslate(tx, ty)` — pre-multiply translation — **P0 · M0 · catalogued**
-- [ ] `is_rectilinear` (prop) — axis-aligned test — **P0 · M0 · catalogued**
-- [ ] `a b c d e f` (props) — the six components — **P0 · M0 · catalogued**
-- [ ] `__mul__` (`*`) — matrix/point/rect transform — **P0 · M0 · catalogued**
-- [ ] `__invert__` (`~`) — inverse — **P0 · M0 · catalogued**
-- [ ] `__add__` (`+`) — component add — **P0 · M0 · catalogued**
-- [ ] `__sub__` (`-`) — component sub — **P0 · M0 · catalogued**
-- [ ] `__eq__` / `__abs__` / `__len__` / `__getitem__` — sequence/compare protocol — **P0 · M0 · catalogued**
-- [ ] `__repr__` / `__bool__` — Python protocol parity — **P0 · M0 · catalogued**
+- [x] `Matrix(...)` constructors — from 6 floats / `(sx,sy)` scale / `Matrix(deg)` rotation / copy / identity — **P0 · M0 · implemented**
+- [x] `concat(m1, m2)` — matrix multiplication — **P0 · M0 · implemented**
+- [x] `invert(m=None)` — inverse (returns 1 if degenerate) — **P0 · M0 · implemented**
+- [x] `norm()` — Euclidean norm — **P0 · M0 · implemented**
+- [x] `prerotate(deg)` — pre-multiply rotation (in place) — **P0 · M0 · implemented**
+- [x] `prescale(sx, sy)` — pre-multiply scale — **P0 · M0 · implemented**
+- [x] `preshear(h, v)` — pre-multiply shear — **P0 · M0 · implemented**
+- [x] `pretranslate(tx, ty)` — pre-multiply translation — **P0 · M0 · implemented**
+- [x] `is_rectilinear` (prop) — axis-aligned test — **P0 · M0 · implemented**
+- [x] `a b c d e f` (props) — the six components — **P0 · M0 · implemented**
+- [x] `__mul__` (`*`) — matrix/point/rect transform — **P0 · M0 · implemented**
+- [x] `__invert__` (`~`) — inverse — **P0 · M0 · implemented**
+- [x] `__add__` (`+`) — component add — **P0 · M0 · implemented**
+- [x] `__sub__` (`-`) — component sub — **P0 · M0 · implemented**
+- [x] `__eq__` / `__abs__` / `__len__` / `__getitem__` — sequence/compare protocol — **P0 · M0 · implemented**
+- [x] `__repr__` / `__bool__` — Python protocol parity — **P0 · M0 · implemented**
 
 ### `Point` — `(x, y)`
 
-- [ ] `Point(...)` constructors — from 2 floats / copy — **P0 · M0 · catalogued**
-- [ ] `distance_to(x, unit='px')` — distance to point or rect — **P0 · M0 · catalogued**
-- [ ] `transform(m)` — apply matrix (in place) — **P0 · M0 · catalogued**
-- [ ] `norm()` — Euclidean norm — **P0 · M0 · catalogued**
-- [ ] `unit` (prop) — unit vector — **P0 · M0 · catalogued**
-- [ ] `abs_unit` (prop) — abs-valued unit vector — **P0 · M0 · catalogued**
-- [ ] `x y` (props) — components — **P0 · M0 · catalogued**
-- [ ] operators `+ - * /` — vector arithmetic — **P0 · M0 · catalogued**
-- [ ] `__invert__` (`~`) — **P0 · M0 · catalogued**
-- [ ] `__eq__` / `__abs__` — compare / magnitude — **P0 · M0 · catalogued**
-- [ ] `__getitem__` / `__len__` / `__repr__` — sequence protocol — **P0 · M0 · catalogued**
+- [x] `Point(...)` constructors — from 2 floats / copy — **P0 · M0 · implemented**
+- [x] `distance_to(x, unit='px')` — distance to point or rect — **P0 · M0 · implemented**
+- [x] `transform(m)` — apply matrix (in place) — **P0 · M0 · implemented**
+- [x] `norm()` — Euclidean norm — **P0 · M0 · implemented**
+- [x] `unit` (prop) — unit vector — **P0 · M0 · implemented**
+- [x] `abs_unit` (prop) — abs-valued unit vector — **P0 · M0 · implemented**
+- [x] `x y` (props) — components — **P0 · M0 · implemented**
+- [x] operators `+ - * /` — vector arithmetic — **P0 · M0 · implemented**
+- [x] `__invert__` (`~`) — **P0 · M0 · implemented**
+- [x] `__eq__` / `__abs__` — compare / magnitude — **P0 · M0 · implemented**
+- [x] `__getitem__` / `__len__` / `__repr__` — sequence protocol — **P0 · M0 · implemented**
 
 ### `Rect` — float rect `(x0, y0, x1, y1)`
 
-- [ ] `Rect(...)` constructors — 4 floats / 2 points / copy — **P0 · M0 · catalogued**
-- [ ] `intersect(r)` — set to intersection (in place) — **P0 · M0 · catalogued**
-- [ ] `include_rect(r)` — set to union (in place) — **P0 · M0 · catalogued**
-- [ ] `include_point(p)` — enlarge to contain point — **P0 · M0 · catalogued**
-- [ ] `intersects(r)` — boolean overlap — **P0 · M0 · catalogued**
-- [ ] `contains(x)` — contains point/rect — **P0 · M0 · catalogued**
-- [ ] `normalize()` — make x0≤x1, y0≤y1 — **P0 · M0 · catalogued**
-- [ ] `transform(m)` — apply matrix (→ bounding box) — **P0 · M0 · catalogued**
-- [ ] `morph(point, matrix)` — morph around fixed point → Quad — **P0 · M0 · catalogued**
-- [ ] `torect(rect)` — matrix mapping self → other rect — **P0 · M0 · catalogued**
-- [ ] `round()` — → `IRect` — **P0 · M0 · catalogued**
-- [ ] `get_area(unit)` — area — **P0 · M0 · catalogued**
-- [ ] `norm()` — corner-vector norm — **P0 · M0 · catalogued**
-- [ ] `width` `height` (props) — dimensions — **P0 · M0 · catalogued**
-- [ ] `x0 y0 x1 y1` (props) — edges — **P0 · M0 · catalogued**
-- [ ] `tl tr bl br` (props) — corner points (aliases) — **P0 · M0 · catalogued**
-- [ ] `top_left top_right bottom_left bottom_right` (props) — corner points — **P0 · M0 · catalogued**
-- [ ] `is_empty` (prop) — empty test — **P0 · M0 · catalogued**
-- [ ] `is_infinite` (prop) — infinite test — **P0 · M0 · catalogued**
-- [ ] `is_valid` (prop) — validity test — **P0 · M0 · catalogued**
-- [ ] `irect` (prop) — → `IRect` — **P0 · M0 · catalogued**
-- [ ] `quad` (prop) — → `Quad` — **P0 · M0 · catalogued**
-- [ ] `__and__` (`&`) — intersect — **P0 · M0 · catalogued**
-- [ ] `__or__` (`|`) — union — **P0 · M0 · catalogued**
-- [ ] `__mul__` (`*`) — transform — **P0 · M0 · catalogued**
-- [ ] `__add__` / `__sub__` / `__truediv__` — arithmetic — **P0 · M0 · catalogued**
-- [ ] `__invert__` (`~`) — **P0 · M0 · catalogued**
-- [ ] `__eq__` / `__contains__` — compare / membership — **P0 · M0 · catalogued**
-- [ ] `__getitem__` / `__len__` / `__repr__` — sequence protocol — **P0 · M0 · catalogued**
-- [ ] `__abs__` — area magnitude — **P0 · M0 · catalogued**
+- [x] `Rect(...)` constructors — 4 floats / 2 points / copy — **P0 · M0 · implemented**
+- [x] `intersect(r)` — set to intersection (in place) — **P0 · M0 · implemented**
+- [x] `include_rect(r)` — set to union (in place) — **P0 · M0 · implemented**
+- [x] `include_point(p)` — enlarge to contain point — **P0 · M0 · implemented**
+- [x] `intersects(r)` — boolean overlap — **P0 · M0 · implemented**
+- [x] `contains(x)` — contains point/rect — **P0 · M0 · implemented**
+- [x] `normalize()` — make x0≤x1, y0≤y1 — **P0 · M0 · implemented**
+- [x] `transform(m)` — apply matrix (→ bounding box) — **P0 · M0 · implemented**
+- [x] `morph(point, matrix)` — morph around fixed point → Quad — **P0 · M0 · implemented**
+- [x] `torect(rect)` — matrix mapping self → other rect — **P0 · M0 · implemented**
+- [x] `round()` — → `IRect` — **P0 · M0 · implemented**
+- [x] `get_area(unit)` — area — **P0 · M0 · implemented**
+- [x] `norm()` — corner-vector norm — **P0 · M0 · implemented**
+- [x] `width` `height` (props) — dimensions — **P0 · M0 · implemented**
+- [x] `x0 y0 x1 y1` (props) — edges — **P0 · M0 · implemented**
+- [x] `tl tr bl br` (props) — corner points (aliases) — **P0 · M0 · implemented**
+- [x] `top_left top_right bottom_left bottom_right` (props) — corner points — **P0 · M0 · implemented**
+- [x] `is_empty` (prop) — empty test — **P0 · M0 · implemented**
+- [x] `is_infinite` (prop) — infinite test — **P0 · M0 · implemented**
+- [x] `is_valid` (prop) — validity test — **P0 · M0 · implemented**
+- [x] `irect` (prop) — → `IRect` — **P0 · M0 · implemented**
+- [x] `quad` (prop) — → `Quad` — **P0 · M0 · implemented**
+- [x] `__and__` (`&`) — intersect — **P0 · M0 · implemented**
+- [x] `__or__` (`|`) — union — **P0 · M0 · implemented**
+- [x] `__mul__` (`*`) — transform — **P0 · M0 · implemented**
+- [x] `__add__` / `__sub__` / `__truediv__` — arithmetic — **P0 · M0 · implemented**
+- [x] `__invert__` (`~`) — **P0 · M0 · implemented**
+- [x] `__eq__` / `__contains__` — compare / membership — **P0 · M0 · implemented**
+- [x] `__getitem__` / `__len__` / `__repr__` — sequence protocol — **P0 · M0 · implemented**
+- [x] `__abs__` — area magnitude — **P0 · M0 · implemented**
 
 ### `IRect` — integer rect
 
-- [ ] `IRect(...)` constructors — 4 ints / copy — **P0 · M0 · catalogued**
-- [ ] `get_area(unit)` — area — **P0 · M0 · catalogued**
-- [ ] `include_point(p)` — **P0 · M0 · catalogued**
-- [ ] `include_rect(r)` — **P0 · M0 · catalogued**
-- [ ] `intersect(r)` — **P0 · M0 · catalogued**
-- [ ] `intersects(r)` — **P0 · M0 · catalogued**
-- [ ] `morph(point, matrix)` — **P0 · M0 · catalogued**
-- [ ] `norm()` — **P0 · M0 · catalogued**
-- [ ] `normalize()` — **P0 · M0 · catalogued**
-- [ ] `torect(rect)` — **P0 · M0 · catalogued**
-- [ ] `transform(m)` — **P0 · M0 · catalogued**
-- [ ] `rect` (prop) — → `Rect` — **P0 · M0 · catalogued**
-- [ ] props mirror `Rect` (`width height x0..y1 tl/tr/bl/br is_empty is_infinite irect quad`) + operators — **P0 · M0 · catalogued**
+- [x] `IRect(...)` constructors — 4 ints / copy — **P0 · M0 · implemented**
+- [x] `get_area(unit)` — area — **P0 · M0 · implemented**
+- [x] `include_point(p)` — **P0 · M0 · implemented**
+- [x] `include_rect(r)` — **P0 · M0 · implemented**
+- [x] `intersect(r)` — **P0 · M0 · implemented**
+- [x] `intersects(r)` — **P0 · M0 · implemented**
+- [x] `morph(point, matrix)` — **P0 · M0 · implemented**
+- [x] `norm()` — **P0 · M0 · implemented**
+- [x] `normalize()` — **P0 · M0 · implemented**
+- [x] `torect(rect)` — **P0 · M0 · implemented**
+- [x] `transform(m)` — **P0 · M0 · implemented**
+- [x] `rect` (prop) — → `Rect` — **P0 · M0 · implemented**
+- [x] props mirror `Rect` (`width height x0..y1 tl/tr/bl/br is_empty is_infinite irect quad`) + operators — **P0 · M0 · implemented**
 
 ### `Quad` — 4 arbitrary points (ul, ur, ll, lr); supports rotation/shear
 
-- [ ] `Quad(...)` constructors — 4 points / copy — **P0 · M0 · catalogued**
-- [ ] `transform(m)` — apply matrix (in place) — **P0 · M0 · catalogued**
-- [ ] `morph(point, matrix)` — morph around fixed point — **P0 · M0 · catalogued**
-- [ ] `width height` (props) — max edge lengths — **P0 · M0 · catalogued**
-- [ ] `rect` (prop) — bounding rect — **P0 · M0 · catalogued**
-- [ ] `ul ur ll lr` (props) — the four corner points — **P0 · M0 · catalogued**
-- [ ] `is_convex` (prop) — **P0 · M0 · catalogued**
-- [ ] `is_empty` (prop) — **P0 · M0 · catalogued**
-- [ ] `is_infinite` (prop) — **P0 · M0 · catalogued**
-- [ ] `is_rectangular` (prop) — **P0 · M0 · catalogued**
-- [ ] operators `* ~ ==` — transform / invert / equal — **P0 · M0 · catalogued**
+- [x] `Quad(...)` constructors — 4 points / copy — **P0 · M0 · implemented**
+- [x] `transform(m)` — apply matrix (in place) — **P0 · M0 · implemented**
+- [x] `morph(point, matrix)` — morph around fixed point — **P0 · M0 · implemented**
+- [x] `width height` (props) — max edge lengths — **P0 · M0 · implemented**
+- [x] `rect` (prop) — bounding rect — **P0 · M0 · implemented**
+- [x] `ul ur ll lr` (props) — the four corner points — **P0 · M0 · implemented**
+- [x] `is_convex` (prop) — **P0 · M0 · implemented**
+- [x] `is_empty` (prop) — **P0 · M0 · implemented**
+- [x] `is_infinite` (prop) — **P0 · M0 · implemented**
+- [x] `is_rectangular` (prop) — **P0 · M0 · implemented**
+- [x] operators `* ~ ==` — transform / invert / equal — **P0 · M0 · implemented**
 
 ### Geometry constants & type aliases
 
-- [ ] `EMPTY_RECT/IRECT/QUAD`, `INFINITE_RECT/IRECT/QUAD`, `Identity`/`IdentityMatrix` — singletons — **P0 · M0 · catalogued**
-- [ ] `EPSILON`, `FLT_EPSILON`, `FZ_MIN_INF_RECT`, `FZ_MAX_INF_RECT` — numeric constants — **P0 · M0 · catalogued**
-- [ ] type aliases `rect_like point_like matrix_like quad_like` — duck-typed inputs — **P0 · M0 · catalogued**
+- [x] `EMPTY_RECT/IRECT/QUAD`, `INFINITE_RECT/IRECT/QUAD`, `Identity`/`IdentityMatrix` — singletons — **P0 · M0 · implemented**
+- [x] `EPSILON`, `FLT_EPSILON`, `FZ_MIN_INF_RECT`, `FZ_MAX_INF_RECT` — numeric constants — **P0 · M0 · implemented**
+- [x] type aliases `rect_like point_like matrix_like quad_like` — duck-typed inputs — **P0 · M0 · implemented**
 
 ---
 
@@ -208,8 +214,8 @@ all non-PDF (XPS/EPUB/MOBI/FB2/CBZ/SVG/TXT) input is **out-of-scope** (PRD §3.2
 
 ### Open / lifecycle / save
 
-- [ ] `open(filename=None, stream=None, filetype=None, rect=None, width=0, height=0, fontsize=11)` — open from path/bytes; PDF + image filetypes in scope — **P0 · M1 · catalogued**
-- [ ] `Document(...)` — constructor alias of `open` — **P0 · M1 · catalogued**
+- [x] `open(filename=None, stream=None, filetype=None, rect=None, width=0, height=0, fontsize=11)` — open from path/bytes; PDF + image filetypes in scope — **P0 · M1 · implemented** *(PDF path/bytes done; image filetypes are M5)*
+- [x] `Document(...)` — constructor alias of `open` — **P0 · M1 · implemented**
 - [ ] `close()` — release resources — **P0 · M1 · catalogued**
 - [ ] `save(filename, garbage, clean, deflate, deflate_images, deflate_fonts, incremental, ascii, expand, linear, no_new_id, appearance, pretty, encryption, permissions, owner_pw, user_pw, preserve_metadata, use_objstms, compression_effort)` — full write (NB `linear=True` → unsupported per PRD §3.2 #7) — **P0 · M3 · catalogued**
 - [ ] `ez_save(filename, ...)` — `save` with friendly defaults (garbage=3, deflate=1) — **P0 · M3 · catalogued**
@@ -221,9 +227,9 @@ all non-PDF (XPS/EPUB/MOBI/FB2/CBZ/SVG/TXT) input is **out-of-scope** (PRD §3.2
 
 ### Pages — access, layout
 
-- [ ] `load_page(n)` / `__getitem__` — get `Page` (neg idx) — **P0 · M1 · catalogued**
-- [ ] `pages(start, stop, step)` — page iterator — **P1 · M1 · catalogued** *(not in PRD §7 explicit row — verify; implied by load_page)*
-- [ ] `page_count` (prop) — number of pages — **P0 · M1 · catalogued**
+- [x] `load_page(n)` / `__getitem__` — get `Page` (neg idx) — **P0 · M1 · implemented**
+- [x] `pages(start, stop, step)` — page iterator — **P1 · M1 · implemented** *(not in PRD §7 explicit row — verify; implied by load_page)*
+- [x] `page_count` (prop) — number of pages — **P0 · M1 · implemented**
 - [ ] `new_page(pno=-1, width, height)` — create blank page — **P0 · M3 · catalogued**
 - [ ] `insert_page(pno, text=None, ...)` — insert page + optional text — **P0 · M3 · catalogued**
 - [ ] `insert_pdf(docsrc, from_page, to_page, start_at, rotate, links, annots, ...)` — merge from another PDF (deep-copy + dedup) — **P0 · M3 · catalogued**
@@ -250,7 +256,7 @@ all non-PDF (XPS/EPUB/MOBI/FB2/CBZ/SVG/TXT) input is **out-of-scope** (PRD §3.2
 
 ### Metadata / TOC / outline
 
-- [ ] `metadata` (attr) — title/author/subject/keywords/creator/producer/dates/format/encryption — **P1 · M1 · catalogued** *(read at M1; write at M3)*
+- [x] `metadata` (attr) — title/author/subject/keywords/creator/producer/dates/format/encryption — **P1 · M1 · implemented** *(read at M1; write at M3)*
 - [ ] `set_metadata(d)` — write metadata (Info + mirror to XMP) — **P1 · M3 · catalogued**
 - [ ] `get_toc(simple=True)` — TOC as `[lvl, title, page, dest]` (page-label aware, PRD §3.5) — **P1 · M3 · catalogued**
 - [ ] `set_toc(toc, collapse)` — replace TOC tree — **P1 · M3 · catalogued**
@@ -264,20 +270,20 @@ all non-PDF (XPS/EPUB/MOBI/FB2/CBZ/SVG/TXT) input is **out-of-scope** (PRD §3.2
 
 ### Security / permissions
 
-- [ ] `needs_pass` (prop) — encrypted/locked test — **P0 · M1 · catalogued**
-- [ ] `authenticate(password)` — unlock with user/owner pw (R2–R6) — **P0 · M1 · catalogued**
-- [ ] `permissions` (prop) — allowed-ops bitmask (advisory, exposed not enforced) — **P0 · M1 · catalogued**
-- [ ] `is_encrypted` (prop) — encryption state — **P0 · M1 · catalogued**
+- [x] `needs_pass` (prop) — encrypted/locked test — **P0 · M1 · implemented**
+- [x] `authenticate(password)` — unlock with user/owner pw (R2–R6) — **P0 · M1 · implemented**
+- [x] `permissions` (prop) — allowed-ops bitmask (advisory, exposed not enforced) — **P0 · M1 · implemented**
+- [x] `is_encrypted` (prop) — encryption state — **P0 · M1 · implemented**
 - [ ] `get_sigflags()` — signature flags (read-only) — **P2 · M4 · catalogued** *(sig fields read-only, PRD §3.2 #6)*
 - [ ] encryption on `save()` — RC4-128/AES-128/AES-256 R6 (never write R5) — **P1 · M3 · catalogued**
 
 ### Identity / state props
 
-- [ ] `is_pdf` (prop) — **P0 · M1 · catalogued**
+- [x] `is_pdf` (prop) — **P0 · M1 · implemented**
 - [ ] `is_form_pdf` (prop) — AcroForm present — **P1 · M4 · catalogued**
 - [ ] `is_dirty` (prop) — unsaved changes — **P1 · M3 · catalogued**
 - [ ] `is_reflowable` (prop) — **P1 · M1 · catalogued** *(false for PDF/image; trivial)*
-- [ ] `is_repaired` (prop) — `parse_was_repaired` flag (PRD §8.2) — **P0 · M1 · catalogued**
+- [x] `is_repaired` (prop) — `parse_was_repaired` flag (PRD §8.2) — **P0 · M1 · implemented**
 - [ ] `is_fast_webaccess` (prop) — linearized read-detect — **P1 · M1 · catalogued** *(read-transparent; linearization write out of scope)*
 - [ ] `is_closed` (prop) — **P0 · M1 · catalogued**
 - [ ] `name` (prop) — source path/name — **P0 · M1 · catalogued**
@@ -312,18 +318,18 @@ all non-PDF (XPS/EPUB/MOBI/FB2/CBZ/SVG/TXT) input is **out-of-scope** (PRD §3.2
 
 ### Low-level xref / object access (COS layer — clean-room critical)
 
-- [ ] `xref_length()` — number of xref entries — **P1 · M1 · catalogued**
-- [ ] `xref_object(xref, compressed, ascii)` — object source as string — **P1 · M1 · catalogued**
-- [ ] `xref_stream(xref)` — decoded stream bytes — **P1 · M1 · catalogued**
+- [x] `xref_length()` — number of xref entries — **P1 · M1 · implemented**
+- [x] `xref_object(xref, compressed, ascii)` — object source as string — **P1 · M1 · implemented**
+- [x] `xref_stream(xref)` — decoded stream bytes — **P1 · M1 · implemented**
 - [ ] `xref_stream_raw(xref)` — raw (undecoded) stream bytes — **P1 · M1 · catalogued**
 - [ ] `update_object(xref, text, page)` — replace object definition — **P1 · M3 · catalogued**
 - [ ] `update_stream(xref, data, new, compress)` — replace stream content — **P1 · M3 · catalogued**
 - [ ] `get_new_xref()` — allocate a fresh xref — **P1 · M3 · catalogued**
-- [ ] `xref_get_key(xref, key)` — read a dict key — **P1 · M1 · catalogued**
+- [x] `xref_get_key(xref, key)` — read a dict key — **P1 · M1 · implemented**
 - [ ] `xref_get_keys(xref)` — list a dict's keys — **P1 · M1 · catalogued**
 - [ ] `xref_set_key(xref, key, value)` — set a dict key (Null deletes) — **P1 · M3 · catalogued**
 - [ ] `xref_copy(src, dst)` — copy object — **P1 · M3 · catalogued**
-- [ ] `xref_is_font(xref)` / `xref_is_image` / `xref_is_stream` / `xref_is_xobject` — type predicates — **P1 · M1 · catalogued**
+- [x] `xref_is_font(xref)` / `xref_is_image` / `xref_is_stream` / `xref_is_xobject` — type predicates — **P1 · M1 · implemented** *(`xref_is_stream` exposed + test-backed; remaining predicates land with the rest of the low-level API)*
 - [ ] `pdf_catalog()` — catalog xref — **P1 · M1 · catalogued**
 - [ ] `pdf_trailer()` — trailer xref/source — **P1 · M1 · catalogued**
 - [ ] `is_stream(xref)` — object has a stream — **P1 · M1 · catalogued**
@@ -346,7 +352,7 @@ all non-PDF (XPS/EPUB/MOBI/FB2/CBZ/SVG/TXT) input is **out-of-scope** (PRD §3.2
 
 ### Document-wide page-content helpers (convenience over `Page`)
 
-- [ ] `get_page_text(pno, output, ...)` — text of a page — **P1 · M2 · catalogued** *(thin wrapper over Page.get_text)*
+- [x] `get_page_text(pno, output, ...)` — text of a page — **P1 · M2 · implemented** *(thin wrapper over Page.get_text)*
 - [ ] `get_page_pixmap(pno, ...)` — render a page (image-only path in scope; vector → unsupported) — **P0 · M5 · catalogued**
 - [ ] `get_page_images(pno, full)` — images on a page — **P1 · M2 · catalogued**
 - [ ] `get_page_fonts(pno, full)` — fonts on a page — **P1 · M2 · catalogued**
@@ -369,23 +375,23 @@ Workhorse for extraction, drawing, annotation, and (in scope only for image-only
 
 ### Text extraction
 
-- [ ] `get_text(option='text', clip, flags, textpage, sort, delimiters, tolerance)` — `text|blocks|words|dict|rawdict|html|xhtml|xml|json|rawjson` — **P0 · M2 · catalogued** *(html/xhtml/xml are P1, PRD §7)*
+- [x] `get_text(option='text', clip, flags, textpage, sort, delimiters, tolerance)` — `text|blocks|words|dict|rawdict|html|xhtml|xml|json|rawjson` — **P0 · M2 · implemented** *(all output variants done; html/xhtml/xml are P1, PRD §7)*
 - [ ] `get_text_blocks(...)` — block tuples convenience — **P0 · M2 · catalogued**
 - [ ] `get_text_words(...)` — word tuples convenience — **P0 · M2 · catalogued**
 - [ ] `get_textbox(rect, textpage=None)` — text inside a rect — **P1 · M2 · catalogued**
 - [ ] `get_text_selection(p1, p2, clip)` — text between two points — **P1 · M2 · catalogued**
-- [ ] `get_textpage(clip, flags)` — build reusable `TextPage` — **P1 · M2 · catalogued**
+- [x] `get_textpage(clip, flags)` — build reusable `TextPage` — **P1 · M2 · implemented**
 - [ ] `extend_textpage(...)` — extend an existing TextPage — **P1 · M2 · catalogued** *(not in PRD §7 explicit row — verify)*
 - [ ] `get_texttrace()` — low-level per-glyph trace — **P1 · M2 · catalogued** *(not in PRD §7 explicit row — verify; valuable for ground-truth)*
 - [ ] `get_textpage_ocr(flags, language, dpi, full, tessdata)` — OCR-backed TextPage — **P3 · post-v1 · catalogued** *(OCR out of scope, PRD §3.2 #3)*
 
 ### Per-method default flag sets
 
-- [ ] `TEXTFLAGS_*` per-method defaults pinned (text/blocks/words/dict/rawdict/html/xhtml/xml/search) — **P0 · M2 · catalogued** *(PRD §7 + §8.6.2; recorded in COMPAT.toml)*
+- [x] `TEXTFLAGS_*` per-method defaults pinned (text/blocks/words/dict/rawdict/html/xhtml/xml/search) — **P0 · M2 · implemented** *(PRD §7 + §8.6.2; recorded in COMPAT.toml)*
 
 ### Search & links
 
-- [ ] `search_for(needle, clip, quads, flags, textpage)` — find text → Rects/Quads — **P0 · M2 · catalogued**
+- [x] `search_for(needle, clip, quads, flags, textpage)` — find text → Rects/Quads — **P0 · M2 · implemented**
 - [ ] `get_links()` / `links(kinds)` — enumerate links — **P1 · M4 · catalogued** *(read in scope; insert/update/delete = M4)*
 - [ ] `load_links()` — load link list — **P1 · M4 · catalogued**
 - [ ] `first_link` (prop) — first `Link` of linked list — **P1 · M4 · catalogued**
@@ -399,7 +405,7 @@ Workhorse for extraction, drawing, annotation, and (in scope only for image-only
 - [ ] `get_svg_image(matrix, text_as_path)` — page → SVG — **deferred · M6 · catalogued** *(vector rendering, PRD §3.2 #1)*
 - [ ] `get_displaylist(annots)` — build replayable `DisplayList` — **deferred · M6 · catalogued**
 - [ ] `run(device, matrix)` — run page through a device — **deferred · M6 · catalogued**
-- [ ] `bound()` — page rectangle (= `rect`) — **P0 · M1 · catalogued**
+- [x] `bound()` — page rectangle (= `rect`) — **P0 · M1 · implemented**
 
 ### Vector / image / font inventory (analysis)
 
@@ -408,8 +414,8 @@ Workhorse for extraction, drawing, annotation, and (in scope only for image-only
 - [ ] `get_bboxlog()` — ordered bbox log of content items — **P1 · M4 · catalogued** *(not in PRD §7 explicit row — verify)*
 - [ ] `cluster_drawings(...)` — group nearby vector graphics — **P2 · M4 · catalogued** *(not in PRD §7 explicit row — verify)*
 - [ ] `find_tables(...)` — detect & extract tables (`TableFinder`) — **P3 · post-v1 · catalogued** *(table detection out of scope, PRD §3.2 #4)*
-- [ ] `get_fonts(full=False)` — fonts used — **P1 · M2 · catalogued**
-- [ ] `get_images(full=False)` — images used — **P1 · M2 · catalogued**
+- [x] `get_fonts(full=False)` — fonts used — **P1 · M2 · implemented**
+- [x] `get_images(full=False)` — images used — **P1 · M2 · implemented**
 - [ ] `get_image_info(hashes, xrefs)` — image placements + bbox — **P1 · M2 · catalogued**
 - [ ] `get_image_bbox(item)` — bbox where image is shown — **P1 · M2 · catalogued**
 - [ ] `get_image_rects(item)` — all rects where image is shown — **P1 · M2 · catalogued**
@@ -487,21 +493,21 @@ Workhorse for extraction, drawing, annotation, and (in scope only for image-only
 
 ### Geometry / boxes / rotation
 
-- [ ] `rect` (prop) — page rect (rotation-aware, PRD §8.6.1) — **P0 · M1 · catalogued**
-- [ ] `mediabox` (prop) / `set_mediabox(r)` — **P0 · M1 / M3 · catalogued**
+- [x] `rect` (prop) — page rect (rotation-aware, PRD §8.6.1) — **P0 · M1 · implemented**
+- [x] `mediabox` (prop) / `set_mediabox(r)` — **P0 · M1 / M3 · implemented** *(read done; `set_mediabox` is M3)*
 - [ ] `mediabox_size` (prop) — **P0 · M1 · catalogued**
-- [ ] `cropbox` (prop) / `set_cropbox(r)` — (cropbox ⊆ mediabox) — **P0 · M1 / M3 · catalogued**
+- [x] `cropbox` (prop) / `set_cropbox(r)` — (cropbox ⊆ mediabox) — **P0 · M1 / M3 · implemented** *(read done; `set_cropbox` is M3)*
 - [ ] `cropbox_position` (prop) — **P0 · M1 · catalogued**
 - [ ] `artbox` (prop) / `set_artbox(r)` — **P1 · M1 / M3 · catalogued**
 - [ ] `bleedbox` (prop) / `set_bleedbox(r)` — **P1 · M1 / M3 · catalogued**
 - [ ] `trimbox` (prop) / `set_trimbox(r)` — **P1 · M1 / M3 · catalogued**
-- [ ] `rotation` (prop) / `set_rotation(deg)` — page `/Rotate` — **P0 · M1 / M3 · catalogued**
+- [x] `rotation` (prop) / `set_rotation(deg)` — page `/Rotate` — **P0 · M1 / M3 · implemented** *(read done; `set_rotation` is M3)*
 - [ ] `remove_rotation()` — normalize rotation to 0, bake into content — **P0 · M3 · catalogued**
 - [ ] `transformation_matrix` (prop) — page → device matrix — **P0 · M1 · catalogued**
 - [ ] `rotation_matrix` (prop) — **P0 · M1 · catalogued**
 - [ ] `derotation_matrix` (prop) — **P0 · M1 · catalogued**
 - [ ] `xref` (prop) — page object xref — **P0 · M1 · catalogued**
-- [ ] `number` (prop) — page index — **P0 · M1 · catalogued**
+- [x] `number` (prop) — page index — **P0 · M1 · implemented**
 - [ ] `parent` (prop) — owning `Document` — **P0 · M1 · catalogued**
 - [ ] `refresh()` — reload page after change — **P1 · M3 · catalogued** *(not in PRD §7 explicit row — verify)*
 - [ ] `language` (prop) / `set_language(lang)` — page `/Lang` — **P1 · M3 · catalogued**
@@ -515,12 +521,12 @@ Workhorse for extraction, drawing, annotation, and (in scope only for image-only
 Cached structured text for a page; produced by `Page.get_textpage()`; backs all `get_text` variants.
 PRD §7 row: *"`TextPage` reusable object — P1 — M2."* (camelCase method names are PyMuPDF-canonical here.)
 
-- [ ] `extractText(sort)` / `extractTEXT` — plain text — **P0 · M2 · catalogued**
-- [ ] `extractBLOCKS` — block tuples — **P0 · M2 · catalogued**
-- [ ] `extractWORDS(delimiters)` — word tuples — **P0 · M2 · catalogued**
-- [ ] `extractDICT(sort)` — structured dict — **P0 · M2 · catalogued**
-- [ ] `extractJSON(sort)` — structured JSON — **P0 · M2 · catalogued**
-- [ ] `extractRAWDICT(sort)` — char-level dict — **P0 · M2 · catalogued**
+- [x] `extractText(sort)` / `extractTEXT` — plain text — **P0 · M2 · implemented**
+- [x] `extractBLOCKS` — block tuples — **P0 · M2 · implemented**
+- [x] `extractWORDS(delimiters)` — word tuples — **P0 · M2 · implemented**
+- [x] `extractDICT(sort)` — structured dict — **P0 · M2 · implemented**
+- [x] `extractJSON(sort)` — structured JSON — **P0 · M2 · implemented**
+- [x] `extractRAWDICT(sort)` — char-level dict — **P0 · M2 · implemented**
 - [ ] `extractRAWJSON(sort)` — char-level JSON — **P0 · M2 · catalogued**
 - [ ] `extractHTML()` — HTML markup — **P1 · M2 · catalogued** *(Tier-B serialization, PRD §6.1/§8.6.2)*
 - [ ] `extractXHTML()` — XHTML markup — **P1 · M2 · catalogued**
@@ -818,9 +824,9 @@ PRD §7 maps `open`, geometry, and helpers; many of these are pure utilities (P0
 render/Story/OCR-bound (deferred / out of scope).
 
 - [ ] `open(...)` — open document (alias of `Document`) — **P0 · M1 · catalogued**
-- [ ] `paper_size(name)` — named paper dimensions — **P1 · M0 · catalogued** *(not in PRD §7 explicit — verify; trivial constant table)*
-- [ ] `paper_rect(name)` — named paper rect — **P1 · M0 · catalogued**
-- [ ] `paper_sizes` — paper-size table — **P1 · M0 · catalogued**
+- [x] `paper_size(name)` — named paper dimensions — **P1 · M0 · implemented** *(not in PRD §7 explicit — verify; trivial constant table)*
+- [x] `paper_rect(name)` — named paper rect — **P1 · M0 · implemented**
+- [x] `paper_sizes` — paper-size table — **P1 · M0 · implemented**
 - [ ] `get_text_length(text, fontname, fontsize, encoding)` — Base-14 string width — **P0 · M2 · catalogued** *(needs Base-14 AFM metrics)*
 - [ ] `get_pdf_now()` — PDF date string — **P1 · M3 · catalogued**
 - [ ] `get_pdf_str(s)` — escaped PDF string — **P1 · M3 · catalogued**
