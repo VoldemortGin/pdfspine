@@ -19,6 +19,7 @@
 //! the matching encrypt-side primitives live here as `pub` helpers used by the
 //! test fixtures and reusable by M3 (see [`kdf`] / [`primitives`]).
 
+pub mod authoring;
 pub mod error;
 pub mod handler;
 pub mod kdf;
@@ -27,5 +28,6 @@ pub mod primitives;
 #[cfg(any(test, feature = "test-support"))]
 pub mod testsupport;
 
+pub use authoring::{Authoring, EncryptMethod, EncryptSpec};
 pub use error::{CryptoError, Result};
 pub use handler::{AuthRole, CryptMethod, Decryptor, EncryptConfig};

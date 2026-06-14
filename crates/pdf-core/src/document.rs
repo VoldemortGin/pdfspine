@@ -61,6 +61,11 @@ pub struct DocumentStore {
     /// Pending edits overlaid on the original cross-reference (PRD §8.7/§9.2).
     /// Empty after open; consulted by `get_object`/`resolve` before the arena.
     changes: RwLock<ChangeSet>,
+    /// Trailer-key overrides set by edits (e.g. a newly created `/Info` or
+    /// `/Encrypt` reference). The writer prefers these over the original trailer
+    /// so metadata-write / encryption-write survive a full save (PRD §8.7/§8.9).
+    /// `Object::Null` for a key means "remove that trailer key".
+    trailer_overrides: RwLock<Dict>,
     /// The Standard Security Handler, present iff the trailer has `/Encrypt`
     /// (PRD §8.4). `None` for an unencrypted document. Behind the `encryption`
     /// feature so the default build does not depend on `pdf-crypto` (PRD §9.1).
@@ -296,6 +301,7 @@ impl DocumentStore {
             interner: RwLock::new(NameInterner::new()),
             arena: RwLock::new(HashMap::new()),
             changes: RwLock::new(ChangeSet::new()),
+            trailer_overrides: RwLock::new(Dict::new()),
             #[cfg(feature = "encryption")]
             decryptor: RwLock::new(decryptor),
             #[cfg(feature = "encryption")]
@@ -858,6 +864,44 @@ impl DocumentStore {
             .map_err(|_| Error::Unsupported("change-set lock poisoned"))?;
         changes.delete(r.num);
         Ok(())
+    }
+
+    /// Overrides a trailer key for the next save (PRD §8.7/§8.9). Used to wire a
+    /// newly created `/Info` or `/Encrypt` reference into the trailer when the
+    /// original document had none (the writer otherwise only carries pre-existing
+    /// indirect trailer refs). Pass `Object::Null` to remove a trailer key.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Unsupported`] if the internal lock is poisoned.
+    pub fn set_trailer_key(&self, key: &str, value: Object) -> Result<()> {
+        let mut over = self
+            .trailer_overrides
+            .write()
+            .map_err(|_| Error::Unsupported("trailer-override lock poisoned"))?;
+        over.insert(Name::new(key), value);
+        Ok(())
+    }
+
+    /// The effective trailer reference for `key`, honoring any
+    /// [`set_trailer_key`](Self::set_trailer_key) override over the original
+    /// trailer (PRD §8.7). Returns `None` if the key is absent, removed, or not
+    /// an indirect reference.
+    #[must_use]
+    pub fn effective_trailer_ref(&self, key: &str) -> Option<ObjRef> {
+        let name = Name::new(key);
+        if let Ok(over) = self.trailer_overrides.read() {
+            match over.get(&name) {
+                Some(Object::Reference(r)) => return Some(*r),
+                Some(Object::Null) => return None,
+                Some(_) => return None,
+                None => {}
+            }
+        }
+        match self.trailer.get(&name) {
+            Some(Object::Reference(r)) => Some(*r),
+            _ => None,
+        }
     }
 
     /// A snapshot of the pending changes (object number → [`Change`]) in

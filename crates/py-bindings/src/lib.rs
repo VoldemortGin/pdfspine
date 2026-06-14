@@ -51,6 +51,54 @@ fn map_err(e: ApiError) -> PyErr {
     }
 }
 
+/// Maps a PyMuPDF `encryption` constant + passwords/permissions to an
+/// [`pdf_api::EncryptSpec`] (PRD §8.4). `encryption` values mirror PyMuPDF:
+/// `1` = RC4-128, `2` = AES-128, `3`/`4`/`6` = AES-256 (always authored as R6).
+fn encrypt_spec(
+    encryption: i32,
+    user_pw: Option<&str>,
+    owner_pw: Option<&str>,
+    permissions: i32,
+) -> PyResult<pdf_api::EncryptSpec> {
+    let method = match encryption {
+        1 => pdf_api::EncryptMethod::Rc4_128,
+        2 => pdf_api::EncryptMethod::Aes128,
+        3..=6 => pdf_api::EncryptMethod::Aes256R6,
+        other => {
+            return Err(PdfUnsupportedError::new_err(format!(
+                "unsupported encryption method: {other}"
+            )))
+        }
+    };
+    Ok(pdf_api::EncryptSpec {
+        user_pw: user_pw.unwrap_or("").as_bytes().to_vec(),
+        owner_pw: owner_pw.unwrap_or("").as_bytes().to_vec(),
+        permissions,
+        method,
+    })
+}
+
+/// Builds the `pdf_api::SaveOptions` for a save call from PyMuPDF-style kwargs.
+fn build_save_opts(
+    garbage: u8,
+    deflate: bool,
+    encryption: Option<i32>,
+    user_pw: Option<&str>,
+    owner_pw: Option<&str>,
+    permissions: i32,
+) -> PyResult<pdf_api::SaveOptions> {
+    let mut opts = pdf_api::SaveOptions::default()
+        .with_garbage(garbage)
+        .with_deflate(deflate);
+    if let Some(enc) = encryption {
+        if enc != 0 {
+            let spec = encrypt_spec(enc, user_pw, owner_pw, permissions)?;
+            opts = opts.with_encrypt(spec);
+        }
+    }
+    Ok(opts)
+}
+
 // --- Page handle ----------------------------------------------------------
 
 /// A page handle (PRD §9.2). Holds a cloned `pdf_api::Page` (its own `Arc` onto
@@ -469,6 +517,85 @@ impl PyPage {
         Ok(list)
     }
 
+    // --- links + label + rotation (PRD §8.9) -----------------------------
+
+    /// The link annotations on this page (PyMuPDF `Page.get_links`). Each link is
+    /// a dict with `kind` (0=none, 1=goto, 2=uri), `from` (rect tuple), and
+    /// `uri`/`page` as applicable, plus `xref`.
+    fn get_links<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
+        let links = pdf_api::page_get_links(&self.page);
+        let out = PyList::empty(py);
+        for link in links {
+            let d = PyDict::new(py);
+            match link.kind {
+                pdf_api::LinkKind::Uri(uri) => {
+                    d.set_item("kind", 2)?;
+                    d.set_item("uri", uri)?;
+                }
+                pdf_api::LinkKind::Goto(page) => {
+                    d.set_item("kind", 1)?;
+                    d.set_item("page", page)?;
+                }
+                pdf_api::LinkKind::None => {
+                    d.set_item("kind", 0)?;
+                }
+            }
+            d.set_item("from", rect_tuple(link.from))?;
+            d.set_item("xref", link.xref)?;
+            out.append(d)?;
+        }
+        Ok(out)
+    }
+
+    /// Inserts a link. `link` is a dict with `kind` (1=goto, 2=uri), `from`
+    /// (4-tuple rect), and `uri` or `page` (PyMuPDF `Page.insert_link`).
+    fn insert_link(&self, link: &Bound<'_, PyDict>) -> PyResult<()> {
+        let from: (f64, f64, f64, f64) = link
+            .get_item("from")?
+            .ok_or_else(|| PdfError::new_err("insert_link requires 'from' rect"))?
+            .extract()?;
+        let rect = Rect::new(from.0, from.1, from.2, from.3);
+        let kind: i32 = link
+            .get_item("kind")?
+            .map(|v| v.extract())
+            .transpose()?
+            .unwrap_or(2);
+        match kind {
+            2 => {
+                let uri: String = link
+                    .get_item("uri")?
+                    .ok_or_else(|| PdfError::new_err("uri link requires 'uri'"))?
+                    .extract()?;
+                pdf_api::page_insert_link_uri(&self.page, rect, &uri).map_err(map_err)
+            }
+            1 => {
+                let page: i32 = link
+                    .get_item("page")?
+                    .ok_or_else(|| PdfError::new_err("goto link requires 'page'"))?
+                    .extract()?;
+                pdf_api::page_insert_link_goto(&self.page, rect, page).map_err(map_err)
+            }
+            other => Err(PdfUnsupportedError::new_err(format!(
+                "unsupported link kind: {other}"
+            ))),
+        }
+    }
+
+    /// Deletes a link annotation by its `xref` (PyMuPDF `Page.delete_link`).
+    fn delete_link(&self, xref: u32) -> PyResult<()> {
+        pdf_api::page_delete_link(&self.page, xref).map_err(map_err)
+    }
+
+    /// The page label (PyMuPDF `Page.get_label`).
+    fn get_label(&self) -> String {
+        pdf_api::page_get_label(&self.page)
+    }
+
+    /// Sets the page rotation (PyMuPDF `Page.set_rotation`).
+    fn set_rotation(&self, rotation: i64) -> PyResult<()> {
+        pdf_api::page_set_rotation(&self.page, rotation).map_err(map_err)
+    }
+
     fn __repr__(&self) -> String {
         format!("<oxipdf._core.Page number={}>", self.page.number())
     }
@@ -614,6 +741,231 @@ impl PyDocument {
     ) -> PyResult<Py<PyAny>> {
         let page = self.doc.load_page(pno).map_err(map_err)?;
         text_output_to_py(py, &page, option, flags, None, sort)
+    }
+
+    // --- save (PRD §8.7 / §8.4) ------------------------------------------
+
+    /// Full-saves to `path` (PyMuPDF `Document.save`). Heavy work runs with the
+    /// GIL released. `encryption`: PyMuPDF method constant (`1`=RC4-128,
+    /// `2`=AES-128, `3..=6`=AES-256-R6); `incremental=True` appends in place.
+    #[pyo3(signature = (
+        path, *, garbage=0, deflate=false, incremental=false,
+        encryption=None, owner_pw=None, user_pw=None, permissions=-1
+    ))]
+    #[allow(clippy::too_many_arguments)]
+    fn save(
+        &self,
+        py: Python<'_>,
+        path: &str,
+        garbage: u8,
+        deflate: bool,
+        incremental: bool,
+        encryption: Option<i32>,
+        owner_pw: Option<&str>,
+        user_pw: Option<&str>,
+        permissions: i32,
+    ) -> PyResult<()> {
+        if incremental {
+            let opts = pdf_api::SaveOptions::default();
+            let bytes = py
+                .detach(|| self.doc.save_incremental(&opts))
+                .map_err(map_err)?;
+            std::fs::write(path, bytes).map_err(|e| PyOSError::new_err(e.to_string()))?;
+            return Ok(());
+        }
+        let opts = build_save_opts(garbage, deflate, encryption, user_pw, owner_pw, permissions)?;
+        py.detach(|| self.doc.save_to_path(path, &opts))
+            .map_err(map_err)
+    }
+
+    /// Full-saves to bytes (PyMuPDF `Document.tobytes`/`write`).
+    #[pyo3(signature = (
+        *, garbage=0, deflate=false, incremental=false,
+        encryption=None, owner_pw=None, user_pw=None, permissions=-1
+    ))]
+    #[allow(clippy::too_many_arguments)]
+    fn tobytes<'py>(
+        &self,
+        py: Python<'py>,
+        garbage: u8,
+        deflate: bool,
+        incremental: bool,
+        encryption: Option<i32>,
+        owner_pw: Option<&str>,
+        user_pw: Option<&str>,
+        permissions: i32,
+    ) -> PyResult<Bound<'py, PyBytes>> {
+        let bytes = if incremental {
+            let opts = pdf_api::SaveOptions::default();
+            py.detach(|| self.doc.save_incremental(&opts))
+                .map_err(map_err)?
+        } else {
+            let opts =
+                build_save_opts(garbage, deflate, encryption, user_pw, owner_pw, permissions)?;
+            py.detach(|| self.doc.save_to_bytes(&opts))
+                .map_err(map_err)?
+        };
+        Ok(PyBytes::new(py, &bytes))
+    }
+
+    /// PyMuPDF deprecated alias for an incremental save to `path`.
+    #[allow(non_snake_case)]
+    fn saveIncr(&self, py: Python<'_>, path: &str) -> PyResult<()> {
+        let opts = pdf_api::SaveOptions::default();
+        let bytes = py
+            .detach(|| self.doc.save_incremental(&opts))
+            .map_err(map_err)?;
+        std::fs::write(path, bytes).map_err(|e| PyOSError::new_err(e.to_string()))?;
+        Ok(())
+    }
+
+    // --- metadata write (PRD §8.9) ---------------------------------------
+
+    /// Sets `/Info` metadata from a dict (PyMuPDF `set_metadata`).
+    fn set_metadata(&self, meta: &Bound<'_, PyDict>) -> PyResult<()> {
+        let mut fields: Vec<(String, String)> = Vec::new();
+        for (k, v) in meta.iter() {
+            let key: String = k.extract()?;
+            let val: String = v.extract().unwrap_or_default();
+            fields.push((key, val));
+        }
+        self.doc.set_metadata(&fields).map_err(map_err)
+    }
+
+    /// PyMuPDF deprecated alias for `set_metadata`.
+    #[allow(non_snake_case)]
+    fn setMetadata(&self, meta: &Bound<'_, PyDict>) -> PyResult<()> {
+        self.set_metadata(meta)
+    }
+
+    /// The catalog XMP metadata string (PyMuPDF `get_xml_metadata`).
+    fn get_xml_metadata(&self) -> String {
+        self.doc.get_xml_metadata().unwrap_or_default()
+    }
+
+    /// Sets the catalog XMP metadata stream (PyMuPDF `set_xml_metadata`).
+    fn set_xml_metadata(&self, xml: &str) -> PyResult<()> {
+        self.doc.set_xml_metadata(xml).map_err(map_err)
+    }
+
+    // --- TOC (PRD §8.9) ---------------------------------------------------
+
+    /// The outline as a list of `[level, title, page]` (PyMuPDF `get_toc`).
+    #[pyo3(signature = (simple=true))]
+    fn get_toc<'py>(&self, py: Python<'py>, simple: bool) -> PyResult<Bound<'py, PyList>> {
+        let _ = simple;
+        let rows = self.doc.get_toc();
+        let list = PyList::empty(py);
+        for (level, title, page) in rows {
+            let row = PyList::new(
+                py,
+                [
+                    level.into_pyobject(py)?.into_any(),
+                    title.into_pyobject(py)?.into_any(),
+                    page.into_pyobject(py)?.into_any(),
+                ],
+            )?;
+            list.append(row)?;
+        }
+        Ok(list)
+    }
+
+    /// PyMuPDF deprecated alias for `get_toc`.
+    #[allow(non_snake_case)]
+    #[pyo3(signature = (simple=true))]
+    fn getToC<'py>(&self, py: Python<'py>, simple: bool) -> PyResult<Bound<'py, PyList>> {
+        self.get_toc(py, simple)
+    }
+
+    /// Builds the outline from a list of `[level, title, page]` (PyMuPDF
+    /// `set_toc`). Raises on a level jump.
+    fn set_toc(&self, toc: &Bound<'_, PyList>) -> PyResult<()> {
+        let mut entries: Vec<(i32, String, i32)> = Vec::with_capacity(toc.len());
+        for item in toc.iter() {
+            let seq: Vec<Bound<'_, PyAny>> = item.extract()?;
+            if seq.len() < 3 {
+                return Err(PdfError::new_err("TOC entry must be [level, title, page]"));
+            }
+            let level: i32 = seq[0].extract()?;
+            let title: String = seq[1].extract()?;
+            let page: i32 = seq[2].extract()?;
+            entries.push((level, title, page));
+        }
+        self.doc.set_toc(&entries).map_err(map_err)
+    }
+
+    /// PyMuPDF deprecated alias for `set_toc`.
+    #[allow(non_snake_case)]
+    fn setToC(&self, toc: &Bound<'_, PyList>) -> PyResult<()> {
+        self.set_toc(toc)
+    }
+
+    // --- page ops + merge (PRD §8.7) -------------------------------------
+
+    /// Inserts pages from `src` (PyMuPDF `insert_pdf`).
+    #[pyo3(signature = (src, from_page=None, to_page=None, start_at=None))]
+    fn insert_pdf(
+        &self,
+        py: Python<'_>,
+        src: &PyDocument,
+        from_page: Option<usize>,
+        to_page: Option<usize>,
+        start_at: Option<usize>,
+    ) -> PyResult<()> {
+        let srcdoc = src.doc.clone();
+        py.detach(|| self.doc.insert_pdf(&srcdoc, from_page, to_page, start_at))
+            .map_err(map_err)
+    }
+
+    /// PyMuPDF deprecated alias for `insert_pdf`.
+    #[allow(non_snake_case)]
+    #[pyo3(signature = (src, from_page=None, to_page=None, start_at=None))]
+    fn insertPDF(
+        &self,
+        py: Python<'_>,
+        src: &PyDocument,
+        from_page: Option<usize>,
+        to_page: Option<usize>,
+        start_at: Option<usize>,
+    ) -> PyResult<()> {
+        self.insert_pdf(py, src, from_page, to_page, start_at)
+    }
+
+    /// Inserts a blank page (PyMuPDF `new_page`). Returns the new page.
+    #[pyo3(signature = (pno=-1, width=595.0, height=842.0))]
+    fn new_page(&self, pno: isize, width: f64, height: f64) -> PyResult<PyPage> {
+        let n = self.doc.page_count();
+        let index = if pno < 0 { n } else { (pno as usize).min(n) };
+        self.doc
+            .new_page(Some(index), width, height)
+            .map_err(map_err)?;
+        let page = self.doc.load_page(index).map_err(map_err)?;
+        Ok(PyPage { page })
+    }
+
+    /// PyMuPDF deprecated alias for `new_page`.
+    #[allow(non_snake_case)]
+    #[pyo3(signature = (pno=-1, width=595.0, height=842.0))]
+    fn newPage(&self, pno: isize, width: f64, height: f64) -> PyResult<PyPage> {
+        self.new_page(pno, width, height)
+    }
+
+    /// Deletes the page at `pno` (PyMuPDF `delete_page`).
+    fn delete_page(&self, pno: usize) -> PyResult<()> {
+        self.doc.delete_page(pno).map_err(map_err)
+    }
+
+    /// Keeps only `pages` in the given order (PyMuPDF `select`).
+    fn select(&self, pages: Vec<usize>) -> PyResult<()> {
+        self.doc.select(&pages).map_err(map_err)
+    }
+
+    // --- links + labels (PRD §8.9) ---------------------------------------
+
+    /// The page label of physical page `pno` (PyMuPDF `Page.get_label`, also
+    /// exposed at the document level for convenience).
+    fn get_page_label(&self, pno: usize) -> String {
+        self.doc.get_label(pno)
     }
 
     fn __repr__(&self) -> String {

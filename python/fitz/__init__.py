@@ -14,6 +14,10 @@ from __future__ import annotations
 
 import oxipdf
 from oxipdf import (
+    PDF_ENCRYPT_AES_128,
+    PDF_ENCRYPT_AES_256,
+    PDF_ENCRYPT_NONE,
+    PDF_ENCRYPT_RC4_128,
     Document,
     IRect,
     Matrix,
@@ -55,6 +59,10 @@ __all__ = [
     "Point",
     "Matrix",
     "Quad",
+    "PDF_ENCRYPT_NONE",
+    "PDF_ENCRYPT_RC4_128",
+    "PDF_ENCRYPT_AES_128",
+    "PDF_ENCRYPT_AES_256",
     "PdfError",
     "PdfSyntaxError",
     "PdfPasswordError",

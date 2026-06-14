@@ -14,13 +14,15 @@ pdf-text.workspace = true
 pdf-edit.workspace = true
 pdf-image.workspace = true
 pdf-render.workspace = true
+pdf-crypto = { workspace = true, optional = true }
 bytes.workspace = true
 
 [features]
 # Encryption is ON by default so the shipped wheel can open encrypted PDFs from
-# Python (PRD §8.4 / M1f). Threads through to `pdf-core`'s `encryption` feature.
+# Python (PRD §8.4 / M1f). Threads through to `pdf-core`'s `encryption` feature
+# and surfaces `pdf-crypto`'s encryption-authoring types for `save(encryption=…)`.
 default = ["encryption"]
-encryption = ["pdf-core/encryption"]
+encryption = ["pdf-core/encryption", "dep:pdf-crypto"]
 
 [dev-dependencies]
 # Encrypted-document integration fixtures are generated via `pdf-crypto`'s

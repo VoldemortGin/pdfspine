@@ -150,6 +150,12 @@ pub enum Error {
     #[error("unsupported: {0}")]
     Unsupported(&'static str),
 
+    /// A caller-supplied argument violates a documented contract (e.g. a TOC
+    /// level jump, an out-of-range page index in an edit). Surfaced to Python as
+    /// the base `PdfError` (PRD §8.9).
+    #[error("invalid argument: {0}")]
+    InvalidArgument(&'static str),
+
     /// Incremental save was requested on a document whose parse was repair-tainted
     /// (PRD §8.7). A repaired file has no trustworthy original byte offsets, so an
     /// append-only update would corrupt the `/Prev` chain and invalidate any
@@ -235,6 +241,7 @@ impl Error {
             Error::MissingObject { .. } => "missing-object",
             Error::ReferenceCycle { .. } => "reference-cycle",
             Error::Unsupported(_) => "unsupported",
+            Error::InvalidArgument(_) => "invalid-argument",
             Error::IncrementalRequiresCleanParse => "incremental-requires-clean-parse",
             #[cfg(feature = "encryption")]
             Error::NeedsPassword(_) => "needs-password",

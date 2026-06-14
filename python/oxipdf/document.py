@@ -22,21 +22,23 @@ from .geometry import Point, Quad, Rect
 _UNIMPLEMENTED_PAGE = {
     "get_pixmap": "rendering / image pages (M5/M6)",
     "get_drawings": "vector drawings (M4)",
-    "get_links": "links (M3)",
     "annots": "annotations (M4)",
     "insert_text": "content emission (M4)",
     "draw_line": "content emission (M4)",
 }
 
 _UNIMPLEMENTED_DOC = {
-    "get_toc": "table of contents (M3)",
-    "set_metadata": "metadata write (M3)",
-    "save": "save / incremental (M3)",
-    "insert_pdf": "merge (M3)",
-    "get_xml_metadata": "XMP metadata (M3)",
-    "select": "page selection (M3)",
     "convert_to_pdf": "image documents (M5)",
 }
+
+# PyMuPDF encryption-method constants (PRD §8.4). AES-256 is always authored as
+# R6 (never R5).
+PDF_ENCRYPT_NONE = 0
+PDF_ENCRYPT_RC4_128 = 1
+PDF_ENCRYPT_AES_128 = 2
+PDF_ENCRYPT_AES_256 = 4
+# PyMuPDF permission flags (advisory). All-permissions sentinel.
+PDF_PERM_ACCESSIBILITY = 1 << 9
 
 
 def _rect(t: tuple[float, float, float, float]) -> Rect:
@@ -208,6 +210,52 @@ class Page:
         """The page's images as PyMuPDF tuples (PyMuPDF ``page.get_images``)."""
         return self._page.get_images(full)
 
+    # --- links / labels / rotation (PRD §8.9) ---
+    def get_links(self) -> list[dict]:
+        """The page's link annotations (PyMuPDF ``page.get_links``).
+
+        Each link is a dict with ``kind`` (0 none / 1 goto / 2 uri), ``from``
+        (a :class:`Rect`), and ``uri``/``page`` as applicable, plus ``xref``.
+        """
+        out = []
+        for link in self._page.get_links():
+            link = dict(link)
+            if "from" in link:
+                link["from"] = _rect(link["from"])
+            out.append(link)
+        return out
+
+    def insert_link(self, link: dict) -> None:
+        """Inserts a link annotation (PyMuPDF ``page.insert_link``).
+
+        ``link`` is a dict with ``kind`` (1 goto / 2 uri), ``from`` (a rect or
+        4-sequence) and ``uri`` or ``page``.
+        """
+        spec = dict(link)
+        if "from" in spec:
+            fr = spec["from"]
+            spec["from"] = (float(fr[0]), float(fr[1]), float(fr[2]), float(fr[3]))
+        self._page.insert_link(spec)
+
+    def delete_link(self, link: dict) -> None:
+        """Deletes a link annotation by its ``xref`` (PyMuPDF ``page.delete_link``)."""
+        self._page.delete_link(int(link["xref"]))
+
+    def get_label(self) -> str:
+        """The page's label under ``/PageLabels`` (PyMuPDF ``page.get_label``)."""
+        return self._page.get_label()
+
+    def set_rotation(self, rotation: int) -> None:
+        """Sets the page rotation (PyMuPDF ``page.set_rotation``)."""
+        self._page.set_rotation(int(rotation))
+
+    # PyMuPDF deprecated camelCase aliases.
+    def getLinks(self) -> list[dict]:  # noqa: N802
+        return self.get_links()
+
+    def setRotation(self, rotation: int) -> None:  # noqa: N802
+        self.set_rotation(rotation)
+
     def __repr__(self) -> str:
         return f"<oxipdf.Page number={self.number}>"
 
@@ -308,6 +356,143 @@ class Document:
 
     def xref_stream(self, xref: int) -> bytes:
         return self._doc.xref_stream(xref)
+
+    # --- save (PRD §8.7 / §8.4) ---
+    def save(
+        self,
+        filename: str | os.PathLike[str],
+        *,
+        garbage: int = 0,
+        deflate: bool = False,
+        incremental: bool = False,
+        encryption: int | None = None,
+        owner_pw: str | None = None,
+        user_pw: str | None = None,
+        permissions: int = -1,
+        **_ignored,
+    ) -> None:
+        """Saves the document (PyMuPDF ``doc.save``).
+
+        ``garbage`` 0–4, ``deflate`` compresses streams, ``incremental`` appends,
+        ``encryption`` selects a method (``PDF_ENCRYPT_*``).
+        """
+        self._doc.save(
+            os.fspath(filename),
+            garbage=garbage,
+            deflate=deflate,
+            incremental=incremental,
+            encryption=encryption,
+            owner_pw=owner_pw,
+            user_pw=user_pw,
+            permissions=permissions,
+        )
+
+    def tobytes(
+        self,
+        *,
+        garbage: int = 0,
+        deflate: bool = False,
+        incremental: bool = False,
+        encryption: int | None = None,
+        owner_pw: str | None = None,
+        user_pw: str | None = None,
+        permissions: int = -1,
+        **_ignored,
+    ) -> bytes:
+        """Serializes the document to bytes (PyMuPDF ``doc.tobytes``/``write``)."""
+        return self._doc.tobytes(
+            garbage=garbage,
+            deflate=deflate,
+            incremental=incremental,
+            encryption=encryption,
+            owner_pw=owner_pw,
+            user_pw=user_pw,
+            permissions=permissions,
+        )
+
+    write = tobytes
+
+    def ez_save(self, filename: str | os.PathLike[str], **kwargs) -> None:
+        """PyMuPDF ``ez_save`` — save with garbage collection + deflate defaults."""
+        kwargs.setdefault("garbage", 3)
+        kwargs.setdefault("deflate", True)
+        self.save(filename, **kwargs)
+
+    def saveIncr(self, filename: str | os.PathLike[str] | None = None) -> None:  # noqa: N802
+        """PyMuPDF deprecated alias: incremental save."""
+        if filename is None:
+            raise ValueError("saveIncr() requires the original filename")
+        self._doc.saveIncr(os.fspath(filename))
+
+    # --- metadata write (PRD §8.9) ---
+    def set_metadata(self, metadata: dict) -> None:
+        """Writes the ``/Info`` metadata dict (PyMuPDF ``doc.set_metadata``)."""
+        self._doc.set_metadata({k: ("" if v is None else str(v)) for k, v in metadata.items()})
+
+    def setMetadata(self, metadata: dict) -> None:  # noqa: N802
+        self.set_metadata(metadata)
+
+    def get_xml_metadata(self) -> str:
+        """The catalog XMP metadata string (PyMuPDF ``doc.get_xml_metadata``)."""
+        return self._doc.get_xml_metadata()
+
+    def set_xml_metadata(self, xml: str) -> None:
+        """Sets the catalog XMP metadata stream (PyMuPDF ``doc.set_xml_metadata``)."""
+        self._doc.set_xml_metadata(xml)
+
+    # --- TOC (PRD §8.9) ---
+    def get_toc(self, simple: bool = True) -> list[list]:
+        """The outline as ``[[level, title, page], …]`` (PyMuPDF ``doc.get_toc``)."""
+        return [list(row) for row in self._doc.get_toc(simple)]
+
+    def getToC(self, simple: bool = True) -> list[list]:  # noqa: N802
+        return self.get_toc(simple)
+
+    def set_toc(self, toc: list) -> None:
+        """Builds the ``/Outlines`` tree (PyMuPDF ``doc.set_toc``). Raises on a
+        level jump."""
+        self._doc.set_toc([list(row) for row in toc])
+
+    def setToC(self, toc: list) -> None:  # noqa: N802
+        self.set_toc(toc)
+
+    # --- page ops + merge (PRD §8.7) ---
+    def insert_pdf(
+        self,
+        docsrc: "Document",
+        from_page: int | None = None,
+        to_page: int | None = None,
+        start_at: int | None = None,
+        **_ignored,
+    ) -> None:
+        """Inserts pages from ``docsrc`` (PyMuPDF ``doc.insert_pdf``)."""
+        self._doc.insert_pdf(
+            docsrc._doc, from_page=from_page, to_page=to_page, start_at=start_at
+        )
+
+    def insertPDF(self, docsrc: "Document", **kwargs) -> None:  # noqa: N802
+        self.insert_pdf(docsrc, **kwargs)
+
+    def new_page(self, pno: int = -1, width: float = 595.0, height: float = 842.0) -> Page:
+        """Inserts a blank page, returning it (PyMuPDF ``doc.new_page``)."""
+        return Page(self._doc.new_page(pno, width, height))
+
+    def newPage(self, pno: int = -1, width: float = 595.0, height: float = 842.0) -> Page:  # noqa: N802
+        return self.new_page(pno, width, height)
+
+    def delete_page(self, pno: int = -1) -> None:
+        """Deletes the page at ``pno`` (PyMuPDF ``doc.delete_page``)."""
+        if pno < 0:
+            pno += self._doc.page_count
+        self._doc.delete_page(pno)
+
+    def select(self, pages: list[int]) -> None:
+        """Keeps only ``pages`` in order (PyMuPDF ``doc.select``)."""
+        self._doc.select([int(p) for p in pages])
+
+    def get_page_label(self, pno: int) -> str:
+        """The page label of physical page ``pno`` (PyMuPDF helper)."""
+        return self._doc.get_page_label(pno)
 
     def close(self) -> None:
         """Releases the document (drops the underlying Rust handle)."""

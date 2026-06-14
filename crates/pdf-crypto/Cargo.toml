@@ -15,6 +15,7 @@ cbc.workspace = true
 sha2.workspace = true
 md-5.workspace = true
 cipher.workspace = true
+getrandom.workspace = true
 
 [dev-dependencies]
 proptest.workspace = true

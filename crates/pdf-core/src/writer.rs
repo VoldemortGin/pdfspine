@@ -80,6 +80,12 @@ pub struct SaveOptions {
     pub garbage: u8,
     /// How incremental save reacts to a repair-tainted parse (PRD §8.7).
     pub on_repaired: OnRepaired,
+    /// Encryption to apply on a **full** save (PRD §8.4 write rules). `None`
+    /// writes in clear; `Some(spec)` derives an `/Encrypt` dict and encrypts all
+    /// strings + stream bodies (with exemptions) using the chosen method.
+    /// Incremental save with encryption is not supported (full save only).
+    #[cfg(feature = "encryption")]
+    pub encrypt: Option<pdf_crypto::EncryptSpec>,
 }
 
 impl Default for SaveOptions {
@@ -92,6 +98,8 @@ impl Default for SaveOptions {
             deflate: false,
             garbage: 0,
             on_repaired: OnRepaired::Reject,
+            #[cfg(feature = "encryption")]
+            encrypt: None,
         }
     }
 }
@@ -130,6 +138,14 @@ impl SaveOptions {
         self.on_repaired = on_repaired;
         self
     }
+
+    /// Sets the encryption spec applied on a full save (PRD §8.4).
+    #[cfg(feature = "encryption")]
+    #[must_use]
+    pub fn with_encrypt(mut self, spec: pdf_crypto::EncryptSpec) -> Self {
+        self.encrypt = Some(spec);
+        self
+    }
 }
 
 /// The binary-comment line that follows the `%PDF-` header (4 high bytes so
@@ -154,8 +170,8 @@ pub fn save_to_vec(doc: &DocumentStore, opts: &SaveOptions) -> crate::Result<Vec
         .ok_or_else(|| crate::Error::xref(0, "cannot save: trailer has no /Root"))?;
     let mut roots = crate::gc::Roots {
         root: Some(root_num),
-        info: trailer_ref(doc, "Info").map(|r| r.num),
-        encrypt: trailer_ref(doc, "Encrypt").map(|r| r.num),
+        info: doc.effective_trailer_ref("Info").map(|r| r.num),
+        encrypt: doc.effective_trailer_ref("Encrypt").map(|r| r.num),
     };
 
     // 2. Garbage collection on the snapshot (PRD §8.7). The live `DocumentStore`
@@ -164,6 +180,25 @@ pub fn save_to_vec(doc: &DocumentStore, opts: &SaveOptions) -> crate::Result<Vec
         let result = crate::gc::collect(objects, roots, opts.garbage);
         objects = result.objects;
         roots = result.roots;
+    }
+
+    // The stable first `/ID` element — also the `/ID[0]` fed to the R2-R4 KDF
+    // when encrypting, so the trailer `/ID` and the file key agree.
+    let id_first = stable_first_id(doc);
+
+    // 2b. Encryption-on-write (PRD §8.4): derive the handler, author the
+    //     `/Encrypt` object, then encrypt every surviving object's strings +
+    //     stream bodies (exemptions: the `/Encrypt` dict and `/Type /XRef` /
+    //     `/Metadata` streams; the trailer `/ID` and the xref stream — added
+    //     below — are clear by construction).
+    #[cfg(feature = "encryption")]
+    if let Some(spec) = &opts.encrypt {
+        let auth = pdf_crypto::Authoring::new(spec, &id_first).map_err(crate::Error::from)?;
+        let max_num = objects.keys().copied().max().unwrap_or(root_num);
+        let encrypt_num = max_num + 1;
+        encrypt_objects(&mut objects, &auth, encrypt_num, opts.deflate);
+        objects.insert(encrypt_num, encrypt_dict_object(auth.config()));
+        roots.encrypt = Some(encrypt_num);
     }
 
     // 3. Serialize each surviving object's body bytes (deflate policy applied).
@@ -189,7 +224,6 @@ pub fn save_to_vec(doc: &DocumentStore, opts: &SaveOptions) -> crate::Result<Vec
     let root = ObjRef::new(roots.root.unwrap_or(root_num), 0);
     let info = roots.info.map(|n| ObjRef::new(n, 0));
     let encrypt = roots.encrypt.map(|n| ObjRef::new(n, 0));
-    let id_first = stable_first_id(doc);
     let id_second = hash16(&out);
 
     // 6. Emit the cross-reference structure + trailer + startxref + %%EOF.
@@ -278,8 +312,8 @@ pub fn save_incremental(doc: &DocumentStore, opts: &SaveOptions) -> crate::Resul
     let root = doc
         .root()
         .ok_or_else(|| crate::Error::xref(0, "cannot save: trailer has no /Root"))?;
-    let info = trailer_ref(doc, "Info");
-    let encrypt = trailer_ref(doc, "Encrypt");
+    let info = doc.effective_trailer_ref("Info");
+    let encrypt = doc.effective_trailer_ref("Encrypt");
     let id_first = stable_first_id(doc);
     let id_second = hash16(&out);
 
@@ -408,6 +442,155 @@ fn serialize_snapshot_body(obj: &Object, opts: &SaveOptions) -> crate::Result<Ve
     }
 }
 
+/// Encrypts every surviving object's strings + stream bodies in place (PRD §8.4
+/// write rules), keyed by object number. The `/Encrypt` dict object number is
+/// exempt (it is not yet in the map), and `/Type /XRef` / clear-`/Metadata`
+/// streams are skipped. Each stream body is deflated (if it was plain) **before**
+/// encryption — "compress then encrypt" — and stored as `Encoded` so the
+/// serializer writes it verbatim with the right `/Length`.
+#[cfg(feature = "encryption")]
+fn encrypt_objects(
+    objects: &mut BTreeMap<u32, Object>,
+    auth: &pdf_crypto::Authoring,
+    encrypt_num: u32,
+    deflate: bool,
+) {
+    let encrypt_metadata = auth.config().encrypt_metadata;
+    for (&num, obj) in objects.iter_mut() {
+        if num == encrypt_num {
+            continue;
+        }
+        match obj {
+            Object::Stream(stream) => {
+                if crate::encrypt::is_exempt_stream(&stream.dict, encrypt_metadata) {
+                    // Body left clear (e.g. /Metadata when EncryptMetadata=false).
+                    continue;
+                }
+                // Compress (if requested and plain) then encrypt — "compress
+                // then encrypt" (PRD §8.4) — and mark Encoded so the serializer
+                // writes it verbatim with the right /Length.
+                let already_encoded = matches!(stream.data, StreamData::Encoded(_));
+                let mut body = match &stream.data {
+                    StreamData::Decoded(b) | StreamData::Encoded(b) => b.to_vec(),
+                    StreamData::Raw { .. } => Vec::new(),
+                };
+                if deflate && !already_encoded {
+                    body = crate::filters::flate::encode(&body);
+                    set_flate_filter(&mut stream.dict);
+                }
+                let enc = auth.encrypt_stream(num, 0, &body);
+                stream.data = StreamData::Encoded(enc.into());
+                // Encrypt string values inside the stream dict too.
+                for v in stream.dict.values_mut() {
+                    encrypt_value_strings(v, auth, num);
+                }
+            }
+            other => encrypt_value_strings(other, auth, num),
+        }
+    }
+}
+
+/// Recursively encrypts every string leaf of `obj` for object `num` (gen 0).
+#[cfg(feature = "encryption")]
+fn encrypt_value_strings(obj: &mut Object, auth: &pdf_crypto::Authoring, num: u32) {
+    match obj {
+        Object::String(s) => {
+            s.bytes = auth.encrypt_string(num, 0, &s.bytes);
+        }
+        Object::Array(items) => {
+            for it in items.iter_mut() {
+                encrypt_value_strings(it, auth, num);
+            }
+        }
+        Object::Dictionary(d) => {
+            for v in d.values_mut() {
+                encrypt_value_strings(v, auth, num);
+            }
+        }
+        Object::Stream(s) => {
+            for v in s.dict.values_mut() {
+                encrypt_value_strings(v, auth, num);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Builds the indirect `/Encrypt` dictionary object from an authored config
+/// (PRD §8.4). Its own strings (`/O`/`/U`/`/OE`/`/UE`) are emitted **clear** —
+/// the `/Encrypt` dict is exempt from encryption.
+#[cfg(feature = "encryption")]
+fn encrypt_dict_object(cfg: &pdf_crypto::EncryptConfig) -> Object {
+    let mut d = Dict::new();
+    d.insert(Name::new("Filter"), Object::Name(Name::new("Standard")));
+    d.insert(Name::new("V"), Object::Integer(i64::from(cfg.v)));
+    d.insert(Name::new("R"), Object::Integer(i64::from(cfg.r)));
+    d.insert(
+        Name::new("Length"),
+        Object::Integer((cfg.key_len * 8) as i64),
+    );
+    d.insert(Name::new("P"), Object::Integer(i64::from(cfg.p)));
+    d.insert(
+        Name::new("O"),
+        Object::String(PdfString {
+            bytes: cfg.o.clone(),
+            kind: StringKind::Literal,
+        }),
+    );
+    d.insert(
+        Name::new("U"),
+        Object::String(PdfString {
+            bytes: cfg.u.clone(),
+            kind: StringKind::Literal,
+        }),
+    );
+    if cfg.v >= 5 {
+        d.insert(
+            Name::new("OE"),
+            Object::String(PdfString {
+                bytes: cfg.oe.clone(),
+                kind: StringKind::Literal,
+            }),
+        );
+        d.insert(
+            Name::new("UE"),
+            Object::String(PdfString {
+                bytes: cfg.ue.clone(),
+                kind: StringKind::Literal,
+            }),
+        );
+        if !cfg.encrypt_metadata {
+            d.insert(Name::new("EncryptMetadata"), Object::Boolean(false));
+        }
+        // Crypt filters for /V 5 (/AESV3 via /StdCF).
+        let mut stdcf = Dict::new();
+        stdcf.insert(Name::new("CFM"), Object::Name(Name::new("AESV3")));
+        stdcf.insert(Name::new("AuthEvent"), Object::Name(Name::new("DocOpen")));
+        stdcf.insert(Name::new("Length"), Object::Integer(32));
+        let mut cf = Dict::new();
+        cf.insert(Name::new("StdCF"), Object::Dictionary(stdcf));
+        d.insert(Name::new("CF"), Object::Dictionary(cf));
+        d.insert(Name::new("StmF"), Object::Name(Name::new("StdCF")));
+        d.insert(Name::new("StrF"), Object::Name(Name::new("StdCF")));
+    } else if cfg.v == 4 {
+        // /V 4 crypt filters (AESV2 via /StdCF).
+        let cfm = match cfg.stm_method {
+            pdf_crypto::CryptMethod::AesV2 => "AESV2",
+            _ => "V2",
+        };
+        let mut stdcf = Dict::new();
+        stdcf.insert(Name::new("CFM"), Object::Name(Name::new(cfm)));
+        stdcf.insert(Name::new("AuthEvent"), Object::Name(Name::new("DocOpen")));
+        stdcf.insert(Name::new("Length"), Object::Integer(cfg.key_len as i64));
+        let mut cf = Dict::new();
+        cf.insert(Name::new("StdCF"), Object::Dictionary(stdcf));
+        d.insert(Name::new("CF"), Object::Dictionary(cf));
+        d.insert(Name::new("StmF"), Object::Name(Name::new("StdCF")));
+        d.insert(Name::new("StrF"), Object::Name(Name::new("StdCF")));
+    }
+    Object::Dictionary(d)
+}
+
 /// Serializes one object's **body** bytes (no indirect wrapper). For a stream the
 /// body is materialized (Raw sliced from the source), the deflate policy applied,
 /// and `/Length` recomputed; every other object uses the canonical
@@ -494,15 +677,6 @@ fn write_header(out: &mut Vec<u8>, doc: &DocumentStore) {
     out.push(b'%');
     out.extend_from_slice(&BINARY_MARKER);
     out.push(b'\n');
-}
-
-/// The trailer reference value for `key` (`/Info`, `/Encrypt`), if it is an
-/// indirect reference in the original trailer.
-fn trailer_ref(doc: &DocumentStore, key: &str) -> Option<ObjRef> {
-    match doc.trailer().get(&Name::new(key)) {
-        Some(Object::Reference(r)) => Some(*r),
-        _ => None,
-    }
 }
 
 /// Builds the common trailer dictionary keys (`/Size`, `/Root`, optional

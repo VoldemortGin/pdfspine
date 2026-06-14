@@ -143,7 +143,9 @@ def test_pydoc_004_unimplemented_raises(two_page_path):
     with pytest.raises(oxipdf.PdfUnsupportedError):
         page.get_pixmap()
     with pytest.raises(oxipdf.PdfUnsupportedError):
-        doc.get_toc()
+        doc.convert_to_pdf()
+    # get_toc is now implemented (M3d): a doc with no /Outlines returns [].
+    assert doc.get_toc() == []
     # An attribute that does not exist at all is still AttributeError.
     with pytest.raises(AttributeError):
         page.totally_made_up_attribute

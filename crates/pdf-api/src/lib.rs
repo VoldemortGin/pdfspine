@@ -12,7 +12,7 @@ pub mod error;
 pub mod text;
 
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use pdf_core::object::{Name, Object};
 use pdf_core::source::MmapMode;
@@ -21,6 +21,15 @@ use pdf_core::{DocumentStore, Limits, ObjRef};
 pub use error::{Error, Result};
 pub use pdf_core::page::Page;
 pub use pdf_core::repair::ParseMode;
+pub use pdf_core::{OnRepaired, SaveOptions, XrefStyle};
+
+// Editing types surfaced to the bindings (PRD §8.9).
+pub use pdf_edit::{Link, LinkKind, TocEntry};
+
+/// Encryption-authoring types for `save(encryption=…)` (PRD §8.4). Available only
+/// under the `encryption` feature (the default for the Python build).
+#[cfg(feature = "encryption")]
+pub use pdf_crypto::{EncryptMethod, EncryptSpec};
 
 // Page inventory + reusable text-extraction surface (M2e). The PyO3 layer calls
 // these free functions (the orphan rule forbids inherent `impl Page` here, since
@@ -54,7 +63,9 @@ pub use pdf_core::geom::{IRect, Matrix, Point, Quad, Rect};
 #[derive(Clone)]
 pub struct Document {
     store: Arc<DocumentStore>,
-    pages: Arc<Vec<ObjRef>>,
+    /// The ordered page list, cached for the fast read path and refreshed by
+    /// [`Document::refresh_pages`] after any structural edit (PRD §8.7).
+    pages: Arc<RwLock<Vec<ObjRef>>>,
 }
 
 impl Document {
@@ -106,8 +117,22 @@ impl Document {
         let pages = pdf_core::pagetree::page_refs(&store);
         Document {
             store,
-            pages: Arc::new(pages),
+            pages: Arc::new(RwLock::new(pages)),
         }
+    }
+
+    /// Re-derives the cached page list from the live store. Called after any
+    /// structural edit (page op / merge) so `page_count`/`load_page` stay correct.
+    fn refresh_pages(&self) {
+        let fresh = pdf_core::pagetree::page_refs(&self.store);
+        if let Ok(mut guard) = self.pages.write() {
+            *guard = fresh;
+        }
+    }
+
+    /// A snapshot of the current ordered page refs.
+    fn page_refs(&self) -> Vec<ObjRef> {
+        self.pages.read().map(|p| p.clone()).unwrap_or_default()
     }
 
     // --- pages ------------------------------------------------------------
@@ -115,7 +140,7 @@ impl Document {
     /// The number of pages (PRD §3.4 `page_count`).
     #[must_use]
     pub fn page_count(&self) -> usize {
-        self.pages.len()
+        self.pages.read().map(|p| p.len()).unwrap_or(0)
     }
 
     /// Loads the page at zero-based `index` (PyMuPDF `load_page`). A negative
@@ -126,7 +151,7 @@ impl Document {
     /// [`Error::Syntax`] when `index` is out of range.
     pub fn load_page(&self, index: usize) -> Result<Page> {
         let page_ref = self
-            .pages
+            .page_refs()
             .get(index)
             .copied()
             .ok_or_else(|| Error::Syntax(format!("page index {index} out of range")))?;
@@ -136,10 +161,10 @@ impl Document {
     /// An iterator over every page in order.
     pub fn pages(&self) -> impl Iterator<Item = Page> + '_ {
         let store = Arc::clone(&self.store);
-        self.pages
-            .iter()
+        self.page_refs()
+            .into_iter()
             .enumerate()
-            .map(move |(i, r)| Page::new(Arc::clone(&store), i, *r))
+            .map(move |(i, r)| Page::new(Arc::clone(&store), i, r))
     }
 
     /// The shared document store (escape hatch for advanced callers).
@@ -231,6 +256,221 @@ impl Document {
         }
     }
 
+    // --- save (PRD §8.7 / §8.4) ------------------------------------------
+
+    /// Full-saves the document to a byte vector with the given options
+    /// (`garbage`, `deflate`, `xref_style`, optional encryption). PyMuPDF
+    /// `tobytes`/`write`.
+    ///
+    /// # Errors
+    ///
+    /// A typed [`Error`] on a write failure.
+    pub fn save_to_bytes(&self, opts: &pdf_core::SaveOptions) -> Result<Vec<u8>> {
+        Ok(self.store.save_to_vec(opts)?)
+    }
+
+    /// Full-saves to a filesystem path.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Io`] on a write failure, or a typed save error.
+    pub fn save_to_path(&self, path: impl AsRef<Path>, opts: &pdf_core::SaveOptions) -> Result<()> {
+        Ok(self.store.save(path, opts)?)
+    }
+
+    /// Incremental-saves (append-only) to a byte vector (PyMuPDF `saveIncr`).
+    ///
+    /// # Errors
+    ///
+    /// [`Error`] when the parse was repair-tainted (clean-parse precondition) or
+    /// on a write failure.
+    pub fn save_incremental(&self, opts: &pdf_core::SaveOptions) -> Result<Vec<u8>> {
+        Ok(self.store.save_incremental(opts)?)
+    }
+
+    // --- metadata write (PRD §8.9) ---------------------------------------
+
+    /// Writes the `/Info` dictionary from PyMuPDF `(key, value)` pairs.
+    ///
+    /// # Errors
+    ///
+    /// A typed [`Error`] from the object-edit path.
+    pub fn set_metadata(&self, fields: &[(String, String)]) -> Result<()> {
+        Ok(pdf_edit::set_metadata(&self.store, fields)?)
+    }
+
+    /// The catalog `/Metadata` XMP stream as a string, or `None` when absent.
+    #[must_use]
+    pub fn get_xml_metadata(&self) -> Option<String> {
+        pdf_edit::get_xml_metadata(&self.store)
+    }
+
+    /// Creates or replaces the catalog `/Metadata` XMP stream.
+    ///
+    /// # Errors
+    ///
+    /// A typed [`Error`] from the object-edit path.
+    pub fn set_xml_metadata(&self, xml: &str) -> Result<()> {
+        Ok(pdf_edit::set_xml_metadata(&self.store, xml)?)
+    }
+
+    // --- TOC (PRD §8.9) ---------------------------------------------------
+
+    /// The document outline as `(level, title, page)` rows (PyMuPDF `get_toc`).
+    #[must_use]
+    pub fn get_toc(&self) -> Vec<(i32, String, i32)> {
+        pdf_edit::get_toc(&self.store)
+            .into_iter()
+            .map(|e| (e.level, e.title, e.page))
+            .collect()
+    }
+
+    /// Builds the `/Outlines` tree from a flat level list (PyMuPDF `set_toc`).
+    ///
+    /// # Errors
+    ///
+    /// [`Error`] (invalid-argument) on a level jump; document left unmutated.
+    pub fn set_toc(&self, entries: &[(i32, String, i32)]) -> Result<()> {
+        let toc: Vec<pdf_edit::TocEntry> = entries
+            .iter()
+            .map(|(level, title, page)| pdf_edit::TocEntry {
+                level: *level,
+                title: title.clone(),
+                page: *page,
+            })
+            .collect();
+        pdf_edit::set_toc(&self.store, &toc)?;
+        Ok(())
+    }
+
+    // --- page ops + merge (PRD §8.7) -------------------------------------
+
+    /// Inserts pages from `src` into this document (PyMuPDF `insert_pdf`).
+    ///
+    /// # Errors
+    ///
+    /// A typed [`Error`] from the merge path.
+    pub fn insert_pdf(
+        &self,
+        src: &Document,
+        from_page: Option<usize>,
+        to_page: Option<usize>,
+        start_at: Option<usize>,
+    ) -> Result<()> {
+        let opts = pdf_edit::InsertOptions {
+            from_page,
+            to_page,
+            start_at,
+            rotate: None,
+        };
+        pdf_edit::insert_pdf(&self.store, &src.store, &opts)?;
+        self.refresh_pages();
+        Ok(())
+    }
+
+    /// Inserts a blank page (PyMuPDF `new_page`). `index` is the 0-based position
+    /// (`None`/large = append).
+    ///
+    /// # Errors
+    ///
+    /// A typed [`Error`] from the page-op path.
+    pub fn new_page(&self, index: Option<usize>, width: f64, height: f64) -> Result<()> {
+        let mut ed = pdf_edit::PageEditor::new(&self.store)?;
+        let idx = index.unwrap_or(ed.page_count());
+        ed.new_page(idx.min(ed.page_count()), width, height)?;
+        self.refresh_pages();
+        Ok(())
+    }
+
+    /// Deletes the page at `index` (PyMuPDF `delete_page`).
+    ///
+    /// # Errors
+    ///
+    /// A typed [`Error`] for an out-of-range index.
+    pub fn delete_page(&self, index: usize) -> Result<()> {
+        let mut ed = pdf_edit::PageEditor::new(&self.store)?;
+        ed.delete_page(index)?;
+        self.refresh_pages();
+        Ok(())
+    }
+
+    /// Keeps only `indices` (in order, with duplication) (PyMuPDF `select`).
+    ///
+    /// # Errors
+    ///
+    /// A typed [`Error`] for an out-of-range index.
+    pub fn select(&self, indices: &[usize]) -> Result<()> {
+        let mut ed = pdf_edit::PageEditor::new(&self.store)?;
+        ed.select(indices)?;
+        self.refresh_pages();
+        Ok(())
+    }
+
+    /// Sets a page's rotation (PyMuPDF `Page.set_rotation`).
+    ///
+    /// # Errors
+    ///
+    /// A typed [`Error`] for an out-of-range index.
+    pub fn set_page_rotation(&self, index: usize, degrees: i64) -> Result<()> {
+        let mut ed = pdf_edit::PageEditor::new(&self.store)?;
+        ed.set_rotation(index, degrees)?;
+        Ok(())
+    }
+
+    // --- links (PRD §8.9) -------------------------------------------------
+
+    /// The link annotations on page `index` (PyMuPDF `Page.get_links`).
+    #[must_use]
+    pub fn get_links(&self, index: usize) -> Vec<pdf_edit::Link> {
+        pdf_edit::get_links(&self.store, index)
+    }
+
+    /// Inserts a URI link on page `index`.
+    ///
+    /// # Errors
+    ///
+    /// A typed [`Error`] for an out-of-range page.
+    pub fn insert_link_uri(&self, index: usize, rect: Rect, uri: &str) -> Result<()> {
+        pdf_edit::insert_link(
+            &self.store,
+            index,
+            &rect,
+            &pdf_edit::LinkKind::Uri(uri.to_string()),
+        )?;
+        Ok(())
+    }
+
+    /// Inserts a GoTo link on page `index` targeting `target_page`.
+    ///
+    /// # Errors
+    ///
+    /// A typed [`Error`] for an out-of-range page.
+    pub fn insert_link_goto(&self, index: usize, rect: Rect, target_page: i32) -> Result<()> {
+        pdf_edit::insert_link(
+            &self.store,
+            index,
+            &rect,
+            &pdf_edit::LinkKind::Goto(target_page),
+        )?;
+        Ok(())
+    }
+
+    /// Deletes the link annotation `xref` on page `index`.
+    ///
+    /// # Errors
+    ///
+    /// A typed [`Error`] for an out-of-range page.
+    pub fn delete_link(&self, index: usize, xref: u32) -> Result<()> {
+        pdf_edit::delete_link(&self.store, index, ObjRef::new(xref, 0))?;
+        Ok(())
+    }
+
+    /// The page label of physical page `index` (PyMuPDF `Page.get_label`).
+    #[must_use]
+    pub fn get_label(&self, index: usize) -> String {
+        pdf_edit::get_label(&self.store, index)
+    }
+
     // --- metadata (PRD §7) ------------------------------------------------
 
     /// The document metadata as a [`Metadata`] struct, parsed from the trailer
@@ -256,14 +496,17 @@ impl Document {
         md
     }
 
-    /// The resolved `/Info` dictionary, if present in the trailer.
+    /// The resolved `/Info` dictionary, if present in the trailer (honoring an
+    /// edit-time override so a freshly-set `/Info` is reflected by `metadata`).
     fn info_dict(&self) -> Option<pdf_core::Dict> {
-        let info_ref = self.store.trailer().get(&Name::new("Info"))?;
-        let obj = match info_ref {
-            Object::Reference(r) => self.store.resolve(*r).ok()?,
-            direct => Arc::new(direct.clone()),
-        };
-        obj.as_dict().cloned()
+        if let Some(r) = self.store.effective_trailer_ref("Info") {
+            return self.store.resolve(r).ok()?.as_dict().cloned();
+        }
+        // Fall back to a direct (non-indirect) /Info dict in the original trailer.
+        match self.store.trailer().get(&Name::new("Info"))? {
+            Object::Reference(r) => self.store.resolve(*r).ok()?.as_dict().cloned(),
+            direct => direct.as_dict().cloned(),
+        }
     }
 
     /// The PyMuPDF-style encryption descriptor (e.g. `"Standard V2 R3 128-bit"`),
@@ -351,6 +594,75 @@ impl Document {
     pub fn xref_stream(&self, num: u32) -> Result<Vec<u8>> {
         Ok(self.store.xref_stream(num)?)
     }
+}
+
+// --- page-level edit free functions (PRD §8.9) ---------------------------
+//
+// The orphan rule forbids inherent `impl Page` here (`Page` is `pdf-core`'s), so
+// page links / labels / rotation are free functions the bindings call on a
+// `Page` handle (which carries its own store `Arc`).
+
+/// The link annotations on `page` (PyMuPDF `Page.get_links`).
+#[must_use]
+pub fn page_get_links(page: &Page) -> Vec<Link> {
+    pdf_edit::get_links(page.document(), page.number())
+}
+
+/// Inserts a URI link on `page`.
+///
+/// # Errors
+///
+/// A typed [`Error`] for an out-of-range page or object-edit failure.
+pub fn page_insert_link_uri(page: &Page, rect: Rect, uri: &str) -> Result<()> {
+    pdf_edit::insert_link(
+        page.document(),
+        page.number(),
+        &rect,
+        &pdf_edit::LinkKind::Uri(uri.to_string()),
+    )?;
+    Ok(())
+}
+
+/// Inserts a GoTo link on `page` targeting `target_page`.
+///
+/// # Errors
+///
+/// A typed [`Error`] for an out-of-range page or object-edit failure.
+pub fn page_insert_link_goto(page: &Page, rect: Rect, target_page: i32) -> Result<()> {
+    pdf_edit::insert_link(
+        page.document(),
+        page.number(),
+        &rect,
+        &pdf_edit::LinkKind::Goto(target_page),
+    )?;
+    Ok(())
+}
+
+/// Deletes the link annotation `xref` on `page`.
+///
+/// # Errors
+///
+/// A typed [`Error`] for an out-of-range page or object-edit failure.
+pub fn page_delete_link(page: &Page, xref: u32) -> Result<()> {
+    pdf_edit::delete_link(page.document(), page.number(), ObjRef::new(xref, 0))?;
+    Ok(())
+}
+
+/// The page label of `page` (PyMuPDF `Page.get_label`).
+#[must_use]
+pub fn page_get_label(page: &Page) -> String {
+    pdf_edit::get_label(page.document(), page.number())
+}
+
+/// Sets the rotation of `page` (PyMuPDF `Page.set_rotation`).
+///
+/// # Errors
+///
+/// A typed [`Error`] from the page-op path.
+pub fn page_set_rotation(page: &Page, degrees: i64) -> Result<()> {
+    let mut ed = pdf_edit::PageEditor::new(page.document())?;
+    ed.set_rotation(page.number(), degrees)?;
+    Ok(())
 }
 
 /// Reads `/Info` key `key` as a UTF-decoded string (PDFDocEncoding / UTF-16BE

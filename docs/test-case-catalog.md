@@ -1486,3 +1486,139 @@ re-read from the document on each query.
 | `SPLIT-001` | `extract_pages([1])` → new 1-page doc bytes; reopens; text == source page 1 | PRD §8.7 | green |
 | `SPLIT-002` | `extract_pages([0,2])` → 2-page doc in that order | PRD §8.7 | green |
 | `SPLIT-003` | extracted doc has its own self-contained object graph (no dangling refs) | PRD §8.7 | green |
+
+## M3d — Metadata / TOC / links / PageLabels + encryption-write + PyO3/fitz wiring (`pdf-edit`, `pdf-crypto`, `pdf-core`, `py-bindings`, `python/`)
+
+Spec source: PRD §8.9 (metadata/TOC/links ~592-595), §8.4 (encryption write rules
+~450-476), §8.7 (~543-567), §12 M3 exit (~973): TOC round-trip == input,
+level-jump rejected, named dest resolves under `/PageLabels`, saved fixtures
+reparse clean, encrypted round-trip. Rust tests live in
+`crates/pdf-edit/tests/{metadata_e2e.rs,toc_e2e.rs,links_e2e.rs,pagelabel_e2e.rs,nameddest_e2e.rs}`
+and `crates/pdf-crypto/tests/authoring_unit.rs` +
+`crates/pdf-core/tests/crypt_write_e2e.rs`; Python in `python/tests/`.
+
+The catalog/`/Info` mutation gap (writer carries `/Info`/`/Encrypt` only as
+pre-existing trailer refs) is bridged by `DocumentStore::set_trailer_ref(key,
+ref)` (interior-mutable trailer-key overlay consulted by the writer). The
+catalog is always a GC root, so `/Outlines`, `/Names`, `/PageLabels` survive a
+full save by mutating the catalog dict via `update_object(root, …)`.
+
+### Metadata — `/Info` write + XMP (`metadata.rs`) — `META-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `META-INFO-001` | `set_metadata` on a doc with no `/Info` creates one; save→reopen reads back title/author | PRD §8.9 | green |
+| `META-INFO-002` | `set_metadata` on a doc with an existing indirect `/Info` updates it; save→reopen reflects new values | PRD §8.9 | green |
+| `META-INFO-003` | all keys round-trip (title/author/subject/keywords/creator/producer/creationDate/modDate) | PRD §8.9 | green |
+| `META-INFO-004` | clearing a key (empty/None) removes it from `/Info`; absent on reopen | PRD §8.9 | green |
+| `META-INFO-005` | non-ASCII title written as UTF-16BE (`FE FF` BOM), read back equal | PRD §8.9 | green |
+| `META-INFO-006` | PDF date string `D:YYYYMMDDHHmmSS` written verbatim, read back verbatim | PRD §8.9 | green |
+| `META-INFO-007` | reading via `pdf-api` `Metadata` stays consistent with what was written (M1f read path) | PRD §8.9 | green |
+| `META-XMP-001` | `set_xml_metadata` creates a `/Metadata` XMP stream in the catalog; `get_xml_metadata` reads it back | PRD §8.9 | green |
+| `META-XMP-002` | `set_xml_metadata` replaces an existing `/Metadata` stream; reopen reads the new XMP | PRD §8.9 | green |
+| `META-XMP-003` | `get_xml_metadata` on a doc with no `/Metadata` returns empty/None | PRD §8.9 | green |
+
+### TOC / outlines — get / set / level-jump (`toc.rs`) — `TOC-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `TOC-GET-001` | `get_toc` on a hand-built `/Outlines` returns `(level,title,page)` rows in document order | PRD §8.9 | green |
+| `TOC-GET-002` | nested First/Next/Parent chain produces correct levels (1,2,2,1) | PRD §8.9 | green |
+| `TOC-GET-003` | page computed from `/Dest [pageref /XYZ …]` and from `/A << /S /GoTo /D … >>` | PRD §8.9 | green |
+| `TOC-GET-004` | empty / absent `/Outlines` → empty list | PRD §8.9 | green |
+| `TOC-SET-001` | `set_toc` then `get_toc` == input (flat 1-level list) | PRD §12 | green |
+| `TOC-SET-002` | nested levels (1,2,3,2,1) round-trip == input | PRD §12 | green |
+| `TOC-SET-003` | built `/Outlines` has correct `/Count` (signed), `/First`/`/Last`, sibling `/Next`/`/Prev`, child `/Parent` | PRD §8.9 | green |
+| `TOC-SET-004` | each entry's `/Dest` resolves to the right physical page after reopen | PRD §8.9 | green |
+| `TOC-SET-005` | `set_toc([])` removes `/Outlines`; `get_toc` → empty | PRD §8.9 | green |
+| `TOC-SET-006` | save→reopen→`get_toc` still equals input (persisted tree) | PRD §12 | green |
+| `TOC-JUMP-001` | a level jump (1→3) is rejected with a typed error; document unmutated | PRD §12 | green |
+| `TOC-JUMP-002` | first entry with level != 1 is rejected | PRD §8.9 | green |
+
+### Page labels — number-tree read + `get_label` (`pagelabel.rs`) — `PAGELABEL-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `PAGELABEL-001` | decimal style `D` with prefix+start → labels per physical page (e.g. `A-1`,`A-2`) | PRD §8.9 §3.5 | green |
+| `PAGELABEL-002` | lowercase-roman `r` style → `i`,`ii`,`iii` | PRD §8.9 | green |
+| `PAGELABEL-003` | uppercase-roman `R` and lowercase/uppercase-alpha `a`/`A` styles | PRD §8.9 | green |
+| `PAGELABEL-004` | multiple ranges in the `/Nums` tree apply to the right page spans | PRD §8.9 | green |
+| `PAGELABEL-005` | no `/PageLabels` → `get_label` returns the empty string (PyMuPDF behavior) | PRD §8.9 | green |
+| `PAGELABEL-006` | `/St` start value honored (range starting at 5 → `5`,`6`,…) | PRD §8.9 | green |
+
+### Named destinations → physical page (`dest.rs`) — `NAMEDDEST-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `NAMEDDEST-001` | resolve a name in catalog `/Dests` dict → correct physical page index | PRD §8.9 | green |
+| `NAMEDDEST-002` | resolve a name in the `/Names /Dests` name-tree → correct page | PRD §8.9 | green |
+| `NAMEDDEST-003` | name-tree with `/Kids` (intermediate nodes + `/Limits`) traverses to the leaf | PRD §8.9 | green |
+| `NAMEDDEST-004` | a named dest still resolves to the correct **physical** page under a non-trivial `/PageLabels` | PRD §12 | green |
+| `NAMEDDEST-005` | unknown name → `None` (no panic) | PRD §8.9 | green |
+| `NAMEDDEST-006` | `resolve_link` on a `/GoTo` action with a named `/D` resolves to a page | PRD §8.9 | green |
+
+### Links — read / insert / update / delete (`links.rs`) — `LINK-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `LINK-GET-001` | `get_links` reads a `/Annots` Link with `/A /URI` → `{kind:uri, from:Rect, uri}` | PRD §8.9 | green |
+| `LINK-GET-002` | `get_links` reads a GoTo link (`/Dest` or `/A /GoTo`) → `{kind:goto, from:Rect, page}` | PRD §8.9 | green |
+| `LINK-GET-003` | a page with no `/Annots` → empty list | PRD §8.9 | green |
+| `LINK-GET-004` | named-dest GoTo link resolves to a page index | PRD §8.9 | green |
+| `LINK-INSERT-001` | `insert_link` (uri) adds a Link annot; reopen→`get_links` shows it with the rect+uri | PRD §8.9 | green |
+| `LINK-INSERT-002` | `insert_link` (goto) adds a GoTo Link; reopen→page target correct | PRD §8.9 | green |
+| `LINK-INSERT-003` | inserting on a page with no `/Annots` creates the array | PRD §8.9 | green |
+| `LINK-UPDATE-001` | `update_link` changes the rect / uri of an existing link; reopen reflects it | PRD §8.9 | green |
+| `LINK-DELETE-001` | `delete_link` removes the annot; reopen→`get_links` count decremented | PRD §8.9 | green |
+
+### Encryption authoring — `pdf-crypto` public API (`authoring.rs`) — `CRYPT-AUTH-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `CRYPT-AUTH-001` | `author_rc4_128` builds an `/Encrypt` config a `Decryptor` authenticates with `""` | PRD §8.4 | green |
+| `CRYPT-AUTH-002` | `author_aes128` (AESV2) config authenticates with `""`; per-object enc/dec round-trips | PRD §8.4 | green |
+| `CRYPT-AUTH-003` | `author_aes256_r6` config authenticates with `""`; R6 file key used directly (no salt) | PRD §8.4 | green |
+| `CRYPT-AUTH-004` | owner-only password: `author_*` with owner pw, empty user pw authenticates as Owner | PRD §8.4 | green |
+| `CRYPT-AUTH-005` | wrong password → `NeedsPassword` | PRD §8.4 | green |
+| `CRYPT-AUTH-006` | salts/IVs come from a real RNG (two authorings of the same doc differ in `/U` salt) | PRD §8.4 | green |
+| `CRYPT-AUTH-007` | `author_aes256_r6` sets `/R 6` and `/V 5`; **never emits R5** | PRD §8.4 | green |
+| `CRYPT-AUTH-008` | `EncryptSpec::method` maps RC4_128/AES_128/AES_256_R6 → correct `(v,r,cfm)` | PRD §8.4 | green |
+
+### Encryption on save — writer integration (`crypt_write_e2e.rs`) — `CRYPT-WRITE-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `CRYPT-WRITE-RC4` | save encrypted (RC4-128) → reopen + `authenticate("")` → page text equals plaintext | PRD §8.4 | green |
+| `CRYPT-WRITE-AES128` | save encrypted (AES-128) → reopen + auth → text equals; AES IV prefix present | PRD §8.4 | green |
+| `CRYPT-WRITE-AES256` | save encrypted (AES-256 R6) → reopen + auth → text equals | PRD §8.4 | green |
+| `CRYPT-WRITE-STR` | `/Info /Title` string is encrypted on disk (ciphertext != plaintext), decrypts on reopen | PRD §8.4 | green |
+| `CRYPT-WRITE-OWNER` | owner-only password save → wrong user pw fails, owner pw authenticates | PRD §8.4 | green |
+| `CRYPT-WRITE-WRONGPW` | reopen + `authenticate("wrong")` → false; `authenticate("")` succeeds | PRD §8.4 | green |
+| `CRYPT-WRITE-EXEMPT-ID` | the trailer `/ID` strings are NOT encrypted (readable as plain hex) | PRD §8.4 | green |
+| `CRYPT-WRITE-EXEMPT-ENC` | the `/Encrypt` dict's own strings (`/O`/`/U`) are NOT encrypted | PRD §8.4 | green |
+| `CRYPT-WRITE-EXEMPT-XREF` | when xref-stream style is used, the xref stream body is NOT encrypted (reparses) | PRD §8.4 | green |
+| `CRYPT-WRITE-NEVER-R5` | the authored `/Encrypt` for AES-256 has `/R 6` (assert never 5) | PRD §8.4 | green |
+| `CRYPT-WRITE-QPDF` | (optional) `qpdf --decrypt` on the saved file succeeds when `qpdf` present | PRD §12 | green |
+
+### PyO3 / fitz wiring — save + edit surface (`python/tests/`) — `PYSAVE-*` / `PYMETA-*` / `PYTOC-*` / `PYMERGE-*` / `PYLINK-*` / `PYENC-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `PYSAVE-001` | `Document.save(path)` then `oxipdf.open(path)` reopens with same page_count + text | PRD §8.9 | green |
+| `PYSAVE-002` | `Document.tobytes()` → `open(stream=…)` round-trips | PRD §8.9 | green |
+| `PYSAVE-003` | `Document.save(incremental=True)` / `saveIncr()` appends; both revisions reopen | PRD §8.9 | green |
+| `PYSAVE-004` | `garbage`/`deflate` kwargs accepted; saved file reparses | PRD §8.9 | green |
+| `PYMETA-001` | `set_metadata({...})` → `metadata` round-trips after reopen | PRD §8.9 | green |
+| `PYMETA-002` | `setMetadata` deprecated alias works (via shim) | PRD §8.9 | green |
+| `PYMETA-003` | `get_xml_metadata`/`set_xml_metadata` round-trip | PRD §8.9 | green |
+| `PYTOC-001` | `set_toc(list)` then `get_toc()` == input (nested) | PRD §12 | green |
+| `PYTOC-002` | `getToC`/`setToC` deprecated aliases work | PRD §8.9 | green |
+| `PYTOC-003` | level-jump in `set_toc` raises `PdfError` (mapped) | PRD §12 | green |
+| `PYMERGE-001` | `insert_pdf(src)` merges; page_count grows; text from both present | PRD §8.9 | green |
+| `PYMERGE-002` | `insertPDF` deprecated alias works | PRD §8.9 | green |
+| `PYEDIT-001` | a page op (`delete_page`/`select`) reflected on reopen | PRD §8.9 | green |
+| `PYEDIT-002` | `new_page`/`newPage` adds a page; reopen count grows | PRD §8.9 | green |
+| `PYLINK-001` | `Page.get_links()` returns links with `fitz.Rect` `from` + kind/uri/page | PRD §8.9 | green |
+| `PYLABEL-001` | `Page.get_label()` returns the page label under a `/PageLabels` doc | PRD §8.9 | green |
+| `PYENC-001` | `save(encryption=AES_256, user_pw="")` → reopen → `is_encrypted`, `authenticate("")`, text equals | PRD §8.4 | green |
+| `PYENC-002` | encrypted save with owner pw: wrong user pw → `authenticate` false | PRD §8.4 | green |
