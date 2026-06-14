@@ -325,8 +325,127 @@ never a panic; every decoder respects `Limits::max_decompressed_stream`.
 
 ---
 
+## M1c — Xref machinery + `DocumentStore` + lazy object access (`pdf-core`)
+
+Spec source of truth: PRD §8.2 (cross-reference machinery), §9.2 (core data
+model / `DocumentStore`), §9.6 / §9.6.1 (security, mmap-truncation, never-panic).
+Fixtures are **self-built** in-test (M1a serializer + hand-written xref); no
+external/PyMuPDF files. Tests live in `crates/pdf-core/tests/source_unit.rs`,
+`xref_unit.rs`, `objstm_unit.rs`, `document_unit.rs`,
+`document_property.rs`.
+
+### `Source` — bounds-checked backing bytes (`source.rs`) — `SOURCE-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `SOURCE-001` | `Source::from_bytes` exposes the bytes verbatim via `bytes()` | PRD §9.2 | green |
+| `SOURCE-002` | `Source::Empty` is zero-length, never panics | PRD §9.6.1 | green |
+| `SOURCE-003` | `slice(off,len)` returns the in-range subslice | PRD §9.6.1 | green |
+| `SOURCE-004` | out-of-bounds offset/len → `Error::Source`, no panic | PRD §9.6.1 | green |
+| `SOURCE-005` | `slice` length overflow (off+len wraps) → typed error | PRD §9.6.1 | green |
+| `SOURCE-006` | `open(path, mmap: Never)` reads owned bytes (hard-safe mode) | PRD §9.6.1 | green |
+| `SOURCE-007` | truncated-tail buffer handled gracefully (no startxref) | PRD §9.6.1 | green |
+
+### Xref — classic table (`xref/table.rs`) — `XREF-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `XREF-001` | `startxref` discovery scans the file tail | PRD §8.2 | green |
+| `XREF-002` | classic single-subsection table parses; entries map num→offset | PRD §8.2 | green |
+| `XREF-003` | multi-subsection table (disjoint ranges) merges correctly | PRD §8.2 | green |
+| `XREF-004` | free entry (`f`) recorded as `XrefEntry::Free` | PRD §8.2 | green |
+| `XREF-005` | generation numbers preserved on in-use entries | PRD §8.2 | green |
+| `XREF-006` | trailer dict parses (`/Size /Root /Prev …`) | PRD §8.2 | green |
+| `XREF-007` | object resolved by offset matches the serialized object | PRD §8.2 | green |
+| `XREF-008` | 19-byte / bare-LF entry variant tolerated | PRD §8.2 | green |
+| `XREF-009` | multiple `%%EOF` → last `startxref` wins | PRD §8.2 | green |
+| `XREF-010` | missing/garbage `startxref` → typed `Error::Xref`, no panic | PRD §8.2 | green |
+
+### Xref — streams (`xref/stream.rs`) — `XREFSTM-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `XREFSTM-001` | `/Type /XRef`, `/W [1 2 1]` decodes all 3 entry types | PRD §8.2 | green |
+| `XREFSTM-002` | `/Index` ranges honoured (non-zero start) | PRD §8.2 | green |
+| `XREFSTM-003` | predictor-encoded (PNG-up) xref stream decodes | PRD §8.2 | green |
+| `XREFSTM-004` | varied `/W` widths (e.g. `[1 3 2]`) parse | PRD §8.2 | green |
+| `XREFSTM-005` | type-0 (free) / type-1 (uncompressed) / type-2 (compressed) | PRD §8.2 | green |
+| `XREFSTM-006` | default `/W` field of width 0 → default value applied | PRD §8.2 | green |
+| `XREFSTM-007` | object resolved through an xref stream matches expected | PRD §8.2 | green |
+| `XREFSTM-008` | malformed `/W` (wrong length) → typed error | PRD §8.2 | green |
+
+### Object streams (`objstm.rs`) — `OBJSTM-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `OBJSTM-001` | compressed object resolves identically to an uncompressed one | PRD §8.2 | green |
+| `OBJSTM-002` | `/N` / `/First` header pairs parsed; multiple members | PRD §8.2 | green |
+| `OBJSTM-003` | second member (index 1) resolves to its object | PRD §8.2 | green |
+| `OBJSTM-004` | `/N` exceeding `Limits::max_objstm_objects` → `LimitExceeded` | PRD §9.6.2 | green |
+| `OBJSTM-005` | corrupt offset table → typed error, no panic | PRD §8.2 | green |
+
+### `/Prev` chains + multi-revision (`xref`) — `PREV-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `PREV-001` | `/Prev` chain followed; older section objects visible | PRD §8.2 | green |
+| `PREV-002` | newest-wins: object overridden in later section resolves to new | PRD §8.2 | green |
+| `PREV-003` | later section re-frees an object → resolves to free/missing | PRD §8.2 | green |
+| `PREV-004` | `/Prev` cycle terminates (no infinite loop), typed handling | PRD §8.2 | green |
+
+### Hybrid-reference (`xref`) — `HYBRID-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `HYBRID-001` | `/XRefStm` overlay: object only in stream resolves | PRD §8.2 | green |
+| `HYBRID-002` | object in classic table still resolves (both ways) | PRD §8.2 | green |
+
+### Resolution + lazy arena (`document.rs`) — `RESOLVE-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `RESOLVE-001` | first `resolve` parses + caches the `Arc<Object>` | PRD §9.2 | green |
+| `RESOLVE-002` | second `resolve` returns the cached `Arc` (same pointer) | PRD §9.2 | green |
+| `RESOLVE-003` | reference→reference→value followed transparently | PRD §8.1 | green |
+| `RESOLVE-004` | direct self-reference cycle → `Error::ReferenceCycle` | PRD §9.3 | green |
+| `RESOLVE-005` | indirect (A→B→A) cycle → `Error::ReferenceCycle` | PRD §9.3 | green |
+| `RESOLVE-006` | nesting past `max_recursion_depth` → `LimitExceeded` | PRD §9.6.2 | green |
+| `RESOLVE-007` | dangling reference (no xref entry) → `Error::MissingObject` | PRD §9.3 | green |
+| `RESOLVE-008` | `resolve_dict_key` resolves a dict value that is a reference | PRD §9.2 | green |
+| `RESOLVE-009` | `root()` returns the catalog ref from the trailer | PRD §9.2 | green |
+| `RESOLVE-010` | `get_object(num,gen)` returns the raw (unresolved) object | PRD §9.2 | green |
+
+### Source-backed stream `Raw` decode (`document.rs`) — `STREAM-RAW-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `STREAM-RAW-001` | `StreamData::Raw{off,len}` slices body from `Source` | PRD §9.2 | green |
+| `STREAM-RAW-002` | a Flate stream parsed from source decodes to expected bytes | PRD §8.3 | green |
+| `STREAM-RAW-003` | `Raw` body length validated against source bounds | PRD §9.6.1 | green |
+
+### Open / header / store (`document.rs`) — `OPEN-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `OPEN-001` | `%PDF-1.7` header → `version == (1,7)`, `header_offset == 0` | PRD §8.2 | green |
+| `OPEN-002` | junk before header → `header_offset` bias recorded | PRD §8.2 | green |
+| `OPEN-003` | `from_bytes` does not eagerly load all objects (arena empty) | PRD §9.2 | green |
+| `OPEN-004` | `parse_was_repaired == false` on a clean file | PRD §8.2 | green |
+| `OPEN-005` | catalog `/Version` overrides header version | PRD §8.2 | green |
+| `OPEN-006` | full open → resolve `/Root` → catalog dict, end-to-end | PRD §8.2 | green |
+
+### Property / robustness (`document_property.rs`) — `OPEN-PROP-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `OPEN-PROP-001` | opening arbitrary bytes never panics (typed `Err` or `Ok`) | PRD §9.6 | green |
+| `OPEN-PROP-002` | truncating a valid file at any offset never panics | PRD §9.6 | green |
+| `OPEN-PROP-003` | `resolve` of arbitrary obj nums on opened doc never panics | PRD §9.6 | green |
+
+---
+
 ## M1+ (placeholder)
 
-Catalogs for `XREF-*`, `OBJSTM-*`, `REPAIR-*`, `CRYPT-*` (M1c–M1f),
-`WORDS-*` / text formats (M2), etc. are enumerated at the start of each
-milestone per PRD §10.1.1 before implementation begins.
+Catalogs for `REPAIR-*` (M1d), `CRYPT-*` (M1e), `WORDS-*` / text formats (M2),
+etc. are enumerated at the start of each milestone per PRD §10.1.1 before
+implementation begins.

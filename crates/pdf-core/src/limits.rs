@@ -65,6 +65,33 @@ impl Limits {
             ..Limits::DEFAULT
         }
     }
+
+    // --- builder-style overrides ------------------------------------------
+    //
+    // `Limits` is `#[non_exhaustive]`, so downstream crates/tests cannot use a
+    // struct-update literal to tweak one field. These consuming setters provide
+    // that ergonomics without exposing the field set as a stable constructor.
+
+    /// Returns a copy with [`Limits::max_recursion_depth`] overridden.
+    #[must_use]
+    pub fn with_max_recursion_depth(mut self, v: u32) -> Self {
+        self.max_recursion_depth = v;
+        self
+    }
+
+    /// Returns a copy with [`Limits::max_objstm_objects`] overridden.
+    #[must_use]
+    pub fn with_max_objstm_objects(mut self, v: u64) -> Self {
+        self.max_objstm_objects = v;
+        self
+    }
+
+    /// Returns a copy with [`Limits::max_objects`] overridden.
+    #[must_use]
+    pub fn with_max_objects(mut self, v: u64) -> Self {
+        self.max_objects = v;
+        self
+    }
 }
 
 /// One gibibyte, the unit several §9.6.2 ceilings are pinned in.

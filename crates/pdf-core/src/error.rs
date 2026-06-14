@@ -19,6 +19,15 @@ pub enum LimitKind {
     /// The incremental decode ratio exceeded `Limits::max_decode_ratio`
     /// (decompression-bomb guard, PRD §9.6.2).
     DecodeRatio,
+    /// An object stream declared more members than `Limits::max_objstm_objects`
+    /// (PRD §9.6.2).
+    ObjstmObjects,
+    /// A document declared/contained more objects than `Limits::max_objects`
+    /// (xref/object-count bomb bound, PRD §9.6.2).
+    Objects,
+    /// Indirect-object resolution nested deeper than
+    /// `Limits::max_recursion_depth` (PRD §9.6.2).
+    RecursionDepth,
 }
 
 impl LimitKind {
@@ -28,6 +37,9 @@ impl LimitKind {
         match self {
             LimitKind::DecompressedStream => "decompressed-stream",
             LimitKind::DecodeRatio => "decode-ratio",
+            LimitKind::ObjstmObjects => "objstm-objects",
+            LimitKind::Objects => "objects",
+            LimitKind::RecursionDepth => "recursion-depth",
         }
     }
 }
@@ -90,6 +102,48 @@ pub enum Error {
     #[error("limit exceeded: {0}")]
     LimitExceeded(LimitKind),
 
+    /// A bounds-checked read into the backing [`crate::source::Source`] fell
+    /// outside the captured length (PRD §9.6.1: every offset/len validated
+    /// before slicing; a later truncation can never make us read past the
+    /// length captured at open time).
+    #[error("source out of bounds: {msg}")]
+    Source {
+        /// Stable English description (e.g. `"slice past end of source"`).
+        msg: &'static str,
+    },
+
+    /// The cross-reference machinery (classic table, xref stream, `startxref`
+    /// discovery, `/Prev` chain, object-stream container) was malformed in a way
+    /// that the non-repairing reader cannot recover from (repair is M1d).
+    #[error("xref error at offset {offset}: {msg}")]
+    Xref {
+        /// Byte offset of the fault (best effort).
+        offset: usize,
+        /// Stable English description of what went wrong.
+        msg: &'static str,
+    },
+
+    /// A referenced object has no usable cross-reference entry (free, absent, or
+    /// a dangling reference). The "object not found" case (PRD §9.3).
+    #[error("missing object {num} {gen}")]
+    MissingObject {
+        /// Object number that could not be resolved.
+        num: u32,
+        /// Generation number requested.
+        gen: u16,
+    },
+
+    /// A reference cycle was detected while resolving an indirect object — the
+    /// graph-walk guard (PRD §9.3 / §9.6). `num`/`gen` name the object at which
+    /// the cycle closed.
+    #[error("reference cycle at object {num} {gen}")]
+    ReferenceCycle {
+        /// Object number at which the cycle closed.
+        num: u32,
+        /// Generation number at which the cycle closed.
+        gen: u16,
+    },
+
     /// A construct that is valid PDF but not yet implemented in this unit.
     #[error("unsupported: {0}")]
     Unsupported(&'static str),
@@ -120,6 +174,18 @@ impl Error {
         Error::Decode { filter, msg }
     }
 
+    /// Builds an [`Error::Source`] with a stable message.
+    #[must_use]
+    pub fn source(msg: &'static str) -> Self {
+        Error::Source { msg }
+    }
+
+    /// Builds an [`Error::Xref`] at `offset` with a stable message.
+    #[must_use]
+    pub fn xref(offset: usize, msg: &'static str) -> Self {
+        Error::Xref { offset, msg }
+    }
+
     /// A short, stable discriminant string (machine-greppable, never localized).
     #[must_use]
     pub fn kind(&self) -> &'static str {
@@ -130,6 +196,10 @@ impl Error {
             Error::Filter { .. } => "filter",
             Error::Decode { .. } => "decode",
             Error::LimitExceeded(_) => "limit-exceeded",
+            Error::Source { .. } => "source",
+            Error::Xref { .. } => "xref",
+            Error::MissingObject { .. } => "missing-object",
+            Error::ReferenceCycle { .. } => "reference-cycle",
             Error::Unsupported(_) => "unsupported",
         }
     }

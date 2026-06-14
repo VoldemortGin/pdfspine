@@ -6,7 +6,7 @@
 //! round-trip property `parse(serialize(o)) == normalize(o)` (catalog
 //! `SER-PROP-001`) holds for any finite-real object.
 
-use crate::object::{Dict, Name, ObjRef, Object, PdfString, StreamData, StreamObj, StringKind};
+use crate::object::{Dict, Name, ObjRef, Object, PdfString, StreamObj, StringKind};
 
 /// Serializes a single object to bytes (no indirect wrapper).
 #[must_use]
@@ -151,9 +151,13 @@ fn write_dict(out: &mut Vec<u8>, dict: &Dict) {
 fn write_stream(out: &mut Vec<u8>, s: &StreamObj) {
     // Emit the dict with a correct `/Length` for the payload, overriding any
     // stale value in the source dict (ISO 32000-1 §7.3.8).
-    let payload = match &s.data {
-        StreamData::Encoded(b) | StreamData::Decoded(b) => b,
-    };
+    //
+    // A source-backed `Raw` payload cannot be serialized without the document
+    // `Source` (it is only an `(offset, len)` into it); writing source-backed
+    // streams is an M3 (save) concern. Here it serializes as an empty body so
+    // the writer stays total — the M1c reader never feeds a `Raw` stream back to
+    // the serializer.
+    let payload: &[u8] = s.data.owned_bytes().map_or(&[][..], |b| b.as_ref());
     let mut dict = s.dict.clone();
     dict.insert(Name::new("Length"), Object::Integer(payload.len() as i64));
     write_dict(out, &dict);

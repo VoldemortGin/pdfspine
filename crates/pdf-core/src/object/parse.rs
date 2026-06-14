@@ -14,6 +14,10 @@ use super::{Dict, Name, ObjRef, Object, PdfString, StreamObj};
 /// A recursive-descent object parser over a [`Lexer`].
 pub struct Parser<'a> {
     lexer: Lexer<'a>,
+    /// When set, the most recently parsed stream's body range (within the parse
+    /// buffer) — captured for the lazy source-backed (`Raw`) path so the
+    /// `DocumentStore` can record `(offset, len)` instead of copying the body.
+    last_stream_body: Option<(usize, usize)>,
 }
 
 impl<'a> Parser<'a> {
@@ -22,13 +26,26 @@ impl<'a> Parser<'a> {
     pub fn new(buf: &'a [u8]) -> Self {
         Parser {
             lexer: Lexer::new(buf),
+            last_stream_body: None,
         }
     }
 
     /// Creates a parser from an existing lexer (sharing position).
     #[must_use]
     pub fn from_lexer(lexer: Lexer<'a>) -> Self {
-        Parser { lexer }
+        Parser {
+            lexer,
+            last_stream_body: None,
+        }
+    }
+
+    /// The `(start, len)` byte range, **within the parse buffer**, of the most
+    /// recently parsed stream's body — or `None` if the last parsed object was
+    /// not a stream. Used by the `DocumentStore` to build a source-backed
+    /// [`crate::object::StreamData::Raw`] payload (PRD §9.2).
+    #[must_use]
+    pub fn last_stream_body(&self) -> Option<(usize, usize)> {
+        self.last_stream_body
     }
 
     /// The current byte offset.
@@ -230,6 +247,9 @@ impl<'a> Parser<'a> {
         };
 
         let data = Bytes::copy_from_slice(&buf[body_start..body_end]);
+        // Record the body's location (within the parse buffer) for the lazy
+        // source-backed `Raw` path (PRD §9.2).
+        self.last_stream_body = Some((body_start, body_end.saturating_sub(body_start)));
 
         // Advance the lexer past the body and consume `endstream`.
         self.lexer.seek(after);

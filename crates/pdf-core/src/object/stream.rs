@@ -5,10 +5,11 @@
 //! (PRD §8.1 / §9.2) for O(1) clone.
 //!
 //! PRD §9.2 sketches three payload variants `Raw{off,len}|Encoded|Decoded`. M1a
-//! ships the two owned variants ([`StreamData::Encoded`], [`StreamData::Decoded`]);
-//! the source-backed `Raw { offset, len }` variant is deferred to M1c, when the
-//! `DocumentStore` / `Source` exist to back it (see §9.2 memory model). The enum
-//! is `#[non_exhaustive]` so adding `Raw` later is not a breaking change.
+//! shipped the two owned variants ([`StreamData::Encoded`],
+//! [`StreamData::Decoded`]); M1c adds the source-backed
+//! [`StreamData::Raw`]`{ offset, len }` variant now that the `DocumentStore` /
+//! `Source` exist to back it (see §9.2 memory model). The enum is
+//! `#[non_exhaustive]` so adding variants is not a breaking change.
 
 use bytes::Bytes;
 
@@ -16,13 +17,24 @@ use super::Dict;
 
 /// The payload of a [`StreamObj`].
 ///
-/// `Encoded` holds bytes exactly as they appear in the file (still run through
-/// the filters named in the stream dict's `/Filter`); `Decoded` holds bytes
-/// after those filters have been applied. M1a only ever produces `Encoded`
-/// (filters are M1b); `Decoded` exists so the variant set is stable.
+/// - [`StreamData::Raw`] is the lazy, source-backed variant: it records only the
+///   `offset`/`len` of the still-filter-encoded body within the document's
+///   [`crate::source::Source`]; the bytes are sliced on demand (PRD §9.2). This
+///   is what the object parser produces when reading from a `DocumentStore`.
+/// - [`StreamData::Encoded`] holds owned bytes exactly as they appear in the
+///   file (still run through the filters named in `/Filter`).
+/// - [`StreamData::Decoded`] holds owned bytes after those filters were applied.
 #[derive(Clone, Debug, PartialEq)]
 #[non_exhaustive]
 pub enum StreamData {
+    /// A still-encoded body, recorded as an `(offset, len)` slice into the
+    /// document `Source` and materialized lazily (PRD §9.2 memory model).
+    Raw {
+        /// Absolute byte offset of the stream body within the `Source`.
+        offset: usize,
+        /// Byte length of the stream body.
+        len: usize,
+    },
     /// Raw, still-filter-encoded bytes (verbatim from the file).
     Encoded(Bytes),
     /// Bytes after the stream's filters have been applied.
@@ -30,24 +42,49 @@ pub enum StreamData {
 }
 
 impl StreamData {
-    /// The underlying bytes regardless of variant.
+    /// The underlying owned bytes, if this payload is materialized
+    /// ([`StreamData::Encoded`] / [`StreamData::Decoded`]). A
+    /// [`StreamData::Raw`] payload has no owned bytes (it must be sliced from the
+    /// `Source` first) and returns `None`.
+    #[must_use]
+    pub fn owned_bytes(&self) -> Option<&Bytes> {
+        match self {
+            StreamData::Encoded(b) | StreamData::Decoded(b) => Some(b),
+            StreamData::Raw { .. } => None,
+        }
+    }
+
+    /// The underlying owned bytes regardless of variant.
+    ///
+    /// # Panics
+    ///
+    /// Panics on a [`StreamData::Raw`] payload — callers that may hold a `Raw`
+    /// stream must go through the `DocumentStore` (which slices the body from the
+    /// `Source`) or use [`StreamData::owned_bytes`]. Kept for the owned-only
+    /// call sites that predate the `Raw` variant.
     #[must_use]
     pub fn bytes(&self) -> &Bytes {
         match self {
             StreamData::Encoded(b) | StreamData::Decoded(b) => b,
+            StreamData::Raw { .. } => {
+                panic!("StreamData::bytes() called on a source-backed Raw payload")
+            }
         }
     }
 
-    /// Length in bytes of the payload.
+    /// Length in bytes of the payload (the recorded `len` for [`StreamData::Raw`]).
     #[must_use]
     pub fn len(&self) -> usize {
-        self.bytes().len()
+        match self {
+            StreamData::Raw { len, .. } => *len,
+            StreamData::Encoded(b) | StreamData::Decoded(b) => b.len(),
+        }
     }
 
     /// `true` when the payload is empty.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.bytes().is_empty()
+        self.len() == 0
     }
 }
 
@@ -70,7 +107,14 @@ impl StreamObj {
         }
     }
 
-    /// The raw payload bytes.
+    /// The raw payload bytes for a materialized ([`StreamData::Encoded`] /
+    /// [`StreamData::Decoded`]) stream.
+    ///
+    /// # Panics
+    ///
+    /// Panics on a source-backed [`StreamData::Raw`] payload — resolve such
+    /// streams through the `DocumentStore` (which slices the body from the
+    /// `Source`) first. Use [`StreamData::owned_bytes`] for a non-panicking path.
     #[must_use]
     pub fn raw_bytes(&self) -> &Bytes {
         self.data.bytes()
@@ -95,6 +139,11 @@ impl StreamObj {
         match &self.data {
             StreamData::Decoded(b) => Ok(crate::filters::DecodeOutcome::Decoded(b.to_vec())),
             StreamData::Encoded(b) => crate::filters::decode_stream(&self.dict, b, limits),
+            // A source-backed body must be materialized via the `DocumentStore`
+            // before it can be decoded; `decode` operates on owned payloads only.
+            StreamData::Raw { .. } => Err(crate::Error::Unsupported(
+                "decode on a source-backed Raw stream; resolve via DocumentStore",
+            )),
         }
     }
 

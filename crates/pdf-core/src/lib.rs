@@ -6,18 +6,30 @@
 //! M1a adds the [`lexer`] (byte tokenizer), the [`object`] model + parser, the
 //! [`serialize`] writer and the core [`Error`] type. M1b adds the [`filters`]
 //! codec layer (Flate/LZW/ASCII*/RunLength + predictors + a stream-decode
-//! dispatcher) and the [`Limits`] resource ceilings. Xref, encryption and pages
-//! land in later M1 units per PRD §7.
+//! dispatcher) and the [`Limits`] resource ceilings. M1c adds the [`source`]
+//! backing-bytes abstraction, the [`xref`] cross-reference machinery,
+//! [`objstm`] object-stream decoding, name [`interner`]ing and the lazy
+//! [`document`]`::DocumentStore`. Encryption and pages land in later M1 units
+//! per PRD §7.
 
+pub mod document;
 pub mod error;
 pub mod filters;
 pub mod geom;
+pub mod interner;
 pub mod lexer;
 pub mod limits;
 pub mod object;
+pub mod objstm;
 pub mod serialize;
+pub mod source;
+pub mod xref;
 
+pub use document::{DocumentStore, Version};
 pub use error::{Error, LimitKind, Result};
 pub use filters::{decode_stream, DecodeOutcome};
+pub use interner::NameInterner;
 pub use limits::Limits;
 pub use object::{Dict, Name, ObjRef, Object, PdfString, StreamData, StreamObj, StringKind};
+pub use source::{MmapMode, Source};
+pub use xref::{XrefEntry, XrefTable};
