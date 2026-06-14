@@ -194,8 +194,139 @@ error or EOF token, never a panic or out-of-bounds.
 
 ---
 
+## M1b — Stream filters + predictors (`pdf-core::filters`)
+
+Spec source of truth: ISO 32000-1 §7.4 (filters), §7.4.4 (Flate + predictors),
+§7.4.4.4 (LZW), RFC 1950/1951 (zlib/deflate), TIFF 6.0 §14 (PNG/TIFF
+predictors). Implements PRD §8.3 (filters/codecs) at the §10.7 granularity.
+Tests live in `crates/pdf-core/tests/flate_unit.rs`,
+`crates/pdf-core/tests/lzw_unit.rs`, `crates/pdf-core/tests/ascii_unit.rs`,
+`crates/pdf-core/tests/runlength_unit.rs`,
+`crates/pdf-core/tests/predictor_unit.rs`,
+`crates/pdf-core/tests/dispatch_unit.rs` (unit),
+`crates/pdf-core/tests/filters_property.rs` (property) and
+`crates/pdf-core/tests/limits_unit.rs`. Design center (PRD §8.1/§9.6): every
+decoder is **total** — arbitrary/truncated/corrupt input yields a typed `Err`,
+never a panic; every decoder respects `Limits::max_decompressed_stream`.
+
+### FlateDecode (`filters::flate`) — `FLATE-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `FLATE-DEC-001` | empty input round-trips: `decode(encode(b"")) == b""` | RFC 1950 | green |
+| `FLATE-DEC-002` | `decode(encode(b"hello")) == b"hello"` | RFC 1950 | green |
+| `FLATE-DEC-003` | known zlib bytes → precomputed expected | RFC 1950 | green |
+| `FLATE-DEC-004` | 64 KiB random round-trip | RFC 1950 | green |
+| `FLATE-DEC-005` | `b"A"*100000` round-trips and compresses (out < in) | RFC 1951 | green |
+| `FLATE-DEC-006` | truncated zlib stream → typed `Err`, no panic | PRD §8.1/§8.3 | green |
+| `FLATE-DEC-007` | corrupted middle bytes → typed `Err`, no panic | PRD §8.3 | green |
+| `FLATE-DEC-008` | trailing garbage after valid stream → valid prefix (policy) | PRD §8.3 | green |
+| `FLATE-DEC-009` | raw deflate (no zlib header) → decoded (raw fallback policy) | PRD §8.3 | green |
+| `FLATE-DEC-010` | declared/effective output > tiny limit → `LimitExceeded`, bounded | PRD §9.6.2 | green |
+
+### Predictors (`filters::predictor`) — `FLATE-PRED-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `FLATE-PRED-001` | predictor 1 (none) is identity (decode + encode) | ISO 32000-1 §7.4.4.4 | green |
+| `FLATE-PRED-002` | PNG Sub (predictor 11) round-trip | TIFF 6.0 / PNG | green |
+| `FLATE-PRED-003` | PNG Up (predictor 12) round-trip | TIFF 6.0 / PNG | green |
+| `FLATE-PRED-004` | PNG Average (predictor 13) round-trip | TIFF 6.0 / PNG | green |
+| `FLATE-PRED-005` | PNG Paeth (predictor 14) round-trip incl. tie-break | TIFF 6.0 / PNG | green |
+| `FLATE-PRED-006` | PNG optimum (predictor 15) multi-row, mixed tag bytes | PNG | green |
+| `FLATE-PRED-007` | TIFF predictor 2 round-trip | TIFF 6.0 §14 | green |
+| `FLATE-PRED-008` | Colors/BitsPerComponent/Columns stride matrix (incl. sub-byte BPC) | ISO 32000-1 §7.4.4.4 | green |
+| `FLATE-PRED-009` | `/Columns` mismatch (row stride ∤ data) → typed `Err` | PRD §8.3 | green |
+
+### LZWDecode (`filters::lzw`) — `LZW-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `LZW-DEC-001` | empty round-trip `decode(encode(b"")) == b""` | ISO 32000-1 §7.4.4.2 | green |
+| `LZW-DEC-002` | `decode(encode(b"hello..")) == input` | ISO 32000-1 §7.4.4.2 | green |
+| `LZW-DEC-003` | known spec example (`-----A---B`) decodes to precomputed | ISO 32000-1 §7.4.4.2 | green |
+| `LZW-DEC-004` | EarlyChange=1 (default) vs EarlyChange=0 differ; each round-trips | ISO 32000-1 §7.4.4.2 | green |
+| `LZW-DEC-005` | larger random round-trip (EarlyChange=1) | ISO 32000-1 §7.4.4.2 | green |
+| `LZW-DEC-006` | truncated/corrupt code stream → typed `Err`, no panic | PRD §8.3 | green |
+| `LZW-DEC-007` | declared/effective output > tiny limit → `LimitExceeded` | PRD §9.6.2 | green |
+| `LZW-DEC-008` | predictor applies to LZW output (PNG Up over LZW) | ISO 32000-1 §7.4.4 | green |
+
+### ASCIIHexDecode (`filters::ascii_hex`) — `AHX-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `AHX-DEC-001` | empty / lone `>` → empty | ISO 32000-1 §7.4.2 | green |
+| `AHX-DEC-002` | `48656C6C6F>` → `b"Hello"` | ISO 32000-1 §7.4.2 | green |
+| `AHX-DEC-003` | whitespace between digits skipped | ISO 32000-1 §7.4.2 | green |
+| `AHX-DEC-004` | odd digit count before `>` → pad trailing `0` | ISO 32000-1 §7.4.2 | green |
+| `AHX-DEC-005` | bytes after `>` ignored; missing `>` tolerated at EOF | ISO 32000-1 §7.4.2 | green |
+| `AHX-DEC-006` | non-hex non-whitespace char → typed `Err`, no panic | PRD §8.3 | green |
+| `AHX-DEC-007` | round-trip `decode(encode(x)) == x` | ISO 32000-1 §7.4.2 | green |
+
+### ASCII85Decode (`filters::ascii85`) — `A85-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `A85-DEC-001` | empty / lone `~>` → empty | ISO 32000-1 §7.4.3 | green |
+| `A85-DEC-002` | known group → precomputed 4 bytes | ISO 32000-1 §7.4.3 | green |
+| `A85-DEC-003` | `z` shortcut → 4 zero bytes | ISO 32000-1 §7.4.3 | green |
+| `A85-DEC-004` | partial final group (2/3/4 chars) decodes to 1/2/3 bytes | ISO 32000-1 §7.4.3 | green |
+| `A85-DEC-005` | whitespace skipped; `~>` terminator; optional `<~` lead tolerated | ISO 32000-1 §7.4.3 | green |
+| `A85-DEC-006` | out-of-range char / `z` mid-group / 1-char final group → typed `Err` | PRD §8.3 | green |
+| `A85-DEC-007` | round-trip `decode(encode(x)) == x` | ISO 32000-1 §7.4.3 | green |
+
+### RunLengthDecode (`filters::run_length`) — `RL-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `RL-DEC-001` | empty / lone `128` (EOD) → empty | ISO 32000-1 §7.4.5 | green |
+| `RL-DEC-002` | literal run (length 0..127 → copy n+1 bytes) | ISO 32000-1 §7.4.5 | green |
+| `RL-DEC-003` | replicate run (length 129..255 → 257-n copies) | ISO 32000-1 §7.4.5 | green |
+| `RL-DEC-004` | `128` byte terminates; trailing bytes ignored | ISO 32000-1 §7.4.5 | green |
+| `RL-DEC-005` | truncated run (length byte then EOF) → typed `Err`, no panic | PRD §8.3 | green |
+| `RL-DEC-006` | round-trip `decode(encode(x)) == x` | ISO 32000-1 §7.4.5 | green |
+
+### Dispatcher (`filters::decode_stream`) — `DISPATCH-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `DISPATCH-001` | single `/Filter /FlateDecode` decodes | ISO 32000-1 §7.4.1 | green |
+| `DISPATCH-002` | no `/Filter` → bytes returned verbatim | ISO 32000-1 §7.4.1 | green |
+| `DISPATCH-003` | filter chain `[ASCII85Decode FlateDecode]` applied in order | ISO 32000-1 §7.4.1 | green |
+| `DISPATCH-004` | abbreviations `Fl/LZW/AHx/A85/RL` accepted | ISO 32000-1 §7.4.1 (inline) | green |
+| `DISPATCH-005` | `/DecodeParms` predictor applied to its filter | ISO 32000-1 §7.4.4.4 | green |
+| `DISPATCH-006` | `/DecodeParms` array with null entries handled | ISO 32000-1 §7.4.1 | green |
+| `DISPATCH-007` | image filter (`DCTDecode`) → leave-encoded outcome, not error | PRD §8.3 | green |
+| `DISPATCH-008` | image filter mid-chain → leave-encoded from that point | PRD §8.3 | green |
+| `DISPATCH-009` | unknown filter name → typed `Err`, no panic | PRD §8.3 | green |
+| `DISPATCH-010` | `StreamObj::decoded` produces `StreamData::Decoded` lazily | PRD §9.2 | green |
+
+### Limits / decompression-bomb guard — `LIMITS-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `LIMITS-DEFAULT-001` | `Limits::default()` matches pinned §9.6.2 values | PRD §9.6.2 | green |
+| `LIMITS-BOMB-001` | Flate bomb (small input, huge output) > limit → `LimitExceeded`, bounded mem | PRD §9.6.2 | green |
+| `LIMITS-BOMB-002` | LZW bomb > limit → `LimitExceeded`, bounded mem | PRD §9.6.2 | green |
+| `LIMITS-BOMB-003` | RunLength bomb > limit → `LimitExceeded`, bounded mem | PRD §9.6.2 | green |
+
+### Property (`filters_property.rs`) — `FILTER-PROP-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `FLATE-PROP-001` | `flate::decode(flate::encode(x)) == x ∀x` | PRD §10.7 | green |
+| `FLATE-PROP-002` | `unpredict(predict(rows,cfg)) == rows ∀ rows,cfg` (PNG + TIFF2) | PRD §10.7 | green |
+| `FLATE-PROP-003` | `flate::decode` on arbitrary bytes never panics | PRD §10.7 | green |
+| `LZW-PROP-001` | `lzw::decode(lzw::encode(x)) == x ∀x` (EarlyChange=1) | PRD §10.7 | green |
+| `LZW-PROP-002` | `lzw::decode` on arbitrary bytes never panics | PRD §10.7 | green |
+| `AHX-PROP-001` | `ascii_hex` round-trip + never panics on arbitrary bytes | PRD §10.7 | green |
+| `A85-PROP-001` | `ascii85` round-trip + never panics on arbitrary bytes | PRD §10.7 | green |
+| `RL-PROP-001` | `run_length` round-trip + never panics on arbitrary bytes | PRD §10.7 | green |
+
+---
+
 ## M1+ (placeholder)
 
-Catalogs for `XREF-*`, `OBJSTM-*`, `FLATE-*`, `REPAIR-*`, `CRYPT-*`,
-`LIMITS-DEFAULT-*` (M1b–M1f), `WORDS-*` / text formats (M2), etc. are enumerated
-at the start of each milestone per PRD §10.1.1 before implementation begins.
+Catalogs for `XREF-*`, `OBJSTM-*`, `REPAIR-*`, `CRYPT-*` (M1c–M1f),
+`WORDS-*` / text formats (M2), etc. are enumerated at the start of each
+milestone per PRD §10.1.1 before implementation begins.

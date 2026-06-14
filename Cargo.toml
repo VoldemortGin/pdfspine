@@ -42,6 +42,11 @@ pdf-api = { path = "crates/pdf-api", version = "0.0.0" }
 thiserror = "2"
 pyo3 = "0.29"
 bytes = "1"
+# Pure-Rust DEFLATE (no system zlib): `rust_backend` selects the miniz_oxide
+# backend so the build stays self-contained / cross-platform (PRD §8.3).
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
+# Pure-Rust LZW (PDF/TIFF variants) for LZWDecode (PRD §8.3).
+weezl = "0.2"
 
 # --- shared dev-deps ---
 proptest = "1"

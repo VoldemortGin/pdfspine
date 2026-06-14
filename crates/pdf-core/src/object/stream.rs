@@ -75,4 +75,45 @@ impl StreamObj {
     pub fn raw_bytes(&self) -> &Bytes {
         self.data.bytes()
     }
+
+    /// Decodes this stream's payload through its `/Filter` chain (PRD §8.3),
+    /// returning a [`DecodeOutcome`]. Decoding is **lazy / opt-in**: the stream
+    /// itself still holds the original (`Encoded`) bytes — call
+    /// [`StreamObj::decoded`] to obtain a copy with a `Decoded` payload.
+    ///
+    /// An [`StreamData::Decoded`] payload is treated as already-decoded and
+    /// returned verbatim.
+    ///
+    /// # Errors
+    ///
+    /// Propagates any [`crate::Error`] from the filter chain (unknown filter,
+    /// bad parms, decode failure, limit exceeded).
+    pub fn decode(
+        &self,
+        limits: &crate::limits::Limits,
+    ) -> crate::Result<crate::filters::DecodeOutcome> {
+        match &self.data {
+            StreamData::Decoded(b) => Ok(crate::filters::DecodeOutcome::Decoded(b.to_vec())),
+            StreamData::Encoded(b) => crate::filters::decode_stream(&self.dict, b, limits),
+        }
+    }
+
+    /// Returns a clone of this stream whose payload has been replaced with its
+    /// decoded bytes ([`StreamData::Decoded`]) — the lazy `Decoded`-production
+    /// path (PRD §9.2). If the chain ends at an image-only filter
+    /// ([`crate::filters::DecodeOutcome::ImageEncoded`]) the stream is returned
+    /// **unchanged** (still `Encoded`), since those codecs land in M5.
+    ///
+    /// # Errors
+    ///
+    /// Propagates any decode error from [`StreamObj::decode`].
+    pub fn decoded(&self, limits: &crate::limits::Limits) -> crate::Result<StreamObj> {
+        match self.decode(limits)? {
+            crate::filters::DecodeOutcome::Decoded(bytes) => Ok(StreamObj {
+                dict: self.dict.clone(),
+                data: StreamData::Decoded(Bytes::from(bytes)),
+            }),
+            crate::filters::DecodeOutcome::ImageEncoded { .. } => Ok(self.clone()),
+        }
+    }
 }
