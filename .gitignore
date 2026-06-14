@@ -1,0 +1,37 @@
+# Rust
+/target/
+**/target/
+Cargo.lock.bak
+*.rs.bk
+*.pdb
+
+# Python / PyO3 / maturin
+__pycache__/
+*.py[cod]
+*.so
+*.pyd
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+wheelhouse/
+
+# Coverage / profiling
+*.profraw
+/coverage/
+tarpaulin-report.html
+
+# Fuzzing
+/fuzz/target/
+/fuzz/corpus/
+/fuzz/artifacts/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
