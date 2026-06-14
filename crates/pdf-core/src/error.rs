@@ -156,6 +156,15 @@ pub enum Error {
     #[error("invalid argument: {0}")]
     InvalidArgument(&'static str),
 
+    /// A redaction could not be applied destructively and therefore **fails
+    /// closed** rather than risk leaving the secret behind (PRD §8.8): the
+    /// canonical case is an image whose pixels overlap a redaction rect but
+    /// cannot be decoded/pixel-edited (JBIG2/JPX/undecodable in v1), so the
+    /// caller must choose `REMOVE` for that image. Surfaced to Python as
+    /// `PdfRedactionError`.
+    #[error("redaction failed (fail-closed): {0}")]
+    Redaction(&'static str),
+
     /// Incremental save was requested on a document whose parse was repair-tainted
     /// (PRD §8.7). A repaired file has no trustworthy original byte offsets, so an
     /// append-only update would corrupt the `/Prev` chain and invalidate any
@@ -242,6 +251,7 @@ impl Error {
             Error::ReferenceCycle { .. } => "reference-cycle",
             Error::Unsupported(_) => "unsupported",
             Error::InvalidArgument(_) => "invalid-argument",
+            Error::Redaction(_) => "redaction",
             Error::IncrementalRequiresCleanParse => "incremental-requires-clean-parse",
             #[cfg(feature = "encryption")]
             Error::NeedsPassword(_) => "needs-password",

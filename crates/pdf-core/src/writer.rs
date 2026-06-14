@@ -259,7 +259,11 @@ pub fn save_to_vec(doc: &DocumentStore, opts: &SaveOptions) -> crate::Result<Vec
 /// `OnRepaired::Upgrade` a full [`save_to_vec`] is returned instead.
 /// [`crate::Error::Xref`] if the document has no `/Root`.
 pub fn save_incremental(doc: &DocumentStore, opts: &SaveOptions) -> crate::Result<Vec<u8>> {
-    if doc.parse_was_repaired() {
+    // A redaction-tainted parse is treated exactly like a repair-tainted one:
+    // appending the redacted objects after the original (pre-redaction) bytes
+    // would leak the secret in the prior revision (PRD §8.8 surface 6), so the
+    // incremental save is rejected (or auto-upgraded to a full rewrite).
+    if doc.parse_was_repaired() || doc.redaction_applied() {
         match opts.on_repaired {
             OnRepaired::Reject => return Err(crate::Error::IncrementalRequiresCleanParse),
             OnRepaired::Upgrade => return save_to_vec(doc, opts),

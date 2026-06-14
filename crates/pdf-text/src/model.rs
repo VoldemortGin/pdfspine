@@ -85,6 +85,71 @@ pub struct ImageRef {
     pub height: Option<u32>,
 }
 
+/// One element of a constructed path (PyMuPDF `get_drawings` `items` entry).
+///
+/// All points are in **PDF user space** (the interpreter's native frame), with
+/// the CTM already applied. The serialization to PyMuPDF device space (top-left)
+/// happens in the public `get_drawings` layer, mirroring the text path.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum PathItem {
+    /// A straight segment `("l", p1, p2)`.
+    Line(Point, Point),
+    /// A cubic Bézier `("c", p1, p2, p3, p4)` (start, ctrl1, ctrl2, end).
+    Curve(Point, Point, Point, Point),
+    /// A rectangle `("re", rect)` (axis-aligned in user space).
+    Rect(Rect),
+}
+
+/// How a constructed path was painted (PyMuPDF drawing `type`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PaintKind {
+    /// Stroked only (`type == "s"`).
+    Stroke,
+    /// Filled only (`type == "f"`).
+    Fill,
+    /// Filled **and** stroked (`type == "fs"`).
+    FillStroke,
+}
+
+impl PaintKind {
+    /// The PyMuPDF `type` string (`"s"`/`"f"`/`"fs"`).
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            PaintKind::Stroke => "s",
+            PaintKind::Fill => "f",
+            PaintKind::FillStroke => "fs",
+        }
+    }
+}
+
+/// One painted path captured by the interpreter (PyMuPDF `get_drawings` entry).
+///
+/// Geometry is in **PDF user space** (CTM applied). `rect` is the axis-aligned
+/// envelope of the path's points.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DrawPath {
+    /// How the path was painted.
+    pub kind: PaintKind,
+    /// The path's bounding rect (union of all item points), user space.
+    pub rect: Rect,
+    /// The stroke color packed as `0x00RRGGBB` sRGB (`None` if not stroked).
+    pub color: Option<u32>,
+    /// The fill color packed as `0x00RRGGBB` sRGB (`None` if not filled).
+    pub fill: Option<u32>,
+    /// The stroke line width (user space, post-CTM scaled by `|a|` heuristic —
+    /// here the raw `w` operand, matching PyMuPDF's `width`).
+    pub width: f64,
+    /// The dash pattern string (`"[…] phase"`), empty when solid.
+    pub dashes: String,
+    /// Whether the (last) sub-path was explicitly closed (`h`/`s`/`b`).
+    pub close_path: bool,
+    /// Whether an even-odd fill rule was used (`f*`/`B*`/`b*`).
+    pub even_odd: bool,
+    /// The constructed path items in construction order.
+    pub items: Vec<PathItem>,
+}
+
 /// The complete result of interpreting a page's content (M2b).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct InterpretResult {
@@ -92,6 +157,8 @@ pub struct InterpretResult {
     pub glyphs: Vec<PositionedGlyph>,
     /// Every image painted (XObject or inline), in content order.
     pub images: Vec<ImageRef>,
+    /// Every painted vector path, in content order (PRD §8.8 `get_drawings`).
+    pub drawings: Vec<DrawPath>,
 }
 
 // === M2c — the PyMuPDF-shaped TextPage model =============================

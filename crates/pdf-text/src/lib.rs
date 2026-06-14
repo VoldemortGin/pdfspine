@@ -30,8 +30,8 @@ use pdf_core::{Dict, DocumentStore};
 pub use interp::ContentInterpreter;
 pub use layout::{build_textpage, page_size, page_transform, textpage_from_glyphs};
 pub use model::{
-    flags, Block, BlockKind, Char, ImageBlock, ImageRef, InterpretResult, Line, PositionedGlyph,
-    Span, TextPage, Word, WritingDir,
+    flags, Block, BlockKind, Char, DrawPath, ImageBlock, ImageRef, InterpretResult, Line,
+    PaintKind, PathItem, PositionedGlyph, Span, TextPage, Word, WritingDir,
 };
 pub use search::{search, SearchOptions};
 pub use serialize::{

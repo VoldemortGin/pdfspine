@@ -53,6 +53,10 @@ pub struct GraphicsState {
     pub fill_color: u32,
     /// The current stroke color packed as `0x00RRGGBB`.
     pub stroke_color: u32,
+    /// The current line width `w` (user-space units; default 1.0).
+    pub line_width: f64,
+    /// The current dash-pattern string (`"[…] phase"`), empty when solid.
+    pub dashes: String,
     /// The text-state parameters.
     pub text: TextState,
 }
@@ -66,6 +70,8 @@ impl GraphicsState {
             ctm,
             fill_color: 0x00_00_00_00,
             stroke_color: 0x00_00_00_00,
+            line_width: 1.0,
+            dashes: String::new(),
             text: TextState::default(),
         }
     }

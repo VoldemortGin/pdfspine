@@ -52,6 +52,11 @@ pub struct DocumentStore {
     version: Version,
     header_offset: usize,
     parse_was_repaired: bool,
+    /// Set once [`crate::DocumentStore::mark_redaction_applied`] is called: a
+    /// redacted document must be **fully rewritten** so no pre-redaction bytes
+    /// leak in an appended incremental revision (PRD §8.8 surface 6). Interior
+    /// mutability so `apply_redactions(&DocumentStore, …)` can taint the doc.
+    redaction_applied: std::sync::atomic::AtomicBool,
     mode: ParseMode,
     diagnostics: Diagnostics,
     limits: Limits,
@@ -295,6 +300,7 @@ impl DocumentStore {
             version,
             header_offset,
             parse_was_repaired,
+            redaction_applied: std::sync::atomic::AtomicBool::new(false),
             mode,
             diagnostics,
             limits,
@@ -486,6 +492,25 @@ impl DocumentStore {
     #[must_use]
     pub fn parse_mode(&self) -> ParseMode {
         self.mode
+    }
+
+    /// Whether destructive redaction has been applied to this document (PRD
+    /// §8.8). A redacted doc must be **fully rewritten** — an incremental save
+    /// would append the redacted objects after the original (pre-redaction)
+    /// bytes, leaking the secret in the prior revision — so incremental save is
+    /// rejected (or auto-upgraded to full) once this is set.
+    #[must_use]
+    pub fn redaction_applied(&self) -> bool {
+        self.redaction_applied
+            .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Marks the document as redacted (PRD §8.8): tainting it so a subsequent
+    /// incremental save is rejected/auto-upgraded. Idempotent; uses interior
+    /// mutability so the `&DocumentStore` redaction path can set it.
+    pub fn mark_redaction_applied(&self) {
+        self.redaction_applied
+            .store(true, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// The reconstruction actions taken during open — empty after a clean parse
@@ -967,7 +992,7 @@ impl DocumentStore {
     /// `can_save_incrementally`).
     #[must_use]
     pub fn can_save_incrementally(&self) -> bool {
-        !self.parse_was_repaired
+        !self.parse_was_repaired && !self.redaction_applied()
     }
 
     /// Serializes an **incremental** update: appends only the changed objects and

@@ -31,7 +31,9 @@ use pdf_core::{Dict, DocumentStore, Name, Object};
 use pdf_fonts::FontMapper;
 use smol_str::SmolStr;
 
-use crate::model::{ImageRef, InterpretResult, PositionedGlyph, WritingDir};
+use crate::model::{
+    DrawPath, ImageRef, InterpretResult, PaintKind, PathItem, PositionedGlyph, WritingDir,
+};
 use crate::state::GraphicsState;
 use crate::tokenizer::{tokenize, Event};
 
@@ -50,6 +52,102 @@ struct CachedFont {
     ascent: f64,
     /// Descent in 1000-unit glyph space (bottom of the cell; usually negative).
     descent: f64,
+}
+
+/// Accumulates path-construction operators (`m l c v y re h`) into device-space
+/// [`PathItem`]s for the current sub-path(s). Reset after each paint operator
+/// (`S s f F f* B B* b b* n`). Points are CTM-transformed at construction time
+/// so a `DrawPath` is already in user space (PRD §8.8 `get_drawings`).
+#[derive(Default)]
+struct CurrentPath {
+    /// The completed items of the path (across sub-paths until painted).
+    items: Vec<PathItem>,
+    /// The current point (user space), updated by `m`/`l`/`c`/`re`.
+    current: Option<Point>,
+    /// The most recent sub-path start (for `h` close).
+    subpath_start: Option<Point>,
+    /// Whether any sub-path was closed with `h` since the last paint.
+    closed: bool,
+}
+
+impl CurrentPath {
+    fn moveto(&mut self, p: Point) {
+        self.current = Some(p);
+        self.subpath_start = Some(p);
+    }
+
+    fn lineto(&mut self, p: Point) {
+        if let Some(from) = self.current {
+            self.items.push(PathItem::Line(from, p));
+        }
+        self.current = Some(p);
+    }
+
+    fn curveto(&mut self, c1: Point, c2: Point, end: Point) {
+        if let Some(from) = self.current {
+            self.items.push(PathItem::Curve(from, c1, c2, end));
+        }
+        self.current = Some(end);
+    }
+
+    fn rect(&mut self, r: Rect) {
+        self.items.push(PathItem::Rect(r));
+        // A `re` sets the current point to its lower-left and starts a sub-path.
+        let p = Point::new(r.x0, r.y0);
+        self.current = Some(p);
+        self.subpath_start = Some(p);
+    }
+
+    fn close(&mut self) {
+        self.closed = true;
+        if let (Some(start), Some(cur)) = (self.subpath_start, self.current) {
+            if start != cur {
+                self.items.push(PathItem::Line(cur, start));
+            }
+        }
+        self.current = self.subpath_start;
+    }
+
+    fn reset(&mut self) {
+        self.items.clear();
+        self.current = None;
+        self.subpath_start = None;
+        self.closed = false;
+    }
+
+    /// The axis-aligned envelope of all item points (user space).
+    fn bounds(&self) -> Rect {
+        let mut r = Rect::new(f64::MAX, f64::MAX, f64::MIN, f64::MIN);
+        let mut acc = |p: Point| {
+            r.x0 = r.x0.min(p.x);
+            r.y0 = r.y0.min(p.y);
+            r.x1 = r.x1.max(p.x);
+            r.y1 = r.y1.max(p.y);
+        };
+        for it in &self.items {
+            match *it {
+                PathItem::Line(a, b) => {
+                    acc(a);
+                    acc(b);
+                }
+                PathItem::Curve(a, b, c, d) => {
+                    acc(a);
+                    acc(b);
+                    acc(c);
+                    acc(d);
+                }
+                PathItem::Rect(rr) => {
+                    acc(Point::new(rr.x0, rr.y0));
+                    acc(Point::new(rr.x1, rr.y1));
+                }
+            }
+        }
+        if self.items.is_empty() {
+            Rect::new(0.0, 0.0, 0.0, 0.0)
+        } else {
+            r.normalize()
+        }
+    }
 }
 
 /// Runs a page (or a form/resources pair) and produces positioned glyphs.
@@ -181,6 +279,9 @@ impl<'a> ContentInterpreter<'a> {
         // Operand stack for the current operator.
         let mut ops: Vec<Object> = Vec::new();
 
+        // The in-progress vector path (path-construction → paint, PRD §8.8).
+        let mut path = CurrentPath::default();
+
         for ev in events {
             match ev {
                 Event::Operand(o) => ops.push(o),
@@ -197,6 +298,7 @@ impl<'a> ContentInterpreter<'a> {
                         &mut in_text,
                         &mut tm,
                         &mut tlm,
+                        &mut path,
                         resources,
                         &mut font_cache,
                         depth,
@@ -219,6 +321,7 @@ impl<'a> ContentInterpreter<'a> {
         in_text: &mut bool,
         tm: &mut Matrix,
         tlm: &mut Matrix,
+        path: &mut CurrentPath,
         resources: &Dict,
         font_cache: &mut std::collections::HashMap<SmolStr, Option<CachedFont>>,
         depth: u32,
@@ -238,6 +341,94 @@ impl<'a> ContentInterpreter<'a> {
                     gs.ctm = Matrix::concat(&m, &gs.ctm);
                 }
             }
+            b"w" => {
+                if let Some(v) = nth_f64(ops, 0) {
+                    gs.line_width = v;
+                }
+            }
+            b"d" => {
+                gs.dashes = format_dash(ops);
+            }
+
+            // --- path construction (CTM-applied → user space) ------------
+            b"m" => {
+                if let (Some(x), Some(y)) = (nth_f64(ops, 0), nth_f64(ops, 1)) {
+                    path.moveto(Point::new(x, y).transform(&gs.ctm));
+                }
+            }
+            b"l" => {
+                if let (Some(x), Some(y)) = (nth_f64(ops, 0), nth_f64(ops, 1)) {
+                    path.lineto(Point::new(x, y).transform(&gs.ctm));
+                }
+            }
+            b"c" => {
+                if let Some(v) = six_f64(ops) {
+                    path.curveto(
+                        Point::new(v[0], v[1]).transform(&gs.ctm),
+                        Point::new(v[2], v[3]).transform(&gs.ctm),
+                        Point::new(v[4], v[5]).transform(&gs.ctm),
+                    );
+                }
+            }
+            b"v" => {
+                // `v`: first control point == current point.
+                if let Some(v) = four_f64(ops) {
+                    let from = path.current.unwrap_or_else(|| Point::new(0.0, 0.0));
+                    path.curveto(
+                        from,
+                        Point::new(v[0], v[1]).transform(&gs.ctm),
+                        Point::new(v[2], v[3]).transform(&gs.ctm),
+                    );
+                }
+            }
+            b"y" => {
+                // `y`: second control point == end point.
+                if let Some(v) = four_f64(ops) {
+                    let end = Point::new(v[2], v[3]).transform(&gs.ctm);
+                    path.curveto(Point::new(v[0], v[1]).transform(&gs.ctm), end, end);
+                }
+            }
+            b"re" => {
+                if let Some(v) = four_f64(ops) {
+                    // `x y w h re`: build the rect's four corners in user space,
+                    // then take the axis-aligned envelope (handles rotated CTMs).
+                    let p0 = Point::new(v[0], v[1]).transform(&gs.ctm);
+                    let p1 = Point::new(v[0] + v[2], v[1]).transform(&gs.ctm);
+                    let p2 = Point::new(v[0] + v[2], v[1] + v[3]).transform(&gs.ctm);
+                    let p3 = Point::new(v[0], v[1] + v[3]).transform(&gs.ctm);
+                    let mut r = Rect::new(p0.x, p0.y, p0.x, p0.y);
+                    for p in [p1, p2, p3] {
+                        r.x0 = r.x0.min(p.x);
+                        r.y0 = r.y0.min(p.y);
+                        r.x1 = r.x1.max(p.x);
+                        r.y1 = r.y1.max(p.y);
+                    }
+                    path.rect(r);
+                }
+            }
+            b"h" => path.close(),
+
+            // --- path painting (emit a DrawPath, then clear the path) ----
+            b"S" => self.paint_path(path, gs, PaintKind::Stroke, false),
+            b"s" => {
+                path.close();
+                self.paint_path(path, gs, PaintKind::Stroke, false);
+            }
+            b"f" | b"F" => self.paint_path(path, gs, PaintKind::Fill, false),
+            b"f*" => self.paint_path(path, gs, PaintKind::Fill, true),
+            b"B" | b"b" => {
+                if name == b"b" {
+                    path.close();
+                }
+                self.paint_path(path, gs, PaintKind::FillStroke, false);
+            }
+            b"B*" | b"b*" => {
+                if name == b"b*" {
+                    path.close();
+                }
+                self.paint_path(path, gs, PaintKind::FillStroke, true);
+            }
+            b"n" => path.reset(),
 
             // --- text object ---------------------------------------------
             b"BT" => {
@@ -761,6 +952,37 @@ impl<'a> ContentInterpreter<'a> {
         });
     }
 
+    /// Emits a [`DrawPath`] for the current path under paint kind `kind`, then
+    /// resets the path. Empty paths emit nothing. Colors come from the graphics
+    /// state (stroke for `S`-kinds, fill for `f`-kinds; both for `B`-kinds).
+    fn paint_path(
+        &mut self,
+        path: &mut CurrentPath,
+        gs: &GraphicsState,
+        kind: PaintKind,
+        eo: bool,
+    ) {
+        if !path.items.is_empty() {
+            let (color, fill) = match kind {
+                PaintKind::Stroke => (Some(gs.stroke_color), None),
+                PaintKind::Fill => (None, Some(gs.fill_color)),
+                PaintKind::FillStroke => (Some(gs.stroke_color), Some(gs.fill_color)),
+            };
+            self.out.drawings.push(DrawPath {
+                kind,
+                rect: path.bounds(),
+                color,
+                fill,
+                width: gs.line_width,
+                dashes: gs.dashes.clone(),
+                close_path: path.closed,
+                even_odd: eo,
+                items: path.items.clone(),
+            });
+        }
+        path.reset();
+    }
+
     /// Records an inline image (`BI…ID…EI`) into the inventory.
     fn record_inline_image(&mut self, params: &Object, ctm: Matrix) {
         let d = params.as_dict();
@@ -790,6 +1012,58 @@ impl<'a> ContentInterpreter<'a> {
 /// The `n`-th numeric operand as `f64` (operands are in source order).
 fn nth_f64(ops: &[Object], n: usize) -> Option<f64> {
     ops.get(n).and_then(Object::as_f64)
+}
+
+/// The first six numeric operands as a fixed array (for `c`/`cm`).
+fn six_f64(ops: &[Object]) -> Option<[f64; 6]> {
+    let nums: Vec<f64> = ops.iter().filter_map(Object::as_f64).collect();
+    if nums.len() < 6 {
+        return None;
+    }
+    Some([nums[0], nums[1], nums[2], nums[3], nums[4], nums[5]])
+}
+
+/// The first four numeric operands as a fixed array (for `v`/`y`/`re`).
+fn four_f64(ops: &[Object]) -> Option<[f64; 4]> {
+    let nums: Vec<f64> = ops.iter().filter_map(Object::as_f64).collect();
+    if nums.len() < 4 {
+        return None;
+    }
+    Some([nums[0], nums[1], nums[2], nums[3]])
+}
+
+/// Formats a `d` dash operator (`[array] phase`) back into a stable string, e.g.
+/// `"[3 2] 0"`. An empty array means a solid line → empty string.
+fn format_dash(ops: &[Object]) -> String {
+    let Some(arr) = ops.iter().find_map(Object::as_array) else {
+        return String::new();
+    };
+    if arr.is_empty() {
+        return String::new();
+    }
+    let phase = ops.iter().rev().find_map(Object::as_f64).unwrap_or(0.0);
+    let nums: Vec<String> = arr
+        .iter()
+        .filter_map(Object::as_f64)
+        .map(fmt_dash_num)
+        .collect();
+    format!("[{}] {}", nums.join(" "), fmt_dash_num(phase))
+}
+
+/// Formats a dash scalar without trailing zeros (integral → no point).
+fn fmt_dash_num(v: f64) -> String {
+    if v == v.trunc() && v.abs() < 1e15 {
+        format!("{}", v as i64)
+    } else {
+        let mut s = format!("{v:.4}");
+        while s.ends_with('0') {
+            s.pop();
+        }
+        if s.ends_with('.') {
+            s.pop();
+        }
+        s
+    }
 }
 
 /// Builds a `Matrix` from the first six numeric operands (`a b c d e f`).

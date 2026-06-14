@@ -17,6 +17,7 @@ pub mod color;
 pub mod content;
 pub mod dest;
 pub mod drawing;
+pub mod drawings;
 pub mod fontfile;
 pub mod form;
 pub mod image;
@@ -25,6 +26,7 @@ pub mod merge;
 pub mod metadata;
 pub mod page_ops;
 pub mod pagelabel;
+pub mod redact;
 pub mod text;
 pub mod toc;
 
@@ -40,6 +42,7 @@ pub use dest::{resolve_link, resolve_named};
 pub use drawing::{
     draw_bezier, draw_circle, draw_curve, draw_line, draw_oval, draw_polyline, draw_rect, Shape,
 };
+pub use drawings::{get_cdrawings, get_drawings, DrawItem, Drawing};
 pub use fontfile::EmbeddedFont;
 pub use form::{
     acroform_dict, default_appearance, fill, first_widget, flatten, form_fields, is_form_pdf,
@@ -51,5 +54,6 @@ pub use merge::{extract_pages, insert_pdf, InsertOptions};
 pub use metadata::{get_xml_metadata, set_metadata, set_xml_metadata};
 pub use page_ops::PageEditor;
 pub use pagelabel::get_label;
+pub use redact::apply_redactions;
 pub use text::{insert_text, insert_textbox, Align, TextOptions};
 pub use toc::{get_toc, set_toc, TocEntry};

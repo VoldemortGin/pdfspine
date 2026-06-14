@@ -37,7 +37,7 @@ pub fn dict(pairs: impl IntoIterator<Item = (&'static str, Object)>) -> Dict {
 
 /// A WinAnsi Type1 Helvetica with a flat 600-unit width table over the printable
 /// ASCII range (codes 32..=126), so any ASCII marker text extracts.
-fn ascii_font() -> Object {
+pub fn ascii_font() -> Object {
     let widths: Vec<Object> = (32..=126).map(|_| Object::Integer(600)).collect();
     Object::Dictionary(dict([
         ("Type", name_obj("Font")),
@@ -1183,6 +1183,356 @@ pub fn decompress_corpus(bytes: &[u8]) -> Vec<u8> {
         }
     }
     corpus
+}
+
+// === M4d redaction fixtures (PRD §8.8) ====================================
+
+/// Saves `doc` with **deflate on** (garbage=1, deflate=1) and returns the bytes.
+/// The redaction security gate must hold over the *decompressed* corpus of a
+/// compressed save — a compressed-only grep is a false pass (PRD §12 M4).
+pub fn save_full_deflate_bytes(doc: &DocumentStore) -> Vec<u8> {
+    doc.save_to_vec(
+        &pdf_core::SaveOptions::default()
+            .with_garbage(1)
+            .with_deflate(true),
+    )
+    .expect("save")
+}
+
+/// A single-page document (612×792) showing two text runs on one line via one
+/// `Tj` each at a fixed baseline: a leading visible run, then the secret run.
+///
+/// Layout (user space, baseline y=700, font 12, width 0.6em = 7.2pt/char):
+/// - run A `lead` starts at x=72.
+/// - run B `secret` starts at `x = 72 + lead.len()*7.2` (right after A).
+///
+/// Returns `(bytes, secret_topleft_rect)` where the rect (PyMuPDF top-left
+/// space) tightly covers the secret run — feed it straight to `add_redact_annot`.
+pub fn text_secret_doc(lead: &str, secret: &str) -> (Vec<u8>, pdf_core::geom::Rect) {
+    let char_w = 12.0 * 0.6; // 7.2 pt per glyph
+    let x_lead = 72.0;
+    let x_secret = x_lead + lead.len() as f64 * char_w;
+    let x_secret_end = x_secret + secret.len() as f64 * char_w;
+    // One BT block: position A, show A; position B, show B.
+    let body = format!(
+        "BT /F1 12 Tf 1 0 0 1 {x_lead} 700 Tm ({lead}) Tj \
+         1 0 0 1 {x_secret} 700 Tm ({secret}) Tj ET"
+    )
+    .into_bytes();
+    let bytes = simple_text_page(body);
+    // Top-left rect: user y 698..710 → top-left y (792-710)..(792-698) = 82..94.
+    let rect = pdf_core::geom::Rect::new(x_secret - 1.0, 82.0, x_secret_end + 1.0, 96.0);
+    (bytes, rect)
+}
+
+/// A single-page document whose page content draws `body` (user space), with a
+/// shared ASCII Helvetica font under `/F1`. Object layout: 1 catalog, 2 pages,
+/// 3 leaf, 4 content, 5 font.
+pub fn simple_text_page(body: Vec<u8>) -> Vec<u8> {
+    let objects: Vec<(u32, Object)> = vec![
+        (
+            1,
+            Object::Dictionary(dict([("Type", name_obj("Catalog")), ("Pages", rref(2))])),
+        ),
+        (
+            2,
+            Object::Dictionary(dict([
+                ("Type", name_obj("Pages")),
+                ("Kids", Object::Array(vec![rref(3)])),
+                ("Count", Object::Integer(1)),
+            ])),
+        ),
+        (
+            3,
+            Object::Dictionary(dict([
+                ("Type", name_obj("Page")),
+                ("Parent", rref(2)),
+                (
+                    "MediaBox",
+                    Object::Array(vec![
+                        Object::Integer(0),
+                        Object::Integer(0),
+                        Object::Integer(612),
+                        Object::Integer(792),
+                    ]),
+                ),
+                ("Contents", rref(4)),
+                (
+                    "Resources",
+                    Object::Dictionary(dict([(
+                        "Font",
+                        Object::Dictionary(dict([("F1", rref(5))])),
+                    )])),
+                ),
+            ])),
+        ),
+        (
+            4,
+            Object::Stream(StreamObj::new_encoded(
+                dict([("Length", Object::Integer(body.len() as i64))]),
+                body,
+            )),
+        ),
+        (5, ascii_font()),
+    ];
+    assemble_classic(&objects, ObjRef::new(1, 0))
+}
+
+/// A single-page document that shows the secret **inside a Form XObject** (object
+/// 6) referenced by the page via `/X1 Do`. The page also shows a visible `lead`
+/// run directly. Returns `(bytes, secret_topleft_rect)`.
+pub fn form_secret_doc(lead: &str, secret: &str) -> (Vec<u8>, pdf_core::geom::Rect) {
+    let char_w = 12.0 * 0.6;
+    let x_secret = 200.0;
+    let x_secret_end = x_secret + secret.len() as f64 * char_w;
+    // The form draws the secret at user (x_secret, 700).
+    let form_body = format!("BT /F1 12 Tf 1 0 0 1 {x_secret} 700 Tm ({secret}) Tj ET").into_bytes();
+    // The page draws the lead run directly, then invokes the form.
+    let page_body = format!("BT /F1 12 Tf 1 0 0 1 72 700 Tm ({lead}) Tj ET\n/X1 Do").into_bytes();
+
+    let objects: Vec<(u32, Object)> = vec![
+        (
+            1,
+            Object::Dictionary(dict([("Type", name_obj("Catalog")), ("Pages", rref(2))])),
+        ),
+        (
+            2,
+            Object::Dictionary(dict([
+                ("Type", name_obj("Pages")),
+                ("Kids", Object::Array(vec![rref(3)])),
+                ("Count", Object::Integer(1)),
+            ])),
+        ),
+        (
+            3,
+            Object::Dictionary(dict([
+                ("Type", name_obj("Page")),
+                ("Parent", rref(2)),
+                (
+                    "MediaBox",
+                    Object::Array(vec![
+                        Object::Integer(0),
+                        Object::Integer(0),
+                        Object::Integer(612),
+                        Object::Integer(792),
+                    ]),
+                ),
+                ("Contents", rref(4)),
+                (
+                    "Resources",
+                    Object::Dictionary(dict([
+                        ("Font", Object::Dictionary(dict([("F1", rref(5))]))),
+                        ("XObject", Object::Dictionary(dict([("X1", rref(6))]))),
+                    ])),
+                ),
+            ])),
+        ),
+        (
+            4,
+            Object::Stream(StreamObj::new_encoded(
+                dict([("Length", Object::Integer(page_body.len() as i64))]),
+                page_body,
+            )),
+        ),
+        (5, ascii_font()),
+        (
+            6,
+            Object::Stream(StreamObj::new_encoded(
+                dict([
+                    ("Type", name_obj("XObject")),
+                    ("Subtype", name_obj("Form")),
+                    ("FormType", Object::Integer(1)),
+                    (
+                        "BBox",
+                        Object::Array(vec![
+                            Object::Integer(0),
+                            Object::Integer(0),
+                            Object::Integer(612),
+                            Object::Integer(792),
+                        ]),
+                    ),
+                    (
+                        "Resources",
+                        Object::Dictionary(dict([(
+                            "Font",
+                            Object::Dictionary(dict([("F1", rref(5))])),
+                        )])),
+                    ),
+                    ("Length", Object::Integer(form_body.len() as i64)),
+                ]),
+                form_body,
+            )),
+        ),
+    ];
+    let bytes = assemble_classic(&objects, ObjRef::new(1, 0));
+    let rect = pdf_core::geom::Rect::new(x_secret - 1.0, 82.0, x_secret_end + 1.0, 96.0);
+    (bytes, rect)
+}
+
+/// A single-page document placing a raw Flate RGB image XObject (`/X1`) filling
+/// `[x, y_topleft, x+w, y_topleft+h]` (top-left space). The image is `iw×ih`
+/// solid `(r,g,b)` so a covered region zeroes to black, distinguishable from the
+/// fill. Returns the PDF bytes (image object is 6).
+pub fn rgb_image_page(
+    iw: u32,
+    ih: u32,
+    rgb: (u8, u8, u8),
+    place_x: f64,
+    place_y_topleft: f64,
+    place_w: f64,
+    place_h: f64,
+) -> Vec<u8> {
+    use pdf_core::filters::flate;
+    let mut pixels = Vec::with_capacity((iw * ih * 3) as usize);
+    for _ in 0..(iw * ih) {
+        pixels.push(rgb.0);
+        pixels.push(rgb.1);
+        pixels.push(rgb.2);
+    }
+    let encoded = flate::encode(&pixels);
+    // user-space placement: y_user_lower = 792 - (place_y_topleft + place_h).
+    let y_user = 792.0 - (place_y_topleft + place_h);
+    let content = format!("q {place_w} 0 0 {place_h} {place_x} {y_user} cm /X1 Do Q").into_bytes();
+    image_page_with(iw, ih, encoded, "FlateDecode", "DeviceRGB", content)
+}
+
+/// A single-page document placing a **DCTDecode** (JPEG) image (`/X1`) — used to
+/// prove fail-closed behavior (its pixels cannot be edited in v1). The JPEG body
+/// is arbitrary opaque bytes (never decoded; redaction must fail before that).
+pub fn dct_image_page(
+    iw: u32,
+    ih: u32,
+    place_x: f64,
+    place_y_topleft: f64,
+    place_w: f64,
+    place_h: f64,
+) -> Vec<u8> {
+    let jpeg = vec![0xFFu8, 0xD8, 0xFF, 0xD9]; // SOI…EOI placeholder
+    let y_user = 792.0 - (place_y_topleft + place_h);
+    let content = format!("q {place_w} 0 0 {place_h} {place_x} {y_user} cm /X1 Do Q").into_bytes();
+    image_page_with(iw, ih, jpeg, "DCTDecode", "DeviceRGB", content)
+}
+
+/// Shared image-page builder: 1 catalog, 2 pages, 3 leaf (`/XObject /X1` → 6),
+/// 4 content, 6 image stream.
+fn image_page_with(
+    iw: u32,
+    ih: u32,
+    encoded: Vec<u8>,
+    filter: &str,
+    colorspace: &str,
+    content: Vec<u8>,
+) -> Vec<u8> {
+    let img = Object::Stream(StreamObj::new_encoded(
+        dict([
+            ("Type", name_obj("XObject")),
+            ("Subtype", name_obj("Image")),
+            ("Width", Object::Integer(i64::from(iw))),
+            ("Height", Object::Integer(i64::from(ih))),
+            ("ColorSpace", name_obj(colorspace)),
+            ("BitsPerComponent", Object::Integer(8)),
+            ("Filter", name_obj(filter)),
+            ("Length", Object::Integer(encoded.len() as i64)),
+        ]),
+        encoded,
+    ));
+    let objects: Vec<(u32, Object)> = vec![
+        (
+            1,
+            Object::Dictionary(dict([("Type", name_obj("Catalog")), ("Pages", rref(2))])),
+        ),
+        (
+            2,
+            Object::Dictionary(dict([
+                ("Type", name_obj("Pages")),
+                ("Kids", Object::Array(vec![rref(3)])),
+                ("Count", Object::Integer(1)),
+            ])),
+        ),
+        (
+            3,
+            Object::Dictionary(dict([
+                ("Type", name_obj("Page")),
+                ("Parent", rref(2)),
+                (
+                    "MediaBox",
+                    Object::Array(vec![
+                        Object::Integer(0),
+                        Object::Integer(0),
+                        Object::Integer(612),
+                        Object::Integer(792),
+                    ]),
+                ),
+                ("Contents", rref(4)),
+                (
+                    "Resources",
+                    Object::Dictionary(dict([(
+                        "XObject",
+                        Object::Dictionary(dict([("X1", rref(6))])),
+                    )])),
+                ),
+            ])),
+        ),
+        (
+            4,
+            Object::Stream(StreamObj::new_encoded(
+                dict([("Length", Object::Integer(content.len() as i64))]),
+                content,
+            )),
+        ),
+        (6, img),
+    ];
+    assemble_classic(&objects, ObjRef::new(1, 0))
+}
+
+/// Decodes the first image XObject (`/X1` on page 0) into raw bytes (for pixel
+/// assertions after `REDACT-IMAGE` pixel-blanking).
+pub fn first_image_pixels(doc: &DocumentStore) -> (usize, usize, usize, Vec<u8>) {
+    let leaf = pdf_core::pagetree::page_refs(doc)[0];
+    let page = pdf_core::pagetree::page_dict(doc, leaf).expect("page dict");
+    let resources = doc
+        .resolve_dict_key(&page, &Name::new("Resources"))
+        .ok()
+        .flatten()
+        .and_then(|o| o.as_dict().cloned())
+        .expect("resources");
+    let xobjects = match resources.get(&Name::new("XObject")) {
+        Some(Object::Dictionary(d)) => d.clone(),
+        Some(Object::Reference(r)) => doc.resolve(*r).unwrap().as_dict().cloned().unwrap(),
+        _ => panic!("no /XObject"),
+    };
+    let r = xobjects
+        .values()
+        .next()
+        .and_then(Object::as_reference)
+        .expect("img ref");
+    let obj = doc.resolve(r).unwrap();
+    let stream = obj.as_stream().unwrap();
+    let w = stream
+        .dict
+        .get(&Name::new("Width"))
+        .and_then(Object::as_i64)
+        .unwrap() as usize;
+    let h = stream
+        .dict
+        .get(&Name::new("Height"))
+        .and_then(Object::as_i64)
+        .unwrap() as usize;
+    let n = match stream
+        .dict
+        .get(&Name::new("ColorSpace"))
+        .and_then(Object::as_name)
+        .and_then(Name::as_str)
+    {
+        Some("DeviceGray") => 1,
+        _ => 3,
+    };
+    let pixels = doc
+        .decode_stream(stream)
+        .and_then(|o| o.into_decoded())
+        .unwrap()
+        .to_vec();
+    (w, h, n, pixels)
 }
 
 /// Whether the catalog still carries an `/AcroForm` entry.

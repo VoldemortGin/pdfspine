@@ -1855,3 +1855,72 @@ AcroForm fixtures only (PRD §10): a text field, a checkbox with `/AP /N
 | `FORM-PROP-002` | read-only field (`/Ff` 1) set → typed error; value unchanged | PRD §8.8 | green |
 | `FORM-PROP-003` | degenerate dicts (missing `/FT`, `/Rect`, `/AP`) never panic | PRD §8.8 | green |
 | `FORM-PROP-004-QPDF` | filled form full-save passes `qpdf --check` (skipped if qpdf absent) | PRD §12 M4 | green |
+
+---
+
+## M4d — Redaction (multi-surface destructive) + `get_drawings` (`pdf-edit`)
+
+Spec source of truth: PRD §8.8 (redaction multi-surface destructive guarantee +
+acceptance gate; `get_drawings`/`get_cdrawings`) and §12 M4 exit. Self-built
+fixtures only (PRD §10). The acceptance gate runs over the **fully-decompressed**
+corpus (every stream + objstm expanded) — a compressed-only grep is forbidden.
+Tests live in `crates/pdf-edit/tests/{redact_e2e.rs,drawings_e2e.rs}`.
+
+### Redaction security gate — `REDACT-SECURITY-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `REDACT-SECURITY-001` | secret over a known rect → apply → full save → decompress every stream + objstm → secret bytes appear **nowhere** in the decompressed corpus AND not in `get_text()`; surrounding text intact + unshifted | PRD §12 M4 | green |
+| `REDACT-SECURITY-002` | gate over the **compressed** save would false-pass without decompression — assert decompressed corpus is what catches it (deflate=1) | PRD §8.8 | green |
+
+### Text removal — `REDACT-TEXT-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `REDACT-TEXT-001` | partial-line rect drops only the intersecting glyphs; survivors remain with unshifted positions | PRD §8.8 | green |
+| `REDACT-TEXT-002` | multiple redaction rects on one page each remove their glyphs | PRD §8.8 | green |
+| `REDACT-TEXT-003` | glyph drawn via a Form XObject under the rect is removed from the saved bytes | PRD §8.8 | green |
+| `REDACT-TEXT-004` | redaction count / changed-status reported; non-overlapping text fully preserved | PRD §8.8 | green |
+
+### Image redaction — `REDACT-IMAGE-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `REDACT-IMAGE-001` | fully-covered image XObject `Do` removed from content; cover box drawn | PRD §8.8 | green |
+| `REDACT-IMAGE-002` | raw Flate RGB image partially covered → covered pixels zeroed + re-encoded (decode & verify) | PRD §8.8 | green |
+| `REDACT-IMAGE-003` | undecodable (DCT/JBIG2/JPX) image under the rect → fail-closed `Error::Redaction` | PRD §8.8 | green |
+
+### Cover + annot cleanup — `REDACT-COVER-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `REDACT-COVER-001` | redaction fill box (default black) drawn over each region in page content | PRD §8.8 | green |
+| `REDACT-COVER-002` | `/Redact` annotations removed after apply; reopen has none | PRD §8.8 | green |
+
+### Incremental-after-redaction — `REDACT-INCR-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `REDACT-INCR-001` | `save_incremental` after redaction rejected (`IncrementalRequiresCleanParse`); `can_save_incrementally` false | PRD §12 M4 | green |
+| `REDACT-INCR-002` | `OnRepaired::Upgrade` auto-upgrades a post-redaction incremental save to a full rewrite (secret absent) | PRD §12 M4 | green |
+
+### Robustness / properties — `REDACT-PROP-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `REDACT-PROP-001` | no redaction annots → `apply_redactions` is a no-op (count 0); page unchanged | PRD §8.8 | green |
+| `REDACT-PROP-002` | redacting an empty region (no overlap) preserves all glyphs | PRD §8.8 | green |
+| `REDACT-PROP-003` | degenerate inputs never panic; redacted save passes `qpdf --check` (skipped if absent) | PRD §12 M4 | green |
+
+### Vector path extraction — `DRAWINGS-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `DRAWINGS-001` | `draw_rect` (stroke) → one `type "s"` path with an `("re", rect)` item + stroke color + width | PRD §8.8 | green |
+| `DRAWINGS-002` | `draw_line` → `type "s"` path with an `("l", p1, p2)` item; rect spans the segment | PRD §8.8 | green |
+| `DRAWINGS-003` | filled rect → `type "f"` path with `fill` color set, `color` None | PRD §8.8 | green |
+| `DRAWINGS-004` | fill+stroke rect → `type "fs"` with both colors | PRD §8.8 | green |
+| `DRAWINGS-005` | even-odd fill (`f*`) sets `even_odd`; closed polyline sets `close_path` | PRD §8.8 | green |
+| `DRAWINGS-006` | `get_cdrawings` (raw user-space variant) returns the same item geometry pre device transform | PRD §8.8 | green |
+| `DRAWINGS-007` | curve (`c`) captured as a `("c", p1,p2,p3,p4)` item | PRD §8.8 | green |
+| `DRAWINGS-PROP-001` | empty / text-only page → no drawings; never panics | PRD §8.8 | green |
