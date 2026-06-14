@@ -6,7 +6,11 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 rust-version.workspace = true
-description = "Font parsing for mapping (encodings/ToUnicode/CMap/widths) for oxipdf. No rasterization. Placeholder in M0."
+description = "Font parsing for mapping (encodings/ToUnicode/CMap/widths/glyph->Unicode) for oxipdf. No rasterization."
 
 [dependencies]
 pdf-core.workspace = true
+smol_str.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true

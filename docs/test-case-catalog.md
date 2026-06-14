@@ -712,3 +712,120 @@ Spec source: PRD §7 (M1 rows), §8.6.1 (rotation), §9.2 (`Page` shape), §9.4
 | `PYFITZ-001` | `fitz.open(...)`: `page_count`/`doc[n]`/`metadata`/geometry | PRD §9.5 | green |
 | `PYFITZ-002` | encrypted: `needs_pass`→`authenticate`→pages (fitz names) | PRD §8.4 | green |
 | `PYFITZ-003` | `fitz.Rect`/`Matrix` value types match PyMuPDF arithmetic | PRD §9.5 | green |
+
+---
+
+## M2a — Font mapping layer (`pdf-fonts`)
+
+Spec source of truth: PRD §8.5 (Fonts — mapping only, no rasterization) + ISO
+32000-1 §9.6–§9.7 + §9.10 (encodings, CMaps, CID fonts, ToUnicode), Annex D
+(base encodings — public-domain facts) and the Adobe Glyph List + ZapfDingbats
+glyph list (both BSD-3-Clause Adobe, vendored byte-for-byte in
+`crates/pdf-fonts/data/` with provenance in `data/PROVENANCE.md` /
+`data/NOTICE`). The `FontMapper` is built from a resolved
+font dict + `&DocumentStore`; it answers `iter_codes`, `to_unicode(code)` and
+`width(code)`. No rasterization (that is M6). Tests live in
+`crates/pdf-fonts/tests/`.
+
+> **Core-14 AFM gap (PRD §6.5 #2 / §8.5.2).** No recognized-permissive (SPDX
+> MIT/BSD/Apache) source for Core-14 AFM width metrics was established for this
+> milestone; per the project's license-cleanliness thesis no license-uncertain
+> width data is embedded. The Core-14 framework (font-name normalization +
+> lookup hook) is implemented but the bundled width table is empty, so unembedded
+> standard-14 fonts without `/Widths` fall back to `/MissingWidth` then the
+> notdef width. Documented as `WIDTHS-CORE14-GAP`.
+
+### Base encodings + `/Differences` (`encodings.rs`) — `ENCODING-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `ENCODING-001` | WinAnsi `0x41`→`A`→U+0041; `0x80`→`Euro`→U+20AC | ISO Annex D | green |
+| `ENCODING-002` | StandardEncoding `0xA1`→`exclamdown`→U+00A1 | ISO Annex D | green |
+| `ENCODING-003` | MacRoman `0x80`→`Adieresis`→U+00C4 | ISO Annex D | green |
+| `ENCODING-004` | PDFDocEncoding `0xA0`→`Euro`→U+20AC; `0x18`→breve | ISO Annex D | green |
+| `ENCODING-005` | Symbol built-in `0x61`→`alpha`→U+03B1 | ISO Annex D | green |
+| `ENCODING-006` | ZapfDingbats built-in `0x41`→`a10`→U+2721, `0x61`→`a60`→U+2741 | ISO Annex D | green |
+| `ENCODING-007` | `/Encoding` name → that base table | ISO §9.6.6 | green |
+| `ENCODING-008` | `/Encoding` dict `/BaseEncoding`+`/Differences` override | ISO §9.6.6 | green |
+| `ENCODING-009` | `/Differences` over implicit base (no `/BaseEncoding`) | ISO §9.6.6 | green |
+| `ENCODING-010` | TrueType symbolic w/o `/Encoding` → Standard default | ISO §9.6.6 | green |
+| `ENCODING-011` | unmapped simple code → `to_unicode` None, never panic | PRD §8.5 | green |
+
+### Glyph-name → Unicode (AGL + algorithmic) (`glyphlist.rs`) — `GLYPHLIST-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `GLYPHLIST-001` | AGL `quotedblleft`→U+201C; `Euro`→U+20AC | AGL / Adobe | green |
+| `GLYPHLIST-002` | AGL ligature `fi`→U+FB01 | AGL / Adobe | green |
+| `GLYPHLIST-003` | `uniXXXX` (`uni20AC`→U+20AC) | AGL algorithm | green |
+| `GLYPHLIST-004` | `uXXXXXX` (`u1F600`→U+1F600) | AGL algorithm | green |
+| `GLYPHLIST-005` | underscore ligature `f_f_i`→ U+0066 U+0066 U+0069 | AGL algorithm | green |
+| `GLYPHLIST-006` | `.`-suffix strip (`a.sc`→ glyph `a`→U+0061) | AGL algorithm | green |
+| `GLYPHLIST-007` | `cidNN` / `gNN` / `.notdef` → unresolved (None) | PRD §8.5 | green |
+| `GLYPHLIST-008` | unknown name → None, never panic | PRD §8.5 | green |
+
+### CMap parser (shared) (`cmap.rs`) — `CMAP-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `CMAP-001` | ToUnicode `beginbfchar` single byte → U+ | ISO §9.10.3 | green |
+| `CMAP-002` | ToUnicode `beginbfrange` (lo,hi,base) increment form | ISO §9.10.3 | green |
+| `CMAP-003` | ToUnicode `beginbfrange` array-of-dst form | ISO §9.10.3 | green |
+| `CMAP-004` | UTF-16BE multi-unit value (surrogate pair → astral) | ISO §9.10.3 | green |
+| `CMAP-005` | 1-to-many (ligature) bf value → multi-char string | ISO §9.10.3 | green |
+| `CMAP-006` | `begincodespacerange` drives 1- vs 2-byte decode | ISO §9.7.6 | green |
+| `CMAP-007` | `begincidchar` / `begincidrange` parse → CID | ISO §9.7.5 | green |
+| `CMAP-008` | `usecmap` chaining merges parent ranges | ISO §9.7.5 | green |
+| `CMAP-009` | malformed CMap tokens skipped, never panic | PRD §8.5 | green |
+| `CMAP-010` | mixed 1-and-2-byte codespace ranges decode by prefix | ISO §9.7.6 | green |
+
+### `iter_codes` (codespace-driven) (`mapper.rs`) — `ITERCODES-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `ITERCODES-001` | simple font: 1 byte/code over whole string | ISO §9.4.3 | green |
+| `ITERCODES-002` | Identity-H: 2 bytes/code, code==CID | ISO §9.7.5 | green |
+| `ITERCODES-003` | embedded codespace: variable-length per prefix | ISO §9.7.6 | green |
+| `ITERCODES-004` | odd trailing byte consumed as 1-byte (no panic) | PRD §8.5 | green |
+
+### Simple-font widths (`widths.rs`) — `WIDTHS-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `WIDTHS-001` | `/Widths` indexed by `code - /FirstChar` | ISO §9.2.4 | green |
+| `WIDTHS-002` | code outside `/Widths` range → `/MissingWidth` | ISO §9.2.4 | green |
+| `WIDTHS-003` | absent `/MissingWidth` → 0 | ISO §9.2.4 | green |
+| `WIDTHS-004` | NaN / negative / absurd width clamped to 0 | PRD §8.5 | green |
+| `WIDTHS-CORE14-GAP` | unembedded std-14, no `/Widths` → MissingWidth fallback (AFM gap) | PRD §8.5.2 | green |
+
+### Type0 / CID fonts (`mapper.rs` + `widths.rs`) — `CID-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `CID-001` | Identity-H code==CID; `/ToUnicode` extraction | ISO §9.7.4 | green |
+| `CID-002` | `/W` array form `[c [w0 w1 …]]` | ISO §9.7.4.3 | green |
+| `CID-003` | `/W` range form `[c_first c_last w]` | ISO §9.7.4.3 | green |
+| `CID-004` | `/DW` default applied to CID outside `/W` | ISO §9.7.4.3 | green |
+| `CID-005` | absent `/DW` → default 1000 | ISO §9.7.4.3 | green |
+| `CID-006` | CIDToGIDMap Identity (default) | ISO §9.7.4.3 | green |
+| `CID-007` | CIDToGIDMap stream maps CID→GID | ISO §9.7.4.3 | green |
+| `CID-008` | embedded CMap stream `/Encoding` code→CID | ISO §9.7.5.3 | green |
+| `CID-009` | Type0 without `/ToUnicode` → None (documented CJK gap) | PRD §8.5 | green |
+
+### `FontMapper` orchestration (`mapper.rs`) — `FONTMAP-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `FONTMAP-001` | simple Type1: `/ToUnicode` OVERRIDES encoding+AGL | PRD §8.5 | green |
+| `FONTMAP-002` | Type3 simple-font path (encoding/Widths) | PRD §8.5 | green |
+| `FONTMAP-003` | predefined CMap framework: Identity-H/V resolved | ISO §9.7.5.2 | green |
+| `FONTMAP-004` | unknown predefined CMap name → documented gap, no panic | PRD §8.5 | green |
+
+### Property / never-panic (`fontmap_property.rs`) — `FONTMAP-PROP-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `FONTMAP-PROP-001` | `iter_codes` covers whole input, no overlap, lengths sum | PRD §8.5 | green |
+| `FONTMAP-PROP-002` | `iter_codes` never panics on arbitrary bytes | PRD §8.5 | green |
+| `FONTMAP-PROP-003` | `to_unicode` on arbitrary code never panics → Option | PRD §8.5 | green |
+| `FONTMAP-PROP-004` | `width` on arbitrary code never panics, finite ≥ 0 | PRD §8.5 | green |

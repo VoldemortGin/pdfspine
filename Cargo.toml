@@ -47,6 +47,9 @@ bytes = "1"
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 # Pure-Rust LZW (PDF/TIFF variants) for LZWDecode (PRD §8.3).
 weezl = "0.2"
+# Small-string optimization for glyph→Unicode results in pdf-fonts (most
+# mappings are 1 char; ligatures are 2–3). Pure-Rust, MIT/Apache-2.0.
+smol_str = "0.3"
 # --- pdf-crypto: RustCrypto (all MIT/Apache-2.0, pure-Rust) — PRD §6.4 / §8.4 ---
 # Stable 0.8/0.10/0.4 generation pinned for toolchain 1.96. RC4 is hand-rolled
 # in pdf-crypto (the `rc4` crate cannot take a runtime-length key, which PDF
