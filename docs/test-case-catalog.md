@@ -829,3 +829,85 @@ font dict + `&DocumentStore`; it answers `iter_codes`, `to_unicode(code)` and
 | `FONTMAP-PROP-002` | `iter_codes` never panics on arbitrary bytes | PRD §8.5 | green |
 | `FONTMAP-PROP-003` | `to_unicode` on arbitrary code never panics → Option | PRD §8.5 | green |
 | `FONTMAP-PROP-004` | `width` on arbitrary code never panics, finite ≥ 0 | PRD §8.5 | green |
+
+---
+
+## M2b — Content-stream interpreter → positioned glyphs (`pdf-text`)
+
+Spec source of truth: PRD §8.6.1 (Trm math, row-vector convention) + §8.6.2
+(interpreter operator subset) + ISO 32000-1 §9.4 (text objects/operators), §8.4
+(graphics state). The `ContentInterpreter` runs a page's decoded content
+stream(s) and emits a flat `Vec<PositionedGlyph>` in **PDF user space** (no page
+transform / no layout grouping — that is M2c/M2d). Self-constructed content +
+font fixtures only (we control every byte; no PyMuPDF files). Tests live in
+`crates/pdf-text/tests/`.
+
+### Operator interpreter + advance (`interp.rs`) — `INTERP-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `INTERP-001` | `Tj` at a known `Tm` → glyph origins at expected user-space coords | PRD §8.6.1 | green |
+| `INTERP-002` | per-glyph advance `tx = (w0/1000·Tfs + Tc)·Th` | ISO §9.4.4 | green |
+| `INTERP-003` | `Tw` adds to advance only on single-byte code 0x20 | ISO §9.4.3 | green |
+| `INTERP-004` | `Tz` horizontal scaling scales advance + Trm x-scale | ISO §9.4.4 | green |
+| `INTERP-005` | `Tc` char spacing adds to every glyph advance | ISO §9.4.4 | green |
+| `INTERP-006` | `TJ` numeric kerning shifts by `-adj/1000·Tfs·Th` | ISO §9.4.3 | green |
+| `INTERP-007` | `Td` moves text line matrix; origin shifts | ISO §9.4.2 | green |
+| `INTERP-008` | `TD` sets leading = `-ty` then `Td` | ISO §9.4.2 | green |
+| `INTERP-009` | `T*` advances one line by current leading `TL` | ISO §9.4.2 | green |
+| `INTERP-010` | `Tm` replaces text + line matrix absolutely | ISO §9.4.2 | green |
+| `INTERP-011` | `'` operator = `T*` then `Tj` | ISO §9.4.3 | green |
+| `INTERP-012` | `"` operator sets `Tw`/`Tc` then `'` | ISO §9.4.3 | green |
+| `INTERP-013` | `q`/`Q` save/restore CTM + text state | ISO §8.4.2 | green |
+| `INTERP-014` | `cm` pre-concats CTM; composes with `Tm` | ISO §8.3.4 | green |
+| `INTERP-015` | `Ts` text rise offsets glyph origin in y | ISO §9.4.4 | green |
+| `INTERP-016` | `Tr` render mode recorded on glyph | ISO §9.4.4 | green |
+| `INTERP-017` | `Tr 3` (invisible) glyph still emitted, tagged | PRD §8.6.2 | green |
+| `INTERP-018` | fill color `g`/`rg`/`k` → packed sRGB on glyph | ISO §8.6.8 | green |
+| `INTERP-019` | multiple `/Contents` streams concatenated w/ separator | PRD §8.6.2 | green |
+| `INTERP-020` | Type0 Identity-H 2-byte show + `/W` advance | ISO §9.7.4 | green |
+
+### Text rendering matrix + rotation envelope (`interp.rs`) — `TRM-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `TRM-001` | `Trm = params·Tm·CTM`; glyph origin = `(0,0)·Trm` | PRD §8.6.1 | green |
+| `TRM-002` | bbox height from `/Ascent`/`/Descent` scaled by size | PRD §8.6.2 | green |
+| `TRM-003` | font-size scaling scales bbox + advance linearly | ISO §9.4.4 | green |
+| `TRM-004` | translation `Tm` offsets origin/bbox | PRD §8.6.1 | green |
+| `COORD-ROT-90-TRM` | 90°-rotated `Tm` → correct axis-aligned bbox envelope | PRD §8.6.1 | green |
+| `COORD-ROT-180-TRM` | 180°-rotated `Tm` → correct envelope + origin | PRD §8.6.1 | green |
+
+### Form XObject recursion (`interp.rs`) — `INTERP-FORM-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `INTERP-FORM-001` | `Do` Form XObject places nested text with form `/Matrix` | ISO §8.10 | green |
+| `INTERP-FORM-002` | nested form `/Resources` resolves its own fonts | ISO §8.10 | green |
+| `INTERP-FORM-003` | recursion depth cap halts deep nesting (no overflow) | PRD §8.6.2 | green |
+| `INTERP-FORM-004` | self-referential form cycle guarded (no infinite loop) | PRD §8.6.2 | green |
+| `INTERP-FORM-005` | Image XObject `Do` records presence, emits no glyph | PRD §8.6.2 | green |
+
+### Inline images (`interp.rs`) — `INTERP-INLINE-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `INTERP-INLINE-001` | `BI/ID/EI` binary body skipped; following `Tj` intact | ISO §8.9.7 | green |
+| `INTERP-INLINE-002` | inline-image presence/metadata captured (not decoded) | PRD §8.6.2 | green |
+| `INTERP-INLINE-003` | `EI`-like bytes inside the body don't terminate early | ISO §8.9.7 | green |
+
+### Robustness / never-panic (`interp_property.rs`) — `INTERP-ROBUST-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `INTERP-ROBUST-001` | arbitrary bytes as content never panic | PRD §8.1 | green |
+| `INTERP-ROBUST-002` | unknown operators skipped; operand underflow tolerated | PRD §8.6.2 | green |
+| `INTERP-ROBUST-003` | truncated `BT`/string/`TJ` array never panic | PRD §8.6.2 | green |
+| `INTERP-ROBUST-004` | every emitted glyph has finite bbox/origin | PRD §8.6.2 | green |
+
+### End-to-end (`interp_e2e.rs`) — `INTERP-E2E-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `INTERP-E2E-001` | 1-page PDF, two words on two lines → unicode seq + positions | PRD §8.6 | green |
+| `INTERP-E2E-002` | `interpret_page` resolves `/Contents` array + `/Resources` | PRD §8.6 | green |

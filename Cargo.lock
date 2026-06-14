@@ -431,6 +431,8 @@ version = "0.0.0"
 dependencies = [
  "pdf-core",
  "pdf-fonts",
+ "proptest",
+ "smol_str",
 ]
 
 [[package]]
