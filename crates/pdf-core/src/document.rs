@@ -27,6 +27,7 @@ use crate::lexer::Lexer;
 use crate::limits::Limits;
 use crate::object::parse::Parser;
 use crate::object::{Dict, Name, ObjRef, Object, StreamData, StreamObj};
+use crate::repair::{self, Diagnostics, ParseMode, RepairAction, Warning, WarningKind};
 use crate::source::{MmapMode, Source};
 use crate::xref::{parse_xref_chain, XrefEntry, XrefTable};
 
@@ -50,6 +51,8 @@ pub struct DocumentStore {
     version: Version,
     header_offset: usize,
     parse_was_repaired: bool,
+    mode: ParseMode,
+    diagnostics: Diagnostics,
     limits: Limits,
     interner: RwLock<NameInterner>,
     /// Lazy object arena: object number → cached resolved object (PRD §9.2).
@@ -59,58 +62,268 @@ pub struct DocumentStore {
 impl DocumentStore {
     // --- opening ----------------------------------------------------------
 
-    /// Opens a document from in-memory bytes with the given [`Limits`].
+    /// Opens a document from in-memory bytes with the given [`Limits`], in the
+    /// default [`ParseMode::Lenient`] (best-effort: repair + warnings, PRD §8.2).
     ///
     /// Parses the header, locates and walks the cross-reference chain and reads
-    /// the trailer; **does not** load object bodies (PRD §9.2).
+    /// the trailer; **does not** load object bodies (PRD §9.2). On any failure of
+    /// the normal path — broken xref, failed validation gate — it falls back to a
+    /// full-file object scan ([`crate::repair`]).
     ///
     /// # Errors
     ///
-    /// [`Error::Source`] if the buffer is empty / too small,
-    /// [`Error::Unsupported`] for a missing header, or [`Error::Xref`] for an
-    /// unrecoverable cross-reference (repair is M1d).
+    /// [`Error::Source`] if the buffer is empty, [`Error::Unsupported`] for a
+    /// missing header, or a typed error if even repair cannot recover a usable
+    /// document.
     pub fn from_bytes(bytes: impl Into<Bytes>, limits: Limits) -> Result<Self> {
-        let source = Source::from_bytes(bytes);
-        Self::open_source(source, limits)
+        Self::from_bytes_with(bytes, ParseMode::Lenient, limits)
     }
 
-    /// Opens a document from a path. `mode` selects the backing strategy; the
-    /// hard-safe [`MmapMode::Never`] is recommended for untrusted inputs (PRD
-    /// §9.6.1).
+    /// Opens from bytes with an explicit [`ParseMode`] (PRD §8.2). `Strict`
+    /// surfaces the first typed error where `Lenient` would repair.
+    ///
+    /// # Errors
+    ///
+    /// See [`DocumentStore::from_bytes`]; in `Strict` mode a broken
+    /// cross-reference is returned as the typed error rather than repaired.
+    pub fn from_bytes_with(
+        bytes: impl Into<Bytes>,
+        mode: ParseMode,
+        limits: Limits,
+    ) -> Result<Self> {
+        let source = Source::from_bytes(bytes);
+        Self::open_source(source, mode, limits)
+    }
+
+    /// Opens a document from a path in [`ParseMode::Lenient`]. `mmap` selects the
+    /// backing strategy; the hard-safe [`MmapMode::Never`] is recommended for
+    /// untrusted inputs (PRD §9.6.1).
     ///
     /// # Errors
     ///
     /// [`Error::Io`] on read failure, plus the [`DocumentStore::from_bytes`]
     /// errors.
-    pub fn open(path: impl AsRef<Path>, mode: MmapMode, limits: Limits) -> Result<Self> {
-        let source = Source::open(path, mode)?;
-        Self::open_source(source, limits)
+    pub fn open(path: impl AsRef<Path>, mmap: MmapMode, limits: Limits) -> Result<Self> {
+        Self::open_with(path, mmap, ParseMode::Lenient, limits)
     }
 
-    /// Shared open path over an already-built [`Source`].
-    fn open_source(source: Source, limits: Limits) -> Result<Self> {
+    /// Opens a document from a path with an explicit [`ParseMode`] (PRD §8.2).
+    ///
+    /// # Errors
+    ///
+    /// See [`DocumentStore::open`] and [`DocumentStore::from_bytes_with`].
+    pub fn open_with(
+        path: impl AsRef<Path>,
+        mmap: MmapMode,
+        mode: ParseMode,
+        limits: Limits,
+    ) -> Result<Self> {
+        let source = Source::open(path, mmap)?;
+        Self::open_source(source, mode, limits)
+    }
+
+    /// Shared open path over an already-built [`Source`] — the central decision
+    /// flow (PRD §8.2): **normal parse → validation gate → repair-on-fail**.
+    ///
+    /// 1. Parse the header (records `header_offset`).
+    /// 2. **Strict**: parse the xref chain; any failure is the returned error.
+    ///    Then run the validation gate; a failure there is an error too.
+    /// 3. **Lenient**: try the normal xref parse. If it fails *or* the resulting
+    ///    document fails the validation gate (`/Root`→catalog→`/Pages`
+    ///    unreachable), fall back to a full-file object scan and retry the gate.
+    fn open_source(source: Source, mode: ParseMode, limits: Limits) -> Result<Self> {
         if source.is_empty() {
             return Err(Error::source("empty document"));
         }
         let (version, header_offset) = parse_header(&source)?;
-        let xref = parse_xref_chain(&source, header_offset, &limits)?;
-        let trailer = xref.trailer().clone();
+        let mut diagnostics = Diagnostics::new();
+        if header_offset != 0 {
+            diagnostics.warn(
+                0,
+                WarningKind::HeaderOffset,
+                format!("{header_offset} junk byte(s) before %PDF- header"),
+            );
+        }
 
+        // --- Strict: no repair; first violation is the error -----------------
+        if mode == ParseMode::Strict {
+            let xref = parse_xref_chain(&source, header_offset, &limits)?;
+            let trailer = xref.trailer().clone();
+            let mut store = Self::assemble(
+                source,
+                xref,
+                trailer,
+                version,
+                header_offset,
+                header_offset != 0,
+                mode,
+                diagnostics,
+                limits,
+            );
+            store.validate_gate()?;
+            return Ok(store);
+        }
+
+        // --- Lenient: normal parse → gate → repair-on-fail (best-effort) -----
+        //
+        // The gate never *fails* the open in Lenient mode; it only decides
+        // whether to attempt a reconstruction. If neither the normal parse nor
+        // the repair yields a gate-valid document, the best available parse is
+        // still returned so low-level object access remains possible (PRD §8
+        // intro: tolerate, don't reject).
+        let normal = parse_xref_chain(&source, header_offset, &limits);
+        let mut normal_store = match normal {
+            Ok(xref) => {
+                let trailer = xref.trailer().clone();
+                let mut store = Self::assemble(
+                    source.clone(),
+                    xref,
+                    trailer,
+                    version,
+                    header_offset,
+                    header_offset != 0,
+                    mode,
+                    diagnostics.clone(),
+                    limits,
+                );
+                if store.validate_gate().is_ok() {
+                    return Ok(store);
+                }
+                // Clean parse exists but is not gate-valid: try repair, keep this
+                // as the fallback.
+                diagnostics.warn(
+                    0,
+                    WarningKind::ValidationFailed,
+                    "clean parse failed the catalog/page-tree validation gate",
+                );
+                Some(store)
+            }
+            Err(e) => {
+                diagnostics.warn(
+                    0,
+                    WarningKind::XrefUnreadable,
+                    format!("cross-reference unreadable ({}); reconstructing", e.kind()),
+                );
+                None
+            }
+        };
+
+        // Attempt a full-file object scan (PRD §8.2 repair subsystem).
+        match repair::reconstruct(&source, header_offset, &limits, &mut diagnostics) {
+            Ok(result) => {
+                let trailer = result.xref.trailer().clone();
+                let mut repaired = Self::assemble(
+                    source,
+                    result.xref,
+                    trailer,
+                    version,
+                    header_offset,
+                    true, // repair path always taints the parse (PRD §8.2)
+                    mode,
+                    diagnostics,
+                    limits,
+                );
+                if repaired.validate_gate().is_ok() {
+                    repaired.apply_catalog_version();
+                    return Ok(repaired);
+                }
+                // Repair ran but produced no gate-valid catalog. Prefer the
+                // normal parse if we have one (it is closer to the file as
+                // written); otherwise return the best-effort reconstruction so
+                // the recovered objects are still reachable.
+                if let Some(mut store) = normal_store.take() {
+                    store.diagnostics = repaired.diagnostics.clone();
+                    Ok(store)
+                } else {
+                    Ok(repaired)
+                }
+            }
+            Err(e) => {
+                // Reconstruction found nothing usable. Fall back to the normal
+                // parse if it succeeded at all; else propagate the failure.
+                if let Some(mut store) = normal_store.take() {
+                    store.diagnostics = diagnostics;
+                    Ok(store)
+                } else {
+                    Err(e)
+                }
+            }
+        }
+    }
+
+    /// Assembles the store struct and applies the catalog `/Version` override.
+    #[allow(clippy::too_many_arguments)]
+    fn assemble(
+        source: Source,
+        xref: XrefTable,
+        trailer: Dict,
+        version: Version,
+        header_offset: usize,
+        parse_was_repaired: bool,
+        mode: ParseMode,
+        diagnostics: Diagnostics,
+        limits: Limits,
+    ) -> Self {
         let mut store = DocumentStore {
             source,
             xref,
             trailer,
             version,
             header_offset,
-            parse_was_repaired: header_offset != 0,
+            parse_was_repaired,
+            mode,
+            diagnostics,
             limits,
             interner: RwLock::new(NameInterner::new()),
             arena: RwLock::new(HashMap::new()),
         };
-
         // The catalog `/Version`, if present, overrides the header (PRD §8.2).
         store.apply_catalog_version();
-        Ok(store)
+        store
+    }
+
+    /// The validation gate (PRD §8.2 step 7): `trailer.Root` must resolve to a
+    /// dict with `/Type /Catalog`, and the catalog's `/Pages` must resolve to a
+    /// page-tree node (a dict). Returns `Ok(())` when the document is usable.
+    ///
+    /// This populates the arena for the catalog / pages objects, which is the one
+    /// sanctioned exception to "no eager load": it is open-time validation, and
+    /// the catalog/pages are needed immediately anyway (PRD §8.2).
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Xref`] when the catalog or page-tree root is missing /
+    /// unresolvable / the wrong type.
+    fn validate_gate(&mut self) -> Result<()> {
+        let root = self
+            .root()
+            .ok_or_else(|| Error::xref(0, "trailer has no /Root"))?;
+        let catalog = self
+            .resolve(root)
+            .map_err(|_| Error::xref(0, "/Root does not resolve"))?;
+        let cat_dict = catalog
+            .as_dict()
+            .ok_or_else(|| Error::xref(0, "/Root is not a dictionary"))?;
+        match cat_dict.get(&Name::new("Type")) {
+            Some(Object::Name(n)) if n.as_bytes() == b"Catalog" => {}
+            _ => return Err(Error::xref(0, "/Root is not /Type /Catalog")),
+        }
+        // `/Pages` must resolve to a page-tree node (a dict). Absent `/Pages` is
+        // tolerated only if there genuinely is no page tree — but a catalog with
+        // no `/Pages` is degenerate; require it to be present and a dict.
+        let pages = self
+            .resolve_dict_key(cat_dict, &Name::new("Pages"))
+            .map_err(|_| Error::xref(0, "/Pages does not resolve"))?
+            .ok_or_else(|| Error::xref(0, "catalog has no /Pages"))?;
+        if pages.as_dict().is_none() {
+            return Err(Error::xref(0, "/Pages is not a page-tree node"));
+        }
+        // The gate touched the arena; clear it so the "no eager load" invariant
+        // holds for callers that assert an empty arena right after open.
+        if let Ok(mut a) = self.arena.write() {
+            a.clear();
+        }
+        Ok(())
     }
 
     /// If the catalog declares `/Version /1.x`, adopt it over the header value.
@@ -173,11 +386,32 @@ impl DocumentStore {
         self.header_offset
     }
 
-    /// Whether the parse was repair-tainted (PRD §8.2). M1c only sets this for a
-    /// nonzero `header_offset`; full repair is M1d.
+    /// Whether the parse was repair-tainted (PRD §8.2): set when a full-file
+    /// scan ran, the header had a nonzero bias, or any xref/`/Length` was
+    /// corrected. The precondition gate for incremental save (PRD §8.7).
     #[must_use]
     pub fn parse_was_repaired(&self) -> bool {
         self.parse_was_repaired
+    }
+
+    /// The [`ParseMode`] this document was opened in (PRD §8.2).
+    #[must_use]
+    pub fn parse_mode(&self) -> ParseMode {
+        self.mode
+    }
+
+    /// The reconstruction actions taken during open — empty after a clean parse
+    /// (PRD §8.2: queryable `repair_report`).
+    #[must_use]
+    pub fn repair_report(&self) -> &[RepairAction] {
+        self.diagnostics.actions()
+    }
+
+    /// The non-fatal warnings collected during a Lenient open (PRD §8.2:
+    /// `Warning { offset, kind, detail }`). Empty in Strict / on a clean parse.
+    #[must_use]
+    pub fn warnings(&self) -> &[Warning] {
+        self.diagnostics.warnings()
     }
 
     /// The configured resource ceilings.
@@ -261,7 +495,16 @@ impl DocumentStore {
                     gen: current.gen,
                 });
             }
-            let obj = self.get_object(current.num, current.gen)?;
+            let obj = match self.get_object(current.num, current.gen) {
+                Ok(o) => o,
+                // Dangling reference (no usable xref entry): in Lenient mode a
+                // reference to a non-existent object yields Null, not an error
+                // (PRD §8.1 / §8.2). In Strict mode it is the typed error.
+                Err(Error::MissingObject { .. }) if self.mode.is_lenient() => {
+                    return Ok(Arc::new(Object::Null));
+                }
+                Err(e) => return Err(e),
+            };
             match obj.as_ref() {
                 Object::Reference(next) => current = *next,
                 _ => return Ok(obj),

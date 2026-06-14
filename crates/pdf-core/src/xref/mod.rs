@@ -11,9 +11,10 @@
 //! newest-wins semantics (PRD §8.2: "build effective xref newest→oldest").
 //!
 //! Everything here is **total**: malformed input yields a typed
-//! [`Error::Xref`] (or another typed error), never a panic. Full repair of a
-//! broken xref (object scan / reconstruction) is M1d; M1c reads well-formed
-//! cross-reference structures and fails cleanly on the rest.
+//! [`Error::Xref`] (or another typed error), never a panic. This module reads
+//! well-formed cross-reference structures and fails cleanly on the rest; the
+//! full repair of a broken xref (object scan / reconstruction) lives in
+//! [`crate::repair`], which the document open path uses as a fallback.
 
 pub mod stream;
 pub mod table;
@@ -60,6 +61,16 @@ impl XrefTable {
     #[must_use]
     pub fn new() -> Self {
         XrefTable::default()
+    }
+
+    /// Builds a table directly from entries and a trailer. Used by the repair
+    /// subsystem ([`crate::repair`]) to install a **synthetic** cross-reference
+    /// after a full-file object scan (PRD §8.2). Later insertions of the same
+    /// object number overwrite earlier ones (the caller scans front-to-back, so
+    /// **last definition wins**).
+    #[must_use]
+    pub fn from_synthetic(entries: HashMap<u32, XrefEntry>, trailer: Dict) -> Self {
+        XrefTable { entries, trailer }
     }
 
     /// The merged trailer dictionary (`/Root`, `/Size`, `/Info`, `/ID`, …).

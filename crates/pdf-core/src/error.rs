@@ -114,7 +114,9 @@ pub enum Error {
 
     /// The cross-reference machinery (classic table, xref stream, `startxref`
     /// discovery, `/Prev` chain, object-stream container) was malformed in a way
-    /// that the non-repairing reader cannot recover from (repair is M1d).
+    /// that the non-repairing reader cannot recover from. In `Lenient` mode the
+    /// document open path falls back to [`crate::repair`]; this typed error is
+    /// what `Strict` mode surfaces.
     #[error("xref error at offset {offset}: {msg}")]
     Xref {
         /// Byte offset of the fault (best effort).

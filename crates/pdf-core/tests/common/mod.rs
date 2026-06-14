@@ -397,3 +397,85 @@ pub fn parse_one_indirect(bytes: &[u8]) -> (ObjRef, Object) {
     let mut p = Parser::new(bytes);
     p.parse_indirect_object().unwrap()
 }
+
+// --- M1d malformed-fixture corruptors (self-built; PRD §10) ---------------
+//
+// Each takes a *valid* PDF (from `Pdf::build`) and corrupts it in one specific
+// way so the repair subsystem must recover it. Offsets are recomputed against
+// the byte string so the corruption is realistic.
+
+/// Removes the `startxref <n>` line (and its number), leaving the body + xref
+/// table but no pointer to it — the "missing startxref" case (REPAIR-XREF-001).
+pub fn corrupt_remove_startxref(bytes: &[u8]) -> Vec<u8> {
+    let needle = b"startxref";
+    if let Some(pos) = find_last(bytes, needle) {
+        bytes[..pos].to_vec()
+    } else {
+        bytes.to_vec()
+    }
+}
+
+/// Replaces the `startxref` offset digits with a wildly out-of-range value
+/// (REPAIR-XREF-002).
+pub fn corrupt_garbage_startxref(bytes: &[u8]) -> Vec<u8> {
+    let needle = b"startxref";
+    let mut out = bytes.to_vec();
+    if let Some(pos) = find_last(&out, needle) {
+        // Find the digits after `startxref` (skipping whitespace) and overwrite.
+        let mut p = pos + needle.len();
+        while p < out.len() && (out[p] == b'\n' || out[p] == b'\r' || out[p] == b' ') {
+            p += 1;
+        }
+        let start = p;
+        while p < out.len() && out[p].is_ascii_digit() {
+            p += 1;
+        }
+        // Replace the digit run with a bogus, in-bounds-but-wrong offset of the
+        // same-or-different length.
+        let replacement = b"999999999";
+        out.splice(start..p, replacement.iter().copied());
+    }
+    out
+}
+
+/// Removes the whole classic-xref table + trailer + startxref (everything from
+/// the `xref` keyword onward), simulating a body-only / no-trailer file
+/// (REPAIR-TRAILER-001).
+pub fn corrupt_remove_xref_and_trailer(bytes: &[u8]) -> Vec<u8> {
+    if let Some(pos) = find_last(bytes, b"\nxref") {
+        bytes[..pos + 1].to_vec()
+    } else if let Some(pos) = find_last(bytes, b"xref") {
+        bytes[..pos].to_vec()
+    } else {
+        bytes.to_vec()
+    }
+}
+
+/// Truncates the file to `keep` bytes (REPAIR-TRUNC-*).
+pub fn corrupt_truncate(bytes: &[u8], keep: usize) -> Vec<u8> {
+    bytes[..keep.min(bytes.len())].to_vec()
+}
+
+/// Returns the byte offset just before the classic-xref table (i.e. the end of
+/// the object body), so tests can truncate "after the objects".
+pub fn body_end_offset(bytes: &[u8]) -> usize {
+    find_last(bytes, b"\nxref")
+        .map(|p| p + 1)
+        .unwrap_or(bytes.len())
+}
+
+/// Finds the last occurrence of `needle` in `hay`.
+pub fn find_last(hay: &[u8], needle: &[u8]) -> Option<usize> {
+    if needle.is_empty() || needle.len() > hay.len() {
+        return None;
+    }
+    hay.windows(needle.len()).rposition(|w| w == needle)
+}
+
+/// Finds the first occurrence of `needle` in `hay`.
+pub fn find_first(hay: &[u8], needle: &[u8]) -> Option<usize> {
+    if needle.is_empty() || needle.len() > hay.len() {
+        return None;
+    }
+    hay.windows(needle.len()).position(|w| w == needle)
+}

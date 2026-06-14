@@ -216,10 +216,33 @@ fn resolve_006_depth_limit() {
 
 #[test]
 fn resolve_007_dangling_reference() {
-    // RESOLVE-007: reference to an object with no xref entry.
-    let bytes = Pdf::new().obj(1, 0, rref(99, 0)).root(1, 0).build();
-    let doc = open(&bytes);
-    let err = doc.resolve(pdf_core::ObjRef::new(1, 0)).unwrap_err();
+    // RESOLVE-007: reference to an object with no xref entry. Per PRD §8.2 the
+    // *Strict*-mode contract is a typed `Error::MissingObject`; the default
+    // Lenient mode yields `Null` (covered by MODE-006 in repair_unit.rs). The
+    // fixture carries a valid catalog/page-tree so the Strict validation gate
+    // passes, then object 3 (a ref to the absent object 99) is resolved.
+    use pdf_core::ParseMode;
+    let bytes = Pdf::new()
+        .obj(
+            1,
+            0,
+            Object::Dictionary(dict([("Type", name_obj("Catalog")), ("Pages", rref(2, 0))])),
+        )
+        .obj(
+            2,
+            0,
+            Object::Dictionary(dict([
+                ("Type", name_obj("Pages")),
+                ("Count", Object::Integer(0)),
+                ("Kids", Object::Array(vec![])),
+            ])),
+        )
+        .obj(3, 0, rref(99, 0))
+        .root(1, 0)
+        .build();
+    let doc = DocumentStore::from_bytes_with(bytes, ParseMode::Strict, Limits::unbounded_decode())
+        .expect("open");
+    let err = doc.resolve(pdf_core::ObjRef::new(3, 0)).unwrap_err();
     assert!(
         matches!(err, Error::MissingObject { num: 99, .. }),
         "{err:?}"

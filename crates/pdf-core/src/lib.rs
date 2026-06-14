@@ -9,8 +9,10 @@
 //! dispatcher) and the [`Limits`] resource ceilings. M1c adds the [`source`]
 //! backing-bytes abstraction, the [`xref`] cross-reference machinery,
 //! [`objstm`] object-stream decoding, name [`interner`]ing and the lazy
-//! [`document`]`::DocumentStore`. Encryption and pages land in later M1 units
-//! per PRD §7.
+//! [`document`]`::DocumentStore`. M1d adds the [`repair`] subsystem
+//! (full-file object scan / synthetic xref / trailer reconstruction) wired into
+//! the document open path as a fallback, plus the `Strict`/`Lenient`
+//! [`repair::ParseMode`]. Encryption and pages land in later M1 units per PRD §7.
 
 pub mod document;
 pub mod error;
@@ -21,6 +23,7 @@ pub mod lexer;
 pub mod limits;
 pub mod object;
 pub mod objstm;
+pub mod repair;
 pub mod serialize;
 pub mod source;
 pub mod xref;
@@ -31,5 +34,6 @@ pub use filters::{decode_stream, DecodeOutcome};
 pub use interner::NameInterner;
 pub use limits::Limits;
 pub use object::{Dict, Name, ObjRef, Object, PdfString, StreamData, StreamObj, StringKind};
+pub use repair::{ParseMode, RepairAction, RepairKind, Warning, WarningKind};
 pub use source::{MmapMode, Source};
 pub use xref::{XrefEntry, XrefTable};

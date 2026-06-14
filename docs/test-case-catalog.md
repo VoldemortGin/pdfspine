@@ -410,7 +410,7 @@ external/PyMuPDF files. Tests live in `crates/pdf-core/tests/source_unit.rs`,
 | `RESOLVE-004` | direct self-reference cycle → `Error::ReferenceCycle` | PRD §9.3 | green |
 | `RESOLVE-005` | indirect (A→B→A) cycle → `Error::ReferenceCycle` | PRD §9.3 | green |
 | `RESOLVE-006` | nesting past `max_recursion_depth` → `LimitExceeded` | PRD §9.6.2 | green |
-| `RESOLVE-007` | dangling reference (no xref entry) → `Error::MissingObject` | PRD §9.3 | green |
+| `RESOLVE-007` | dangling reference (no xref entry) → `Error::MissingObject` (Strict; Lenient→Null per MODE-006) | PRD §9.3 / §8.2 | green |
 | `RESOLVE-008` | `resolve_dict_key` resolves a dict value that is a reference | PRD §9.2 | green |
 | `RESOLVE-009` | `root()` returns the catalog ref from the trailer | PRD §9.2 | green |
 | `RESOLVE-010` | `get_object(num,gen)` returns the raw (unresolved) object | PRD §9.2 | green |
@@ -444,8 +444,115 @@ external/PyMuPDF files. Tests live in `crates/pdf-core/tests/source_unit.rs`,
 
 ---
 
+## M1d — Malformed-PDF repair / reconstruction (`pdf-core::repair`, `document.rs`)
+
+Spec source of truth: PRD §8 intro (design center: tolerate the garbage),
+§8.1 (object-model tolerance), §8.2 (cross-reference + repair subsystem +
+Strict/Lenient modes + `parse_was_repaired`), §9.3 (stable error/warning kinds),
+§9.6 (never-panic / never-OOM / bounded-work). Tests live in
+`crates/pdf-core/tests/repair_unit.rs` (unit) and
+`crates/pdf-core/tests/repair_property.rs` (property / never-panic).
+
+### Parse mode plumbing (`document.rs`) — `MODE-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `MODE-001` | default `open`/`from_bytes` parse mode is `Lenient` | PRD §8.2 | green |
+| `MODE-002` | `open_with(Strict)` on a clean file opens identically | PRD §8.2 | green |
+| `MODE-003` | Strict: broken xref (missing startxref) surfaces typed `Error::Xref` | PRD §8.2 | green |
+| `MODE-004` | Lenient: same broken xref repairs and opens | PRD §8.2 | green |
+| `MODE-005` | Strict: dangling ref → typed `Error::MissingObject` (no Null) | PRD §8.2 | green |
+| `MODE-006` | Lenient: dangling ref resolves to `Null` | PRD §8.2 | green |
+
+### Full-file object scan / synthetic xref (`repair.rs`) — `REPAIR-XREF-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `REPAIR-XREF-001` | missing `startxref` → scan rebuilds xref, objects resolve | PRD §8.2 | green |
+| `REPAIR-XREF-002` | garbage `startxref` offset → scan recovers | PRD §8.2 | green |
+| `REPAIR-XREF-003` | xref entries point at wrong offsets → scan finds true offsets | PRD §8.2 | green |
+| `REPAIR-XREF-004` | object value after repair equals original value | PRD §8.2 | green |
+| `REPAIR-XREF-005` | objects inside an ObjStm are recovered during scan | PRD §8.2 | green |
+| `REPAIR-XREF-006` | scan recovers gen numbers; `N G obj` with G>0 found | PRD §8.2 | green |
+
+### Stream `/Length` repair under reconstruction — `REPAIR-LEN-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `REPAIR-LEN-001` | wrong `/Length` (too short) → body re-derived to `endstream` | PRD §8.2 | green |
+| `REPAIR-LEN-002` | missing `/Length` → body recovered by scan | PRD §8.2 | green |
+| `REPAIR-LEN-003` | recovered stream decodes to original bytes (Flate) | PRD §8.3 | green |
+
+### Garbage prefix / header bias — `REPAIR-PREFIX-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `REPAIR-PREFIX-001` | N bytes of junk before `%PDF-` + broken xref → opens via scan | PRD §8.2 | green |
+| `REPAIR-PREFIX-002` | scanned offsets are absolute (resolve correct under bias) | PRD §8.2 | green |
+
+### Truncated tail — `REPAIR-TRUNC-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `REPAIR-TRUNC-001` | file cut after some objects (no trailer) → salvages survivors | PRD §8.2 | green |
+| `REPAIR-TRUNC-002` | truncation mid-object → complete objects still resolve | PRD §8.2 | green |
+| `REPAIR-TRUNC-003` | catalog survives truncation → doc opens, Root resolves | PRD §8.2 | green |
+
+### Trailer reconstruction — `REPAIR-TRAILER-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `REPAIR-TRAILER-001` | missing trailer → `/Root` rebuilt from `/Type /Catalog` | PRD §8.2 | green |
+| `REPAIR-TRAILER-002` | synthetic trailer carries a `/Size` ≥ max obj num + 1 | PRD §8.2 | green |
+| `REPAIR-TRAILER-003` | multiple catalogs → last (by obj num order) wins as `/Root` | PRD §8.2 | green |
+
+### Dangling references — `REPAIR-DANGLING-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `REPAIR-DANGLING-001` | Lenient: ref to non-existent object resolves to `Null` | PRD §8.1 | green |
+| `REPAIR-DANGLING-002` | Lenient: dangling ref inside a dict value → `Null` | PRD §8.1 | green |
+
+### Duplicate object numbers (revisions) — `REPAIR-DUP-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `REPAIR-DUP-001` | duplicate `N G obj` across body → last definition wins | PRD §8.2 | green |
+| `REPAIR-DUP-002` | last-wins survives header bias / prefix | PRD §8.2 | green |
+
+### Validation gate (`document.rs`) — `REPAIR-GATE-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `REPAIR-GATE-001` | clean parse whose `/Root` is unreachable → auto-repairs | PRD §8.2 | green |
+| `REPAIR-GATE-002` | clean parse whose `/Pages` is unreachable → auto-repairs | PRD §8.2 | green |
+| `REPAIR-GATE-003` | valid file passes gate without triggering repair | PRD §8.2 | green |
+
+### Diagnostics / report — `REPAIR-REPORT-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `REPAIR-REPORT-001` | `parse_was_repaired == true` after a scan-path open | PRD §8.2 | green |
+| `REPAIR-REPORT-002` | `repair_report()` lists the reconstruction actions taken | PRD §8.2 | green |
+| `REPAIR-REPORT-003` | `warnings()` collects `Warning { offset, kind, detail }` | PRD §9.3 | green |
+| `REPAIR-REPORT-004` | warning `kind` discriminant strings are stable / English | PRD §9.3 | green |
+| `REPAIR-REPORT-005` | clean open → empty report, `parse_was_repaired == false` | PRD §8.2 | green |
+
+### Never-panic / never-hang / bounded-work (`repair_property.rs`) — `REPAIR-PANIC-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `REPAIR-PANIC-001` | opening arbitrary `Vec<u8>` (Lenient) never panics, terminates | PRD §9.6 | green |
+| `REPAIR-PANIC-002` | opening arbitrary `Vec<u8>` (Strict) never panics, terminates | PRD §9.6 | green |
+| `REPAIR-PANIC-003` | bit-flipped valid PDF never panics; opens or typed `Err` | PRD §9.6 | green |
+| `REPAIR-PANIC-004` | truncate-at-any-offset of valid PDF never panics | PRD §9.6 | green |
+| `REPAIR-PANIC-005` | object scan honors `max_objects` (no unbounded growth) | PRD §9.6.2 | green |
+| `REPAIR-PANIC-006` | resolve of arbitrary obj nums on a repaired doc never panics | PRD §9.6 | green |
+
+---
+
 ## M1+ (placeholder)
 
-Catalogs for `REPAIR-*` (M1d), `CRYPT-*` (M1e), `WORDS-*` / text formats (M2),
+Catalogs for `CRYPT-*` (M1e), `WORDS-*` / text formats (M2),
 etc. are enumerated at the start of each milestone per PRD §10.1.1 before
 implementation begins.

@@ -115,6 +115,13 @@ impl ObjStm {
         self.entries.get(index).map(|&(num, _)| num)
     }
 
+    /// The contained object numbers in directory order (index = position). Used
+    /// by the repair scan to register `Compressed` xref entries (PRD §8.2).
+    #[must_use]
+    pub fn member_nums(&self) -> Vec<u32> {
+        self.entries.iter().map(|&(num, _)| num).collect()
+    }
+
     /// Parses and returns the object at directory `index` (0-based). The object's
     /// bytes run from `first + off` to the next entry's start (or end of body).
     ///

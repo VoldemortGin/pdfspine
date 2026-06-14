@@ -23,5 +23,20 @@ test = false
 doc = false
 bench = false
 
+# M1d: never-panic / never-hang / never-OOM contract (PRD §9.6).
+[[bin]]
+name = "fuzz_open"
+path = "fuzz_targets/fuzz_open.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_repair"
+path = "fuzz_targets/fuzz_repair.rs"
+test = false
+doc = false
+bench = false
+
 [profile.release]
 debug = 1
