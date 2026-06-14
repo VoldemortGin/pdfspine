@@ -1,0 +1,42 @@
+[build-system]
+requires = ["maturin>=1.12,<2"]
+build-backend = "maturin"
+
+[project]
+name = "oxipdf"
+# Keep in sync with the Rust workspace version (Cargo.toml [workspace.package]).
+version = "0.0.0"
+description = "MIT-licensed, pure-Rust reimplementation of PyMuPDF (fitz) with PyO3 bindings."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+authors = [{ name = "oxipdf contributors" }]
+keywords = ["pdf", "pymupdf", "fitz", "mupdf", "rust"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: Multimedia :: Graphics :: Graphics Conversion",
+]
+
+[project.urls]
+Homepage = "https://github.com/oxipdf/oxipdf"
+Repository = "https://github.com/oxipdf/oxipdf"
+
+[project.optional-dependencies]
+test = ["pytest>=8", "hypothesis>=6"]
+
+[tool.maturin]
+# The Rust crate that builds the extension module.
+manifest-path = "crates/py-bindings/Cargo.toml"
+# Place the compiled `_core` inside the `oxipdf` package.
+module-name = "oxipdf._core"
+# Pure-Python sources (oxipdf / fitz / pymupdf packages) live here.
+python-source = "python"
+# abi3 wheel covering CPython >= 3.10 (PRD §9.4 / §11.2).
+features = ["pyo3/abi3-py310"]
+
+[tool.pytest.ini_options]
+testpaths = ["python/tests"]

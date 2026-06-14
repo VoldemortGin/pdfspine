@@ -1,0 +1,12 @@
+[package]
+name = "pdf-image"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+description = "Image-document support, image-XObject decode/encode, Pixmap for oxipdf. Placeholder in M0."
+
+[dependencies]
+pdf-core.workspace = true

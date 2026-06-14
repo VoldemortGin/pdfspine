@@ -1,0 +1,27 @@
+[package]
+name = "pdf-fuzz"
+version = "0.0.0"
+edition = "2021"
+license = "MIT"
+publish = false
+
+# cargo-fuzz target crate. Excluded from the main workspace (see root
+# Cargo.toml): it requires the nightly toolchain and `libfuzzer-sys`. Drive it
+# with `cargo +nightly fuzz run <target>`. Real targets land in M1
+# (fuzz_open / fuzz_lexer / fuzz_xref / per-filter, PRD §9.6).
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+pdf-core = { path = "../crates/pdf-core" }
+
+[[bin]]
+name = "fuzz_geom"
+path = "fuzz_targets/fuzz_geom.rs"
+test = false
+doc = false
+bench = false
+
+[profile.release]
+debug = 1

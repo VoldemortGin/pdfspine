@@ -1,0 +1,19 @@
+[package]
+name = "py-bindings"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+description = "PyO3 bindings for oxipdf; builds the _core extension module. FFI chokepoint."
+publish = false
+
+[lib]
+name = "_core"
+# cdylib for the Python extension module; rlib so it can be unit-tested.
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+pdf-api.workspace = true
+pyo3 = { workspace = true, features = ["abi3-py310", "extension-module"] }

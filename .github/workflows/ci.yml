@@ -1,0 +1,204 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Cancel superseded runs on the same ref.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # ----------------------------------------------------------------- lint
+  lint:
+    name: lint (fmt / clippy / deny / geiger)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain (pinned)
+        uses: dtolnay/rust-toolchain@1.96.0
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: rustfmt
+        run: cargo fmt --all --check
+      - name: clippy (-D warnings)
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - name: cargo-deny (licenses + advisories + sources)
+        uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check
+      - name: cargo-geiger (whole-tree unsafe surface, non-blocking)
+        continue-on-error: true
+        run: |
+          cargo install cargo-geiger --locked || true
+          cargo geiger --workspace --all-features || true
+
+  # ----------------------------------------------------------------- test
+  test:
+    name: test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.96.0
+      - uses: Swatinem/rust-cache@v2
+      # PyO3 extension-module crates need an interpreter to link against on the
+      # plain `cargo test` path.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: cargo test --workspace --all-features
+        run: cargo test --workspace --all-features
+
+  # --------------------------------------------------- coverage / mutants
+  coverage:
+    name: coverage + mutants (diff)
+    runs-on: ubuntu-latest
+    # Non-blocking for M0; the 90% diff gate becomes hard once real impl lands.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@1.96.0
+        with:
+          components: llvm-tools-preview
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: cargo-llvm-cov (diff coverage)
+        run: |
+          cargo install cargo-llvm-cov --locked
+          cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: lcov.info
+          fail_ci_if_error: false
+      - name: cargo-mutants (in-diff)
+        run: |
+          cargo install cargo-mutants --locked
+          cargo mutants --in-diff <(git diff origin/${{ github.base_ref || 'main' }}...HEAD) || true
+
+  # ------------------------------------------------------------- fuzz-smoke
+  fuzz-smoke:
+    name: fuzz-smoke (nightly, mmap:Never)
+    runs-on: ubuntu-latest
+    # Allowed-fail in M0 (only the placeholder geom target exists).
+    continue-on-error: true
+    env:
+      OXIPDF_MMAP: never
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --locked
+      - name: Smoke each fuzz target (60s)
+        working-directory: fuzz
+        run: |
+          for target in $(cargo +nightly fuzz list); do
+            echo "::group::fuzz $target"
+            cargo +nightly fuzz run "$target" -- -max_total_time=60 -rss_limit_mb=2048
+            echo "::endgroup::"
+          done
+
+  # ----------------------------------------------------------------- pytest
+  pytest:
+    name: pytest (py${{ matrix.python }} / ${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python: ["3.10", "3.11", "3.12", "3.13"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.96.0
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install maturin + test deps
+        run: pip install "maturin>=1.12,<2" pytest hypothesis
+      - name: Build + install (maturin develop)
+        run: maturin develop
+      - name: pytest (incl. doctests)
+        run: pytest --doctest-modules python/oxipdf || pytest
+
+  # ----------------------------------------------------------- TDD guards
+  tdd-guards:
+    name: TDD harness guards
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: test-order-guard (git-history test-precedes-impl)
+        run: python scripts/test-order-guard.py
+      - name: catalog-status-guard (0 remaining RED at milestone exit)
+        run: python scripts/catalog-status-guard.py
+      - name: compat-symbol-guard (PyMuPDF baseline disposition)
+        run: python scripts/compat-symbol-guard.py
+      - name: manifest-lint (affirmative-license fixtures)
+        run: python scripts/manifest-lint.py
+
+  # ----------------------------------------------------------- supply-chain
+  supply-chain:
+    name: supply-chain (cargo-vet)
+    runs-on: ubuntu-latest
+    # Non-blocking in M0 (bootstrap importing trusted audit sets).
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.96.0
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo-vet
+        run: |
+          cargo install cargo-vet --locked
+          cargo vet --locked || cargo vet
+
+  # ----------------------------------------------------------------- wheels
+  wheels:
+    name: wheels (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.96.0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build abi3 wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          command: build
+          args: --release --out dist
+      - name: Smoke-import the built wheel
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --no-index --find-links dist oxipdf
+          python -c "import oxipdf; print('oxipdf', oxipdf.__version__)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.os }}
+          path: dist/*.whl

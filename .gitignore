@@ -10,6 +10,8 @@ __pycache__/
 *.py[cod]
 *.so
 *.pyd
+*.dylib
+*.dSYM/
 .venv/
 venv/
 .pytest_cache/

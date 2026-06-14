@@ -1,0 +1,37 @@
+# oxipdf fixture corpus manifest — affirmative-license schema (PRD §10.3).
+#
+# POLICY: affirmative-permissive-license-REQUIRED, not merely "AGPL-absent".
+# Every fixture committed under `fixtures/` MUST have an entry here. A file with
+# `license = "unknown"` or an empty license FAILS the manifest lint — absence of
+# a positive license is a hard fail, not a pass. No fixture may be derived from
+# MuPDF / PyMuPDF / any AGPL source (clean-room invariant).
+#
+# Each fixture is one [[fixture]] table with ALL of these fields:
+#
+#   [[fixture]]
+#   path         = "well-formed/hello-flate.pdf"   # repo-relative to fixtures/
+#   source       = "self-generated"                # or upstream project name
+#   license      = "CC0-1.0"                        # MUST be in the §6.3 ✅ set,
+#                                                   #   or an explicit PD/CC0
+#                                                   #   declaration. Permitted:
+#                                                   #   MIT, Apache-2.0,
+#                                                   #   BSD-2-Clause, BSD-3-Clause,
+#                                                   #   Zlib, Unicode-DFS-2016,
+#                                                   #   ISC, CC0-1.0, Unlicense,
+#                                                   #   PD / Public-Domain.
+#   sha256       = "<hex>"                          # integrity; lint verifies it
+#   cleared_by   = "Jane Doe (Corpus Steward)"      # NAMED human; empty fails
+#                                                   #   for non-self-generated.
+#   cleared_date = "2026-06-15"                      # ISO 8601
+#   notes        = "optional free text"
+#
+# GovDocs1 / scraped real-document corpora are NOT committed here (unknown
+# copyright); they are used only in a non-committed, locally-fetched fuzz pass
+# (PRD §10.3). veraPDF / PDF-Association files must be individually cleared by
+# the Corpus Steward before inclusion.
+#
+# M0: no fixtures yet — the well-formed/malformed/adversarial generators and the
+# affirmatively-cleared upstream subsets land in M1. This file intentionally
+# carries only the schema header so `manifest-lint` has a target to parse.
+
+# (no [[fixture]] entries yet)

@@ -1,0 +1,11 @@
+[package]
+name = "pdf-crypto"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+description = "Standard PDF security handler (RC4/AES) for oxipdf. Placeholder in M0."
+
+[dependencies]

@@ -1,0 +1,19 @@
+# Allow `cargo build`/`cargo test` to link the PyO3 `extension-module` cdylib
+# *outside* of maturin (i.e. on CI's plain `cargo test --workspace`). With the
+# `extension-module` feature, the `_core` cdylib intentionally leaves the
+# CPython symbols (`PyModule_*`, `Py_*`, …) undefined — they resolve against the
+# host interpreter at import time. Without these flags the bare linker errors
+# with "symbol(s) not found". maturin sets the equivalent itself, so these are a
+# no-op under `maturin build`/`develop`.
+#
+# These are the linker flags PyO3 documents for `cargo test` with
+# `extension-module`. They are host-target scoped so cross-builds are untouched.
+
+[target.x86_64-apple-darwin]
+rustflags = ["-C", "link-arg=-undefined", "-C", "link-arg=dynamic_lookup"]
+
+[target.aarch64-apple-darwin]
+rustflags = ["-C", "link-arg=-undefined", "-C", "link-arg=dynamic_lookup"]
+
+# On Linux the cdylib links fine with unresolved symbols by default; no extra
+# flags are required. (Listed for documentation symmetry; left empty.)

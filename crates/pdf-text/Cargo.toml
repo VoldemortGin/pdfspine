@@ -1,0 +1,13 @@
+[package]
+name = "pdf-text"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+description = "Content-stream text interpreter, TextPage, get_text formats and search for oxipdf. Placeholder in M0."
+
+[dependencies]
+pdf-core.workspace = true
+pdf-fonts.workspace = true

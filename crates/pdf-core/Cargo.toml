@@ -1,0 +1,21 @@
+[package]
+name = "pdf-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+description = "oxipdf core: object model, lexer/parser, xref, filters, writer, geometry. No domain logic."
+
+[dependencies]
+thiserror.workspace = true
+pdf-crypto = { workspace = true, optional = true }
+
+[dev-dependencies]
+proptest.workspace = true
+
+[features]
+default = []
+# `pdf-core` uses `pdf-crypto` behind the `encryption` feature (PRD §9.1).
+encryption = ["dep:pdf-crypto"]

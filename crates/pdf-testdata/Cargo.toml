@@ -1,0 +1,12 @@
+[package]
+name = "pdf-testdata"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+description = "Dev-only corpus loader and golden helpers for oxipdf tests. Internal."
+publish = false
+
+[dependencies]

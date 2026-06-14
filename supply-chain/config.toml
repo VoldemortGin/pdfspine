@@ -1,0 +1,54 @@
+# cargo-vet config (PRD §11.4 — "auditable supply chain").
+#
+# Bootstrap for M0: import the well-known trusted audit sets so the bulk of the
+# ecosystem is covered without re-auditing, and default the audit-as-crates-io
+# policy. Run `cargo vet` in CI; unvetted deps fail the supply-chain job.
+#
+# As the dependency graph grows (M1+), each new crate/version needs either an
+# imported trusted audit or a recorded local audit entry in `audits.toml`.
+
+cargo-vet-version = "0.10"
+
+[imports.bytecodealliance]
+url = "https://raw.githubusercontent.com/bytecodealliance/wasmtime/main/supply-chain/audits.toml"
+
+[imports.embark-studios]
+url = "https://raw.githubusercontent.com/EmbarkStudios/rust-ecosystem/main/audits.toml"
+
+[imports.google]
+url = "https://raw.githubusercontent.com/google/supply-chain/main/audits.toml"
+
+[imports.mozilla]
+url = "https://raw.githubusercontent.com/mozilla/supply-chain/main/audits.toml"
+
+# Default trust policy: third-party crates require "safe-to-deploy". First-party
+# workspace crates are exempt (audited by being our own code).
+[policy.pdf-core]
+audit-as-crates-io = false
+
+[policy.pdf-crypto]
+audit-as-crates-io = false
+
+[policy.pdf-fonts]
+audit-as-crates-io = false
+
+[policy.pdf-text]
+audit-as-crates-io = false
+
+[policy.pdf-edit]
+audit-as-crates-io = false
+
+[policy.pdf-image]
+audit-as-crates-io = false
+
+[policy.pdf-render]
+audit-as-crates-io = false
+
+[policy.pdf-api]
+audit-as-crates-io = false
+
+[policy.py-bindings]
+audit-as-crates-io = false
+
+[policy.pdf-testdata]
+audit-as-crates-io = false

@@ -1,0 +1,47 @@
+# cargo-deny configuration — license + advisory gate (PRD §6.3 / §11.3).
+#
+# Thesis of the project is license cleanliness, so the shipped graph must be
+# free of copyleft. This config denies GPL/AGPL/LGPL/MPL/SSPL and allows only an
+# explicit permissive allowlist. Dev-only tooling (hypothesis = MPL) is a Python
+# dependency and never enters the cargo graph, so it is not a concern here.
+
+[graph]
+all-features = true
+
+[licenses]
+# Fail on any license not in this allowlist (no implicit acceptance).
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "Zlib",
+    "Unicode-DFS-2016",
+    "Unicode-3.0",
+    "ISC",
+    "CC0-1.0",
+    "Unlicense",
+]
+# Copyleft licenses are denied implicitly by being absent from `allow`. The
+# project gate (PRD §11.2) is: zero GPL/AGPL/LGPL/SSPL AND zero MPL in the
+# shipped graph.
+confidence-threshold = 0.93
+
+# Allow a couple of common dual-licensed crates whose SPDX expression resolves
+# cleanly against the allowlist; explicit exceptions go here as the graph grows.
+exceptions = []
+
+[bans]
+multiple-versions = "warn"
+wildcards = "warn"
+
+[advisories]
+# Use the RustSec advisory DB; CI fails on known vulnerabilities.
+yanked = "deny"
+ignore = []
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

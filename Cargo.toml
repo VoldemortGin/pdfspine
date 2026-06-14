@@ -1,0 +1,50 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/pdf-core",
+    "crates/pdf-crypto",
+    "crates/pdf-fonts",
+    "crates/pdf-text",
+    "crates/pdf-edit",
+    "crates/pdf-image",
+    "crates/pdf-render",
+    "crates/pdf-api",
+    "crates/py-bindings",
+    "crates/pdf-testdata",
+]
+# NOTE: `fuzz/` is intentionally excluded from the workspace. cargo-fuzz crates
+# depend on `libfuzzer-sys`, require the nightly toolchain, and use a private
+# target dir; folding them into the stable workspace would break `cargo build`
+# / `cargo test --workspace` on the pinned stable toolchain (1.96.0). The
+# scaffold lives in `fuzz/` and is driven by `cargo +nightly fuzz` (M1+).
+exclude = ["fuzz"]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/oxipdf/oxipdf"
+authors = ["oxipdf contributors"]
+rust-version = "1.96"
+
+[workspace.dependencies]
+# --- shared first-party crates ---
+pdf-core = { path = "crates/pdf-core", version = "0.0.0" }
+pdf-crypto = { path = "crates/pdf-crypto", version = "0.0.0" }
+pdf-fonts = { path = "crates/pdf-fonts", version = "0.0.0" }
+pdf-text = { path = "crates/pdf-text", version = "0.0.0" }
+pdf-edit = { path = "crates/pdf-edit", version = "0.0.0" }
+pdf-image = { path = "crates/pdf-image", version = "0.0.0" }
+pdf-render = { path = "crates/pdf-render", version = "0.0.0" }
+pdf-api = { path = "crates/pdf-api", version = "0.0.0" }
+
+# --- shared third-party deps (versions per PRD §11.1) ---
+thiserror = "2"
+pyo3 = "0.29"
+
+# --- shared dev-deps ---
+proptest = "1"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
