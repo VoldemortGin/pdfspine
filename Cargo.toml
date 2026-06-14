@@ -53,6 +53,11 @@ smol_str = "0.3"
 # Unicode NFC/NFD normalization for case/accent-insensitive search compare in
 # pdf-text (PRD §8.6). Pure-Rust, MIT/Apache-2.0.
 unicode-normalization = "0.1"
+# Pure-Rust TrueType/OpenType reader for font embedding (PRD §8.5 / §8.5.2):
+# reads `hmtx` widths + `cmap` glyph mapping so `insert_text` with a user TTF can
+# emit a CIDFontType2/Type0 with correct `/W` + ToUnicode. `#![forbid(unsafe)]`,
+# no_std-capable, MIT/Apache-2.0. Only the metric/cmap features are needed.
+ttf-parser = { version = "0.25", default-features = false, features = ["std", "glyph-names"] }
 # --- pdf-crypto: RustCrypto (all MIT/Apache-2.0, pure-Rust) — PRD §6.4 / §8.4 ---
 # Stable 0.8/0.10/0.4 generation pinned for toolchain 1.96. RC4 is hand-rolled
 # in pdf-crypto (the `rc4` crate cannot take a runtime-length key, which PDF

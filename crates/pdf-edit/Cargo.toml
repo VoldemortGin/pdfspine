@@ -11,6 +11,8 @@ description = "Page ops, insert_pdf, annotations/links/forms, content emission, 
 [dependencies]
 pdf-core.workspace = true
 pdf-fonts.workspace = true
+ttf-parser.workspace = true
 
 [dev-dependencies]
 pdf-text.workspace = true
+ttf-parser.workspace = true

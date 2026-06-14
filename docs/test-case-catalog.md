@@ -1622,3 +1622,94 @@ full save by mutating the catalog dict via `update_object(root, …)`.
 | `PYLABEL-001` | `Page.get_label()` returns the page label under a `/PageLabels` doc | PRD §8.9 | green |
 | `PYENC-001` | `save(encryption=AES_256, user_pw="")` → reopen → `is_encrypted`, `authenticate("")`, text equals | PRD §8.4 | green |
 | `PYENC-002` | encrypted save with owner pw: wrong user pw → `authenticate` false | PRD §8.4 | green |
+
+---
+
+## M4a — Content insertion (text / image / vector drawing) + font embedding (`pdf-edit`)
+
+Spec source of truth: PRD §8.8 (content emission), §8.5 / §8.5.2 (font embedding,
+full-embed fallback), §7 (insert_text/insert_textbox/insert_image/draw_*/Shape).
+All content appends to a page's `/Contents` (the existing content is wrapped in a
+`q … Q` balanced pair, a new content stream is appended, resources are merged
+into `/Resources`). The strongest correctness oracle is **round-trip through the
+M2 pipeline**: insert → full save → reopen → `pdf_text::interpret_page` /
+`search`. Tests live in `crates/pdf-edit/tests/insert_text_e2e.rs`,
+`insert_image_e2e.rs`, `draw_e2e.rs`, plus `pdf-fonts` width-table unit tests.
+
+### Core-14 standard widths (`pdf-fonts::widths`) — `WIDTHS-STD14-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `WIDTHS-STD14-001` | `helvetica` widths: space=278, `A`=667, `i`=222 (factual AFM metrics) | PRD §8.5 | green |
+| `WIDTHS-STD14-002` | `times-roman` widths: space=250, `A`=722, `.`=250 | PRD §8.5 | green |
+| `WIDTHS-STD14-003` | Courier (mono) all glyphs = 600 | PRD §8.5 | green |
+| `WIDTHS-STD14-004` | `string_width("Hello", helv, 12)` sums per-glyph advances scaled by size/1000 | PRD §8.5 | green |
+| `WIDTHS-STD14-005` | unknown glyph code falls back to the font's default (space) width, never panics | PRD §8.5 | green |
+
+### insert_text — Base-14 (`text.rs`) — `INSERT-TEXT-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `INSERT-TEXT-001` | `insert_text(blank, point, "Hello", helv)` → save → reopen → `get_text` contains "Hello" | PRD §8.8 | green |
+| `INSERT-TEXT-002` | inserted glyph origin lands at the PyMuPDF top-left `point` (y-down → PDF y-up conversion) | PRD §8.6.1 | green |
+| `INSERT-TEXT-003` | multi-line text (`\n`) emits one positioned line per split, leading = fontsize·1.2 | PRD §8.8 | green |
+| `INSERT-TEXT-004` | color (rgb) is reflected on the extracted glyph span color | PRD §8.8 | green |
+| `INSERT-TEXT-005` | a Base-14 `/Type1 /BaseFont /Helvetica` font resource is registered (no embedding) | PRD §8.5 | green |
+| `INSERT-TEXT-006` | inserting onto a page with existing content leaves the existing text extractable | PRD §8.8 | green |
+| `INSERT-TEXT-007` | parentheses / backslashes in text are escaped; reopen extracts them verbatim | PRD §8.8 | green |
+| `INSERT-TEXT-008` | `fontname` aliases (`tiro`→Times, `cour`→Courier) register the right BaseFont | PRD §8.5 | green |
+
+### insert_text — TTF full-embed (`fontfile.rs`) — `INSERT-TTF-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `INSERT-TTF-001` | embedding a user TTF emits a `/Type0` Identity-H font with a `/CIDFontType2` descendant + `FontFile2` | PRD §8.5.2 | green |
+| `INSERT-TTF-002` | a `/ToUnicode` CMap is written; reopen → glyphs map back to the original text | PRD §8.5.2 | green |
+| `INSERT-TTF-003` | per-glyph `/W` widths come from the TTF `hmtx` table (ttf-parser) | PRD §8.5 | green |
+| `INSERT-TTF-004` | the whole font program is embedded (FontFile2 length == input length) — full-embed fallback | PRD §8.5.2 | green |
+| `INSERT-TTF-005` | a malformed / non-font byte blob is rejected with a typed error (never panics) | PRD §8.5.2 | green |
+
+### insert_textbox — wrap / align / overflow (`text.rs`) — `INSERT-TEXTBOX-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `INSERT-TEXTBOX-001` | text wraps to multiple lines within `rect` width; all words extractable | PRD §8.8 | green |
+| `INSERT-TEXTBOX-002` | `align=center` centers each line; `align=right` right-justifies (origin offsets differ) | PRD §8.8 | green |
+| `INSERT-TEXTBOX-003` | returns the unused height (>0 when text fits) | PRD §8.8 | green |
+| `INSERT-TEXTBOX-004` | returns a negative overflow value when text does not fit (PyMuPDF convention) | PRD §8.8 | green |
+| `INSERT-TEXTBOX-005` | explicit `\n` forces a line break inside the box | PRD §8.8 | green |
+
+### insert_image — JPEG passthrough + raw (`image.rs`) — `INSERT-IMAGE-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `INSERT-IMAGE-001` | JPEG bytes → image XObject with `/Filter /DCTDecode` (no re-encode; raw passthrough) | PRD §8.8 | green |
+| `INSERT-IMAGE-002` | image placed with a `cm` matrix mapping the unit square to `rect`; reopen → `interpret_page` lists it with the right CTM | PRD §8.8 | green |
+| `INSERT-IMAGE-003` | the XObject is registered under `/Resources /XObject` and emitted as `q cm /Img Do Q` | PRD §8.8 | green |
+| `INSERT-IMAGE-004` | raw RGB pixels → `/FlateDecode` XObject with `/ColorSpace /DeviceRGB`, `/BitsPerComponent 8` | PRD §8.8 | green |
+| `INSERT-IMAGE-005` | non-JPEG / bad bytes for the JPEG path are rejected with a typed error (never panics) | PRD §8.8 | green |
+
+### draw_* primitives + Shape (`drawing.rs`) — `DRAW-*` / `SHAPE-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `DRAW-LINE-001` | `draw_line(p1, p2)` emits `m … l … S`; reopen content shows the path operators | PRD §8.8 | green |
+| `DRAW-RECT-001` | `draw_rect` emits `re` + stroke; coordinates converted from top-left space | PRD §8.8 | green |
+| `DRAW-CIRCLE-001` | `draw_circle` emits 4 cubic Béziers (κ≈0.5523) closed with `h` | PRD §8.8 | green |
+| `DRAW-OVAL-001` | `draw_oval(rect)` emits 4 Béziers fitting the rect | PRD §8.8 | green |
+| `DRAW-BEZIER-001` | `draw_bezier` emits a single `c` curve | PRD §8.8 | green |
+| `DRAW-POLYLINE-001` | `draw_polyline` emits `m` + chained `l`; `draw_curve` emits a smooth `c` | PRD §8.8 | green |
+| `DRAW-FILL-001` | a fill color → `rg`/`f`; stroke color → `RG`/`S`; both → `B` | PRD §8.8 | green |
+| `DRAW-WIDTH-001` | line width emits `w`; dashes emit `d` | PRD §8.8 | green |
+| `SHAPE-001` | `Shape` accumulates several path ops then `finish` + `commit` emits one balanced `q … Q` chunk | PRD §8.8 | green |
+| `SHAPE-002` | multiple `finish` blocks with different colors are all committed | PRD §8.8 | green |
+
+### insertion robustness (`*_e2e.rs`) — `INSERT-PROP-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `INSERT-PROP-001` | inserting never corrupts existing content (existing text still extractable after save→reopen) | PRD §8.8 | green |
+| `INSERT-PROP-002` | inserting onto a page whose `/Contents` is an array (multi-stream) works | PRD §8.8 | green |
+| `INSERT-PROP-003` | a saved file with inserted content reparses clean (no dangling refs; valid xref) | PRD §8.8 | green |
+| `INSERT-PROP-003-QPDF` | mixed text+image+vector save passes `qpdf --check` (skipped if qpdf absent) | PRD §8.8 | green |
+| `INSERT-PROP-004` | repeated insertions on the same page accumulate (idempotent resource-name allocation) | PRD §8.8 | green |

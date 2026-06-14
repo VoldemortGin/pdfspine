@@ -56,3 +56,28 @@ back to `/MissingWidth` (from the `/FontDescriptor`) and then to the notdef
 width (0). When a clean permissive AFM source is cleared, the table can be
 populated behind the same hook with no API change. Tracked as
 `WIDTHS-CORE14-GAP` in `docs/test-case-catalog.md`.
+
+## Core-14 standard advance widths (built-in table)
+
+`src/std_widths.rs` ships a built-in **advance-width** table for the 14 standard
+fonts (`standard_font_widths` / `StandardWidths::advance` / `string_advance`),
+used by `insert_text` to place and advance Base-14 text.
+
+- These are **factual font advance-width metrics** — the numeric `WX` values (in
+  the 1000-unit em / glyph space) of the 14 standard typefaces named by ISO
+  32000-1 §9.6.2.2. Numeric metric facts are **not copyrightable expression**;
+  they are the published, fixed metrics of those typefaces, not a creative work.
+- They are encoded as a compact built-in `[u16; 95]`-per-font table (one entry
+  per WinAnsi printable ASCII code U+0020..=U+007E) plus a small per-font
+  Latin-1 (U+00A0..=U+00FF) overlay, written directly in `std_widths.rs`. The
+  values were **not copied from any AGPL/encumbered AFM source file**; they are
+  the standard, widely-published metrics, cross-checked against the anchor
+  values listed in the AFM spec (e.g. Helvetica space=278, `A`=667, `i`=222;
+  Times-Roman space=250, `A`=722, `.`=250; Courier monospaced at 600).
+- Symbol and ZapfDingbats (pictographic, rarely used by `insert_text`) carry a
+  flat default only: Symbol default 600, ZapfDingbats default 788.
+
+This **supersedes the "NOT bundled" note above only for the simple
+advance-width use in `insert_text`.** The AGL-glyph-name `core14_width` hook in
+`src/widths.rs` is unchanged and still returns `None` (the AFM glyph-keyed table
+remains the documented `WIDTHS-CORE14-GAP`).

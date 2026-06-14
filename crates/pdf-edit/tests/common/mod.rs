@@ -9,6 +9,8 @@
 
 #![allow(dead_code)] // each test file uses a subset of the helpers
 
+pub mod testfont;
+
 use pdf_core::object::parse::Parser;
 use pdf_core::serialize::{write_indirect, write_object};
 use pdf_core::{Dict, DocumentStore, Limits, Name, ObjRef, Object, StreamObj};
@@ -209,6 +211,172 @@ pub fn save_reopen(doc: &DocumentStore) -> DocumentStore {
         .save_to_vec(&pdf_core::SaveOptions::default().with_garbage(1))
         .expect("save");
     open(&bytes)
+}
+
+/// Saves `doc` (full save, garbage=1) and returns the raw bytes (for byte-level
+/// / decompressed-corpus assertions in the M4a content-insertion tests).
+pub fn save_bytes(doc: &DocumentStore) -> Vec<u8> {
+    doc.save_to_vec(&pdf_core::SaveOptions::default().with_garbage(1))
+        .expect("save")
+}
+
+// === M4a content-insertion helpers (PRD §8.8) =============================
+
+/// A single-page blank document: catalog (1) → pages (2) → one leaf (3) with an
+/// empty `/Contents` stream (4). The page is `width × height` (default Letter).
+/// Used as the canvas for `insert_text` / `insert_image` / `draw_*` tests.
+pub fn blank_page(width: i64, height: i64) -> Vec<u8> {
+    let objects: Vec<(u32, Object)> = vec![
+        (
+            1,
+            Object::Dictionary(dict([("Type", name_obj("Catalog")), ("Pages", rref(2))])),
+        ),
+        (
+            2,
+            Object::Dictionary(dict([
+                ("Type", name_obj("Pages")),
+                ("Kids", Object::Array(vec![rref(3)])),
+                ("Count", Object::Integer(1)),
+            ])),
+        ),
+        (
+            3,
+            Object::Dictionary(dict([
+                ("Type", name_obj("Page")),
+                ("Parent", rref(2)),
+                (
+                    "MediaBox",
+                    Object::Array(vec![
+                        Object::Integer(0),
+                        Object::Integer(0),
+                        Object::Integer(width),
+                        Object::Integer(height),
+                    ]),
+                ),
+                ("Contents", rref(4)),
+                ("Resources", Object::Dictionary(Dict::new())),
+            ])),
+        ),
+        (
+            4,
+            Object::Stream(StreamObj::new_encoded(
+                dict([("Length", Object::Integer(0))]),
+                Vec::new(),
+            )),
+        ),
+    ];
+    assemble_classic(&objects, ObjRef::new(1, 0))
+}
+
+/// The positioned glyphs (PDF user space) of the page at `index`, via the M2
+/// interpreter. The strongest M4a oracle: inserted text shows up here.
+pub fn page_glyphs(doc: &DocumentStore, index: usize) -> Vec<pdf_text::PositionedGlyph> {
+    let leaf = pdf_core::pagetree::page_refs(doc)[index];
+    let page = pdf_core::pagetree::page_dict(doc, leaf).expect("page dict");
+    interpret_page(doc, &page).glyphs
+}
+
+/// The image inventory (with CTM) of the page at `index`, via the M2
+/// interpreter — used to assert `insert_image` placement on reopen.
+pub fn page_images(doc: &DocumentStore, index: usize) -> Vec<pdf_text::ImageRef> {
+    let leaf = pdf_core::pagetree::page_refs(doc)[index];
+    let page = pdf_core::pagetree::page_dict(doc, leaf).expect("page dict");
+    interpret_page(doc, &page).images
+}
+
+/// The concatenated, decoded `/Contents` bytes of the page at `index` (so a test
+/// can grep for raw operators like `re`, `c`, `Do`).
+pub fn page_content_bytes(doc: &DocumentStore, index: usize) -> Vec<u8> {
+    let leaf = pdf_core::pagetree::page_refs(doc)[index];
+    let page = pdf_core::pagetree::page_dict(doc, leaf).expect("page dict");
+    let contents = doc
+        .resolve_dict_key(&page, &Name::new("Contents"))
+        .ok()
+        .flatten();
+    let mut out = Vec::new();
+    let push = |s: &StreamObj, out: &mut Vec<u8>| {
+        if let Ok(b) = doc.decode_stream(s).and_then(|o| o.into_decoded()) {
+            out.extend_from_slice(&b);
+            out.push(b'\n');
+        }
+    };
+    match contents.as_deref() {
+        Some(Object::Stream(s)) => push(s, &mut out),
+        Some(Object::Array(arr)) => {
+            for item in arr {
+                if let Some(r) = item.as_reference() {
+                    if let Ok(o) = doc.resolve(r) {
+                        if let Some(s) = o.as_stream() {
+                            push(s, &mut out);
+                        }
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+    out
+}
+
+/// The font dictionaries registered under `/Resources /Font` of the page at
+/// `index` (resolved through the overlay), the robust reopen-safe way to assert
+/// what `insert_text` registered (objects may be packed into ObjStms on save).
+pub fn page_fonts(doc: &DocumentStore, index: usize) -> Vec<Dict> {
+    let leaf = pdf_core::pagetree::page_refs(doc)[index];
+    let page = pdf_core::pagetree::page_dict(doc, leaf).expect("page dict");
+    let resources = doc
+        .resolve_dict_key(&page, &Name::new("Resources"))
+        .ok()
+        .flatten()
+        .and_then(|o| o.as_dict().cloned())
+        .unwrap_or_default();
+    let fonts = match resources.get(&Name::new("Font")) {
+        Some(Object::Dictionary(d)) => d.clone(),
+        Some(Object::Reference(r)) => doc
+            .resolve(*r)
+            .ok()
+            .and_then(|o| o.as_dict().cloned())
+            .unwrap_or_default(),
+        _ => return Vec::new(),
+    };
+    fonts
+        .values()
+        .filter_map(|v| match v {
+            Object::Dictionary(d) => Some(d.clone()),
+            Object::Reference(r) => doc.resolve(*r).ok().and_then(|o| o.as_dict().cloned()),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Resolves the first image XObject dictionary registered under
+/// `/Resources /XObject` of the page at `index` (for `/Filter` / `/ColorSpace`
+/// assertions). Returns the XObject stream dict.
+pub fn first_xobject_dict(doc: &DocumentStore, index: usize) -> Dict {
+    let leaf = pdf_core::pagetree::page_refs(doc)[index];
+    let page = pdf_core::pagetree::page_dict(doc, leaf).expect("page dict");
+    let resources = doc
+        .resolve_dict_key(&page, &Name::new("Resources"))
+        .ok()
+        .flatten()
+        .and_then(|o| o.as_dict().cloned())
+        .expect("resources");
+    let xobjects = match resources.get(&Name::new("XObject")) {
+        Some(Object::Dictionary(d)) => d.clone(),
+        Some(Object::Reference(r)) => doc.resolve(*r).unwrap().as_dict().cloned().unwrap(),
+        _ => panic!("no /XObject dict"),
+    };
+    let first = xobjects
+        .values()
+        .next()
+        .and_then(Object::as_reference)
+        .expect("xobject ref");
+    doc.resolve(first)
+        .unwrap()
+        .as_stream()
+        .unwrap()
+        .dict
+        .clone()
 }
 
 /// The `/Count` value of the root `/Pages` node (independent of the page-tree

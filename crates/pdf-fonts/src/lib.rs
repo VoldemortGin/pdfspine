@@ -21,18 +21,22 @@
 //!
 //! - **Adobe Glyph List** (`data/glyphlist.txt`, **BSD-3-Clause**, Adobe) is
 //!   embedded verbatim — see `data/PROVENANCE.md` and `data/NOTICE`.
-//! - **Core-14 AFM width metrics are NOT bundled** (documented gap): no
-//!   recognized-permissive source was cleared, so per the license-cleanliness
-//!   thesis the width table is empty and unembedded standard-14 fonts without
-//!   `/Widths` fall back to `/MissingWidth`. See [`widths::core14_width`].
+//! - **Core-14 standard advance widths** are a built-in factual-metrics table
+//!   ([`std_widths`]): the numeric AFM `WX` values of the 14 standard typefaces
+//!   (ISO 32000-1 §9.6.2.2), used by `insert_text` to place/advance Base-14
+//!   text. Numeric metric facts are not copyrightable expression — see
+//!   `data/PROVENANCE.md`. The AGL-glyph-name [`widths::core14_width`] hook is
+//!   unchanged (still returns `None`).
 
 pub mod cmap;
 pub mod encodings;
 pub mod glyphlist;
 pub mod mapper;
 pub mod predefined;
+pub mod std_widths;
 pub mod widths;
 
 pub use cmap::{CMap, CodespaceRange};
 pub use encodings::BaseEncoding;
 pub use mapper::{CodeIter, FontKind, FontMapper};
+pub use std_widths::{standard_font_widths, string_advance, StandardWidths};
