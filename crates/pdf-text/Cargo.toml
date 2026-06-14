@@ -12,6 +12,7 @@ description = "Content-stream text interpreter, TextPage, get_text formats and s
 pdf-core.workspace = true
 pdf-fonts.workspace = true
 smol_str.workspace = true
+unicode-normalization.workspace = true
 
 [dev-dependencies]
 proptest.workspace = true

@@ -9,6 +9,7 @@
 //! types are re-exported from [`pdf_core::geom`].
 
 pub mod error;
+pub mod text;
 
 use std::path::Path;
 use std::sync::Arc;
@@ -20,6 +21,19 @@ use pdf_core::{DocumentStore, Limits, ObjRef};
 pub use error::{Error, Result};
 pub use pdf_core::page::Page;
 pub use pdf_core::repair::ParseMode;
+
+// Page inventory + reusable text-extraction surface (M2e). The PyO3 layer calls
+// these free functions (the orphan rule forbids inherent `impl Page` here, since
+// `Page` is defined in `pdf-core`).
+pub use text::{
+    get_fonts, get_images, get_text, search, textpage, FontInfo, ImageInfo, TextOutput,
+};
+
+// `pdf-text` types the bindings need so they only depend on `pdf-api` (PRD §9.1).
+pub use pdf_text::{
+    defaults, BlockTuple, DictBlock, DictChar, DictImageBlock, DictLine, DictSpan, DictTextBlock,
+    SearchOptions, TextDict, TextPage, WordTuple,
+};
 
 /// The crate version string (the workspace version), surfaced to Python as
 /// `oxipdf.__version__`.

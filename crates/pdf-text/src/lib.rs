@@ -18,6 +18,7 @@
 pub mod interp;
 pub mod layout;
 pub mod model;
+pub mod search;
 pub mod serialize;
 pub mod state;
 pub mod tokenizer;
@@ -32,6 +33,7 @@ pub use model::{
     flags, Block, BlockKind, Char, ImageBlock, ImageRef, InterpretResult, Line, PositionedGlyph,
     Span, TextPage, Word, WritingDir,
 };
+pub use search::{search, SearchOptions};
 pub use serialize::{
     defaults, get_textbox, textflags, to_blocks, to_dict, to_html, to_json, to_text, to_words,
     to_xhtml, to_xml, BlockTuple, DictBlock, DictChar, DictImageBlock, DictLine, DictSpan,

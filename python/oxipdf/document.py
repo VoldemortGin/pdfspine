@@ -14,18 +14,14 @@ from typing import Iterator
 
 from . import _core
 from ._core import PdfUnsupportedError
-from .geometry import Rect
+from .geometry import Point, Quad, Rect
 
 # PyMuPDF methods/properties that exist on the real API but land in later
 # milestones. Accessing them raises a typed, catchable error with a hint, not
 # AttributeError (PRD §9.5).
 _UNIMPLEMENTED_PAGE = {
-    "get_text": "text extraction (M2)",
-    "get_textpage": "text extraction (M2)",
-    "search_for": "text search (M2)",
     "get_pixmap": "rendering / image pages (M5/M6)",
     "get_drawings": "vector drawings (M4)",
-    "get_images": "image inventory (M2)",
     "get_links": "links (M3)",
     "annots": "annotations (M4)",
     "insert_text": "content emission (M4)",
@@ -45,6 +41,70 @@ _UNIMPLEMENTED_DOC = {
 
 def _rect(t: tuple[float, float, float, float]) -> Rect:
     return Rect(*t)
+
+
+def _as_clip(clip) -> tuple[float, float, float, float] | None:
+    """Normalizes a clip argument (``Rect``/sequence/``None``) to a 4-tuple."""
+    if clip is None:
+        return None
+    return (float(clip[0]), float(clip[1]), float(clip[2]), float(clip[3]))
+
+
+def _quad_from_corners(t: tuple[float, ...]) -> Quad:
+    """Builds a :class:`Quad` from the corner-coord 8-tuple
+    ``(ul.x, ul.y, ur.x, ur.y, ll.x, ll.y, lr.x, lr.y)`` the core returns."""
+    return Quad(
+        Point(t[0], t[1]),
+        Point(t[2], t[3]),
+        Point(t[4], t[5]),
+        Point(t[6], t[7]),
+    )
+
+
+def _rect_from_corners(t: tuple[float, ...]) -> Rect:
+    """The enclosing :class:`Rect` of the corner-coord 8-tuple."""
+    xs = (t[0], t[2], t[4], t[6])
+    ys = (t[1], t[3], t[5], t[7])
+    return Rect(min(xs), min(ys), max(xs), max(ys))
+
+
+class TextPage:
+    """A reusable text-extraction handle (PyMuPDF ``fitz.TextPage``).
+
+    Built by :meth:`Page.get_textpage`; pass it back to
+    :meth:`Page.get_text` / :meth:`Page.search_for` via ``textpage=`` to avoid
+    re-parsing the page (PRD §9.4).
+    """
+
+    __slots__ = ("_tp",)
+
+    def __init__(self, core_tp: "_core.TextPage") -> None:
+        self._tp = core_tp
+
+    def extractText(self) -> str:
+        return self._tp.extractText()
+
+    def extractWORDS(self) -> list[tuple]:
+        return self._tp.extractWORDS()
+
+    def extractBLOCKS(self) -> list[tuple]:
+        return self._tp.extractBLOCKS()
+
+    def extractDICT(self) -> dict:
+        return self._tp.extractDICT()
+
+    def extractRAWDICT(self) -> dict:
+        return self._tp.extractRAWDICT()
+
+    def extractJSON(self) -> str:
+        return self._tp.extractJSON()
+
+    @property
+    def rect(self) -> Rect:
+        return Rect(0.0, 0.0, self._tp.width, self._tp.height)
+
+    def __repr__(self) -> str:
+        return repr(self._tp)
 
 
 class Page:
@@ -83,6 +143,70 @@ class Page:
     def rotation(self) -> int:
         """The normalized rotation ∈ {0, 90, 180, 270} (PyMuPDF ``page.rotation``)."""
         return self._page.rotation()
+
+    # --- text extraction (PRD §8.6 / §9.4) ---
+    def get_textpage(self, flags: int | None = None, clip=None) -> TextPage:
+        """Builds a reusable :class:`TextPage` (PyMuPDF ``page.get_textpage``)."""
+        return TextPage(self._page.get_textpage(flags, _as_clip(clip)))
+
+    def get_text(
+        self,
+        option: str = "text",
+        *,
+        clip=None,
+        flags: int | None = None,
+        textpage: TextPage | None = None,
+        sort: bool = False,
+    ):
+        """Extracts text (PyMuPDF ``page.get_text``).
+
+        Returns the native object per ``option``: ``str`` for
+        ``text``/``html``/``xhtml``/``xml``/``json``/``rawjson``;
+        ``list[tuple]`` for ``blocks``/``words``; ``dict`` for
+        ``dict``/``rawdict``. Reuses ``textpage`` when given; ``sort`` orders
+        blocks by ``(y, x)``.
+        """
+        tp = textpage._tp if textpage is not None else None
+        return self._page.get_text(
+            option, clip=_as_clip(clip), flags=flags, textpage=tp, sort=sort
+        )
+
+    def search_for(
+        self,
+        needle: str,
+        *,
+        hit_max: int = 0,
+        quads: bool = False,
+        clip=None,
+        flags: int | None = None,
+        textpage: TextPage | None = None,
+    ) -> list:
+        """Searches for ``needle`` (PyMuPDF ``page.search_for``).
+
+        Returns a list of :class:`Quad` (``quads=True``) or :class:`Rect`
+        (default), each overlapping a hit.
+        """
+        tp = textpage._tp if textpage is not None else None
+        hits = self._page.search_for(
+            needle,
+            hit_max=hit_max,
+            quads=quads,
+            clip=_as_clip(clip),
+            flags=flags,
+            textpage=tp,
+        )
+        if quads:
+            return [_quad_from_corners(h) for h in hits]
+        return [_rect_from_corners(h) for h in hits]
+
+    # --- inventory (PRD §8.6) ---
+    def get_fonts(self, full: bool = False) -> list[tuple]:
+        """The page's fonts as PyMuPDF tuples (PyMuPDF ``page.get_fonts``)."""
+        return self._page.get_fonts(full)
+
+    def get_images(self, full: bool = False) -> list[tuple]:
+        """The page's images as PyMuPDF tuples (PyMuPDF ``page.get_images``)."""
+        return self._page.get_images(full)
 
     def __repr__(self) -> str:
         return f"<oxipdf.Page number={self.number}>"
@@ -151,6 +275,18 @@ class Document:
     def authenticate(self, password) -> bool:
         """Authenticates ``password`` (str or bytes). Returns True on success."""
         return self._doc.authenticate(password)
+
+    # --- text convenience ---
+    def get_page_text(
+        self,
+        pno: int,
+        option: str = "text",
+        *,
+        flags: int | None = None,
+        sort: bool = False,
+    ):
+        """Extracts text from page ``pno`` (PyMuPDF ``Document.get_page_text``)."""
+        return self._doc.get_page_text(pno, option, flags=flags, sort=sort)
 
     @property
     def metadata(self) -> dict[str, str]:

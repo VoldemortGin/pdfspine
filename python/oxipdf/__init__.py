@@ -22,7 +22,7 @@ from ._core import (
     identity_matrix,
     version,
 )
-from .document import Document, Page, open
+from .document import Document, Page, TextPage, open
 from .geometry import IRect, Matrix, Point, Quad, Rect
 
 __version__: str = _core.__version__
@@ -34,6 +34,7 @@ __all__ = [
     "open",
     "Document",
     "Page",
+    "TextPage",
     "Rect",
     "IRect",
     "Point",

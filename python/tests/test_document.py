@@ -141,7 +141,7 @@ def test_pydoc_004_unimplemented_raises(two_page_path):
     doc = oxipdf.open(two_page_path)
     page = doc[0]
     with pytest.raises(oxipdf.PdfUnsupportedError):
-        page.get_text()
+        page.get_pixmap()
     with pytest.raises(oxipdf.PdfUnsupportedError):
         doc.get_toc()
     # An attribute that does not exist at all is still AttributeError.

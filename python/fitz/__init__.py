@@ -27,6 +27,7 @@ from oxipdf import (
     Point,
     Quad,
     Rect,
+    TextPage,
     __version__,
     open,
 )
@@ -48,6 +49,7 @@ __all__ = [
     "open",
     "Document",
     "Page",
+    "TextPage",
     "Rect",
     "IRect",
     "Point",

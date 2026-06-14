@@ -1116,3 +1116,90 @@ oxipdf-defined valid serializations (Tier-B, §6.1); inline goldens human-valida
 | `SERIAL-PROP-002` | dict block/line/span counts == model | PRD §10.7 | green |
 | `SERIAL-PROP-003` | every serializer never panics on arbitrary glyph lists | PRD §8.1 | green |
 | `SERIAL-PROP-004` | json always parses for arbitrary pages | PRD §8.6.2 | green |
+
+## M2e — search + inventory + reusable TextPage + PyO3/fitz wiring (M2 exit)
+
+Completes M2 (PRD §8.6, §9.4, §9.5, §12). Adds `search` over a `TextPage`,
+`get_fonts`/`get_images` page inventory, a reusable `TextPage` handle, the PyO3
+`get_text`/`search_for`/`get_fonts`/`get_images`/`get_textpage` surface (native
+Python objects, GIL released around the heavy work), the `fitz`-shim text
+methods, and the **M2 accuracy exit gate**. Self-generated fixtures only
+(PRD §10). Rust tests live in `crates/pdf-text/tests/search_*.rs` and
+`crates/pdf-api/tests/inventory_unit.rs` / `textpage_reuse.rs`; Python tests in
+`python/tests/test_text.py`.
+
+### Search over a TextPage (`search.rs`) — `SEARCH-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `SEARCH-001` | single hit → one quad overlapping the word | PRD §8.6 | green |
+| `SEARCH-002` | multiple hits on a page → one quad each, in reading order | PRD §8.6 | green |
+| `SEARCH-003` | case-insensitive by default (`Hello` finds `hello`) | PRD §8.6 | green |
+| `SEARCH-004` | Unicode-normalized compare (NFC vs NFD) | PRD §8.6 | green |
+| `SEARCH-005` | match across spans within a line → one quad | PRD §8.6 | green |
+| `SEARCH-006` | match spanning a line break → one quad per line | PRD §8.6 | green |
+| `SEARCH-007` | `hit_max` caps the number of returned hits | PRD §8.6 | green |
+| `SEARCH-008` | `clip` rect restricts hits to intersecting geometry | PRD §8.6 | green |
+| `SEARCH-009` | not found → empty Vec | PRD §8.6 | green |
+| `SEARCH-010` | `quads=false` enclosing `Rect`; `quads=true` `Quad`s | PRD §8.6 | green |
+| `SEARCH-011` | empty needle → empty Vec (no panic) | PRD §8.6 | green |
+
+### Page font inventory (`inventory.rs`) — `FONTS-INV-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `FONTS-INV-001` | one `/Resources /Font` entry → one 7-tuple | PyMuPDF get_fonts | green |
+| `FONTS-INV-002` | tuple = (xref, ext, type, basefont, name, encoding, referencer) | PyMuPDF get_fonts | green |
+| `FONTS-INV-003` | subset tag retained in basefont (full name) | PyMuPDF get_fonts | green |
+| `FONTS-INV-004` | Type0 reports descendant subtype + encoding | PyMuPDF get_fonts | green |
+| `FONTS-INV-005` | no fonts → empty Vec | PyMuPDF get_fonts | green |
+| `FONTS-INV-006` | two fonts → two tuples, deduped by xref | PyMuPDF get_fonts | green |
+
+### Page image inventory (`inventory.rs`) — `IMAGES-INV-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `IMAGES-INV-001` | one `/Resources /XObject` image → one 10-tuple | PyMuPDF get_images | green |
+| `IMAGES-INV-002` | tuple = (xref, smask, w, h, bpc, cs, alt_cs, name, filter, referencer) | PyMuPDF get_images | green |
+| `IMAGES-INV-003` | non-image XObject (Form) excluded | PyMuPDF get_images | green |
+| `IMAGES-INV-004` | no images → empty Vec | PyMuPDF get_images | green |
+| `IMAGES-INV-005` | smask xref reported when `/SMask` present | PyMuPDF get_images | green |
+
+### Reusable TextPage (`pdf-api`) — `TEXTPAGE-REUSE-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `TEXTPAGE-REUSE-001` | `Page::textpage` builds once; reused by get_text + search | PRD §9.4 | green |
+| `TEXTPAGE-REUSE-002` | reused TextPage yields identical text to a fresh build | PRD §9.4 | green |
+| `TEXTPAGE-REUSE-003` | search over a reused TextPage equals a fresh search | PRD §9.4 | green |
+
+### Python text surface (`test_text.py`) — `PYTEXT-*` / `PYSEARCH-*` / `PYINV-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `PYTEXT-001` | `get_text("text")` returns known text content | PRD §9.4 | green |
+| `PYTEXT-002` | `get_text("words")` arity-8 tuples with content | PRD §9.4 | green |
+| `PYTEXT-003` | `get_text("dict")` key set + types (bbox tuple, color int, nested) | PRD §9.4 | green |
+| `PYTEXT-004` | `get_text("blocks")` arity-7 tuples | PRD §9.4 | green |
+| `PYTEXT-005` | `get_text("json")` parses to the dict structure | PRD §9.4 | green |
+| `PYTEXT-006` | `get_text("rawdict")` span carries `chars` | PRD §9.4 | green |
+| `PYTEXT-007` | html/xhtml/xml return `str` | PRD §9.4 | green |
+| `PYTEXT-008` | `get_textpage()` handle reused via `textpage=` | PRD §9.4 | green |
+| `PYTEXT-009` | `sort=True` orders blocks by (y, x) | PRD §9.4 | green |
+| `PYSEARCH-001` | `search_for` returns Rect overlapping the known location | PRD §9.4 | green |
+| `PYSEARCH-002` | `quads=True` returns `Quad`s | PRD §9.4 | green |
+| `PYSEARCH-003` | `hit_max` caps results | PRD §9.4 | green |
+| `PYINV-001` | `get_fonts()` returns the expected tuple(s) | PRD §9.4 | green |
+| `PYINV-002` | `get_images()` returns the expected tuple(s) | PRD §9.4 | green |
+| `PYFITZ-TEXT-001` | `fitz.open(...).load_page(0).get_text("dict")` parity | PRD §9.5 | green |
+| `PYFITZ-TEXT-002` | `fitz` search returns fitz `Rect`/`Quad` value types | PRD §9.5 | green |
+
+### M2 accuracy exit gate (`test_text.py`) — `ACCURACY-GT-*`
+
+Normalized-Levenshtein similarity of `get_text("text")` vs known ground truth.
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `ACCURACY-GT-001` | ASCII multi-line PDF → similarity ≥ 0.98 | PRD §12 (~971) | green |
+| `ACCURACY-GT-002` | WinAnsi specials PDF → similarity ≥ 0.98 | PRD §12 (~971) | green |
+| `ACCURACY-GT-003` | Type0/Identity-H CID + ToUnicode PDF → similarity ≥ 0.95 | PRD §12 (~971) | green |
