@@ -1371,3 +1371,118 @@ on `PATH`. Tests live in `crates/pdf-core/tests/incremental_e2e.rs` and
 | `GC-PROP-001` | GC never drops a reachable object (all roots survive every level) | PRD §8.7 | green |
 | `GC-PROP-002` | GC never panics across levels 0..=4 on a simple doc | PRD §8.7 | green |
 | `GC-PROP-003` | garbage=0 is identity (no objects dropped vs plain full save) | PRD §8.7 | green |
+
+## M3c — Page operations + `insert_pdf` merge (`pdf-edit`)
+
+Spec source: PRD §8.7 "Page ops" + `insert_pdf` (lines ~543–567), §12 M3 exit
+(merge order/count/refs correct, shared font deduped single, saved fixtures
+reparse clean). Tests live in `crates/pdf-edit/tests/`. The page tree is
+**normalized to a single-level flat `/Kids` list under the root `/Pages`** on
+first edit (PRD §8.7: flatten is the v1 default, round-trip-safe because
+inherited attributes are materialized onto leaves). `/Pages /Count` and every
+kid's `/Parent` are kept consistent at every step; the live page list is
+re-read from the document on each query.
+
+### Page ops — new / insert / delete (`page_ops.rs`) — `PAGEOPS-NEW-*` / `PAGEOPS-INSERT-*` / `PAGEOPS-DELETE-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `PAGEOPS-NEW-001` | `new_page(index, w, h)` → page_count += 1; new leaf has MediaBox [0 0 w h] + empty Contents | PRD §8.7 | green |
+| `PAGEOPS-NEW-002` | new page inserted at `index`; surrounding page order preserved | PRD §8.7 | green |
+| `PAGEOPS-NEW-003` | after save→reopen, `/Pages /Count` == new count; new page's MediaBox intact | PRD §8.7 | green |
+| `PAGEOPS-NEW-004` | `new_page` at end (index == count) appends | PRD §8.7 | green |
+| `PAGEOPS-INSERT-001` | `insert_page(index, leaf_ref)` splices an existing leaf; count += 1, `/Parent` repointed | PRD §8.7 | green |
+| `PAGEOPS-INSERT-002` | inserted page appears at `index` by identifiable content after reopen | PRD §8.7 | green |
+| `PAGEOPS-DELETE-001` | `delete_page(index)` → count -= 1; the right page removed (by content) | PRD §8.7 | green |
+| `PAGEOPS-DELETE-002` | delete first / last / middle each yield correct remaining order | PRD §8.7 | green |
+| `PAGEOPS-DELETE-003` | after save→reopen, `/Count` consistent and removed content absent | PRD §8.7 | green |
+| `PAGEOPS-DELETE-004` | delete out-of-range index → typed error, no mutation | PRD §8.7 | green |
+
+### Page ops — copy / move (`page_ops.rs`) — `PAGEOPS-COPY-*` / `PAGEOPS-MOVE-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `PAGEOPS-COPY-001` | `copy_page(from, to)` → count += 1; copy shares the source leaf ref (count occurrences) | PRD §8.7 | green |
+| `PAGEOPS-COPY-002` | copied page content equals source content after reopen | PRD §8.7 | green |
+| `PAGEOPS-MOVE-001` | `move_page(from, to)` keeps count; page order reflects the move (by content) | PRD §8.7 | green |
+| `PAGEOPS-MOVE-002` | move is a no-op when from == to | PRD §8.7 | green |
+| `PAGEOPS-MOVE-003` | move backward and forward both correct after reopen | PRD §8.7 | green |
+
+### Page ops — select / subset+reorder (`page_ops.rs`) — `PAGEOPS-SELECT-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `PAGEOPS-SELECT-001` | `select([2,0])` yields exactly those pages in that order; count == 2 | PRD §8.7 | green |
+| `PAGEOPS-SELECT-002` | duplicate indices in `select` duplicate the page | PRD §8.7 | green |
+| `PAGEOPS-SELECT-003` | empty `select([])` yields a zero-page document; `/Count` == 0 | PRD §8.7 | green |
+| `PAGEOPS-SELECT-004` | select identity (`[0,1,2]`) preserves order + content after reopen | PRD §8.7 | green |
+| `PAGEOPS-SELECT-005` | out-of-range index in `select` → typed error | PRD §8.7 | green |
+
+### Page ops — box / rotation setters (`page_ops.rs`) — `PAGEOPS-BOX-*` / `PAGEOPS-ROTATE-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `PAGEOPS-BOX-001` | `set_mediabox(rect)` reflected on `Page::mediabox()` after reopen | PRD §8.7 | green |
+| `PAGEOPS-BOX-002` | `set_cropbox(rect)` clipped to mediabox; reflected after reopen | PRD §8.7 | green |
+| `PAGEOPS-ROTATE-001` | `set_rotation(90)` reflected on `Page::rotation()` after reopen | PRD §8.7 | green |
+| `PAGEOPS-ROTATE-002` | rotation normalized to {0,90,180,270} (e.g. 450 → 90, -90 → 270) | PRD §8.7 | green |
+
+### Page ops — flatten / consistency (`page_ops.rs`) — `PAGEOPS-FLATTEN-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `PAGEOPS-FLATTEN-001` | a nested page tree normalizes to a flat `/Kids` under root on first edit; order preserved | PRD §8.7 | green |
+| `PAGEOPS-FLATTEN-002` | inherited MediaBox/Rotate materialized onto leaves after flatten | PRD §8.7 | green |
+| `PAGEOPS-FLATTEN-003` | every leaf's `/Parent` points at the root `/Pages` after flatten | PRD §8.7 | green |
+
+### insert_pdf — count / range / position (`merge.rs`) — `MERGE-COUNT-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `MERGE-COUNT-001` | `insert_pdf(src)` appends all src pages → dst count += src count | PRD §8.7 | green |
+| `MERGE-COUNT-002` | `from_page`/`to_page` subset inserts only the selected range | PRD §8.7 | green |
+| `MERGE-COUNT-003` | `start_at` splices the copied pages at that position | PRD §8.7 | green |
+| `MERGE-COUNT-004` | after save→reopen, `/Pages /Count` == merged count | PRD §8.7 | green |
+| `MERGE-COUNT-005` | reversed range (`from > to`) inserts pages in reverse order | PRD §8.7 | green |
+
+### insert_pdf — order (`merge.rs`) — `MERGE-ORDER-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `MERGE-ORDER-001` | appended pages' text appears after dst text, in src order, after reopen | PRD §12 | green |
+| `MERGE-ORDER-002` | `start_at=0` prepends; interleaved order correct by content | PRD §12 | green |
+| `MERGE-ORDER-003` | a page-range subset preserves intra-range order | PRD §12 | green |
+
+### insert_pdf — refs / extractability (`merge.rs`) — `MERGE-REFS-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `MERGE-REFS-001` | all references in copied pages resolve in dst (no dangling) | PRD §12 | green |
+| `MERGE-REFS-002` | copied objects get fresh numbers, no collision with dst objects | PRD §12 | green |
+| `MERGE-REFS-003` | `get_text` on a merged page returns the source page's text | PRD §12 | green |
+| `MERGE-REFS-004` | saved merged doc reparses clean (reopen + optional `qpdf --check`) | PRD §12 | green |
+
+### insert_pdf — shared-object dedup (`merge.rs`) — `MERGE-DEDUP-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `MERGE-DEDUP-001` | a font shared by two src pages is copied **once**; both copies reference it | PRD §12 | green |
+| `MERGE-DEDUP-002` | a shared XObject is copied once (count copies in dst) | PRD §12 | green |
+| `MERGE-DEDUP-003` | a cyclic ref graph in src is copied without infinite loop | PRD §8.7 | green |
+
+### insert_pdf — inherited attrs / rotate / robustness (`merge.rs`) — `MERGE-PROP-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `MERGE-PROP-001` | inherited MediaBox on src pages is materialized onto copied leaves | PRD §8.7 | green |
+| `MERGE-PROP-002` | `rotate` option applied to inserted pages (reflected after reopen) | PRD §8.7 | green |
+| `MERGE-PROP-003` | self-insert (src structurally == dst) never panics; count doubles | PRD §8.7 | green |
+| `MERGE-PROP-004` | inserting from an empty range is a no-op (count unchanged) | PRD §8.7 | green |
+
+### split / extract (`merge.rs`) — `SPLIT-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `SPLIT-001` | `extract_pages([1])` → new 1-page doc bytes; reopens; text == source page 1 | PRD §8.7 | green |
+| `SPLIT-002` | `extract_pages([0,2])` → 2-page doc in that order | PRD §8.7 | green |
+| `SPLIT-003` | extracted doc has its own self-contained object graph (no dangling refs) | PRD §8.7 | green |
