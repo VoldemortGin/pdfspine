@@ -52,6 +52,12 @@ pub struct PositionedGlyph {
     pub render_mode: u8,
     /// The writing direction in effect.
     pub writing_dir: WritingDir,
+    /// The font ascender normalized to a unit font size (`/Ascent ÷ 1000`),
+    /// matching PyMuPDF's span `ascender` (PRD §8.6.2, §10.7).
+    pub ascender: f64,
+    /// The font descender normalized to a unit font size (`/Descent ÷ 1000`,
+    /// usually negative), matching PyMuPDF's span `descender`.
+    pub descender: f64,
 }
 
 impl PositionedGlyph {
@@ -145,6 +151,15 @@ pub struct Span {
     pub flags: u32,
     /// The fill color packed as `0x00RRGGBB` sRGB.
     pub color: u32,
+    /// The font ascender normalized to a unit font size (PyMuPDF span
+    /// `ascender`; PRD §10.7).
+    pub ascender: f64,
+    /// The font descender normalized to a unit font size, usually negative
+    /// (PyMuPDF span `descender`).
+    pub descender: f64,
+    /// The origin (baseline, left edge) of the span's first char, device space
+    /// (PyMuPDF span `origin`).
+    pub origin: Point,
     /// The per-character detail (rawdict-level).
     pub chars: Vec<Char>,
     /// The span text (concatenation of `chars[i].c`), the dict-level field.

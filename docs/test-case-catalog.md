@@ -1012,3 +1012,107 @@ self-built PDFs (reuse `tests/common`). No PyMuPDF files.
 |---|---|---|---|
 | `LAYOUT-E2E-001` | 2-line/2-word PDF → exact block/line/span/word + text | PRD §8.6 | green |
 | `LAYOUT-E2E-002` | `build_textpage` from a real page → device-space structure | PRD §8.6 | green |
+
+## M2d — `get_text` serializers + TEXTFLAGS (`pdf-text`)
+
+Serializes a `&TextPage` into every PyMuPDF `get_text` output (text / blocks /
+words / dict / rawdict / json / rawjson / html / xhtml / xml + `get_textbox`)
+and pins the per-method `TEXTFLAGS_*` default flag sets (PRD §8.6.2, §10.7).
+dict/rawdict/blocks/words/json shapes match PyMuPDF's **documented** shape
+(Tier-A, §6.1); html/xhtml/xml are **oxipdf-defined** valid serializations with
+their own inline goldens (Tier-B, §6.1). TextPages are built from self-made
+glyph lists via `textpage_from_glyphs` (no PyMuPDF files). Tests live in
+`crates/pdf-text/tests/serialize_*.rs`.
+
+### TEXTFLAGS values + per-method defaults (`serialize.rs`) — `TEXTFLAGS-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `TEXTFLAGS-VALUE-001` | `TEXT_*` bit values match PyMuPDF (1,2,4,8,16,32,64,128) | PRD §8.6.2 | green |
+| `TEXTFLAGS-DEFAULT-001` | `text`/`blocks`/`words` default = LIGATURES\|WHITESPACE\|MEDIABOX_CLIP (67) | PRD §8.6.2 | green |
+| `TEXTFLAGS-DEFAULT-002` | `dict`/`rawdict`/`json`/`rawjson` default = +PRESERVE_IMAGES (71) | PRD §8.6.2 | green |
+| `TEXTFLAGS-DEFAULT-003` | `html`/`xhtml` default = 71 (images on) | PRD §8.6.2 | green |
+| `TEXTFLAGS-DEFAULT-004` | `xml` default = LIGATURES\|WHITESPACE\|MEDIABOX_CLIP (67) | PRD §8.6.2 | green |
+
+### Plain text (`serialize.rs`) — `SERIAL-TEXT-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `SERIAL-TEXT-001` | words on a line joined; line ends with `\n` | PRD §8.6 | green |
+| `SERIAL-TEXT-002` | two lines in a block → `\n`-separated, trailing `\n` | PRD §8.6 | green |
+| `SERIAL-TEXT-003` | two blocks → separated by a blank line | PRD §8.6 | green |
+| `SERIAL-TEXT-004` | empty page → empty string, no panic | PRD §8.6 | green |
+| `SERIAL-TEXT-005` | hyphen kept by default (no dehyphenation) | PRD §8.6.2 | green |
+| `SERIAL-TEXT-006` | DEHYPHENATE flag joins a line-broken hyphenated word | PRD §8.6.2 | green |
+| `SERIAL-TEXT-007` | image block contributes no text | PRD §8.6.2 | green |
+
+### get_textbox clip (`serialize.rs`) — `SERIAL-TEXTBOX-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `SERIAL-TEXTBOX-001` | clip rect selects only intersecting lines | PRD §8.6.2 | green |
+| `SERIAL-TEXTBOX-002` | clip outside all content → empty string | PRD §8.6.2 | green |
+
+### blocks (`serialize.rs`) — `SERIAL-BLOCKS-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `SERIAL-BLOCKS-001` | tuple arity 7 `(x0,y0,x1,y1,text,no,type)` | PRD §8.6.2 | green |
+| `SERIAL-BLOCKS-002` | text block type=0; block_no monotonic | PRD §8.6.2 | green |
+| `SERIAL-BLOCKS-003` | block text is its lines joined by `\n` (trailing `\n`) | PRD §8.6.2 | green |
+| `SERIAL-BLOCKS-004` | image block type=1 when PRESERVE_IMAGES on | PRD §8.6.2 | green |
+| `SERIAL-BLOCKS-005` | image block omitted when PRESERVE_IMAGES off | PRD §8.6.2 | green |
+
+### words (`serialize.rs`) — `SERIAL-WORDS-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `SERIAL-WORDS-001` | tuple arity 8 `(x0,y0,x1,y1,word,b,l,w)` | PRD §10.7 | green |
+| `SERIAL-WORDS-002` | `(block,line,word)` numbering matches segmenter | PRD §10.7 | green |
+| `SERIAL-WORDS-003` | image blocks contribute no words | PRD §8.6.2 | green |
+
+### dict / rawdict tree (`serialize.rs`) — `DICT-*` / `RAWDICT-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `DICT-001` | top has width/height/blocks | PRD §10.7 | green |
+| `DICT-002` | text block keys type/bbox/number/lines | PRD §10.7 | green |
+| `DICT-003` | line keys bbox/wmode/dir/spans | PRD §10.7 | green |
+| `DICT-004` | span keys size/flags/font/color/ascender/descender/origin/bbox/text | PRD §10.7 | green |
+| `DICT-005` | span color is an int (sRGB) | PRD §10.7 | green |
+| `DICT-006` | dict-mode span carries `text`, no `chars` | PRD §10.7 | green |
+| `DICT-007` | image block keys (type=1, width/height/ext/colorspace/bpc/transform/size/image) | PRD §10.7 | green |
+| `DICT-008` | empty page → blocks empty, width/height set | PRD §10.7 | green |
+| `RAWDICT-001` | rawdict span carries `chars`, not `text` | PRD §10.7 | green |
+| `RAWDICT-002` | each char has origin/bbox/c | PRD §10.7 | green |
+| `RAWDICT-003` | char `c` is a single-scalar string | PRD §10.7 | green |
+
+### json / rawjson (`serialize.rs`) — `JSON-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `JSON-001` | output parses as valid JSON | PRD §8.6.2 | green |
+| `JSON-002` | bbox serialized as a 4-array | PRD §8.6.2 | green |
+| `JSON-003` | json span has `text`; rawjson span has `chars` | PRD §8.6.2 | green |
+| `JSON-004` | image block `image` is a base64 string (placeholder) | PRD §8.6.2 | green |
+| `JSON-005` | top width/height/blocks present, deterministic key order | PRD §8.6.2 | green |
+
+### html / xhtml / xml goldens (`serialize_golden.rs`) — `HTML-*` / `XHTML-*` / `XML-*`
+
+oxipdf-defined valid serializations (Tier-B, §6.1); inline goldens human-validated.
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `HTML-001` | positioned-block html golden (well-formed, oxipdf-defined) | PRD §6.1 | green |
+| `XHTML-001` | semantic xhtml golden (well-formed, oxipdf-defined) | PRD §6.1 | green |
+| `XML-001` | char-level xml golden (well-formed, oxipdf-defined) | PRD §6.1 | green |
+| `XML-002` | xml escapes `<`/`>`/`&`/quotes in char data and attrs | PRD §6.1 | green |
+
+### Properties (`serialize_property.rs`) — `SERIAL-PROP-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `SERIAL-PROP-001` | words-concat ≈ text (whitespace-normalized) | PRD §8.6.2 | green |
+| `SERIAL-PROP-002` | dict block/line/span counts == model | PRD §10.7 | green |
+| `SERIAL-PROP-003` | every serializer never panics on arbitrary glyph lists | PRD §8.1 | green |
+| `SERIAL-PROP-004` | json always parses for arbitrary pages | PRD §8.6.2 | green |

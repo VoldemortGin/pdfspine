@@ -532,6 +532,8 @@ impl<'a> ContentInterpreter<'a> {
             color: gs.fill_color,
             render_mode: ts.render_mode,
             writing_dir: WritingDir::Horizontal,
+            ascender: asc,
+            descender: desc,
         });
 
         // Advance: tx = ((w0)·Tfs + Tc + Tw_if_space)·Th  (w0 already /1000).

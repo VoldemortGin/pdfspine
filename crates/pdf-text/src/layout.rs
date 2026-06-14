@@ -157,6 +157,10 @@ struct DevGlyph {
     wmode: u8,
     /// Writing-direction unit vector `(cos, sin)` in device space.
     dir: (f64, f64),
+    /// Font ascender normalized to a unit font size (PyMuPDF span `ascender`).
+    ascender: f64,
+    /// Font descender normalized to a unit font size (PyMuPDF span `descender`).
+    descender: f64,
 }
 
 impl DevGlyph {
@@ -184,6 +188,8 @@ impl DevGlyph {
             flags,
             wmode,
             dir,
+            ascender: g.ascender,
+            descender: g.descender,
         }
     }
 
@@ -420,6 +426,9 @@ fn build_line(glyphs: &[&DevGlyph]) -> Line {
                 size: g.size,
                 flags: gflags,
                 color: g.color,
+                ascender: g.ascender,
+                descender: g.descender,
+                origin: g.origin,
                 chars: Vec::new(),
                 text: String::new(),
             });

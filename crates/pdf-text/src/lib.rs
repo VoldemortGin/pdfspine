@@ -18,6 +18,7 @@
 pub mod interp;
 pub mod layout;
 pub mod model;
+pub mod serialize;
 pub mod state;
 pub mod tokenizer;
 pub mod words;
@@ -30,6 +31,11 @@ pub use layout::{build_textpage, page_size, page_transform, textpage_from_glyphs
 pub use model::{
     flags, Block, BlockKind, Char, ImageBlock, ImageRef, InterpretResult, Line, PositionedGlyph,
     Span, TextPage, Word, WritingDir,
+};
+pub use serialize::{
+    defaults, get_textbox, textflags, to_blocks, to_dict, to_html, to_json, to_text, to_words,
+    to_xhtml, to_xml, BlockTuple, DictBlock, DictChar, DictImageBlock, DictLine, DictSpan,
+    DictTextBlock, TextDict, WordTuple,
 };
 pub use words::words;
 

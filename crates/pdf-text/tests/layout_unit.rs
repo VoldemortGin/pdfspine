@@ -37,6 +37,8 @@ fn glyph_styled(c: &str, ox: f64, oy: f64, size: f64, font: &str, color: u32) ->
         color,
         render_mode: 0,
         writing_dir: WritingDir::Horizontal,
+        ascender: 0.7,
+        descender: -0.2,
     }
 }
 
