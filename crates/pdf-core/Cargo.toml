@@ -10,6 +10,7 @@ description = "oxipdf core: object model, lexer/parser, xref, filters, writer, g
 
 [dependencies]
 thiserror.workspace = true
+bytes.workspace = true
 pdf-crypto = { workspace = true, optional = true }
 
 [dev-dependencies]

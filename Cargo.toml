@@ -41,6 +41,7 @@ pdf-api = { path = "crates/pdf-api", version = "0.0.0" }
 # --- shared third-party deps (versions per PRD §11.1) ---
 thiserror = "2"
 pyo3 = "0.29"
+bytes = "1"
 
 # --- shared dev-deps ---
 proptest = "1"

@@ -2,7 +2,16 @@
 //! `pdf-core` — oxipdf core: object model, lexer/parser, xref (table + stream),
 //! trailer, repair, filters, writer, `DocumentStore`. No domain logic.
 //!
-//! In M0 only the [`geom`] module is implemented (PyMuPDF-compatible geometry
-//! value types). Parsing, filters and the writer land in M1+ per PRD §7.
+//! M0 implemented the [`geom`] module (PyMuPDF-compatible geometry value types).
+//! M1a adds the [`lexer`] (byte tokenizer), the [`object`] model + parser, the
+//! [`serialize`] writer and the core [`Error`] type. Xref, filters, encryption
+//! and pages land in later M1 units per PRD §7.
 
+pub mod error;
 pub mod geom;
+pub mod lexer;
+pub mod object;
+pub mod serialize;
+
+pub use error::{Error, Result};
+pub use object::{Dict, Name, ObjRef, Object, PdfString, StreamData, StreamObj, StringKind};

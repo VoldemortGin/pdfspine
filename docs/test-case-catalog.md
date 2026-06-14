@@ -120,8 +120,82 @@ docs. Tests live in `crates/pdf-core/tests/geom_unit.rs` (unit) and
 
 ---
 
+## M1a — Lexer/tokenizer + object model + serializer (`pdf-core`)
+
+Spec source of truth: ISO 32000-1 §7.2 (lexical conventions), §7.3 (objects),
+§7.3.8 (streams). Implements PRD §8.1 (tokenizer / object types) and §9.2 (core
+data model). Tests live in `crates/pdf-core/tests/lexer_unit.rs`,
+`crates/pdf-core/tests/object_unit.rs`, `crates/pdf-core/tests/serialize_unit.rs`
+(unit) and `crates/pdf-core/tests/objmodel_property.rs` (property). Design center
+(PRD §8.1): the lexer is **total** — arbitrary / truncated input yields a typed
+error or EOF token, never a panic or out-of-bounds.
+
+### Lexer — token kinds (`LEXER-*`)
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `LEXER-001` | whitespace (incl. NUL, FF, CR, LF, TAB, SP) is skipped between tokens | ISO 32000-1 §7.2.2 | green |
+| `LEXER-002` | comment `%`…EOL skipped; not inside strings | ISO 32000-1 §7.2.3 | green |
+| `LEXER-003` | integer literal (`0`, `123`, `+17`, `-98`) | ISO 32000-1 §7.3.3 | green |
+| `LEXER-004` | real literal `34.5`, `-3.62`, `+.002`, `4.` (trailing dot), `.5` (leading dot) | ISO 32000-1 §7.3.3 | green |
+| `LEXER-005` | real with exponent `1e3`, `1.2E-2` tolerated (PRD §8.1) | PRD §8.1 | green |
+| `LEXER-006` | literal string `(...)` with escapes `\n \r \t \b \f \( \) \\` | ISO 32000-1 §7.3.4.2 | green |
+| `LEXER-007` | literal string octal escape `\ddd` (1–3 digits, overflow wraps mod 256) | ISO 32000-1 §7.3.4.2 | green |
+| `LEXER-008` | literal string line-continuation `\`+EOL elides newline | ISO 32000-1 §7.3.4.2 | green |
+| `LEXER-009` | literal string balanced nested parens + raw newlines | ISO 32000-1 §7.3.4.2 | green |
+| `LEXER-010` | hex string `<48656C6C6F>`; whitespace skipped inside | ISO 32000-1 §7.3.4.3 | green |
+| `LEXER-011` | hex string odd nibble count → pad trailing `0` | ISO 32000-1 §7.3.4.3 | green |
+| `LEXER-012` | name `/Name`; `/` = empty name | ISO 32000-1 §7.3.5 | green |
+| `LEXER-013` | name `#XX` hex escape decoded (`/A#42` → `AB`) | ISO 32000-1 §7.3.5 | green |
+| `LEXER-014` | dict delimiters `<<` / `>>` | ISO 32000-1 §7.3.7 | green |
+| `LEXER-015` | array delimiters `[` / `]` | ISO 32000-1 §7.3.6 | green |
+| `LEXER-016` | keywords `obj endobj stream endstream R true false null xref trailer startxref` | ISO 32000-1 §7.3 | green |
+| `LEXER-017` | keyword vs name disambiguation (`true` keyword, `/true` name) | ISO 32000-1 §7.3 | green |
+| `LEXER-018` | EOF token at end of input; repeated `next` stays EOF | — | green |
+| `LEXER-019` | truncated literal string → typed `Err`, no panic | PRD §8.1 | green |
+| `LEXER-020` | truncated hex string → typed `Err`, no panic | PRD §8.1 | green |
+| `LEXER-021` | truncated name escape (`/A#`) → typed `Err`, no panic | PRD §8.1 | green |
+| `LEXER-022` | regular-character run after a number boundary (delimiter ends token) | ISO 32000-1 §7.2.2 | green |
+| `LEXER-PROP-001` | tokenizing arbitrary bytes never panics; terminates at EOF | PRD §8.1 / §10.2 | green |
+
+### Object parser (`OBJ-*`)
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `OBJ-001` | parse `null` / `true` / `false` | ISO 32000-1 §7.3.2/§7.3.9 | green |
+| `OBJ-002` | parse integer and real | ISO 32000-1 §7.3.3 | green |
+| `OBJ-003` | parse literal & hex string into `PdfString` (bytes + kind) | ISO 32000-1 §7.3.4 | green |
+| `OBJ-004` | parse name into `Name` (decoded) | ISO 32000-1 §7.3.5 | green |
+| `OBJ-005` | parse empty array `[]` and heterogeneous array | ISO 32000-1 §7.3.6 | green |
+| `OBJ-006` | parse empty dict `<<>>` and nested dict | ISO 32000-1 §7.3.7 | green |
+| `OBJ-007` | parse reference `12 0 R` → `Reference` | ISO 32000-1 §7.3.10 | green |
+| `OBJ-008` | `R` is reference keyword, not a name/keyword object | ISO 32000-1 §7.3.10 | green |
+| `OBJ-009` | nested array containing dict containing reference | ISO 32000-1 §7.3 | green |
+| `OBJ-010` | duplicate dict key → last wins | ISO 32000-1 §7.3.7 / PRD §8.1 | green |
+| `OBJ-011` | indirect object `N G obj <obj> endobj` (no stream) | ISO 32000-1 §7.3.10 | green |
+| `OBJ-012` | indirect stream with correct `/Length` integer body | ISO 32000-1 §7.3.8 | green |
+| `OBJ-013` | indirect stream with no usable `/Length` → scan to `endstream` | ISO 32000-1 §7.3.8 / PRD §8.1 | green |
+| `OBJ-014` | stream EOL after `stream` keyword consumed (CRLF and bare LF) | ISO 32000-1 §7.3.8 | green |
+| `OBJ-015` | truncated indirect object → typed `Err`, no panic | PRD §8.1 | green |
+| `OBJ-016` | unexpected closing delimiter / odd dict token count → typed `Err`, no crash | PRD §8.1 | green |
+
+### Serializer (`SER-*`)
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `SER-001` | scalars: `null`, booleans, integer, real (canonical formatting) | ISO 32000-1 §7.3 | green |
+| `SER-002` | name re-encoded with `#XX` for delimiters / non-regular bytes | ISO 32000-1 §7.3.5 | green |
+| `SER-003` | literal string re-escaped to canonical literal form | ISO 32000-1 §7.3.4.2 | green |
+| `SER-004` | hex string emitted as `<…>` uppercase | ISO 32000-1 §7.3.4.3 | green |
+| `SER-005` | array round-trips; dict keys emitted in BTreeMap order (deterministic) | PRD §9.2 | green |
+| `SER-006` | stream emits a correct `/Length` for the payload | ISO 32000-1 §7.3.8 | green |
+| `SER-007` | `write_indirect(ObjRef, &Object)` emits `N G obj … endobj` | ISO 32000-1 §7.3.10 | green |
+| `SER-PROP-001` | `parse(serialize(o)) == normalize(o)` over generated `Object` | PRD §10.7 | green |
+
+---
+
 ## M1+ (placeholder)
 
-Catalogs for `LEXER-*`, `XREF-*`, `OBJSTM-*`, `FLATE-*`, `REPAIR-*`, `CRYPT-*`,
-`LIMITS-DEFAULT-*` (M1), `WORDS-*` / text formats (M2), etc. are enumerated at
-the start of each milestone per PRD §10.1.1 before implementation begins.
+Catalogs for `XREF-*`, `OBJSTM-*`, `FLATE-*`, `REPAIR-*`, `CRYPT-*`,
+`LIMITS-DEFAULT-*` (M1b–M1f), `WORDS-*` / text formats (M2), etc. are enumerated
+at the start of each milestone per PRD §10.1.1 before implementation begins.
