@@ -24,9 +24,12 @@
 //! # Coverage / documented gaps
 //!
 //! - Glyphs rasterize for **embedded** TrueType (`/FontFile2`) and OpenType/CFF
-//!   (`/FontFile3`) programs. Bare Type1 (`/FontFile` PFB), Type3 (content-stream
-//!   glyphs) and non-embedded standard-14 fonts are **not** rasterized (text
-//!   stays extractable; no license-uncertain substitute font is bundled).
+//!   (`/FontFile3`) programs, and for **Type3** fonts (each glyph is a
+//!   content-stream `/CharProcs` procedure, drawn recursively through the
+//!   `FontMatrix · Trm` mapping — d0/d1, colored/uncolored, depth-guarded).
+//!   Bare Type1 (`/FontFile` PFB) and non-embedded standard-14 fonts are
+//!   **not** rasterized (text stays extractable; no license-uncertain
+//!   substitute font is bundled).
 //! - Images: XObject + inline, Gray/RGB/CMYK, `/SMask` soft masks, stencil
 //!   `/ImageMask`. Tiling patterns and shading-pattern fills are deferred; the
 //!   bare `sh` operator paints axial/radial (types 2 & 3).
@@ -150,7 +153,7 @@ impl DisplayList {
     /// propagates `pdf-core` / `pdf-image` errors during op replay.
     pub fn get_pixmap(&self, doc: &DocumentStore, opts: &RenderOptions) -> Result<Pixmap> {
         let mut canvas = build_canvas(self.cropbox, self.rotate, opts)?;
-        replay(&mut canvas, doc, &self.ops)?;
+        replay(&mut canvas, doc, &self.ops, &RenderCtx::page())?;
         canvas.into_pixmap()
     }
 }
@@ -176,7 +179,7 @@ pub fn render_page(doc: &DocumentStore, page: &Page, opts: &RenderOptions) -> Re
         Some(dict) => interpret_page_render(doc, &dict),
         None => Vec::new(),
     };
-    replay(&mut canvas, doc, &ops)?;
+    replay(&mut canvas, doc, &ops, &RenderCtx::page())?;
     canvas.into_pixmap()
 }
 
@@ -249,15 +252,58 @@ fn render_scale(opts: &RenderOptions) -> Matrix {
 
 // === replay ===============================================================
 
+/// Maximum Type3 glyph-procedure recursion depth (a Type3 glyph whose proc
+/// shows more Type3 text). Guards against runaway / cyclic CharProcs.
+const MAX_TYPE3_DEPTH: u32 = 8;
+
+/// The context an op stream is replayed under.
+///
+/// The page renders with the defaults ([`RenderCtx::page`]); a Type3 glyph
+/// procedure recurses with an `extra_ctm` (the glyph-space → user-space mapping,
+/// `FontMatrix · Trm`) composed on top of every op's geometry, an incremented
+/// `depth` (recursion guard), and — for an **uncolored** (`d1`) glyph — a
+/// `fill_override` that forces every fill to the text's current fill color
+/// (`d1` glyphs take their color from the text state, not the proc).
+#[derive(Clone, Copy)]
+struct RenderCtx {
+    /// Glyph-space → user-space matrix to compose on top of each op's geometry
+    /// (identity for the page; `FontMatrix · Trm` inside a Type3 glyph proc).
+    extra_ctm: Matrix,
+    /// Forced fill color (`Some` for an uncolored `d1` Type3 glyph), else the
+    /// op's own color is used.
+    fill_override: Option<u32>,
+    /// Current Type3 glyph-proc recursion depth (0 at the page).
+    depth: u32,
+}
+
+impl RenderCtx {
+    /// The page-level context: no extra transform, no color override, depth 0.
+    fn page() -> Self {
+        RenderCtx {
+            extra_ctm: Matrix::IDENTITY,
+            fill_override: None,
+            depth: 0,
+        }
+    }
+}
+
 /// Replays an ordered [`RenderOp`] stream onto `canvas`, maintaining the full
 /// graphics state (clip stack via the canvas's own `save`/`restore`).
-fn replay(canvas: &mut Canvas, doc: &DocumentStore, ops: &[RenderOp]) -> Result<()> {
-    // Per-page font program cache: the font dict identity (its BaseFont + a hash
-    // of the FontFile length) is awkward to key, so cache by the program bytes'
-    // pointer is impossible across clones — instead cache the *resolved program
-    // bytes* keyed by a small fingerprint. We key on the font dict's BaseFont +
-    // FontDescriptor object identity is not available; use a Vec of (fingerprint,
-    // bytes) so repeated runs of the same font reuse the parse.
+///
+/// `ctx` carries the Type3 glyph-proc transform / color override / recursion
+/// depth (see [`RenderCtx`]); the page passes [`RenderCtx::page`].
+fn replay(
+    canvas: &mut Canvas,
+    doc: &DocumentStore,
+    ops: &[RenderOp],
+    ctx: &RenderCtx,
+) -> Result<()> {
+    // Per-stream font program cache: the font dict identity (its BaseFont + a
+    // hash of the FontFile length) is awkward to key, so cache by the program
+    // bytes' pointer is impossible across clones — instead cache the *resolved
+    // program bytes* keyed by a small fingerprint. We key on the font dict's
+    // BaseFont + FontDescriptor object identity is not available; use a Vec of
+    // (fingerprint, bytes) so repeated runs of the same font reuse the parse.
     let mut font_cache: FontCache = FontCache::new();
 
     for op in ops {
@@ -271,10 +317,12 @@ fn replay(canvas: &mut Canvas, doc: &DocumentStore, ops: &[RenderOp]) -> Result<
                 alpha,
                 even_odd,
             } => {
-                let paint = Paint::from_rgb_alpha(*color, *alpha);
-                // Geometry already carries the CTM (interpreter applies it), so
-                // replay with an identity CTM on top of the canvas base.
-                fill_items(canvas, items, *close, paint, Matrix::IDENTITY, *even_odd)?;
+                let color = ctx.fill_override.unwrap_or(*color);
+                let paint = Paint::from_rgb_alpha(color, *alpha);
+                // Geometry already carries the CTM (interpreter applies it);
+                // `ctx.extra_ctm` adds the Type3 glyph-space → user-space map
+                // (identity at the page level).
+                fill_items(canvas, items, *close, paint, ctx.extra_ctm, *even_odd)?;
             }
             RenderOp::Stroke {
                 items,
@@ -285,15 +333,17 @@ fn replay(canvas: &mut Canvas, doc: &DocumentStore, ops: &[RenderOp]) -> Result<
                 ctm,
                 dashes,
             } => {
-                let paint = Paint::from_rgb_alpha(*color, *alpha);
-                let dev_scale = scale_for_ctm(*ctm, canvas.base_transform());
+                let color = ctx.fill_override.unwrap_or(*color);
+                let paint = Paint::from_rgb_alpha(color, *alpha);
+                let eff_ctm = Matrix::concat(ctm, &ctx.extra_ctm);
+                let dev_scale = scale_for_ctm(eff_ctm, canvas.base_transform());
                 let style = stroke_style(*width, dev_scale, dashes);
-                stroke_items(canvas, items, *close, paint, &style, Matrix::IDENTITY)?;
+                stroke_items(canvas, items, *close, paint, &style, ctx.extra_ctm)?;
             }
             RenderOp::Clip { items, even_odd } => {
-                set_clip(canvas, items, Matrix::IDENTITY, *even_odd)?;
+                set_clip(canvas, items, ctx.extra_ctm, *even_odd)?;
             }
-            RenderOp::Text(run) => draw_text(canvas, doc, run, &mut font_cache)?,
+            RenderOp::Text(run) => draw_text(canvas, doc, run, &mut font_cache, ctx)?,
             RenderOp::Image(img) => draw_image_op(canvas, doc, img)?,
             RenderOp::Shading(sh) => draw_shading_op(canvas, doc, sh)?,
         }
@@ -388,9 +438,15 @@ fn draw_text(
     doc: &DocumentStore,
     run: &TextRun,
     cache: &mut FontCache,
+    ctx: &RenderCtx,
 ) -> Result<()> {
     if run.glyphs.is_empty() {
         return Ok(());
+    }
+    // Type3 fonts draw each glyph as a content-stream procedure (CharProc),
+    // recursively, rather than rasterizing an outline program.
+    if is_type3(&run.font_dict) {
+        return draw_type3_run(canvas, doc, run, ctx);
     }
     // Resolve + cache the embedded font program bytes.
     let program = match resolve_font_program(doc, &run.font_dict) {
@@ -448,6 +504,221 @@ fn draw_text(
         )?;
     }
     Ok(())
+}
+
+// === Type3 glyph rendering ================================================
+
+/// Whether a font dict is `/Subtype /Type3`.
+fn is_type3(font_dict: &Dict) -> bool {
+    font_dict
+        .get(&Name::new("Subtype"))
+        .and_then(Object::as_name)
+        .and_then(Name::as_str)
+        == Some("Type3")
+}
+
+/// Renders a [`TextRun`] painted in a Type3 font: each shown code resolves to a
+/// glyph name (`/Encoding /Differences`), whose `/CharProcs` content stream is
+/// interpreted and replayed onto `canvas`, transformed from glyph space to
+/// device by `/FontMatrix · Trm` (the per-glyph text-rendering matrix).
+///
+/// The proc draws with the Type3 font's own `/Resources`. A `d0` glyph is
+/// *colored* (the proc sets its own color); a `d1` glyph is *uncolored* (it
+/// paints in the text's current fill color — applied via a fill override). A
+/// missing / unresolvable CharProc draws nothing (never an error). Recursion is
+/// depth-guarded ([`MAX_TYPE3_DEPTH`]).
+fn draw_type3_run(
+    canvas: &mut Canvas,
+    doc: &DocumentStore,
+    run: &TextRun,
+    ctx: &RenderCtx,
+) -> Result<()> {
+    if ctx.depth >= MAX_TYPE3_DEPTH {
+        return Ok(()); // runaway / cyclic CharProc: stop.
+    }
+    // Render mode 3 (invisible) paints nothing.
+    if run.render_mode == 3 {
+        return Ok(());
+    }
+
+    let font_matrix = type3_font_matrix(doc, &run.font_dict);
+    let Some(char_procs) = type3_dict_key(doc, &run.font_dict, "CharProcs") else {
+        return Ok(()); // no glyph procedures: nothing to draw.
+    };
+    let differences = type3_differences(doc, &run.font_dict);
+    let resources = type3_dict_key(doc, &run.font_dict, "Resources").unwrap_or_default();
+
+    for glyph in &run.glyphs {
+        // Resolve the glyph name for this code via /Encoding /Differences.
+        let Some(name) = differences.get(&glyph.code).cloned() else {
+            continue; // unmapped code: no glyph.
+        };
+        // Fetch + decode the CharProc content stream.
+        let Some(proc_bytes) = resolve_charproc(doc, &char_procs, &name) else {
+            continue; // missing CharProc: draw nothing (tolerant).
+        };
+
+        // Per-glyph text-rendering matrix (upright approximation): the
+        // interpreter keeps only the glyph `origin` (= (0,0)·Trm) and `size`
+        // (= Tfs) — rotation/shear are lost (the documented upright-text
+        // approximation). Trm ≈ [Tfs 0 0 Tfs ox oy].
+        let trm = Matrix::new(
+            glyph.size,
+            0.0,
+            0.0,
+            glyph.size,
+            glyph.origin.x,
+            glyph.origin.y,
+        );
+        // glyph space → user space → (page) device: FontMatrix · Trm, then any
+        // enclosing Type3 extra_ctm.
+        let glyph_to_user = Matrix::concat(&Matrix::concat(&font_matrix, &trm), &ctx.extra_ctm);
+
+        // Interpret the CharProc into an ordered op stream (glyph space, the
+        // proc's own coordinates; base CTM identity), using the font Resources.
+        let proc_ops = interpret_charproc(doc, &proc_bytes, &resources);
+        if proc_ops.is_empty() {
+            continue;
+        }
+
+        // Colored (d0) vs uncolored (d1): a d1 glyph paints in the text's
+        // current fill color (override every proc fill); a d0 glyph keeps the
+        // colors it sets itself.
+        let fill_override = if charproc_is_uncolored(&proc_bytes) {
+            Some(glyph.color)
+        } else {
+            None
+        };
+
+        let glyph_ctx = RenderCtx {
+            extra_ctm: glyph_to_user,
+            fill_override,
+            depth: ctx.depth + 1,
+        };
+        // Isolate the glyph proc's graphics state (it must not leak q/Q or clip
+        // into the surrounding text).
+        canvas.save();
+        replay(canvas, doc, &proc_ops, &glyph_ctx)?;
+        canvas.restore();
+    }
+    Ok(())
+}
+
+/// The Type3 `/FontMatrix` (glyph space → text space). Defaults to the standard
+/// `[0.001 0 0 0.001 0 0]` (1000-unit glyph space) when absent / malformed.
+fn type3_font_matrix(doc: &DocumentStore, font_dict: &Dict) -> Matrix {
+    let default = Matrix::new(0.001, 0.0, 0.0, 0.001, 0.0, 0.0);
+    let Some(obj) = doc
+        .resolve_dict_key(font_dict, &Name::new("FontMatrix"))
+        .ok()
+        .flatten()
+    else {
+        return default;
+    };
+    let Some(arr) = obj.as_array() else {
+        return default;
+    };
+    let v: Vec<f64> = arr.iter().filter_map(Object::as_f64).collect();
+    if v.len() < 6 {
+        return default;
+    }
+    Matrix::new(v[0], v[1], v[2], v[3], v[4], v[5])
+}
+
+/// Resolves a Type3 font dict key to a (possibly indirect) dict.
+fn type3_dict_key(doc: &DocumentStore, font_dict: &Dict, key: &str) -> Option<Dict> {
+    doc.resolve_dict_key(font_dict, &Name::new(key))
+        .ok()
+        .flatten()
+        .and_then(|o| o.as_dict().cloned())
+}
+
+/// Builds the `code → glyph name` map from `/Encoding /Differences`.
+///
+/// `/Encoding` is usually an indirect dict carrying `/Differences [code /name …
+/// code /name …]`; a run of names after a code increments the code by one each.
+fn type3_differences(doc: &DocumentStore, font_dict: &Dict) -> HashMap<u32, Name> {
+    let mut map = HashMap::new();
+    let Some(enc) = doc
+        .resolve_dict_key(font_dict, &Name::new("Encoding"))
+        .ok()
+        .flatten()
+    else {
+        return map;
+    };
+    let Some(enc_dict) = enc.as_dict() else {
+        return map;
+    };
+    let Some(diffs) = enc_dict
+        .get(&Name::new("Differences"))
+        .and_then(Object::as_array)
+    else {
+        return map;
+    };
+    let mut code: u32 = 0;
+    for item in diffs {
+        match item {
+            Object::Integer(n) if *n >= 0 => code = *n as u32,
+            Object::Real(r) if *r >= 0.0 => code = *r as u32,
+            Object::Name(name) => {
+                map.insert(code, name.clone());
+                code = code.saturating_add(1);
+            }
+            _ => {}
+        }
+    }
+    map
+}
+
+/// Fetches + decodes the CharProc content stream for `name` from a `/CharProcs`
+/// dict. `None` when the entry is absent or not a decodable stream.
+fn resolve_charproc(doc: &DocumentStore, char_procs: &Dict, name: &Name) -> Option<Vec<u8>> {
+    let obj = doc.resolve_dict_key(char_procs, name).ok().flatten()?;
+    let stream = obj.as_stream()?;
+    let bytes = doc.decode_stream(stream).ok()?.into_decoded().ok()?;
+    if bytes.is_empty() {
+        None
+    } else {
+        Some(bytes)
+    }
+}
+
+/// Interprets a CharProc content buffer (already decoded) under the Type3 font's
+/// `/Resources`, returning the ordered op stream in glyph space (base CTM
+/// identity). Wraps the bytes in a synthetic page dict so the existing
+/// recording interpreter can run them.
+fn interpret_charproc(doc: &DocumentStore, proc_bytes: &[u8], resources: &Dict) -> Vec<RenderOp> {
+    // A synthetic single-content "page" whose /Contents is an inline decoded
+    // stream and whose /Resources are the font's. The interpreter decodes a
+    // Decoded payload verbatim and runs it with an identity base CTM.
+    let content_stream = Object::Stream(pdf_core::StreamObj {
+        dict: Dict::new(),
+        data: pdf_core::StreamData::Decoded(proc_bytes.to_vec().into()),
+    });
+    let mut page = Dict::new();
+    page.insert(Name::new("Contents"), content_stream);
+    page.insert(
+        Name::new("Resources"),
+        Object::Dictionary(resources.clone()),
+    );
+    interpret_page_render(doc, &page)
+}
+
+/// Whether a CharProc is **uncolored** (`d1`) vs colored (`d0`).
+///
+/// A glyph procedure begins with either `wx wy d0` (colored — the proc sets its
+/// own color) or `wx wy llx lly urx ury d1` (uncolored — the glyph is painted in
+/// the text's current color). We scan the leading tokens for the first `d0`/`d1`
+/// operator. Absent either, treat as colored (use the proc's own colors).
+fn charproc_is_uncolored(proc_bytes: &[u8]) -> bool {
+    for tok in proc_bytes.split(|b| b.is_ascii_whitespace()) {
+        match tok {
+            b"d1" => return true,
+            b"d0" => return false,
+            _ => {}
+        }
+    }
+    false
 }
 
 /// Resolves the program glyph id for one positioned glyph.
