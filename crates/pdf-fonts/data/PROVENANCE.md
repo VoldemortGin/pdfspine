@@ -37,6 +37,50 @@ non-overlapping fallback table consulted after the AGL; it lets the
 ZapfDingbats built-in encoding resolve to real Dingbats-block code points
 (e.g. `a10` → U+2721).
 
+## `cmap/Uni{GB,CNS,JIS,KS}-UCS2-H` — Adobe predefined CJK CMaps
+
+| field | value |
+|---|---|
+| **What** | Four Adobe *UCS2* encoding CMaps — `UniGB-UCS2-H` (Adobe-GB1, Simplified Chinese), `UniCNS-UCS2-H` (Adobe-CNS1, Traditional Chinese), `UniJIS-UCS2-H` (Adobe-Japan1), `UniKS-UCS2-H` (Adobe-Korea1). Each maps a 2-byte UCS2 Unicode code point → an Adobe CID via `begincidrange`/`begincidchar`. |
+| **Upstream** | <https://github.com/adobe-type-tools/cmap-resources> — `Adobe-GB1-6/CMap/`, `Adobe-CNS1-7/CMap/`, `Adobe-Japan1-7/CMap/`, `Adobe-Korea1-2/CMap/`. |
+| **Canonical URL** | e.g. <https://raw.githubusercontent.com/adobe-type-tools/cmap-resources/master/Adobe-GB1-6/CMap/UniGB-UCS2-H> (and the CNS1/Japan1/Korea1 analogues). |
+| **Version** | Per-file `%%Version:` headers; copyright line `Copyright 1990-2019 Adobe. All rights reserved.` (repo `LICENSE.md` carries `Copyright 1990-2023 Adobe`). |
+| **License** | **BSD-3-Clause** (Adobe). The repository's `LICENSE.md` is the BSD 3-Clause text; the same clauses are reproduced in each file's `%%Copyright:` comment header (retained verbatim — clause 1 source-retention is satisfied by shipping the files unmodified). SPDX: `BSD-3-Clause`. |
+| **Fetched** | 2026-06-16 via `curl` from the canonical raw URLs (no modification). |
+| **Cleared by** | oxide-pdf maintainers — BSD-3-Clause is in the PRD §6.3 permitted set. |
+
+These files are shipped **byte-for-byte unmodified** (the parser ignores `%`
+comment lines, so each license header travels with its data). Total embedded
+size ≈ 935 KB of text (GB1 ≈ 268 KB, CNS1 ≈ 319 KB, Japan1 ≈ 165 KB,
+Korea1 ≈ 162 KB).
+
+**How they enable extraction.** A `Uni…-UCS2-H` file is an *encoding* CMap
+(code → CID). `src/predefined.rs` parses it with the shared `cmap.rs` parser and
+then **inverts** the `cidrange` table into a CID → Unicode index
+(`CMap::invert_to_cid_unicode`), keeping the smallest Unicode code point per CID.
+A Type0 font whose `/Encoding` is one of these eight names (the `-H` and `-V`
+variants share a collection) resolves `code → CID` via the bundled encoding
+CMap and `CID → Unicode` via the inverted table — so a CJK PDF with **no**
+embedded `/ToUnicode` still extracts Unicode. An explicit `/ToUnicode` still
+overrides this path. See `NOTICE` for the binary-distribution attribution.
+
+### Documented gaps (not bundled)
+
+- **Legacy code→CID encodings** (`GBK-EUC-H`, `90ms-RKSJ-H`, `ETen-B5-H`,
+  `KSCms-UHC-H`, …) are **not** bundled. A Type0 font using one is recognized
+  (`PredefinedKind::KnownUnbundled`) and falls back gracefully: best-effort
+  2-byte `code == CID` iteration and widths, but `to_unicode` returns `None`
+  unless the font carries its own `/ToUnicode`. (The inverted UCS2 tables we
+  bundle still cover the *CID → Unicode* half for these collections; only the
+  legacy *code → CID* halves are missing.)
+- **`UTF8` / `UTF16` / `UTF32` predefined variants** and the **`Adobe-KR`**
+  roster are not bundled; they classify as `KnownUnbundled` with the same
+  graceful fallback.
+- **Vertical writing (`-V`)**: the `-V` names resolve the same CID → Unicode
+  table as their `-H` partner (orientation affects glyph placement, not code
+  points), which is correct for text extraction. Vertical *metrics/placement*
+  are out of scope for M2 mapping.
+
 ## Core-14 AFM width metrics — **NOT bundled (documented gap)**
 
 PRD §6.5 #2 requires the Core-14 AFM width tables to clear counsel with an

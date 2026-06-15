@@ -165,6 +165,70 @@ impl CMap {
     pub fn is_empty(&self) -> bool {
         self.codespace.is_empty() && self.cid_ranges.is_empty() && self.bf_entries.is_empty()
     }
+
+    /// Inverts this CMap's `code → CID` ranges into a `CID → Unicode` index,
+    /// interpreting each source *code* as a Unicode scalar value.
+    ///
+    /// This is exactly the transform that turns a predefined `Uni…-UCS2-H`
+    /// **encoding** CMap (which maps a 2-byte Unicode code point to an Adobe
+    /// CID) into a **ToUnicode** table (CID → the character). When several
+    /// Unicode code points map to the same CID, the **smallest** is kept
+    /// (deterministic, and the conventional canonical representative). Codes
+    /// that are not valid Unicode scalars (surrogates / out of range) are
+    /// skipped. Never panics.
+    #[must_use]
+    pub fn invert_to_cid_unicode(&self) -> CidUnicode {
+        // Smallest Unicode code wins per CID. We scan ranges in order; an entry
+        // only overwrites a CID's mapping if its code is strictly smaller.
+        let mut map: std::collections::HashMap<u32, char> = std::collections::HashMap::new();
+        for r in &self.cid_ranges {
+            // Guard against absurd ranges (malformed data) blowing up memory.
+            let span = r.hi.saturating_sub(r.lo);
+            if span > MAX_INVERT_SPAN {
+                continue;
+            }
+            for off in 0..=span {
+                let code = r.lo + off;
+                let cid = r.cid + off;
+                let Some(ch) = char::from_u32(code) else {
+                    continue;
+                };
+                map.entry(cid)
+                    .and_modify(|existing| {
+                        if code < u32::from(*existing) {
+                            *existing = ch;
+                        }
+                    })
+                    .or_insert(ch);
+            }
+        }
+        CidUnicode { map }
+    }
+}
+
+/// Caps the number of codes expanded from a single inverted `cidrange` entry, so
+/// a malformed CMap with an absurd `lo..hi` span cannot exhaust memory.
+const MAX_INVERT_SPAN: u32 = 0x20_000;
+
+/// A `CID → Unicode` index produced by [`CMap::invert_to_cid_unicode`]
+/// (predefined CJK encoding CMap → ToUnicode table).
+#[derive(Clone, Debug, Default)]
+pub struct CidUnicode {
+    map: std::collections::HashMap<u32, char>,
+}
+
+impl CidUnicode {
+    /// The Unicode character for a CID, if the table covers it.
+    #[must_use]
+    pub fn get(&self, cid: u32) -> Option<SmolStr> {
+        self.map.get(&cid).map(|c| SmolStr::new(c.to_string()))
+    }
+
+    /// Whether the index has no entries.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.map.is_empty()
+    }
 }
 
 /// Bumps the final scalar of `base` by `offset` (for `bfrange` increment form).

@@ -2,13 +2,22 @@ oxide-pdf — pdf-fonts bundled data NOTICE
 ======================================
 
 This product includes the Adobe Glyph List (AGL), embedded as
-`crates/pdf-fonts/data/glyphlist.txt`, and the Adobe ZapfDingbats glyph list,
-embedded as `crates/pdf-fonts/data/zapfdingbats.txt`.
+`crates/pdf-fonts/data/glyphlist.txt`, the Adobe ZapfDingbats glyph list,
+embedded as `crates/pdf-fonts/data/zapfdingbats.txt`, and four Adobe predefined
+CJK CMaps, embedded as `crates/pdf-fonts/data/cmap/Uni{GB,CNS,JIS,KS}-UCS2-H`.
 
   Adobe Glyph List & ZapfDingbats glyph list
   Copyright 2002-2019 Adobe (http://www.adobe.com/).
   Licensed under the BSD 3-Clause License.
   Source: https://github.com/adobe-type-tools/agl-aglfn
+
+  Adobe CMap resources (UniGB-UCS2-H, UniCNS-UCS2-H, UniJIS-UCS2-H,
+  UniKS-UCS2-H)
+  Copyright 1990-2023 Adobe (http://www.adobe.com/).
+  Licensed under the BSD 3-Clause License.
+  Source: https://github.com/adobe-type-tools/cmap-resources
+
+The BSD 3-Clause License text below applies to all of the above Adobe data.
 
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions are met:

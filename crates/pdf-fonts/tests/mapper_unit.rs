@@ -513,8 +513,9 @@ fn fontmap_003_identity_v_resolved() {
 }
 
 #[test]
-fn fontmap_004_unknown_predefined_cmap_no_panic() {
-    // A known-but-unbundled predefined CJK CMap name (documented gap).
+fn fontmap_004_unbundled_predefined_cmap_no_panic() {
+    // A recognized-but-unbundled predefined CJK CMap name (documented gap):
+    // legacy encodings whose code->CID table we do not bundle.
     let mut d = FontDoc::new();
     let descendant = d.add(Object::Dictionary(dict([
         ("Type", name_obj("Font")),
@@ -524,7 +525,7 @@ fn fontmap_004_unknown_predefined_cmap_no_panic() {
     let font = d.add(Object::Dictionary(dict([
         ("Type", name_obj("Font")),
         ("Subtype", name_obj("Type0")),
-        ("Encoding", name_obj("UniGB-UCS2-H")),
+        ("Encoding", name_obj("GBK-EUC-H")),
         ("DescendantFonts", Object::Array(vec![rref(descendant, 0)])),
     ])));
     let doc = d.open();
@@ -536,13 +537,130 @@ fn fontmap_004_unknown_predefined_cmap_no_panic() {
     assert_eq!(m.width(0x0041), 1000.0); // DW default
 }
 
+// === CMAP-CJK-* : predefined CJK CMaps drive extraction without /ToUnicode ==
+
+/// Builds a Type0/CIDFontType0 font with a predefined `/Encoding` name, no
+/// `/ToUnicode`, a `/DW` and a `/W` for one CID. Returns `(doc, font_num)`.
+fn predefined_cjk_doc(encoding: &'static str, w_cid: i64, w_val: i64) -> (DocumentStore, u32) {
+    let mut d = FontDoc::new();
+    let descendant = d.add(Object::Dictionary(dict([
+        ("Type", name_obj("Font")),
+        ("Subtype", name_obj("CIDFontType0")),
+        ("BaseFont", name_obj("CJKFont")),
+        ("DW", Object::Integer(1000)),
+        (
+            "W",
+            Object::Array(vec![
+                Object::Integer(w_cid),
+                Object::Array(vec![Object::Integer(w_val)]),
+            ]),
+        ),
+    ])));
+    let font = d.add(Object::Dictionary(dict([
+        ("Type", name_obj("Font")),
+        ("Subtype", name_obj("Type0")),
+        ("BaseFont", name_obj("CJKFont")),
+        ("Encoding", name_obj(encoding)),
+        ("DescendantFonts", Object::Array(vec![rref(descendant, 0)])),
+    ])));
+    (d.open(), font)
+}
+
+#[test]
+fn cmap_cjk_gb_unigb_ucs2_extracts_without_tounicode() {
+    // UniGB-UCS2-H: the 2-byte char code is a UCS2 value; code 0x4E2D maps via
+    // the encoding CMap to CID 4559, then the inverted ToUnicode table gives 中.
+    let (doc, font) = predefined_cjk_doc("UniGB-UCS2-H", 4559, 1000);
+    let m = mapper_for(&doc, font);
+    assert_eq!(m.kind(), FontKind::Type0);
+    assert_eq!(m.cid(0x4E2D), 4559);
+    assert_eq!(tu(&m, 0x4E2D).as_deref(), Some("\u{4E2D}"));
+    // An ASCII code <0041> → CID 34 → 'A'.
+    assert_eq!(tu(&m, 0x0041).as_deref(), Some("A"));
+}
+
+#[test]
+fn cmap_cjk_cns_unicns_ucs2_extracts() {
+    let (doc, font) = predefined_cjk_doc("UniCNS-UCS2-H", 595, 1000);
+    let m = mapper_for(&doc, font);
+    // U+4E00 (一) → CID 595 → back to U+4E00.
+    assert_eq!(m.cid(0x4E00), 595);
+    assert_eq!(tu(&m, 0x4E00).as_deref(), Some("\u{4E00}"));
+}
+
+#[test]
+fn cmap_cjk_jis_unijis_ucs2_extracts() {
+    let (doc, font) = predefined_cjk_doc("UniJIS-UCS2-H", 843, 1000);
+    let m = mapper_for(&doc, font);
+    // U+3042 (あ) → CID 843 → back to U+3042.
+    assert_eq!(m.cid(0x3042), 843);
+    assert_eq!(tu(&m, 0x3042).as_deref(), Some("\u{3042}"));
+}
+
+#[test]
+fn cmap_cjk_ks_uniks_ucs2_extracts() {
+    let (doc, font) = predefined_cjk_doc("UniKS-UCS2-H", 1086, 1000);
+    let m = mapper_for(&doc, font);
+    // U+AC00 (가) → CID 1086 → back to U+AC00.
+    assert_eq!(m.cid(0xAC00), 1086);
+    assert_eq!(tu(&m, 0xAC00).as_deref(), Some("\u{AC00}"));
+}
+
+#[test]
+fn cmap_cjk_tounicode_overrides_predefined() {
+    // An explicit /ToUnicode still wins over the predefined table.
+    let mut d = FontDoc::new();
+    let tu_stream = d.add(flate_stream(
+        [("Type", name_obj("CMap"))],
+        b"1 beginbfchar <4E2D> <005A> endbfchar",
+    ));
+    let descendant = d.add(Object::Dictionary(dict([
+        ("Type", name_obj("Font")),
+        ("Subtype", name_obj("CIDFontType0")),
+        ("BaseFont", name_obj("CJKFont")),
+    ])));
+    let font = d.add(Object::Dictionary(dict([
+        ("Type", name_obj("Font")),
+        ("Subtype", name_obj("Type0")),
+        ("Encoding", name_obj("UniGB-UCS2-H")),
+        ("ToUnicode", rref(tu_stream, 0)),
+        ("DescendantFonts", Object::Array(vec![rref(descendant, 0)])),
+    ])));
+    let doc = d.open();
+    let m = mapper_for(&doc, font);
+    // /ToUnicode remaps 0x4E2D → 'Z' instead of 中.
+    assert_eq!(tu(&m, 0x4E2D).as_deref(), Some("Z"));
+}
+
+#[test]
+fn cmap_cjk_width_001_still_from_w_array() {
+    // CMAP-CJK-WIDTH: widths come from /W, independent of the CJK CMap path.
+    let (doc, font) = predefined_cjk_doc("UniGB-UCS2-H", 4559, 877);
+    let m = mapper_for(&doc, font);
+    // CID 4559 has /W 877; an uncovered code falls back to /DW (1000).
+    assert_eq!(m.width(0x4E2D), 877.0);
+    assert_eq!(m.width(0x0041), 1000.0);
+}
+
+#[test]
+fn cmap_cjk_fallback_001_unbundled_predefined_none() {
+    // CMAP-CJK-FALLBACK: a recognized-but-unbundled name → to_unicode None.
+    let (doc, font) = predefined_cjk_doc("GBK-EUC-H", 4559, 1000);
+    let m = mapper_for(&doc, font);
+    assert_eq!(tu(&m, 0x4E2D), None);
+    // Width still resolves (best-effort code==CID).
+    assert_eq!(m.width(0x4E2D), 1000.0);
+}
+
 // Confirm the predefined classification is what we documented.
 #[test]
 fn fontmap_predefined_classification() {
     use pdf_fonts::predefined::{classify, PredefinedKind};
     assert_eq!(classify(b"Identity-H"), PredefinedKind::Identity);
     assert_eq!(classify(b"Identity-V"), PredefinedKind::Identity);
-    assert_eq!(classify(b"UniGB-UCS2-H"), PredefinedKind::KnownUnbundled);
+    // The bundled UCS2 families now classify as Cjk; legacy encodings remain
+    // recognized-but-unbundled.
+    assert_eq!(classify(b"UniGB-UCS2-H"), PredefinedKind::Cjk);
     assert_eq!(classify(b"90ms-RKSJ-H"), PredefinedKind::KnownUnbundled);
     assert_eq!(classify(b"NotARealCMapName"), PredefinedKind::Unknown);
 }
