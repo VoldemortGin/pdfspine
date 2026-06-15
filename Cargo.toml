@@ -100,6 +100,31 @@ hayro-jbig2 = "0.3"
 # contract; the optional OpenJPEG (C) fallback is deliberately NOT wired here.
 hayro-jpeg2000 = "0.4"
 
+# --- pdf-render: anti-aliased 2D path rasterizer (M6, PRD §8.11 / §11.1).
+#
+# `tiny-skia` is the leaf rasterization primitive: it fills/strokes/clips paths
+# with anti-aliasing, supports blend modes and gradients, and is the mature
+# pure-Rust port of Skia's raster pipeline (BSD-3-Clause). All the PDF→drawcall
+# intelligence (content interpretation, CTM, colorspaces, glyph outline
+# extraction) stays first-party in `pdf-render`; tiny-skia only paints the
+# resulting paths into a pixel buffer. Chosen over `raqote` (less maintained) and
+# `zeno` (rasterizer-only — no pixmap/clip/blend surface).
+#
+# `default-features = false` with only `std` + `simd` deliberately DROPS the
+# `png-format` feature, which would otherwise pull `png`→`flate2`/`miniz_oxide`
+# into the graph (a second `flate2` next to our pinned `rust_backend` one, and a
+# redundant PNG encoder — we already encode via `pdf_image::Pixmap::save_png`).
+# The remaining graph is all BSD/MIT/Apache/Zlib leaves (`tiny-skia-path`,
+# `arrayref`, `arrayvec`, `bytemuck` [shared with `image`], `cfg-if`, `log`,
+# `strict-num`); verified to resolve on crates.io against toolchain 1.96.
+#
+# Glyph rendering reuses the existing `ttf-parser` `OutlineBuilder` (outlines fed
+# straight into a tiny-skia `PathBuilder`), so NO separate glyph-raster crate
+# (`swash`/`fontdue`/`ab_glyph`) is needed — minimizing deps per the policy.
+# Color management (`moxcms` ICC) is intentionally deferred: naive CMYK→RGB is
+# acceptable for the M6 scaffold and first rendering pass (PRD §8.11).
+tiny-skia = { version = "0.11", default-features = false, features = ["std", "simd"] }
+
 # --- shared dev-deps ---
 proptest = "1"
 

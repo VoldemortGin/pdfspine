@@ -6,6 +6,26 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 rust-version.workspace = true
-description = "Reserved vector rasterizer crate for oxide-pdf (page -> Pixmap). Future (M6)."
+description = "Vector/text/image page rasterizer (page -> Pixmap) for oxide-pdf (M6, PRD §8.11)."
 
 [dependencies]
+# Objects + geometry (Matrix/Point/Rect/IRect) + the typed Error this crate
+# wraps. The DAG root (PRD §9.1).
+pdf-core.workspace = true
+# Glyph outlines + metrics: text rendering feeds `ttf-parser` outlines (via
+# pdf-fonts) into the rasterizer's path builder (PRD §8.11 / §8.5).
+pdf-fonts.workspace = true
+# The content interpreter: yields positioned glyphs + constructed draw paths +
+# image placements (the drawcalls this crate paints). PRD §8.6 / §8.11.
+pdf-text.workspace = true
+# Pixmap output type + image-XObject decode (the composited raster source and
+# the final raster target type). PRD §8.10 / §8.11.
+pdf-image.workspace = true
+# Typed error wrapping (`From` impls for the upstream crate errors).
+thiserror.workspace = true
+# Anti-aliased 2D path rasterizer (fill/stroke/clip/blend). Leaf primitive; the
+# PDF→drawcall intelligence stays first-party. See [workspace.dependencies].
+tiny-skia.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
