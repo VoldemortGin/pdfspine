@@ -1,0 +1,66 @@
+site_name: oxide-pdf
+site_description: >-
+  An Apache-2.0-licensed, pure-Rust reimplementation of PyMuPDF (fitz),
+  with a Python API and an `import fitz` compatibility shim.
+site_author: oxide-pdf contributors
+repo_url: https://github.com/VoldemortGin/oxide-pdf
+repo_name: VoldemortGin/oxide-pdf
+edit_uri: ""
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: deep orange
+      accent: orange
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: deep orange
+      accent: orange
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.tracking
+    - content.code.copy
+    - content.code.annotate
+    - search.highlight
+    - toc.follow
+
+markdown_extensions:
+  - admonition
+  - codehilite
+  - toc:
+      permalink: true
+  - tables
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.details
+  - pymdownx.snippets
+
+nav:
+  - Home: index.md
+  - Guide:
+      - Overview: guide/index.md
+      - Installation: guide/installation.md
+      - Quickstart: guide/quickstart.md
+      - Text extraction: guide/text-extraction.md
+      - Editing & saving: guide/editing.md
+      - Rendering: guide/rendering.md
+      - Command-line interface: guide/cli.md
+      - Migrating from PyMuPDF: guide/migrating-from-pymupdf.md
+      - License: guide/license.md
+  - API reference:
+      - Overview: reference/index.md
+      - Document: reference/document.md
+      - Page: reference/page.md
+      - Pixmap: reference/pixmap.md
+      - Geometry: reference/geometry.md
