@@ -197,3 +197,304 @@ fn split_fields(rec: &[u8], widths: &[usize]) -> (u64, u64, u64) {
     let f3 = read(widths[2]);
     (f1, f2, f3)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::filters::flate;
+    use crate::object::{Dict, Name, Object, StreamData, StreamObj};
+
+    /// Builds a `Dict` from `(key, value)` pairs.
+    fn dict(pairs: impl IntoIterator<Item = (&'static str, Object)>) -> Dict {
+        let mut d = Dict::new();
+        for (k, v) in pairs {
+            d.insert(Name::new(k), v);
+        }
+        d
+    }
+
+    /// Packs `(f1,f2,f3)` records into big-endian fixed-width bytes per `widths`.
+    fn pack(records: &[(u64, u64, u64)], widths: [usize; 3]) -> Vec<u8> {
+        let mut out = Vec::new();
+        for &(f1, f2, f3) in records {
+            for (val, w) in [(f1, widths[0]), (f2, widths[1]), (f3, widths[2])] {
+                let bytes = val.to_be_bytes();
+                out.extend_from_slice(&bytes[8 - w..]);
+            }
+        }
+        out
+    }
+
+    /// Builds a `/Type /XRef` `StreamObj` from packed records, Flate-encoded,
+    /// with `/W`, `/Size` and an optional `/Index`.
+    fn xref_stream(
+        records: &[(u64, u64, u64)],
+        widths: [usize; 3],
+        size: i64,
+        index: Option<Vec<i64>>,
+    ) -> StreamObj {
+        let data = pack(records, widths);
+        let enc = flate::encode(&data);
+        let mut d = dict([
+            ("Type", Object::Name(Name::new("XRef"))),
+            ("Filter", Object::Name(Name::new("FlateDecode"))),
+            ("Length", Object::Integer(enc.len() as i64)),
+            ("Size", Object::Integer(size)),
+            (
+                "W",
+                Object::Array(widths.iter().map(|&w| Object::Integer(w as i64)).collect()),
+            ),
+        ]);
+        if let Some(idx) = index {
+            d.insert(
+                Name::new("Index"),
+                Object::Array(idx.into_iter().map(Object::Integer).collect()),
+            );
+        }
+        StreamObj::new_encoded(d, enc)
+    }
+
+    fn parse(stream: &StreamObj) -> Result<XrefSection> {
+        parse_xref_stream_obj(stream, &Limits::unbounded_decode(), 0)
+    }
+
+    #[test]
+    fn xrefstm_read_index_default() {
+        let d = dict([]);
+        assert_eq!(read_index(&d, 5).unwrap(), vec![(0, 5)]);
+    }
+
+    #[test]
+    fn xrefstm_read_index_explicit_pairs() {
+        let d = dict([(
+            "Index",
+            Object::Array(vec![
+                Object::Integer(2),
+                Object::Integer(3),
+                Object::Integer(10),
+                Object::Integer(1),
+            ]),
+        )]);
+        assert_eq!(read_index(&d, 0).unwrap(), vec![(2, 3), (10, 1)]);
+    }
+
+    #[test]
+    fn xrefstm_read_index_odd_length_err() {
+        let d = dict([(
+            "Index",
+            Object::Array(vec![
+                Object::Integer(1),
+                Object::Integer(2),
+                Object::Integer(3),
+            ]),
+        )]);
+        let e = read_index(&d, 0).unwrap_err();
+        assert!(matches!(e, Error::Xref { .. }), "{e:?}");
+    }
+
+    #[test]
+    fn xrefstm_read_index_not_array_err() {
+        let d = dict([("Index", Object::Integer(5))]);
+        let e = read_index(&d, 0).unwrap_err();
+        assert!(matches!(e, Error::Xref { .. }), "{e:?}");
+    }
+
+    #[test]
+    fn xrefstm_read_index_start_not_u32_err() {
+        let d = dict([(
+            "Index",
+            Object::Array(vec![Object::Integer(-1), Object::Integer(2)]),
+        )]);
+        let e = read_index(&d, 0).unwrap_err();
+        assert!(matches!(e, Error::Xref { .. }), "{e:?}");
+    }
+
+    #[test]
+    fn xrefstm_read_w_variants() {
+        let ok = dict([(
+            "W",
+            Object::Array(vec![
+                Object::Integer(1),
+                Object::Integer(2),
+                Object::Integer(1),
+            ]),
+        )]);
+        assert_eq!(read_w(&ok), Some(vec![1, 2, 1]));
+
+        let non_int = dict([(
+            "W",
+            Object::Array(vec![
+                Object::Integer(1),
+                Object::Name(Name::new("x")),
+                Object::Integer(1),
+            ]),
+        )]);
+        assert_eq!(read_w(&non_int), None);
+
+        let missing = dict([]);
+        assert_eq!(read_w(&missing), None);
+    }
+
+    #[test]
+    fn xrefstm_split_fields() {
+        assert_eq!(
+            split_fields(&[0x01, 0x00, 0x10, 0x05], &[1, 2, 1]),
+            (1, 0x0010, 5)
+        );
+        // Zero-width field-1 reads as 0.
+        assert_eq!(
+            split_fields(&[0x00, 0x10, 0x05], &[0, 2, 1]),
+            (0, 0x0010, 5)
+        );
+    }
+
+    #[test]
+    fn xrefstm_missing_w_err() {
+        let enc = flate::encode(b"");
+        let d = dict([
+            ("Type", Object::Name(Name::new("XRef"))),
+            ("Size", Object::Integer(1)),
+            ("Length", Object::Integer(enc.len() as i64)),
+        ]);
+        let stream = StreamObj::new_encoded(d, enc);
+        let e = parse(&stream).unwrap_err();
+        assert!(matches!(e, Error::Xref { .. }), "{e:?}");
+    }
+
+    #[test]
+    fn xrefstm_w_wrong_length_err() {
+        let stream = xref_stream(&[(1, 0, 0)], [1, 2, 0], 1, None);
+        // Re-stamp /W to length 2.
+        let mut stream = stream;
+        stream.dict.insert(
+            Name::new("W"),
+            Object::Array(vec![Object::Integer(1), Object::Integer(2)]),
+        );
+        let e = parse(&stream).unwrap_err();
+        assert!(matches!(e, Error::Xref { .. }), "{e:?}");
+    }
+
+    #[test]
+    fn xrefstm_w_all_zero_err() {
+        let stream = xref_stream(&[], [0, 0, 0], 1, None);
+        let e = parse(&stream).unwrap_err();
+        assert!(matches!(e, Error::Xref { .. }), "{e:?}");
+    }
+
+    #[test]
+    fn xrefstm_missing_size_err() {
+        let data = pack(&[(1, 0, 0)], [1, 2, 1]);
+        let enc = flate::encode(&data);
+        let d = dict([
+            ("Type", Object::Name(Name::new("XRef"))),
+            ("Filter", Object::Name(Name::new("FlateDecode"))),
+            ("Length", Object::Integer(enc.len() as i64)),
+            (
+                "W",
+                Object::Array(vec![
+                    Object::Integer(1),
+                    Object::Integer(2),
+                    Object::Integer(1),
+                ]),
+            ),
+        ]);
+        let stream = StreamObj::new_encoded(d, enc);
+        let e = parse(&stream).unwrap_err();
+        assert!(matches!(e, Error::Xref { .. }), "{e:?}");
+    }
+
+    #[test]
+    fn xrefstm_all_three_entry_types() {
+        let widths = [1usize, 2, 2];
+        let records = vec![
+            (0u64, 0u64, 0u64), // type 0 free
+            (1, 1234, 7),       // type 1 uncompressed offset=1234 gen=7
+            (2, 42, 3),         // type 2 compressed objstm_num=42 index=3
+        ];
+        let stream = xref_stream(&records, widths, 3, None);
+        let section = parse(&stream).unwrap();
+
+        assert_eq!(section.entries.len(), 3);
+        assert_eq!(section.entries[0], (0, XrefEntry::Free));
+        assert_eq!(
+            section.entries[1],
+            (
+                1,
+                XrefEntry::Uncompressed {
+                    offset: 1234,
+                    gen: 7
+                }
+            )
+        );
+        assert_eq!(
+            section.entries[2],
+            (
+                2,
+                XrefEntry::Compressed {
+                    objstm_num: 42,
+                    index: 3
+                }
+            )
+        );
+    }
+
+    #[test]
+    fn xrefstm_field1_width_zero_defaults_to_uncompressed() {
+        let widths = [0usize, 2, 1];
+        // One record encoding offset=512 gen=0; field-1 absent.
+        let records = vec![(0u64, 512u64, 0u64)];
+        let stream = xref_stream(&records, widths, 1, None);
+        let section = parse(&stream).unwrap();
+        assert_eq!(section.entries.len(), 1);
+        assert_eq!(
+            section.entries[0],
+            (
+                0,
+                XrefEntry::Uncompressed {
+                    offset: 512,
+                    gen: 0
+                }
+            )
+        );
+    }
+
+    #[test]
+    fn xrefstm_unknown_type_treated_as_free() {
+        let widths = [1usize, 2, 1];
+        let records = vec![(7u64, 99u64, 0u64)]; // type 7 unknown
+        let stream = xref_stream(&records, widths, 1, None);
+        let section = parse(&stream).unwrap();
+        assert_eq!(section.entries[0], (0, XrefEntry::Free));
+    }
+
+    #[test]
+    fn xrefstm_data_shorter_than_index_err() {
+        let widths = [1usize, 2, 2];
+        // Size 5 but only one record packed.
+        let stream = xref_stream(&[(1, 0, 0)], widths, 5, None);
+        let e = parse(&stream).unwrap_err();
+        assert!(matches!(e, Error::Xref { .. }), "{e:?}");
+    }
+
+    #[test]
+    fn xrefstm_raw_body_not_materialized_err() {
+        let d = dict([
+            ("Type", Object::Name(Name::new("XRef"))),
+            ("Size", Object::Integer(1)),
+            (
+                "W",
+                Object::Array(vec![
+                    Object::Integer(1),
+                    Object::Integer(2),
+                    Object::Integer(1),
+                ]),
+            ),
+        ]);
+        let stream = StreamObj {
+            dict: d,
+            data: StreamData::Raw { offset: 0, len: 0 },
+        };
+        let e = parse(&stream).unwrap_err();
+        assert!(matches!(e, Error::Xref { .. }), "{e:?}");
+    }
+}

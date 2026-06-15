@@ -179,6 +179,45 @@ error or EOF token, never a panic or out-of-bounds.
 | `OBJ-015` | truncated indirect object → typed `Err`, no panic | PRD §8.1 | green |
 | `OBJ-016` | unexpected closing delimiter / odd dict token count → typed `Err`, no crash | PRD §8.1 | green |
 
+### Object-model accessors / `Name` / `StreamData` (`object/`) — `OBJACC-*` / `NAME-*` / `STREAMDATA-*`
+
+Tests live in `crates/pdf-core/tests/objmodel_accessor_unit.rs`.
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `OBJACC-001` | `is_null` / `as_bool` / `as_i64` Some-and-None arms | ISO 32000-1 §7.3 | green |
+| `OBJACC-002` | `as_f64` widens `Integer` and accepts `Real`; `None` for other types | ISO 32000-1 §7.3.3 | green |
+| `OBJACC-003` | `as_string` / `as_name` / `as_array` / `as_stream` / `as_reference` Some-and-None arms | ISO 32000-1 §7.3 | green |
+| `OBJACC-004` | `as_dict` returns the dict for both `Dictionary` and `Stream`; `None` otherwise | ISO 32000-1 §7.3.8 | green |
+| `OBJACC-005` | all `From<…>` impls (bool/i64/i32/f64/PdfString/Name/Vec/Dict/StreamObj/ObjRef) build the right variant | PRD §9.2 | green |
+| `OBJACC-006` | `ObjRef::new` field round-trip | ISO 32000-1 §7.3.10 | green |
+| `NAME-001` | `new` / `from_decoded` / `as_bytes` round-trip; ordering + equality as `BTreeMap` key | ISO 32000-1 §7.3.5 | green |
+| `NAME-002` | `as_str` returns UTF-8; `None` for invalid UTF-8 bytes | ISO 32000-1 §7.3.5 | green |
+| `NAME-003` | `is_empty` for `/`; `From<&str>` / `From<String>` | ISO 32000-1 §7.3.5 | green |
+| `NAME-004` | `Debug` valid-UTF-8 (`Name(/x)`) and invalid-UTF-8 byte arms | — | green |
+| `STREAMDATA-001` | `owned_bytes` Some for Encoded/Decoded, None for Raw | PRD §9.2 | green |
+| `STREAMDATA-002` | `bytes` returns for Encoded/Decoded; panics on Raw | PRD §9.2 | green |
+| `STREAMDATA-003` | `len` / `is_empty` across Raw / Encoded / Decoded | PRD §9.2 | green |
+| `STREAMDATA-004` | `StreamObj::new_encoded` / `raw_bytes` (panics on Raw) | ISO 32000-1 §7.3.8 | green |
+| `STREAMDATA-005` | `decode`: Decoded verbatim, Encoded-no-filter, Raw → `Unsupported` | PRD §8.3 | green |
+| `STREAMDATA-006` | `decoded` clones an Encoded-no-filter stream to a `Decoded` payload | PRD §9.2 | green |
+
+### `NameInterner` de-dup pool (`interner.rs`) — `INTERN-*`
+
+Tests live in `crates/pdf-core/tests/interner_unit.rs`.
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `INTERN-001` | `new` / `default` start empty | PRD §9.2 | green |
+| `INTERN-002` | first `intern` inserts and returns an equal `Name` | PRD §9.2 | green |
+| `INTERN-003` | interning equal bytes twice keeps `len == 1` | PRD §9.2 | green |
+| `INTERN-004` | distinct names grow the pool | PRD §9.2 | green |
+| `INTERN-005` | `intern_bytes` equivalent to `intern(&Name::from_decoded)` | PRD §9.2 | green |
+| `INTERN-006` | second `intern` returns the canonical pooled clone | PRD §9.2 | green |
+| `INTERN-007` | empty name is internable | PRD §9.2 | green |
+| `INTERN-008` | `Clone` preserves pooled state | PRD §9.2 | green |
+| `INTERN-009` | property: `len` equals the number of distinct inputs (never panics) | PRD §9.2 / §10.2 | green |
+
 ### Serializer (`SER-*`)
 
 | ID | feature | spec ref | status |
@@ -374,6 +413,25 @@ external/PyMuPDF files. Tests live in `crates/pdf-core/tests/source_unit.rs`,
 | `XREFSTM-007` | object resolved through an xref stream matches expected | PRD §8.2 | green |
 | `XREFSTM-008` | malformed `/W` (wrong length) → typed error | PRD §8.2 | green |
 
+#### Xref-stream `/W` & `/Index` edge cases — `XREFSTM-EDGE-*`
+
+In-module tests in `crates/pdf-core/src/xref/stream.rs`; public-path tests in
+`crates/pdf-core/tests/xrefstm_edge_unit.rs`.
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `XREFSTM-EDGE-001` | `read_index` default `[0 Size]` when `/Index` absent | ISO 32000-1 §7.5.8.2 | green |
+| `XREFSTM-EDGE-002` | `read_index` explicit `(start,count)` pairs | ISO 32000-1 §7.5.8.2 | green |
+| `XREFSTM-EDGE-003` | `/Index` odd length / non-array / non-u32 start → typed error | ISO 32000-1 §7.5.8.2 | green |
+| `XREFSTM-EDGE-004` | `read_w` parses widths; non-int element / missing → `None` | ISO 32000-1 §7.5.8.2 | green |
+| `XREFSTM-EDGE-005` | `split_fields` big-endian fields incl. zero-width field reads 0 | ISO 32000-1 §7.5.8.2 | green |
+| `XREFSTM-EDGE-006` | missing `/W` / `/Size`, `/W` all-zero → typed error | PRD §8.2 | green |
+| `XREFSTM-EDGE-007` | all three entry kinds decode to Free/Uncompressed/Compressed | ISO 32000-1 §7.5.8.3 | green |
+| `XREFSTM-EDGE-008` | field-1 width 0 → type defaults to 1; unknown type → Free | ISO 32000-1 §7.5.8.3 | green |
+| `XREFSTM-EDGE-009` | data shorter than `/Index` implies → typed error | PRD §8.2 | green |
+| `XREFSTM-EDGE-010` | `Raw` (unmaterialized) body → typed error, no panic | PRD §9.2 | green |
+| `XREFSTM-EDGE-011` | public chain: non-zero `/Index` start + varied `/W` resolve objects | PRD §8.2 | green |
+
 ### Object streams (`objstm.rs`) — `OBJSTM-*`
 
 | ID | feature | spec ref | status |
@@ -383,6 +441,22 @@ external/PyMuPDF files. Tests live in `crates/pdf-core/tests/source_unit.rs`,
 | `OBJSTM-003` | second member (index 1) resolves to its object | PRD §8.2 | green |
 | `OBJSTM-004` | `/N` exceeding `Limits::max_objstm_objects` → `LimitExceeded` | PRD §9.6.2 | green |
 | `OBJSTM-005` | corrupt offset table → typed error, no panic | PRD §8.2 | green |
+
+#### `ObjStm::decode` / `object_at` direct unit edges — `OBJSTM-EDGE-*`
+
+In-module tests in `crates/pdf-core/src/objstm.rs`.
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `OBJSTM-EDGE-001` | happy 2-member decode: `len`/`object_number_at`/`member_nums`/`object_at` | PRD §8.2 | green |
+| `OBJSTM-EDGE-002` | `/N 0` empty stream → `is_empty` | PRD §8.2 | green |
+| `OBJSTM-EDGE-003` | missing `/N` / missing `/First` → typed error | PRD §8.2 | green |
+| `OBJSTM-EDGE-004` | `/N` over limit → `LimitExceeded(ObjstmObjects)` | PRD §9.6.2 | green |
+| `OBJSTM-EDGE-005` | `Raw` (unmaterialized) body → typed error | PRD §9.2 | green |
+| `OBJSTM-EDGE-006` | header too few pairs for `/N` → typed error | PRD §8.2 | green |
+| `OBJSTM-EDGE-007` | `object_at` out-of-range index → typed error | PRD §8.2 | green |
+| `OBJSTM-EDGE-008` | `object_at` offset past body → typed error | PRD §8.2 | green |
+| `OBJSTM-EDGE-009` | malformed object body → typed error, no panic | PRD §8.2 | green |
 
 ### `/Prev` chains + multi-revision (`xref`) — `PREV-*`
 
@@ -636,6 +710,21 @@ integration, `--features encryption`). Fixtures are **self-generated** via
 | `CRYPT-PANIC-002` | random key material / data → decrypt is typed `Err` or bytes, no panic | PRD §9.6 | green |
 | `CRYPT-PANIC-003` | random AES object data (< IV, bad padding) → typed `Err`, no panic | PRD §9.6 | green |
 | `CRYPT-PANIC-004` | arbitrary password against a valid fixture → `Ok`/`NeedsPassword`, no panic | PRD §9.6 | green |
+
+### `CryptoError` Display + `kind()` discriminants — `CRYPTO-ERR-*`
+
+Tests live in `crates/pdf-crypto/tests/error_unit.rs`.
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `CRYPTO-ERR-001` | `Malformed` Display = `malformed /Encrypt: …` | PRD §8.4 | green |
+| `CRYPTO-ERR-002` | `Unsupported` Display = `unsupported security handler: …` | PRD §8.4 | green |
+| `CRYPTO-ERR-003` | `NeedsPassword` Display = `password required or incorrect` | PRD §8.4 | green |
+| `CRYPTO-ERR-004` | `DecryptFailed` Display = `decrypt failed: …` | PRD §8.4 | green |
+| `CRYPTO-ERR-005` | `kind()` returns stable discriminant for all four variants | PRD §8.4 / §9.3 | green |
+| `CRYPTO-ERR-006` | `std::error::Error` trait-object Display path | PRD §8.4 | green |
+| `CRYPTO-ERR-007` | `Clone` + `PartialEq` (equal clone; distinct variants `!=`) | PRD §8.4 | green |
+| `CRYPTO-ERR-008` | `Debug` carries the variant name | PRD §8.4 | green |
 
 ### DocumentStore integration (`--features encryption`) — `CRYPT-DOC-*`
 
