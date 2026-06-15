@@ -71,6 +71,35 @@ cipher = { version = "0.4", features = ["block-padding"] }
 # entropy on every target, no C deps; keeps the wheel pure-Rust / WASM-clean.
 getrandom = "0.2"
 
+# --- pdf-image: image-document decode + image-XObject codecs (M5, PRD §8.10 /
+# §11.1). All MIT/Apache/BSD/Zlib (no GPL/AGPL/LGPL/MPL/IJG in the shipped
+# graph); versions verified to resolve on crates.io against toolchain 1.96.
+#
+# `image` is the decode/encode hub for image-document inputs (PNG/JPEG/TIFF/
+# GIF/BMP/WEBP, PRD §8.10). Default features are off and only the needed format
+# codecs are enabled to keep the footprint tight; this still pulls the pure-Rust
+# `png`/`tiff`/`gif`/`image-webp` leaves transitively, so we do not depend on
+# `png`/`tiff` directly. MIT/Apache-2.0.
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "tiff", "gif", "bmp", "webp"] }
+# DCTDecode (JPEG) decode for image XObjects (PRD §8.4 / §11.1). `zune-jpeg` is
+# the primary fast pure-Rust decoder; `jpeg-decoder` is the cross-check oracle.
+# MIT/Apache(/Zlib).
+zune-jpeg = "0.5"
+jpeg-decoder = "0.3"
+# CCITTFaxDecode G3/G4 (PRD §8.4). `fax` (MIT) is the primary pure-Rust codec
+# (decode + encode for save-transcode); `hayro-ccitt` (Apache-2.0 OR MIT) is the
+# alternate/cross-check decoder. Both verified on crates.io.
+fax = "0.2"
+hayro-ccitt = "0.3"
+# JBIG2Decode (PRD §8.4.1 documented subset). `hayro-jbig2` exists on crates.io
+# (0.3.0, Apache-2.0 OR MIT) — confirmed, not a gap. Pre-1.0 / untrusted: the
+# degradation contract (§8.4.1) wraps every decode in a typed error path.
+hayro-jbig2 = "0.3"
+# JPXDecode / JPEG2000 (PRD §8.4.1 documented subset). `hayro-jpeg2000` exists on
+# crates.io (0.4.0, Apache-2.0 OR MIT) — confirmed, not a gap. Same degradation
+# contract; the optional OpenJPEG (C) fallback is deliberately NOT wired here.
+hayro-jpeg2000 = "0.4"
+
 # --- shared dev-deps ---
 proptest = "1"
 

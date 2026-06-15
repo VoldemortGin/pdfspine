@@ -6,7 +6,26 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 rust-version.workspace = true
-description = "Image-document support, image-XObject decode/encode, Pixmap for oxipdf. Placeholder in M0."
+description = "Image-document support, image-XObject decode/encode, Pixmap for oxipdf (M5)."
 
 [dependencies]
 pdf-core.workspace = true
+thiserror.workspace = true
+# Flate/LZW reuse for image streams that wrap a Flate/LZW filter (PRD §8.10):
+# the same pure-Rust codecs M1 uses for data streams.
+flate2.workspace = true
+weezl.workspace = true
+# Image-document decode/encode hub (PNG/JPEG/TIFF/GIF/BMP/WEBP), PRD §8.10.
+image.workspace = true
+# Image-XObject codecs (PRD §8.4 / §8.4.1). DCTDecode, CCITTFaxDecode, JBIG2,
+# JPX. JBIG2/JPX are the documented-subset codecs behind the §8.4.1 degradation
+# contract.
+zune-jpeg.workspace = true
+jpeg-decoder.workspace = true
+fax.workspace = true
+hayro-ccitt.workspace = true
+hayro-jbig2.workspace = true
+hayro-jpeg2000.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
