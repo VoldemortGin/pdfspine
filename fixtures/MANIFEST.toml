@@ -35,3 +35,276 @@
 # carries only the schema header so `manifest-lint` has a target to parse.
 
 # (no [[fixture]] entries yet)
+
+# >>> validation-harness corpus (auto-generated) >>>
+
+[[fixture]]
+path         = "corpus/irs-f1040.pdf"
+source       = "IRS"
+license      = "Public-Domain"
+sha256       = "3d31c226df0d189ced80e039d01cf0f8820c1019681a0f0ca6264de277b7e982"
+cleared_by   = "validation-harness"
+cleared_date = "2026-06-15"
+notes        = "US federal government work (17 U.S.C. 105); Form 1040 (AcroForm)"
+
+[[fixture]]
+path         = "corpus/irs-fw9.pdf"
+source       = "IRS"
+license      = "Public-Domain"
+sha256       = "2d420cbb4123dcf1fb82595b2359cfbb5d81f00b9df9d359fcc7af361d093f53"
+cleared_by   = "validation-harness"
+cleared_date = "2026-06-15"
+notes        = "US federal government work (17 U.S.C. 105); Form W-9"
+
+[[fixture]]
+path         = "corpus/irs-fw4.pdf"
+source       = "IRS"
+license      = "Public-Domain"
+sha256       = "92444d8856ce55d9e25dca8b6d1420634fc68b11e1ab1f760916ea29ddd312b2"
+cleared_by   = "validation-harness"
+cleared_date = "2026-06-15"
+notes        = "US federal government work (17 U.S.C. 105); Form W-4"
+
+[[fixture]]
+path         = "corpus/irs-fw7.pdf"
+source       = "IRS"
+license      = "Public-Domain"
+sha256       = "0917902b7fd3caaf63a4562fea3d23765fdfd4715f3b2470adb56a930556a943"
+cleared_by   = "validation-harness"
+cleared_date = "2026-06-15"
+notes        = "US federal government work (17 U.S.C. 105); Form W-7"
+
+[[fixture]]
+path         = "corpus/irs-f941.pdf"
+source       = "IRS"
+license      = "Public-Domain"
+sha256       = "38a3d8cf7a455101d52543c8c48e66202bc25c189ead878627e35c797c88e2ad"
+cleared_by   = "validation-harness"
+cleared_date = "2026-06-15"
+notes        = "US federal government work (17 U.S.C. 105); Form 941"
+
+[[fixture]]
+path         = "corpus/irs-f1065.pdf"
+source       = "IRS"
+license      = "Public-Domain"
+sha256       = "0f19f556e12ef53c41ba27e5930b4373103f3abcf64693c4ea686451b2a8f56f"
+cleared_by   = "validation-harness"
+cleared_date = "2026-06-15"
+notes        = "US federal government work (17 U.S.C. 105); Form 1065"
+
+[[fixture]]
+path         = "corpus/irs-f1120.pdf"
+source       = "IRS"
+license      = "Public-Domain"
+sha256       = "016c7fb4042a565c23a98014b17019af7ddc89e3260dd3f926b84d6688b7be6e"
+cleared_by   = "validation-harness"
+cleared_date = "2026-06-15"
+notes        = "US federal government work (17 U.S.C. 105); Form 1120"
+
+[[fixture]]
+path         = "corpus/irs-f2848.pdf"
+source       = "IRS"
+license      = "Public-Domain"
+sha256       = "14377021f95856c453d903aae6a178d8371b3a96e65c28418862394d9f8c2d8e"
+cleared_by   = "validation-harness"
+cleared_date = "2026-06-15"
+notes        = "US federal government work (17 U.S.C. 105); Form 2848"
+
+[[fixture]]
+path         = "corpus/irs-f4868.pdf"
+source       = "IRS"
+license      = "Public-Domain"
+sha256       = "36c7607db08ff469ed4e5df89e27ca90f29023c7cd6ca77c69343045e8f33d29"
+cleared_by   = "validation-harness"
+cleared_date = "2026-06-15"
+notes        = "US federal government work (17 U.S.C. 105); Form 4868"
+
+[[fixture]]
+path         = "corpus/irs-f8949.pdf"
+source       = "IRS"
+license      = "Public-Domain"
+sha256       = "274513891e4e281d11e14286f14b9df724c24b6030fca0f0681da64fb2e7f525"
+cleared_by   = "validation-harness"
+cleared_date = "2026-06-15"
+notes        = "US federal government work (17 U.S.C. 105); Form 8949"
+
+[[fixture]]
+path         = "corpus/irs-f8843.pdf"
+source       = "IRS"
+license      = "Public-Domain"
+sha256       = "b685fcb296ae6a86ee47d82ceaa5a7b64f0a04e1749420e89d6ddde5ab5a63c8"
+cleared_by   = "validation-harness"
+cleared_date = "2026-06-15"
+notes        = "US federal government work (17 U.S.C. 105); Form 8843"
+
+[[fixture]]
+path         = "corpus/irs-f1040sb.pdf"
+source       = "IRS"
+license      = "Public-Domain"
+sha256       = "dd1ec3719954532bd219343d81385a2ada3c8e9573fc755a3893f1fbbecc63e2"
+cleared_by   = "validation-harness"
+cleared_date = "2026-06-15"
+notes        = "US federal government work (17 U.S.C. 105); Schedule B"
+
+[[fixture]]
+path         = "corpus/irs-f1040sc.pdf"
+source       = "IRS"
+license      = "Public-Domain"
+sha256       = "ddf401dbe060467d39f90ad2abf645df1de31512821a150dc68a3882bbf19716"
+cleared_by   = "validation-harness"
+cleared_date = "2026-06-15"
+notes        = "US federal government work (17 U.S.C. 105); Schedule C"
+
+[[fixture]]
+path         = "corpus/irs-f1099msc.pdf"
+source       = "IRS"
+license      = "Public-Domain"
+sha256       = "38051fe1cdce8fac5183a7e7b182b1a0de590dcfec3e4f66a156eba3f98943fa"
+cleared_by   = "validation-harness"
+cleared_date = "2026-06-15"
+notes        = "US federal government work (17 U.S.C. 105); Form 1099-MISC"
+
+[[fixture]]
+path         = "corpus/irs-p15.pdf"
+source       = "IRS"
+license      = "Public-Domain"
+sha256       = "b46c3622439d8521e3a0faca4cd5b5ece3451b526f65f06a5e38d5c9f804c88b"
+cleared_by   = "validation-harness"
+cleared_date = "2026-06-15"
+notes        = "US federal government work (17 U.S.C. 105); Publication 15 (text-heavy)"
+
+[[fixture]]
+path         = "corpus/irs-p501.pdf"
+source       = "IRS"
+license      = "Public-Domain"
+sha256       = "288b62a4917f3bc3df0bade7a22c23a8ae648ba9eb5086df5b8b50e881148ff6"
+cleared_by   = "validation-harness"
+cleared_date = "2026-06-15"
+notes        = "US federal government work (17 U.S.C. 105); Publication 501"
+
+[[fixture]]
+path         = "corpus/irs-p502.pdf"
+source       = "IRS"
+license      = "Public-Domain"
+sha256       = "11801353ab959ee04dcadc1f799b6c0b87e1879680fe6f8511af3fa113690d25"
+cleared_by   = "validation-harness"
+cleared_date = "2026-06-15"
+notes        = "US federal government work (17 U.S.C. 105); Publication 502"
+
+[[fixture]]
+path         = "corpus/govinfo-hr1.pdf"
+source       = "GovInfo"
+license      = "Public-Domain"
+sha256       = "866261d6fa89308f1856ac376f36d6ac373d15e6c1e1a8dcb09a580ad733c9d0"
+cleared_by   = "validation-harness"
+cleared_date = "2026-06-15"
+notes        = "US federal government work (17 U.S.C. 105); H.R.1 (118th)"
+
+[[fixture]]
+path         = "corpus/govinfo-hr2.pdf"
+source       = "GovInfo"
+license      = "Public-Domain"
+sha256       = "26498ce13577278121961e706c714f1abde5c61c9235c04e8b4164cad1097791"
+cleared_by   = "validation-harness"
+cleared_date = "2026-06-15"
+notes        = "US federal government work (17 U.S.C. 105); H.R.2 (118th)"
+
+[[fixture]]
+path         = "corpus/govinfo-s1.pdf"
+source       = "GovInfo"
+license      = "Public-Domain"
+sha256       = "34d91aa78d16046a3d05cec8348422483f127c44c45ce09d262eee0deadc8587"
+cleared_by   = "validation-harness"
+cleared_date = "2026-06-15"
+notes        = "US federal government work (17 U.S.C. 105); S.1 (118th)"
+
+[[fixture]]
+path         = "corpus/govinfo-hjres1.pdf"
+source       = "GovInfo"
+license      = "Public-Domain"
+sha256       = "bca5808f473c19b5da735d1655d2bd188f690e4290ffa3d182a4be3208846861"
+cleared_by   = "validation-harness"
+cleared_date = "2026-06-15"
+notes        = "US federal government work (17 U.S.C. 105); H.J.Res.1 (118th)"
+
+[[fixture]]
+path         = "corpus/govinfo-hr3056.pdf"
+source       = "GovInfo"
+license      = "Public-Domain"
+sha256       = "13b93b1f410c9a90b8a6a3c03378321f51af5680b72f42df97c19916ab923c08"
+cleared_by   = "validation-harness"
+cleared_date = "2026-06-15"
+notes        = "US federal government work (17 U.S.C. 105); H.R.3056 (118th)"
+
+[[fixture]]
+path         = "corpus/govinfo-hr815enr.pdf"
+source       = "GovInfo"
+license      = "Public-Domain"
+sha256       = "0ced1efb0610dbb34ab437f16c53362a847b4fb69b3025b1c876a872611b9939"
+cleared_by   = "validation-harness"
+cleared_date = "2026-06-15"
+notes        = "US federal government work (17 U.S.C. 105); H.R.815 enrolled"
+
+[[fixture]]
+path         = "corpus/govinfo-cdoc110-50.pdf"
+source       = "GovInfo"
+license      = "Public-Domain"
+sha256       = "7f29c4a79e310cc7bcee5f3fd07fb1367e463bd4530fa5d854ebdd4fd4402e57"
+cleared_by   = "validation-harness"
+cleared_date = "2026-06-15"
+notes        = "US federal government work (17 U.S.C. 105); Senate Document (charters of freedom)"
+
+[[fixture]]
+path         = "corpus/cdc-mmwr-7301a1.pdf"
+source       = "CDC"
+license      = "Public-Domain"
+sha256       = "561aca7dde34336da8da9e6c6d42cc29b4fafe2ced6e043334a0e189fab23023"
+cleared_by   = "validation-harness"
+cleared_date = "2026-06-15"
+notes        = "US federal government work (17 U.S.C. 105); MMWR 73/01 a1"
+
+[[fixture]]
+path         = "corpus/cdc-mmwr-7302a1.pdf"
+source       = "CDC"
+license      = "Public-Domain"
+sha256       = "6e9bb839fb097f9531920b7d6e2431f41c5eb6ff7cefa0a1fcc341b6a9ac5aa1"
+cleared_by   = "validation-harness"
+cleared_date = "2026-06-15"
+notes        = "US federal government work (17 U.S.C. 105); MMWR 73/02 a1"
+
+[[fixture]]
+path         = "corpus/cdc-mmwr-7251a1.pdf"
+source       = "CDC"
+license      = "Public-Domain"
+sha256       = "f5d52edbc9a49f88117590b0921879fdad78b02d4209a8dafe313386d636b6af"
+cleared_by   = "validation-harness"
+cleared_date = "2026-06-15"
+notes        = "US federal government work (17 U.S.C. 105); MMWR 72/51 a1"
+
+[[fixture]]
+path         = "corpus/nasa-ntrs-19950009349.pdf"
+source       = "NASA-NTRS"
+license      = "Public-Domain"
+sha256       = "a1dba312026a7495abd9183fd89d32f8fdf220b1bc7a1a36ff6af98a0bd69ed9"
+cleared_by   = "validation-harness"
+cleared_date = "2026-06-15"
+notes        = "US federal government work (17 U.S.C. 105); NASA technical report"
+
+[[fixture]]
+path         = "corpus/usgs-fs20183024.pdf"
+source       = "USGS"
+license      = "Public-Domain"
+sha256       = "ebba059a0c150570b2b61153ed604cc8642b74317bee1e982ebe1d4a899a9b65"
+cleared_by   = "validation-harness"
+cleared_date = "2026-06-15"
+notes        = "US federal government work (17 U.S.C. 105); USGS fact sheet (figures/images)"
+
+[[fixture]]
+path         = "corpus/nist-sp800-63-3.pdf"
+source       = "NIST"
+license      = "Public-Domain"
+sha256       = "915bb812cb705918461e642e84141c6ca2adc2ca0106e1d88f3884c61f07110a"
+cleared_by   = "validation-harness"
+cleared_date = "2026-06-15"
+notes        = "US federal government work (17 U.S.C. 105); NIST SP 800-63-3"
+# <<< validation-harness corpus (auto-generated) <<<

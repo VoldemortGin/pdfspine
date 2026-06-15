@@ -32,6 +32,15 @@ tarpaulin-report.html
 /fuzz/corpus/
 /fuzz/artifacts/
 
+# Conformance / validation harness
+# Local-only diff-oracle venv (PyMuPDF is AGPL — never bundled/committed/shipped).
+.venv-oracle/
+# Tier-2 fetch-only corpus of unknown copyright — robustness only, NEVER committed.
+conformance/corpus-cache/
+# Harness machine-readable output (REPORT.md is committed; raw JSON is not).
+conformance/results.json
+conformance/fetch-summary.json
+
 # Editor / OS
 .DS_Store
 .idea/
