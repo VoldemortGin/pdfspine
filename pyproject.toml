@@ -28,6 +28,9 @@ Repository = "https://github.com/oxide-pdf/oxide-pdf"
 [project.optional-dependencies]
 test = ["pytest>=8", "hypothesis>=6"]
 
+[project.scripts]
+oxide-pdf = "oxide_pdf.cli:main"
+
 [tool.maturin]
 # The Rust crate that builds the extension module.
 manifest-path = "crates/py-bindings/Cargo.toml"
