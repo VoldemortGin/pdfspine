@@ -13,7 +13,11 @@
 //! pictographic fonts (Symbol, ZapfDingbats) use a flat default (rarely used by
 //! `insert_text`). Lookup never panics: unmapped chars fall back to the default.
 
+use std::collections::HashMap;
+use std::sync::OnceLock;
+
 use crate::encodings::BaseEncoding;
+use crate::glyphlist::glyph_name_to_unicode;
 
 /// Index of the first tabled char (U+0020, space) in each `[u16; 95]` array.
 const FIRST: u32 = 0x20;
@@ -34,6 +38,10 @@ pub struct StandardWidths {
     /// (U+00A0..=U+00FF), resolved via the WinAnsi glyph names. Empty for the
     /// monospaced Courier family (every glyph is `default`).
     latin1: &'static [(&'static str, u16)],
+    /// Whether every glyph advances by `default` (the monospaced Courier
+    /// family). When set, [`StandardWidths::glyph_advance`] returns `default`
+    /// for *any* glyph the font carries, regardless of WinAnsi indexing.
+    monospace: bool,
 }
 
 impl StandardWidths {
@@ -62,6 +70,56 @@ impl StandardWidths {
     pub fn default_width(&self) -> f64 {
         f64::from(self.default)
     }
+
+    /// The advance width (1000-unit glyph space) for the AGL **glyph name**
+    /// `glyph_name` (e.g. `"A"`, `"space"`, `"Aacute"`), or `None` when this
+    /// font has no metric for that name.
+    ///
+    /// This is the lookup the text-extraction path uses: a simple font resolves
+    /// `code → glyph_name` via its own `/Encoding`, so we must key on the glyph
+    /// name rather than re-applying WinAnsi to the code. ASCII names resolve via
+    /// the WinAnsi reverse map (the `ascii` array is WinAnsi-code-indexed); the
+    /// Latin-1 names resolve via the per-font `latin1` overlay. For the
+    /// monospaced Courier family every nameable glyph advances by the default.
+    #[must_use]
+    pub fn glyph_advance(&self, glyph_name: &str) -> Option<f64> {
+        if glyph_name.is_empty() {
+            return None;
+        }
+        // ASCII run: glyph name → WinAnsi code → tabled width.
+        if let Some(&code) = winansi_name_to_code().get(glyph_name) {
+            return Some(f64::from(self.ascii[(u32::from(code) - FIRST) as usize]));
+        }
+        // Latin-1 overlay: keyed directly by glyph name.
+        if let Some(&(_, w)) = self.latin1.iter().find(|&&(n, _)| n == glyph_name) {
+            return Some(f64::from(w));
+        }
+        // Monospaced family: any *real* glyph (one with a defined Unicode
+        // meaning) advances by the flat default — including the StandardEncoding
+        // punctuation names (`quoteright`, `quoteleft`, …) that are not
+        // WinAnsi-ASCII. `.notdef` / unresolvable names yield `None`.
+        if self.monospace && glyph_name_to_unicode(glyph_name).is_some() {
+            return Some(f64::from(self.default));
+        }
+        None
+    }
+}
+
+/// Reverse map of WinAnsi glyph name → byte code for the printable ASCII run
+/// (U+0020..=U+007E). The `ascii` arrays are indexed by WinAnsi code, so this
+/// turns a glyph name back into its array index. Built once, shared across all
+/// fonts (the WinAnsi names of 0x20..=0x7E are font-independent).
+fn winansi_name_to_code() -> &'static HashMap<&'static str, u8> {
+    static MAP: OnceLock<HashMap<&'static str, u8>> = OnceLock::new();
+    MAP.get_or_init(|| {
+        let mut m = HashMap::new();
+        for code in (FIRST as u8)..=(LAST as u8) {
+            if let Some(name) = BaseEncoding::WinAnsi.glyph_name(code) {
+                m.insert(name, code);
+            }
+        }
+        m
+    })
 }
 
 /// The built-in advance-width table for one of the 14 canonical standard-font
@@ -180,46 +238,55 @@ static HELVETICA: StandardWidths = StandardWidths {
     ascii: &HELVETICA_ASCII,
     default: 278,
     latin1: HELVETICA_LATIN1,
+    monospace: false,
 };
 static HELVETICA_BOLD: StandardWidths = StandardWidths {
     ascii: &HELVETICA_BOLD_ASCII,
     default: 278,
     latin1: HELVETICA_BOLD_LATIN1,
+    monospace: false,
 };
 static HELVETICA_OBLIQUE: StandardWidths = StandardWidths {
     ascii: &HELVETICA_ASCII,
     default: 278,
     latin1: HELVETICA_LATIN1,
+    monospace: false,
 };
 static HELVETICA_BOLDOBLIQUE: StandardWidths = StandardWidths {
     ascii: &HELVETICA_BOLD_ASCII,
     default: 278,
     latin1: HELVETICA_BOLD_LATIN1,
+    monospace: false,
 };
 static TIMES_ROMAN: StandardWidths = StandardWidths {
     ascii: &TIMES_ROMAN_ASCII,
     default: 250,
     latin1: TIMES_ROMAN_LATIN1,
+    monospace: false,
 };
 static TIMES_BOLD: StandardWidths = StandardWidths {
     ascii: &TIMES_BOLD_ASCII,
     default: 250,
     latin1: TIMES_BOLD_LATIN1,
+    monospace: false,
 };
 static TIMES_ITALIC: StandardWidths = StandardWidths {
     ascii: &TIMES_ITALIC_ASCII,
     default: 250,
     latin1: TIMES_ITALIC_LATIN1,
+    monospace: false,
 };
 static TIMES_BOLDITALIC: StandardWidths = StandardWidths {
     ascii: &TIMES_BOLDITALIC_ASCII,
     default: 250,
     latin1: TIMES_BOLDITALIC_LATIN1,
+    monospace: false,
 };
 static COURIER: StandardWidths = StandardWidths {
     ascii: &COURIER_ASCII,
     default: 600,
     latin1: &[],
+    monospace: true,
 };
 
 // Symbol / ZapfDingbats: flat defaults (rarely used by `insert_text`); see
@@ -234,11 +301,13 @@ static SYMBOL: StandardWidths = StandardWidths {
     ascii: &SYMBOL_ASCII,
     default: 600,
     latin1: &[],
+    monospace: false,
 };
 static ZAPF_DINGBATS: StandardWidths = StandardWidths {
     ascii: &ZAPF_ASCII,
     default: 788,
     latin1: &[],
+    monospace: false,
 };
 
 // --- Latin-1 (U+00A0..=U+00FF) overlays by WinAnsi glyph name -------------

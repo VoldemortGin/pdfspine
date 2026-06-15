@@ -23,10 +23,11 @@
 //!   embedded verbatim — see `data/PROVENANCE.md` and `data/NOTICE`.
 //! - **Core-14 standard advance widths** are a built-in factual-metrics table
 //!   ([`std_widths`]): the numeric AFM `WX` values of the 14 standard typefaces
-//!   (ISO 32000-1 §9.6.2.2), used by `insert_text` to place/advance Base-14
-//!   text. Numeric metric facts are not copyrightable expression — see
-//!   `data/PROVENANCE.md`. The AGL-glyph-name [`widths::core14_width`] hook is
-//!   unchanged (still returns `None`).
+//!   (ISO 32000-1 §9.6.2.2). Numeric metric facts are not copyrightable
+//!   expression — see `data/PROVENANCE.md`. These advances feed both
+//!   `insert_text` (placement) and **text extraction**: a base-14 simple font
+//!   lacking a `/Widths` array resolves each code → glyph name → standard
+//!   advance via [`widths::core14_width`] (see [`FontMapper::width`]).
 
 pub mod cmap;
 pub mod encodings;

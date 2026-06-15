@@ -55,6 +55,12 @@ pub struct FontMapper {
     /// Per-code glyph name (encoding + `/Differences`), for the simple path.
     glyph_names: Option<Box<[Option<SmolStr>; 256]>>,
     simple_widths: SimpleWidths,
+    /// The normalized Core-14 font key (e.g. `"Helvetica"`), set **only** for a
+    /// simple base-14 font that has **no** `/Widths` array. When present,
+    /// `width(code)` resolves the glyph's standard AFM advance via the glyph
+    /// name. `None` whenever a `/Widths` array is authoritative or the font is
+    /// not one of the 14 standard fonts.
+    core14: Option<&'static str>,
 
     // --- Type0 state ---
     cid_encoding: Option<CidEncoding>,
@@ -103,7 +109,16 @@ impl FontMapper {
         apply_differences(font, doc, &mut names);
 
         // 3. Widths: `/Widths` + `/FirstChar` + descriptor `/MissingWidth`.
+        let has_widths = has_widths_array(font, doc);
         let simple_widths = build_simple_widths(font, doc);
+
+        // 3b. Core-14 fallback: a standard font *without* a `/Widths` array gets
+        // its built-in AFM advances (PRD §6.5 #2). `/Widths` stays authoritative.
+        let core14 = if has_widths {
+            None
+        } else {
+            widths::normalize_standard_font(&base_font)
+        };
 
         // 4. `/ToUnicode` (overrides on lookup).
         let to_unicode = load_to_unicode(font, doc);
@@ -113,6 +128,7 @@ impl FontMapper {
             to_unicode,
             glyph_names: Some(Box::new(names)),
             simple_widths,
+            core14,
             cid_encoding: None,
             cid_widths: CidWidths::default(),
             cid_to_gid: None,
@@ -144,6 +160,7 @@ impl FontMapper {
             to_unicode,
             glyph_names: None,
             simple_widths: SimpleWidths::default(),
+            core14: None,
             cid_encoding: Some(cid_encoding),
             cid_widths,
             cid_to_gid,
@@ -211,7 +228,25 @@ impl FontMapper {
     #[must_use]
     pub fn width(&self, code: u32) -> f64 {
         match self.kind {
-            FontKind::Simple => self.simple_widths.width(code),
+            FontKind::Simple => {
+                // Core-14 AFM advances apply only when no `/Widths` array is
+                // present (otherwise `/Widths` is authoritative). Resolve the
+                // code's glyph name, then its standard advance; fall back to the
+                // `/MissingWidth`/notdef table when either is unavailable.
+                if let Some(std_name) = self.core14 {
+                    if let Some(name) = self
+                        .glyph_names
+                        .as_ref()
+                        .and_then(|n| n.get(code as usize))
+                        .and_then(Option::as_ref)
+                    {
+                        if let Some(w) = widths::core14_width(std_name, name) {
+                            return w;
+                        }
+                    }
+                }
+                self.simple_widths.width(code)
+            }
             FontKind::Type0 => {
                 let cid = self.code_to_cid(code);
                 self.cid_widths.width(cid)
@@ -408,6 +443,18 @@ fn apply_differences(font: &Dict, doc: &DocumentStore, names: &mut [Option<SmolS
     }
 }
 
+/// Whether the font dict carries a usable `/Widths` *array* (after resolving an
+/// indirect reference). Drives the Core-14 fallback: a `/Widths` array is always
+/// authoritative, so the built-in AFM metrics apply only in its absence.
+fn has_widths_array(font: &Dict, doc: &DocumentStore) -> bool {
+    doc.resolve_dict_key(font, &Name::new("Widths"))
+        .ok()
+        .flatten()
+        .as_deref()
+        .and_then(Object::as_array)
+        .is_some()
+}
+
 /// Builds the simple-font width table from `/Widths` + `/FirstChar` and the
 /// descriptor `/MissingWidth`.
 fn build_simple_widths(font: &Dict, doc: &DocumentStore) -> SimpleWidths {
@@ -439,8 +486,8 @@ fn build_simple_widths(font: &Dict, doc: &DocumentStore) -> SimpleWidths {
                 .collect();
             SimpleWidths::new(first_char, &resolved, missing)
         }
-        // No `/Widths`: try the Core-14 framework (documented gap → empty), then
-        // fall back to a MissingWidth-only table.
+        // No `/Widths`: a MissingWidth-only table. For a base-14 font the
+        // Core-14 AFM advances are layered on top in `width()` (see `core14`).
         None => SimpleWidths::new(first_char, &[], missing),
     }
 }

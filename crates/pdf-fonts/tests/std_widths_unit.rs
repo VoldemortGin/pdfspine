@@ -72,3 +72,26 @@ fn widths_std14_005_unknown_char_and_font_no_panic() {
     assert!(v.is_finite());
     assert!(v > 0.0);
 }
+
+// WIDTHS-STD14-006: glyph-name advance lookup (the extraction path). ASCII names
+// resolve via the WinAnsi reverse map; Latin-1 names via the per-font overlay;
+// an unknown glyph name returns None (caller falls back).
+#[test]
+fn widths_std14_006_glyph_advance_by_name() {
+    let h = standard_font_widths("Helvetica").unwrap();
+    assert_eq!(h.glyph_advance("A"), Some(667.0));
+    assert_eq!(h.glyph_advance("space"), Some(278.0));
+    assert_eq!(h.glyph_advance("i"), Some(222.0));
+    assert_eq!(h.glyph_advance("zero"), Some(556.0));
+    // Latin-1 overlay names.
+    assert_eq!(h.glyph_advance("Eacute"), Some(667.0));
+    assert_eq!(h.glyph_advance("eacute"), Some(556.0));
+    assert_eq!(h.glyph_advance("germandbls"), Some(611.0));
+    // Unknown name → None, never panics.
+    assert_eq!(h.glyph_advance("nosuchglyph"), None);
+
+    // Times shares the lookup mechanism with different metrics.
+    let t = standard_font_widths("Times-Roman").unwrap();
+    assert_eq!(t.glyph_advance("A"), Some(722.0));
+    assert_eq!(t.glyph_advance("a"), Some(444.0));
+}

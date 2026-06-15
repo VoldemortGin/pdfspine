@@ -192,9 +192,9 @@ fn widths_004_sanitize_nan_negative_absurd() {
 }
 
 #[test]
-fn widths_core14_gap_missingwidth_fallback() {
-    // Unembedded standard-14 font, no /Widths: the AFM table is the documented
-    // gap, so width falls back to /MissingWidth (here 333), not an AFM value.
+fn widths_core14_001_helvetica_no_widths_uses_afm() {
+    // Unembedded standard-14 Helvetica, no /Widths: the Core-14 AFM advances now
+    // apply during extraction — and override /MissingWidth (here 333) per glyph.
     let mut d = FontDoc::new();
     let desc = d.add(Object::Dictionary(dict([
         ("Type", name_obj("FontDescriptor")),
@@ -208,9 +208,15 @@ fn widths_core14_gap_missingwidth_fallback() {
     ])));
     let doc = d.open();
     let m = mapper_for(&doc, font);
-    // 'A' would be 667 in real Helvetica AFM, but the table is empty → 333.
-    assert_eq!(m.width(0x41), 333.0);
-    assert_eq!(pdf_fonts::widths::core14_width("Helvetica", "A"), None);
+    // Standard AFM advances: space=278, 'A'=667, 'i'=222.
+    assert_eq!(m.width(0x20), 278.0);
+    assert_eq!(m.width(0x41), 667.0);
+    assert_eq!(m.width(0x69), 222.0);
+    // The hook now resolves an AFM value rather than returning None.
+    assert_eq!(
+        pdf_fonts::widths::core14_width("Helvetica", "A"),
+        Some(667.0)
+    );
 }
 
 // === ITERCODES-* =========================================================

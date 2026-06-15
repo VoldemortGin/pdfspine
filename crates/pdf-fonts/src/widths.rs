@@ -161,18 +161,16 @@ impl CidWidths {
     }
 }
 
-// --- Core-14 AFM metrics framework (DOCUMENTED GAP, PRD §6.5 #2 / §8.5.2) ---
+// --- Core-14 AFM metrics framework (PRD §6.5 #2 / §8.5.2) ------------------
 
 /// Normalizes a `/BaseFont` name to one of the 14 standard font keys, stripping
 /// a subset tag (`ABCDEF+`) and matching the documented aliases (`Arial` →
 /// Helvetica, etc.). Returns `None` for a non-standard font.
 ///
-/// This is the lookup hook for Core-14 AFM widths. The **width table itself is
-/// intentionally empty for this milestone** — no recognized-permissive AFM
-/// source was cleared (see `data/PROVENANCE.md`), so [`core14_width`] always
-/// returns `None` and callers fall back to `/MissingWidth` then the notdef
-/// width. When a clean AFM source is cleared the table populates behind this
-/// same hook with no API change.
+/// This is the lookup hook for Core-14 AFM widths: the normalized key feeds
+/// [`core14_width`], which resolves against the built-in factual advance-width
+/// table ([`crate::std_widths`]). A base-14 simple font lacking a `/Widths`
+/// array gets these advances during text extraction.
 #[must_use]
 pub fn normalize_standard_font(base_font: &str) -> Option<&'static str> {
     // Drop a `TAG+` subset prefix.
@@ -223,10 +221,21 @@ pub fn normalize_standard_font(base_font: &str) -> Option<&'static str> {
 }
 
 /// The Core-14 AFM width for `glyph_name` in the normalized standard font
-/// `std_name`. **Always `None` for this milestone** — the AFM width table is the
-/// documented gap (`WIDTHS-CORE14-GAP`); see `normalize_standard_font` and
-/// `data/PROVENANCE.md`.
+/// `std_name` (one of the 14 canonical keys, e.g. as returned by
+/// [`normalize_standard_font`]). Returns `None` for an unknown font key or a
+/// glyph name the font has no metric for.
+///
+/// This resolves against the built-in factual advance-width table
+/// ([`crate::std_widths`]). The 12 text fonts carry full per-glyph metrics; the
+/// two pictographic fonts (Symbol, ZapfDingbats) report their flat default for
+/// any glyph (they are not WinAnsi-named).
 #[must_use]
-pub fn core14_width(_std_name: &str, _glyph_name: &str) -> Option<f64> {
-    None
+pub fn core14_width(std_name: &str, glyph_name: &str) -> Option<f64> {
+    let table = crate::std_widths::standard_font_widths(std_name)?;
+    table.glyph_advance(glyph_name).or_else(|| match std_name {
+        // Symbol / ZapfDingbats have no WinAnsi glyph names; any glyph they
+        // do carry advances at the flat default.
+        "Symbol" | "ZapfDingbats" => Some(table.default_width()),
+        _ => None,
+    })
 }
