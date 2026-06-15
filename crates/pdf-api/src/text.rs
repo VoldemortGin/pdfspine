@@ -302,6 +302,149 @@ fn filter_name(dict: &Dict) -> String {
     }
 }
 
+// === get_xobjects =========================================================
+
+/// One `page.get_xobjects()` entry (PyMuPDF tuple
+/// `(xref, name, "Form"|"Image", bbox, matrix, referencer)`). `bbox` is the
+/// XObject's `/BBox` (Form) or the unit square `[0 0 1 1]` (Image, which has no
+/// `/BBox`); `matrix` is the Form `/Matrix` (identity when absent / for Images).
+#[derive(Clone, Debug, PartialEq)]
+pub struct XObjectInfo {
+    /// The XObject's xref number, or `0` if direct/inline.
+    pub xref: i32,
+    /// The resource name the XObject is referenced under (e.g. `"Fm0"`).
+    pub name: String,
+    /// `"Form"`, `"Image"`, or the raw `/Subtype` for any other XObject kind.
+    pub kind: String,
+    /// The `/BBox` (Form) or the unit square (Image), as `(x0, y0, x1, y1)`.
+    pub bbox: (f64, f64, f64, f64),
+    /// The Form `/Matrix` as `(a, b, c, d, e, f)` (identity when absent).
+    pub matrix: (f64, f64, f64, f64, f64, f64),
+    /// The xref of the referencing object — the page object number.
+    pub referencer: i32,
+}
+
+/// The page's XObjects as [`XObjectInfo`] entries, walking `/Resources /XObject`
+/// (PyMuPDF `page.get_xobjects()`). Unlike `get_images`, this keeps **every**
+/// XObject (Form *and* Image), mirroring PyMuPDF.
+///
+/// Deduped by xref; sorted by resource name for determinism. A missing / empty
+/// `/XObject` dict yields an empty `Vec`.
+#[must_use]
+pub fn get_xobjects(page: &Page) -> Vec<XObjectInfo> {
+    let doc = page.document();
+    let referencer = page.obj_ref().num as i32;
+    let mut out: Vec<XObjectInfo> = Vec::new();
+    let mut seen_xref: HashSet<i32> = HashSet::new();
+
+    let Some(xobj_dict) = resource_subdict(doc, page, "XObject") else {
+        return out;
+    };
+
+    let mut entries: Vec<(&Name, &Object)> = xobj_dict.iter().collect();
+    entries.sort_by(|a, b| a.0.as_bytes().cmp(b.0.as_bytes()));
+
+    for (res_name, value) in entries {
+        let xref = value.as_reference().map(|r| r.num as i32).unwrap_or(0);
+        if xref != 0 && seen_xref.contains(&xref) {
+            continue;
+        }
+        let Some(obj) = resolve_value(doc, value) else {
+            continue;
+        };
+        let Some(dict) = obj.as_dict() else {
+            continue;
+        };
+        let Some(name) = res_name.as_str() else {
+            continue;
+        };
+        if xref != 0 {
+            seen_xref.insert(xref);
+        }
+        out.push(build_xobject_info(dict, xref, name.to_string(), referencer));
+    }
+    out
+}
+
+/// Assembles one [`XObjectInfo`] from a resolved XObject dict.
+fn build_xobject_info(dict: &Dict, xref: i32, name: String, referencer: i32) -> XObjectInfo {
+    let kind = dict_name(dict, "Subtype").unwrap_or_default();
+    let bbox = dict
+        .get(&Name::new("BBox"))
+        .and_then(Object::as_array)
+        .map(rect_from_array)
+        .unwrap_or((0.0, 0.0, 1.0, 1.0));
+    let matrix = dict
+        .get(&Name::new("Matrix"))
+        .and_then(Object::as_array)
+        .and_then(matrix_from_array)
+        .unwrap_or((1.0, 0.0, 0.0, 1.0, 0.0, 0.0));
+    XObjectInfo {
+        xref,
+        name,
+        kind,
+        bbox,
+        matrix,
+        referencer,
+    }
+}
+
+/// A 4-number array as `(x0, y0, x1, y1)`; missing/short arrays degrade to zeros.
+fn rect_from_array(a: &[Object]) -> (f64, f64, f64, f64) {
+    let n = |i: usize| a.get(i).and_then(Object::as_f64).unwrap_or(0.0);
+    (n(0), n(1), n(2), n(3))
+}
+
+/// A 6-number array as a matrix tuple; returns `None` when fewer than 6 numbers.
+fn matrix_from_array(a: &[Object]) -> Option<(f64, f64, f64, f64, f64, f64)> {
+    if a.len() < 6 {
+        return None;
+    }
+    let n = |i: usize| a.get(i).and_then(Object::as_f64).unwrap_or(0.0);
+    Some((n(0), n(1), n(2), n(3), n(4), n(5)))
+}
+
+// === get_image_rects ======================================================
+
+/// One placement of an image on the page (PyMuPDF `page.get_image_rects` /
+/// `get_image_info` subset): the device-space bbox plus the resource name and
+/// declared pixel size. One image referenced N times yields N entries.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ImageRect {
+    /// The XObject resource name (`Do`), or empty for an inline image.
+    pub name: String,
+    /// `true` for an inline `BI…ID…EI` image.
+    pub inline: bool,
+    /// The device-space placement bbox `(x0, y0, x1, y1)` (top-left origin).
+    pub bbox: (f64, f64, f64, f64),
+    /// The declared pixel width (`/Width`), if present.
+    pub width: u32,
+    /// The declared pixel height (`/Height`), if present.
+    pub height: u32,
+}
+
+/// Every image **placement** on `page`, in reading order (PyMuPDF
+/// `page.get_image_rects`). Each entry's `bbox` is the device-space rectangle the
+/// image occupies, taken from the layout-reconstructed image blocks.
+#[must_use]
+pub fn get_image_rects(page: &Page) -> Vec<ImageRect> {
+    let tp = textpage(page, 0, None);
+    tp.blocks
+        .iter()
+        .filter(|b| b.kind == pdf_text::BlockKind::Image)
+        .filter_map(|b| {
+            let img = b.image.as_ref()?;
+            Some(ImageRect {
+                name: img.name.as_ref().map(|s| s.to_string()).unwrap_or_default(),
+                inline: img.name.is_none(),
+                bbox: (b.bbox.x0, b.bbox.y0, b.bbox.x1, b.bbox.y1),
+                width: img.width.unwrap_or(0),
+                height: img.height.unwrap_or(0),
+            })
+        })
+        .collect()
+}
+
 // === reusable TextPage ====================================================
 
 /// A neutral `get_text` result the PyO3 layer converts to the right Python

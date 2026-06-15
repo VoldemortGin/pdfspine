@@ -47,7 +47,8 @@ pub use pdf_crypto::{EncryptMethod, EncryptSpec};
 // these free functions (the orphan rule forbids inherent `impl Page` here, since
 // `Page` is defined in `pdf-core`).
 pub use text::{
-    get_fonts, get_images, get_text, search, textpage, FontInfo, ImageInfo, TextOutput,
+    get_fonts, get_image_rects, get_images, get_text, get_xobjects, search, textpage, FontInfo,
+    ImageInfo, ImageRect, TextOutput, XObjectInfo,
 };
 
 // Image path (M5): `Pixmap`, `get_pixmap`, `extract_image`, image documents
@@ -838,6 +839,112 @@ impl Document {
     pub fn set_oc(&self, target: u32, ocg: u32) -> Result<()> {
         pdf_edit::set_oc(&self.store, ObjRef::new(target, 0), ObjRef::new(ocg, 0))?;
         Ok(())
+    }
+
+    // --- page navigation / identity (PRD §8.7 / §7) ----------------------
+
+    /// Re-fetches the [`Page`] at `index` from the live store (PyMuPDF
+    /// `Document.reload_page`). Use after a structural edit invalidated a held
+    /// page handle.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Syntax`] when `index` is out of range.
+    pub fn reload_page(&self, index: usize) -> Result<Page> {
+        self.refresh_pages();
+        self.load_page(index)
+    }
+
+    /// The object number of the page at `index` (PyMuPDF `Document.page_xref`).
+    /// Returns `0` for an out-of-range index, matching PyMuPDF's `-1`-free
+    /// convention here (callers check `page_count`).
+    #[must_use]
+    pub fn page_xref(&self, index: usize) -> u32 {
+        self.page_refs().get(index).map(|r| r.num).unwrap_or(0)
+    }
+
+    /// The XObjects on page `index` (PyMuPDF `Document.get_page_xobjects`).
+    #[must_use]
+    pub fn get_page_xobjects(&self, index: usize) -> Vec<XObjectInfo> {
+        match self.load_page(index) {
+            Ok(page) => get_xobjects(&page),
+            Err(_) => Vec::new(),
+        }
+    }
+
+    /// Resolves a link spec (a URI string, a named destination, or a `/Dest`
+    /// value already serialized as a name/string) to a 0-based page index
+    /// (PyMuPDF `Document.resolve_link`). A `"#page=N"` / `"#N"` fragment or a
+    /// bare named destination is supported; an external `http(s)://` URI returns
+    /// `None` (it has no page target).
+    #[must_use]
+    pub fn resolve_link(&self, link: &str) -> Option<usize> {
+        let pages = pdf_edit::dest::page_index_map(&self.store);
+        // `#page=N` / `#N` fragment → 1-based PyMuPDF page number.
+        if let Some(frag) = link.rsplit('#').next() {
+            let frag = frag.strip_prefix("page=").unwrap_or(frag);
+            if let Ok(n) = frag.parse::<usize>() {
+                let idx = n.saturating_sub(1);
+                if idx < self.page_count() {
+                    return Some(idx);
+                }
+            }
+        }
+        // Otherwise treat the whole string as a named destination.
+        pdf_edit::dest::resolve_named(&self.store, link.as_bytes(), &pages)
+    }
+
+    /// Deep-copies the page at `pno` and appends the copy to the end of the
+    /// document (PyMuPDF `Document.fullcopy_page` with `to == -1`). The copy is
+    /// fully independent (its object graph is grafted), not a shared reference.
+    /// Returns the new page's 0-based index.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Syntax`] for an out-of-range `pno`; propagates graft errors.
+    pub fn fullcopy_page(&self, pno: usize) -> Result<usize> {
+        if pno >= self.page_count() {
+            return Err(Error::Syntax(format!("page index {pno} out of range")));
+        }
+        // Graft the single page from `self` into `self` (a self-merge copies the
+        // page's object graph with fresh numbers, so it is fully independent).
+        let opts = pdf_edit::InsertOptions {
+            from_page: Some(pno),
+            to_page: Some(pno),
+            start_at: None,
+            rotate: None,
+        };
+        pdf_edit::insert_pdf(&self.store, &self.store, &opts)?;
+        self.refresh_pages();
+        Ok(self.page_count() - 1)
+    }
+
+    // --- EPUB-class chapter/location model (single-chapter shim, PRD §7) --
+
+    /// The chapter count (PyMuPDF `Document.chapter_count`). PDF is a flat,
+    /// single-chapter model here, so this is always `1`.
+    #[must_use]
+    pub fn chapter_count(&self) -> usize {
+        1
+    }
+
+    /// The page count of chapter `chapter` (PyMuPDF
+    /// `Document.chapter_page_count`). Chapter `0` holds every page; any other
+    /// chapter is empty.
+    #[must_use]
+    pub fn chapter_page_count(&self, chapter: usize) -> usize {
+        if chapter == 0 {
+            self.page_count()
+        } else {
+            0
+        }
+    }
+
+    /// The last `(chapter, page)` location (PyMuPDF `Document.last_location`):
+    /// `(0, page_count - 1)`, or `(0, 0)` for an empty document.
+    #[must_use]
+    pub fn last_location(&self) -> (usize, usize) {
+        (0, self.page_count().saturating_sub(1))
     }
 }
 
@@ -1995,6 +2102,118 @@ pub fn page_get_drawings(page: &Page) -> Vec<Drawing> {
 #[must_use]
 pub fn page_get_cdrawings(page: &Page) -> Vec<Drawing> {
     pdf_edit::get_cdrawings(page.document(), page.number())
+}
+
+// === page-level XObject / content / image-rect free functions (PRD §7) ===
+
+/// The XObjects on `page` (PyMuPDF `Page.get_xobjects()`).
+#[must_use]
+pub fn page_get_xobjects(page: &Page) -> Vec<XObjectInfo> {
+    get_xobjects(page)
+}
+
+/// The image placements on `page` (PyMuPDF `Page.get_image_rects()`).
+#[must_use]
+pub fn page_get_image_rects(page: &Page) -> Vec<ImageRect> {
+    get_image_rects(page)
+}
+
+/// The object numbers of `page`'s content streams, in order (PyMuPDF
+/// `Page.get_contents`). A single `/Contents` stream yields a one-element list;
+/// an array yields each referenced stream's number; a direct/inline stream
+/// yields an empty list (no xref).
+#[must_use]
+pub fn page_get_contents(page: &Page) -> Vec<u32> {
+    let doc = page.document();
+    let Some(leaf) = page.dict() else {
+        return Vec::new();
+    };
+    match leaf.get(&Name::new("Contents")) {
+        Some(Object::Reference(r)) => vec![r.num],
+        Some(Object::Array(items)) => items
+            .iter()
+            .filter_map(|it| match it {
+                Object::Reference(r) => Some(r.num),
+                _ => None,
+            })
+            .collect(),
+        _ => {
+            let _ = doc;
+            Vec::new()
+        }
+    }
+}
+
+/// The decoded, concatenated content-stream bytes of `page` (PyMuPDF
+/// `Page.read_contents`). Streams are joined with a single newline so an operator
+/// cannot straddle a boundary (ISO 32000-1 §7.8.2).
+#[must_use]
+pub fn page_read_contents(page: &Page) -> Vec<u8> {
+    let doc = page.document();
+    let Some(leaf) = page.dict() else {
+        return Vec::new();
+    };
+    let Ok(Some(contents)) = doc.resolve_dict_key(&leaf, &Name::new("Contents")) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    let push_stream = |obj: &Object, out: &mut Vec<u8>| {
+        if let Some(s) = obj.as_stream() {
+            if let Ok(bytes) = doc.decode_stream(s).and_then(|o| o.into_decoded()) {
+                if !out.is_empty() {
+                    out.push(b'\n');
+                }
+                out.extend_from_slice(&bytes);
+            }
+        }
+    };
+    match contents.as_ref() {
+        Object::Stream(_) => push_stream(contents.as_ref(), &mut out),
+        Object::Array(arr) => {
+            for item in arr {
+                match item {
+                    Object::Reference(r) => {
+                        if let Ok(obj) = doc.resolve(*r) {
+                            push_stream(obj.as_ref(), &mut out);
+                        }
+                    }
+                    other => push_stream(other, &mut out),
+                }
+            }
+        }
+        _ => {}
+    }
+    out
+}
+
+/// Places another PDF page onto `page` as a Form XObject (PyMuPDF
+/// `Page.show_pdf_page`). The source page `src_pno` of `src` is deep-copied into
+/// `page`'s document as a self-contained Form XObject (via the `insert_pdf`
+/// graft machinery) and drawn so it fills `rect` (PyMuPDF top-left page space).
+/// Returns the chosen XObject resource name.
+///
+/// Useful for n-up / watermark / stamp composition. The placement maps the
+/// source page's media box onto `rect`; rotation of the source page is honored
+/// by baking its `/Rotate` into the form's matrix.
+///
+/// # Errors
+///
+/// [`Error::Syntax`] for an out-of-range destination page or `src_pno`;
+/// propagates graft / content-edit errors.
+pub fn page_show_pdf_page(
+    page: &Page,
+    rect: Rect,
+    src: &Document,
+    src_pno: usize,
+) -> Result<String> {
+    let leaf = page_leaf(page)?;
+    Ok(pdf_edit::show_pdf_page(
+        page.document(),
+        leaf,
+        &src.store,
+        src_pno,
+        rect,
+    )?)
 }
 
 // === M4e page-level form free functions (PRD §8.8) =======================

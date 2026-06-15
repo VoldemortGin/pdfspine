@@ -113,17 +113,20 @@ add("Document.save_snapshot", "Document", OUT_OF_SCOPE, "post-v1", "journalling 
 # Pages — access / layout
 add_many("Document", IMPLEMENTED, "M1", ["load_page", "__getitem__", "pages", "page_count"])
 add_many("Document", IMPLEMENTED, "M3", ["new_page", "insert_pdf", "delete_page", "select"])
+add_many("Document", IMPLEMENTED, "M3", ["fullcopy_page", "reload_page", "page_xref"])
 add_many("Document", DEFERRED, "M3", [
-    "insert_page", "copy_page", "fullcopy_page", "move_page", "delete_pages",
-    "reload_page", "page_cropbox", "page_xref",
+    "insert_page", "copy_page", "move_page", "delete_pages", "page_cropbox",
 ])
 add("Document.insert_file", "Document", DEFERRED, "M5", "image inputs in scope; non-image unsupported")
 add("Document.layout", "Document", OUT_OF_SCOPE, "out-of-scope", "EPUB-class reflow (PRD §3.2 #8)")
-# Chapter / location model (reflowable docs) — out of scope
+# Chapter / location model — PDF is a flat single-chapter model: the trivial
+# chapter accessors are implemented; the reflowable-doc bookmark API is out of scope.
+add_many("Document", IMPLEMENTED, "M3", [
+    "chapter_count", "chapter_page_count", "last_location",
+], "single-chapter PDF model (chapter 0 holds every page)")
 add_many("Document", OUT_OF_SCOPE, "out-of-scope", [
-    "chapter_count", "chapter_page_count", "last_location", "next_location",
-    "prev_location", "location_from_page_number", "page_number_from_location",
-    "make_bookmark", "find_bookmark",
+    "next_location", "prev_location", "location_from_page_number",
+    "page_number_from_location", "make_bookmark", "find_bookmark",
 ], "EPUB-class reflow (PRD §3.2 #8)")
 # Metadata / TOC / outline
 add_many("Document", IMPLEMENTED, "M1", ["metadata"])
@@ -160,8 +163,9 @@ add_many("Document", DEFERRED, "M4", ["embfile_upd"])
 add_many("Document", DEFERRED, "M5", ["extract_font", "extract_image", "subset_fonts"])
 add_many("Document", DEFERRED, "M2", ["get_char_widths"])
 add_many("Document", IMPLEMENTED, "M4", ["bake", "scrub"])
+add("Document.resolve_link", "Document", IMPLEMENTED, "M3", "URI fragment / named-destination → page index")
 add_many("Document", DEFERRED, "M3", [
-    "subset", "resolve_names", "resolve_link", "get_outline_xrefs",
+    "subset", "resolve_names", "get_outline_xrefs",
 ])
 # Low-level xref / object access
 add_many("Document", IMPLEMENTED, "M1", [
@@ -191,8 +195,9 @@ add("Document.set_page_labels", "Document", OUT_OF_SCOPE, "post-v1", "page-label
 # Document-wide page-content helpers
 add_many("Document", IMPLEMENTED, "M2", ["get_page_text"])
 add("Document.get_page_pixmap", "Document", DEFERRED, "M5", "image-only path in scope; vector unsupported")
+add("Document.get_page_xobjects", "Document", IMPLEMENTED, "M2", "per-page XObject inventory (Form + Image)")
 add_many("Document", DEFERRED, "M2", [
-    "get_page_images", "get_page_fonts", "get_page_xobjects", "search_page_for",
+    "get_page_images", "get_page_fonts", "search_page_for",
 ])
 # Forms helpers actually implemented in source
 add_many("Document", IMPLEMENTED, "M4", [
@@ -231,8 +236,9 @@ add_many("Page", IMPLEMENTED, "M4", ["get_drawings", "get_cdrawings"])
 add_many("Page", IMPLEMENTED, "M2", ["get_fonts", "get_images"])
 add_many("Page", DEFERRED, "M4", ["get_bboxlog", "cluster_drawings"])
 add("Page.find_tables", "Page", IMPLEMENTED, "M7", "table detection: lines/lines_strict/text strategies (M7)")
+add_many("Page", IMPLEMENTED, "M2", ["get_image_rects", "get_xobjects"])
 add_many("Page", DEFERRED, "M2", [
-    "get_image_info", "get_image_bbox", "get_image_rects", "get_xobjects",
+    "get_image_info", "get_image_bbox",
 ])
 # Drawing primitives
 add_many("Page", IMPLEMENTED, "M4", [
@@ -246,8 +252,9 @@ add_many("Page", DEFERRED, "M4", [
 add_many("Page", IMPLEMENTED, "M4", [
     "insert_text", "insert_textbox", "insert_image",
 ])
+add("Page.show_pdf_page", "Page", IMPLEMENTED, "M4", "place another PDF page as a Form XObject (n-up/stamp/watermark)")
 add_many("Page", DEFERRED, "M4", [
-    "insert_font", "write_text", "show_pdf_page", "replace_image", "delete_image",
+    "insert_font", "write_text", "replace_image", "delete_image",
 ])
 add("Page.insert_htmlbox", "Page", OUT_OF_SCOPE, "post-v1", "HTML/CSS engine out of scope (PRD §3.2 #2)")
 # Annotations
@@ -264,7 +271,8 @@ add_many("Page", DEFERRED, "M4", ["load_annot", "add_caret_annot"])
 add_many("Page", IMPLEMENTED, "M4", ["widgets", "first_widget"])
 add_many("Page", DEFERRED, "M4", ["add_widget", "load_widget", "delete_widget"])
 # Content-stream maintenance
-add_many("Page", DEFERRED, "M3", ["get_contents", "read_contents", "set_contents"])
+add_many("Page", IMPLEMENTED, "M3", ["get_contents", "read_contents"])
+add_many("Page", DEFERRED, "M3", ["set_contents"])
 add_many("Page", DEFERRED, "M4", ["clean_contents", "wrap_contents", "is_wrapped"])
 # Geometry / boxes / rotation
 add_many("Page", IMPLEMENTED, "M1", [
@@ -298,18 +306,20 @@ add_many("TextPage", DEFERRED, "M2", [
 # ---------------------------------------------------------------------------
 # 5. Pixmap — M5, none implemented yet
 # ---------------------------------------------------------------------------
-add_many("Pixmap", DEFERRED, "M5", [
+add_many("Pixmap", IMPLEMENTED, "M5", [
     "Pixmap", "save", "tobytes", "pixel", "set_pixel", "set_rect",
-    "set_origin", "set_dpi", "set_alpha", "clear_with", "invert_irect",
-    "tint_with", "gamma_with", "shrink", "copy", "warp", "color_count",
-    "color_topusage", "samples", "samples_mv", "samples_ptr", "stride",
-    "width", "height", "w", "h", "x", "y", "irect", "n", "alpha",
-    "colorspace", "digest", "size", "xres", "yres", "is_monochrome",
-    "is_unicolor", "__array_interface__",
+    "set_alpha", "clear_with", "invert_irect", "shrink", "copy",
+    "samples", "samples_mv", "stride", "width", "height", "w", "h",
+    "irect", "n", "alpha", "colorspace", "size",
 ])
-add_many("Pixmap", OUT_OF_SCOPE, "post-v1", [
+add_many("Pixmap", DEFERRED, "M5", [
+    "set_origin", "set_dpi", "tint_with", "gamma_with", "warp", "color_count",
+    "color_topusage", "samples_ptr", "x", "y", "digest", "xres", "yres",
+    "is_monochrome", "is_unicolor", "__array_interface__",
+])
+add_many("Pixmap", IMPLEMENTED, "M5", [
     "pil_save", "pil_tobytes",
-], "Pillow bridge out of scope (PRD §3.2 #3)")
+], "PNG/PPM/PAM bytes under the PyMuPDF Pillow-bridge names")
 # OCR sandwich export (M8). PyMuPDF catalogs these under `Pixmap`; oxide-pdf
 # exposes them on `Document` (the whole-document sandwich), with the baseline
 # `Pixmap.*` names kept implemented so the search/save surface is covered.

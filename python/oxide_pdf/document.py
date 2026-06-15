@@ -14,7 +14,7 @@ from typing import Iterator
 
 from . import _core
 from ._core import PdfRedactionError, PdfUnsupportedError
-from .geometry import Point, Quad, Rect
+from .geometry import Matrix, Point, Quad, Rect
 
 # PyMuPDF methods/properties that exist on the real API but land in later
 # milestones. Accessing them raises a typed, catchable error with a hint, not
@@ -767,6 +767,38 @@ class Page:
         """The page's images as PyMuPDF tuples (PyMuPDF ``page.get_images``)."""
         return self._page.get_images(full)
 
+    def get_xobjects(self) -> list[tuple]:
+        """The page's XObjects (PyMuPDF ``page.get_xobjects``).
+
+        Each entry is ``(xref, name, type, bbox, matrix, referencer)`` where
+        ``type`` is ``"Form"`` or ``"Image"``, ``bbox`` is a :class:`Rect`, and
+        ``matrix`` is a :class:`Matrix`.
+        """
+        out = []
+        for xref, name, kind, bbox, matrix, ref in self._page.get_xobjects():
+            out.append((xref, name, kind, _rect(bbox), Matrix(*matrix), ref))
+        return out
+
+    def get_image_rects(self, *_args, **_kwargs) -> list[Rect]:
+        """The page's image placements as :class:`Rect` (PyMuPDF
+        ``page.get_image_rects``). One rectangle per painted image."""
+        return [_rect(bbox) for _name, _inline, bbox, _w, _h in self._page.get_image_rects()]
+
+    def get_contents(self) -> list[int]:
+        """The object numbers of the page's content streams (PyMuPDF
+        ``page.get_contents``)."""
+        return self._page.get_contents()
+
+    def read_contents(self) -> bytes:
+        """The decoded, concatenated content-stream bytes (PyMuPDF
+        ``page.read_contents``)."""
+        return self._page.read_contents()
+
+    def show_pdf_page(self, rect, src: "Document", pno: int = 0, *_args, **_kwargs) -> str:
+        """Places ``src``'s page ``pno`` onto this page as a Form XObject filling
+        ``rect`` (PyMuPDF ``page.show_pdf_page``). Returns the XObject name."""
+        return self._page.show_pdf_page(_rt(rect), src._doc, int(pno))
+
     # --- get_pixmap (PRD §3.3 / §8.10) ---
     def get_pixmap(
         self,
@@ -1374,6 +1406,66 @@ class Document:
     def __iter__(self) -> Iterator[Page]:
         for i in range(self._doc.page_count):
             yield Page(self._doc.load_page(i))
+
+    def pages(self, *_args, **_kwargs) -> Iterator[Page]:
+        """Yields every page in order (PyMuPDF ``doc.pages``)."""
+        for i in range(self._doc.page_count):
+            yield Page(self._doc.load_page(i))
+
+    def reload_page(self, page) -> Page:
+        """Re-fetches a page from the live store (PyMuPDF ``doc.reload_page``).
+
+        Accepts a :class:`Page` (its ``number`` is used) or an int index.
+        """
+        index = page.number if isinstance(page, Page) else int(page)
+        return Page(self._doc.reload_page(index))
+
+    def page_xref(self, pno: int) -> int:
+        """The object number of page ``pno`` (PyMuPDF ``doc.page_xref``)."""
+        if pno < 0:
+            pno += self._doc.page_count
+        return self._doc.page_xref(pno)
+
+    def get_page_xobjects(self, pno: int) -> list[tuple]:
+        """The XObjects on page ``pno`` (PyMuPDF ``doc.get_page_xobjects``).
+
+        Each entry is ``(xref, name, type, bbox, matrix, referencer)``.
+        """
+        if pno < 0:
+            pno += self._doc.page_count
+        out = []
+        for xref, name, kind, bbox, matrix, ref in self._doc.get_page_xobjects(pno):
+            out.append((xref, name, kind, _rect(bbox), Matrix(*matrix), ref))
+        return out
+
+    def resolve_link(self, uri: str = "", *, chapters: int = 0) -> int | None:
+        """Resolves a link/destination spec to a 0-based page index, or ``None``
+        (PyMuPDF ``doc.resolve_link``)."""
+        _ = chapters
+        return self._doc.resolve_link(str(uri))
+
+    def fullcopy_page(self, pno: int, to: int = -1) -> None:
+        """Deep-copies page ``pno`` to the end of the document (PyMuPDF
+        ``doc.fullcopy_page``). Only ``to == -1`` (append) is supported."""
+        if to not in (-1, self._doc.page_count):
+            raise PdfUnsupportedError(
+                "fullcopy_page only supports appending (to=-1)"
+            )
+        self._doc.fullcopy_page(pno)
+
+    @property
+    def chapter_count(self) -> int:
+        """The chapter count — always 1 for PDF (PyMuPDF ``doc.chapter_count``)."""
+        return self._doc.chapter_count
+
+    def chapter_page_count(self, chapter: int) -> int:
+        """The page count of ``chapter`` (PyMuPDF ``doc.chapter_page_count``)."""
+        return self._doc.chapter_page_count(chapter)
+
+    @property
+    def last_location(self) -> tuple[int, int]:
+        """The last ``(chapter, page)`` location (PyMuPDF ``doc.last_location``)."""
+        return self._doc.last_location
 
     # --- document facts ---
     @property

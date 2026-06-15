@@ -320,6 +320,79 @@ impl Pixmap {
         }
     }
 
+    /// An independent copy of this pixmap (PyMuPDF `Pixmap.copy`). The samples
+    /// `Arc` is shared until either copy is mutated (copy-on-write), so this is
+    /// cheap and safe.
+    #[must_use]
+    pub fn copy(&self) -> Pixmap {
+        self.clone()
+    }
+
+    /// Fills the rectangle `(x0, y0, x1, y1)` (half-open, clamped to bounds) with
+    /// the color components `color` (one byte per color component, alpha left
+    /// untouched), copy-on-write (PyMuPDF `Pixmap.set_rect`). Returns the number
+    /// of pixels written. `color` shorter than the color-component count is
+    /// zero-padded; longer is truncated.
+    pub fn set_rect(&mut self, x0: u32, y0: u32, x1: u32, y1: u32, color: &[u8]) -> usize {
+        let x1 = x1.min(self.width);
+        let y1 = y1.min(self.height);
+        if x0 >= x1 || y0 >= y1 {
+            return 0;
+        }
+        let n = self.n as usize;
+        let stride = self.stride;
+        let comps = self.colorspace.components() as usize;
+        let samples = self.samples_mut();
+        let mut count = 0usize;
+        for y in y0..y1 {
+            let row = y as usize * stride;
+            for x in x0..x1 {
+                let base = row + x as usize * n;
+                for c in 0..comps {
+                    samples[base + c] = color.get(c).copied().unwrap_or(0);
+                }
+                count += 1;
+            }
+        }
+        count
+    }
+
+    /// Halves the pixmap's dimensions `factor` times by 2×2 box-averaging
+    /// (PyMuPDF `Pixmap.shrink(factor)`). `factor == 0` is a no-op; each step
+    /// rounds the new dimension down. Stops if a dimension would reach zero.
+    pub fn shrink(&mut self, factor: u8) {
+        for _ in 0..factor {
+            if self.width < 2 || self.height < 2 {
+                break;
+            }
+            *self = self.box_halved();
+        }
+    }
+
+    /// One 2×2 box-average downscale step (used by [`Pixmap::shrink`]).
+    fn box_halved(&self) -> Pixmap {
+        let n = self.n as usize;
+        let nw = self.width / 2;
+        let nh = self.height / 2;
+        let src = &self.samples;
+        let src_stride = self.stride;
+        let mut out = vec![0u8; nw as usize * nh as usize * n];
+        for y in 0..nh as usize {
+            for x in 0..nw as usize {
+                let (sx, sy) = (x * 2, y * 2);
+                let o = (y * nw as usize + x) * n;
+                for c in 0..n {
+                    let p00 = src[sy * src_stride + sx * n + c] as u32;
+                    let p01 = src[sy * src_stride + (sx + 1) * n + c] as u32;
+                    let p10 = src[(sy + 1) * src_stride + sx * n + c] as u32;
+                    let p11 = src[(sy + 1) * src_stride + (sx + 1) * n + c] as u32;
+                    out[o + c] = ((p00 + p01 + p10 + p11) / 4) as u8;
+                }
+            }
+        }
+        Pixmap::new(nw, nh, self.colorspace, self.alpha, out)
+    }
+
     /// Encodes this pixmap as a PNG into `out` (PyMuPDF `Pixmap.save(...)` /
     /// `tobytes("png")`).
     ///

@@ -29,10 +29,10 @@
 baseline = "1.24.x"
 baseline_detail = "PyMuPDF 1.24.14 / MuPDF 1.24.11"
 total = 769
-implemented = 330
-deferred = 361
-out_of_scope = 78
-coverage_pct = 42.9
+implemented = 368
+deferred = 328
+out_of_scope = 73
+coverage_pct = 47.9
 
 # ── Matrix ──
 [[symbol]]
@@ -1218,6 +1218,24 @@ disposition = "implemented"
 milestone = "M3"
 
 [[symbol]]
+name = "Document.fullcopy_page"
+group = "Document"
+disposition = "implemented"
+milestone = "M3"
+
+[[symbol]]
+name = "Document.reload_page"
+group = "Document"
+disposition = "implemented"
+milestone = "M3"
+
+[[symbol]]
+name = "Document.page_xref"
+group = "Document"
+disposition = "implemented"
+milestone = "M3"
+
+[[symbol]]
 name = "Document.insert_page"
 group = "Document"
 disposition = "deferred"
@@ -1225,12 +1243,6 @@ milestone = "M3"
 
 [[symbol]]
 name = "Document.copy_page"
-group = "Document"
-disposition = "deferred"
-milestone = "M3"
-
-[[symbol]]
-name = "Document.fullcopy_page"
 group = "Document"
 disposition = "deferred"
 milestone = "M3"
@@ -1248,19 +1260,7 @@ disposition = "deferred"
 milestone = "M3"
 
 [[symbol]]
-name = "Document.reload_page"
-group = "Document"
-disposition = "deferred"
-milestone = "M3"
-
-[[symbol]]
 name = "Document.page_cropbox"
-group = "Document"
-disposition = "deferred"
-milestone = "M3"
-
-[[symbol]]
-name = "Document.page_xref"
 group = "Document"
 disposition = "deferred"
 milestone = "M3"
@@ -1282,23 +1282,23 @@ note = "EPUB-class reflow (PRD §3.2 #8)"
 [[symbol]]
 name = "Document.chapter_count"
 group = "Document"
-disposition = "out-of-scope"
-milestone = "out-of-scope"
-note = "EPUB-class reflow (PRD §3.2 #8)"
+disposition = "implemented"
+milestone = "M3"
+note = "single-chapter PDF model (chapter 0 holds every page)"
 
 [[symbol]]
 name = "Document.chapter_page_count"
 group = "Document"
-disposition = "out-of-scope"
-milestone = "out-of-scope"
-note = "EPUB-class reflow (PRD §3.2 #8)"
+disposition = "implemented"
+milestone = "M3"
+note = "single-chapter PDF model (chapter 0 holds every page)"
 
 [[symbol]]
 name = "Document.last_location"
 group = "Document"
-disposition = "out-of-scope"
-milestone = "out-of-scope"
-note = "EPUB-class reflow (PRD §3.2 #8)"
+disposition = "implemented"
+milestone = "M3"
+note = "single-chapter PDF model (chapter 0 holds every page)"
 
 [[symbol]]
 name = "Document.next_location"
@@ -1639,6 +1639,13 @@ disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
+name = "Document.resolve_link"
+group = "Document"
+disposition = "implemented"
+milestone = "M3"
+note = "URI fragment / named-destination → page index"
+
+[[symbol]]
 name = "Document.subset"
 group = "Document"
 disposition = "deferred"
@@ -1646,12 +1653,6 @@ milestone = "M3"
 
 [[symbol]]
 name = "Document.resolve_names"
-group = "Document"
-disposition = "deferred"
-milestone = "M3"
-
-[[symbol]]
-name = "Document.resolve_link"
 group = "Document"
 disposition = "deferred"
 milestone = "M3"
@@ -1912,6 +1913,13 @@ milestone = "M5"
 note = "image-only path in scope; vector unsupported"
 
 [[symbol]]
+name = "Document.get_page_xobjects"
+group = "Document"
+disposition = "implemented"
+milestone = "M2"
+note = "per-page XObject inventory (Form + Image)"
+
+[[symbol]]
 name = "Document.get_page_images"
 group = "Document"
 disposition = "deferred"
@@ -1919,12 +1927,6 @@ milestone = "M2"
 
 [[symbol]]
 name = "Document.get_page_fonts"
-group = "Document"
-disposition = "deferred"
-milestone = "M2"
-
-[[symbol]]
-name = "Document.get_page_xobjects"
 group = "Document"
 disposition = "deferred"
 milestone = "M2"
@@ -2233,6 +2235,18 @@ milestone = "M7"
 note = "table detection: lines/lines_strict/text strategies (M7)"
 
 [[symbol]]
+name = "Page.get_image_rects"
+group = "Page"
+disposition = "implemented"
+milestone = "M2"
+
+[[symbol]]
+name = "Page.get_xobjects"
+group = "Page"
+disposition = "implemented"
+milestone = "M2"
+
+[[symbol]]
 name = "Page.get_image_info"
 group = "Page"
 disposition = "deferred"
@@ -2240,18 +2254,6 @@ milestone = "M2"
 
 [[symbol]]
 name = "Page.get_image_bbox"
-group = "Page"
-disposition = "deferred"
-milestone = "M2"
-
-[[symbol]]
-name = "Page.get_image_rects"
-group = "Page"
-disposition = "deferred"
-milestone = "M2"
-
-[[symbol]]
-name = "Page.get_xobjects"
 group = "Page"
 disposition = "deferred"
 milestone = "M2"
@@ -2347,6 +2349,13 @@ disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
+name = "Page.show_pdf_page"
+group = "Page"
+disposition = "implemented"
+milestone = "M4"
+note = "place another PDF page as a Form XObject (n-up/stamp/watermark)"
+
+[[symbol]]
 name = "Page.insert_font"
 group = "Page"
 disposition = "deferred"
@@ -2354,12 +2363,6 @@ milestone = "M4"
 
 [[symbol]]
 name = "Page.write_text"
-group = "Page"
-disposition = "deferred"
-milestone = "M4"
-
-[[symbol]]
-name = "Page.show_pdf_page"
 group = "Page"
 disposition = "deferred"
 milestone = "M4"
@@ -2554,13 +2557,13 @@ milestone = "M4"
 [[symbol]]
 name = "Page.get_contents"
 group = "Page"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M3"
 
 [[symbol]]
 name = "Page.read_contents"
 group = "Page"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M3"
 
 [[symbol]]
@@ -2864,37 +2867,139 @@ milestone = "M2"
 [[symbol]]
 name = "Pixmap.Pixmap"
 group = "Pixmap"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M5"
 
 [[symbol]]
 name = "Pixmap.save"
 group = "Pixmap"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M5"
 
 [[symbol]]
 name = "Pixmap.tobytes"
 group = "Pixmap"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M5"
 
 [[symbol]]
 name = "Pixmap.pixel"
 group = "Pixmap"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M5"
 
 [[symbol]]
 name = "Pixmap.set_pixel"
 group = "Pixmap"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M5"
 
 [[symbol]]
 name = "Pixmap.set_rect"
 group = "Pixmap"
-disposition = "deferred"
+disposition = "implemented"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.set_alpha"
+group = "Pixmap"
+disposition = "implemented"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.clear_with"
+group = "Pixmap"
+disposition = "implemented"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.invert_irect"
+group = "Pixmap"
+disposition = "implemented"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.shrink"
+group = "Pixmap"
+disposition = "implemented"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.copy"
+group = "Pixmap"
+disposition = "implemented"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.samples"
+group = "Pixmap"
+disposition = "implemented"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.samples_mv"
+group = "Pixmap"
+disposition = "implemented"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.stride"
+group = "Pixmap"
+disposition = "implemented"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.width"
+group = "Pixmap"
+disposition = "implemented"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.height"
+group = "Pixmap"
+disposition = "implemented"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.w"
+group = "Pixmap"
+disposition = "implemented"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.h"
+group = "Pixmap"
+disposition = "implemented"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.irect"
+group = "Pixmap"
+disposition = "implemented"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.n"
+group = "Pixmap"
+disposition = "implemented"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.alpha"
+group = "Pixmap"
+disposition = "implemented"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.colorspace"
+group = "Pixmap"
+disposition = "implemented"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.size"
+group = "Pixmap"
+disposition = "implemented"
 milestone = "M5"
 
 [[symbol]]
@@ -2910,24 +3015,6 @@ disposition = "deferred"
 milestone = "M5"
 
 [[symbol]]
-name = "Pixmap.set_alpha"
-group = "Pixmap"
-disposition = "deferred"
-milestone = "M5"
-
-[[symbol]]
-name = "Pixmap.clear_with"
-group = "Pixmap"
-disposition = "deferred"
-milestone = "M5"
-
-[[symbol]]
-name = "Pixmap.invert_irect"
-group = "Pixmap"
-disposition = "deferred"
-milestone = "M5"
-
-[[symbol]]
 name = "Pixmap.tint_with"
 group = "Pixmap"
 disposition = "deferred"
@@ -2935,18 +3022,6 @@ milestone = "M5"
 
 [[symbol]]
 name = "Pixmap.gamma_with"
-group = "Pixmap"
-disposition = "deferred"
-milestone = "M5"
-
-[[symbol]]
-name = "Pixmap.shrink"
-group = "Pixmap"
-disposition = "deferred"
-milestone = "M5"
-
-[[symbol]]
-name = "Pixmap.copy"
 group = "Pixmap"
 disposition = "deferred"
 milestone = "M5"
@@ -2970,49 +3045,7 @@ disposition = "deferred"
 milestone = "M5"
 
 [[symbol]]
-name = "Pixmap.samples"
-group = "Pixmap"
-disposition = "deferred"
-milestone = "M5"
-
-[[symbol]]
-name = "Pixmap.samples_mv"
-group = "Pixmap"
-disposition = "deferred"
-milestone = "M5"
-
-[[symbol]]
 name = "Pixmap.samples_ptr"
-group = "Pixmap"
-disposition = "deferred"
-milestone = "M5"
-
-[[symbol]]
-name = "Pixmap.stride"
-group = "Pixmap"
-disposition = "deferred"
-milestone = "M5"
-
-[[symbol]]
-name = "Pixmap.width"
-group = "Pixmap"
-disposition = "deferred"
-milestone = "M5"
-
-[[symbol]]
-name = "Pixmap.height"
-group = "Pixmap"
-disposition = "deferred"
-milestone = "M5"
-
-[[symbol]]
-name = "Pixmap.w"
-group = "Pixmap"
-disposition = "deferred"
-milestone = "M5"
-
-[[symbol]]
-name = "Pixmap.h"
 group = "Pixmap"
 disposition = "deferred"
 milestone = "M5"
@@ -3030,37 +3063,7 @@ disposition = "deferred"
 milestone = "M5"
 
 [[symbol]]
-name = "Pixmap.irect"
-group = "Pixmap"
-disposition = "deferred"
-milestone = "M5"
-
-[[symbol]]
-name = "Pixmap.n"
-group = "Pixmap"
-disposition = "deferred"
-milestone = "M5"
-
-[[symbol]]
-name = "Pixmap.alpha"
-group = "Pixmap"
-disposition = "deferred"
-milestone = "M5"
-
-[[symbol]]
-name = "Pixmap.colorspace"
-group = "Pixmap"
-disposition = "deferred"
-milestone = "M5"
-
-[[symbol]]
 name = "Pixmap.digest"
-group = "Pixmap"
-disposition = "deferred"
-milestone = "M5"
-
-[[symbol]]
-name = "Pixmap.size"
 group = "Pixmap"
 disposition = "deferred"
 milestone = "M5"
@@ -3098,16 +3101,16 @@ milestone = "M5"
 [[symbol]]
 name = "Pixmap.pil_save"
 group = "Pixmap"
-disposition = "out-of-scope"
-milestone = "post-v1"
-note = "Pillow bridge out of scope (PRD §3.2 #3)"
+disposition = "implemented"
+milestone = "M5"
+note = "PNG/PPM/PAM bytes under the PyMuPDF Pillow-bridge names"
 
 [[symbol]]
 name = "Pixmap.pil_tobytes"
 group = "Pixmap"
-disposition = "out-of-scope"
-milestone = "post-v1"
-note = "Pillow bridge out of scope (PRD §3.2 #3)"
+disposition = "implemented"
+milestone = "M5"
+note = "PNG/PPM/PAM bytes under the PyMuPDF Pillow-bridge names"
 
 [[symbol]]
 name = "Pixmap.pdfocr_save"

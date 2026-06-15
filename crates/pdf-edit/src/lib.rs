@@ -56,7 +56,7 @@ pub use form::{
 };
 pub use image::{insert_image_jpeg, insert_image_rgb};
 pub use links::{delete_link, get_links, insert_link, update_link, Link, LinkKind};
-pub use merge::{extract_pages, insert_pdf, InsertOptions};
+pub use merge::{extract_pages, insert_pdf, show_pdf_page, InsertOptions};
 pub use metadata::{get_xml_metadata, set_metadata, set_xml_metadata};
 pub use ocg::{add_ocg, set_layer, set_layer_state, set_oc};
 pub use page_ops::PageEditor;

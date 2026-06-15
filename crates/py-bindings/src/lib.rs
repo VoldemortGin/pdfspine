@@ -1150,6 +1150,82 @@ impl PyPage {
         Ok(list)
     }
 
+    /// The page's XObjects (PyMuPDF `page.get_xobjects`). Returns a list of
+    /// `(xref, name, type, bbox, matrix, referencer)` tuples, where `type` is
+    /// `"Form"` or `"Image"`, `bbox` is `(x0, y0, x1, y1)`, and `matrix` is a
+    /// 6-tuple `(a, b, c, d, e, f)`.
+    fn get_xobjects<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
+        let xobjs = pdf_api::get_xobjects(&self.page);
+        let list = PyList::empty(py);
+        for xo in xobjs {
+            let t = PyTuple::new(
+                py,
+                [
+                    xo.xref.into_pyobject(py)?.into_any(),
+                    xo.name.into_pyobject(py)?.into_any(),
+                    xo.kind.into_pyobject(py)?.into_any(),
+                    xo.bbox.into_pyobject(py)?.into_any(),
+                    xo.matrix.into_pyobject(py)?.into_any(),
+                    xo.referencer.into_pyobject(py)?.into_any(),
+                ],
+            )?;
+            list.append(t)?;
+        }
+        Ok(list)
+    }
+
+    /// The image placements on the page (PyMuPDF `page.get_image_rects`).
+    /// Returns a list of `(name, inline, bbox, width, height)` tuples, where
+    /// `bbox` is the device-space `(x0, y0, x1, y1)` the image occupies.
+    fn get_image_rects<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
+        let rects = pdf_api::get_image_rects(&self.page);
+        let list = PyList::empty(py);
+        for r in rects {
+            let t = PyTuple::new(
+                py,
+                [
+                    r.name.into_pyobject(py)?.into_any(),
+                    r.inline.into_pyobject(py)?.to_owned().into_any(),
+                    r.bbox.into_pyobject(py)?.into_any(),
+                    r.width.into_pyobject(py)?.into_any(),
+                    r.height.into_pyobject(py)?.into_any(),
+                ],
+            )?;
+            list.append(t)?;
+        }
+        Ok(list)
+    }
+
+    /// The object numbers of the page's content streams (PyMuPDF
+    /// `page.get_contents`).
+    fn get_contents(&self) -> Vec<u32> {
+        pdf_api::page_get_contents(&self.page)
+    }
+
+    /// The decoded, concatenated content-stream bytes (PyMuPDF
+    /// `page.read_contents`).
+    fn read_contents<'py>(&self, py: Python<'py>) -> Bound<'py, PyBytes> {
+        let bytes = py.detach(|| pdf_api::page_read_contents(&self.page));
+        PyBytes::new(py, &bytes)
+    }
+
+    /// Places another PDF's page onto this page as a Form XObject (PyMuPDF
+    /// `page.show_pdf_page`). `rect` is the destination `(x0, y0, x1, y1)`;
+    /// `src` is the source document; `pno` is the 0-based source page index.
+    /// Returns the chosen XObject resource name.
+    #[pyo3(signature = (rect, src, pno=0))]
+    fn show_pdf_page(
+        &self,
+        py: Python<'_>,
+        rect: (f64, f64, f64, f64),
+        src: &PyDocument,
+        pno: usize,
+    ) -> PyResult<String> {
+        let r = rect_of(rect);
+        py.detach(|| pdf_api::page_show_pdf_page(&self.page, r, &src.doc, pno))
+            .map_err(map_err)
+    }
+
     // --- get_pixmap (PRD §3.3 / §8.10) -----------------------------------
 
     /// Renders the page to a [`PyPixmap`] (PyMuPDF `Page.get_pixmap`, PRD §8.11).
@@ -1843,6 +1919,80 @@ impl PyDocument {
             .load_page(idx)
             .map_err(|_| PyIndexError::new_err("page index out of range"))?;
         Ok(PyPage { page })
+    }
+
+    /// Re-fetches the page at `index` from the live store (PyMuPDF
+    /// `Document.reload_page`).
+    fn reload_page(&self, index: usize) -> PyResult<PyPage> {
+        let page = self.doc.reload_page(index).map_err(map_err)?;
+        Ok(PyPage { page })
+    }
+
+    /// The object number of the page at `index` (PyMuPDF `Document.page_xref`).
+    fn page_xref(&self, index: usize) -> u32 {
+        self.doc.page_xref(index)
+    }
+
+    /// Every page, in order, as a list (PyMuPDF `Document.pages`). The Python
+    /// wrapper exposes this as a lazy generator.
+    fn pages(&self) -> PyResult<Vec<PyPage>> {
+        let mut out = Vec::with_capacity(self.doc.page_count());
+        for i in 0..self.doc.page_count() {
+            out.push(PyPage {
+                page: self.doc.load_page(i).map_err(map_err)?,
+            });
+        }
+        Ok(out)
+    }
+
+    /// The XObjects on page `pno` (PyMuPDF `Document.get_page_xobjects`).
+    fn get_page_xobjects<'py>(&self, py: Python<'py>, pno: usize) -> PyResult<Bound<'py, PyList>> {
+        let xobjs = self.doc.get_page_xobjects(pno);
+        let list = PyList::empty(py);
+        for xo in xobjs {
+            let t = PyTuple::new(
+                py,
+                [
+                    xo.xref.into_pyobject(py)?.into_any(),
+                    xo.name.into_pyobject(py)?.into_any(),
+                    xo.kind.into_pyobject(py)?.into_any(),
+                    xo.bbox.into_pyobject(py)?.into_any(),
+                    xo.matrix.into_pyobject(py)?.into_any(),
+                    xo.referencer.into_pyobject(py)?.into_any(),
+                ],
+            )?;
+            list.append(t)?;
+        }
+        Ok(list)
+    }
+
+    /// Resolves a link spec (URI fragment `#page=N` / named destination) to a
+    /// 0-based page index, or `None` (PyMuPDF `Document.resolve_link`).
+    fn resolve_link(&self, uri: &str) -> Option<usize> {
+        self.doc.resolve_link(uri)
+    }
+
+    /// Deep-copies the page at `pno` to the end of the document, returning the
+    /// new page's 0-based index (PyMuPDF `Document.fullcopy_page`).
+    fn fullcopy_page(&self, py: Python<'_>, pno: usize) -> PyResult<usize> {
+        py.detach(|| self.doc.fullcopy_page(pno)).map_err(map_err)
+    }
+
+    /// The chapter count — always `1` for PDF (PyMuPDF `Document.chapter_count`).
+    #[getter]
+    fn chapter_count(&self) -> usize {
+        self.doc.chapter_count()
+    }
+
+    /// The page count of `chapter` (PyMuPDF `Document.chapter_page_count`).
+    fn chapter_page_count(&self, chapter: usize) -> usize {
+        self.doc.chapter_page_count(chapter)
+    }
+
+    /// The last `(chapter, page)` location (PyMuPDF `Document.last_location`).
+    #[getter]
+    fn last_location(&self) -> (usize, usize) {
+        self.doc.last_location()
     }
 
     /// Whether this is a PDF (always true; image docs are M5).
@@ -2634,6 +2784,75 @@ impl PyPixmap {
             x1.max(0) as u32,
             y1.max(0) as u32,
         );
+    }
+
+    /// An independent copy of the pixmap (PyMuPDF `Pixmap.copy`). Shares the
+    /// sample buffer copy-on-write until either copy is mutated.
+    fn copy(&self) -> PyPixmap {
+        PyPixmap::new(self.pix.copy())
+    }
+
+    /// Fills `irect` (`(x0, y0, x1, y1)`) with `color` (one byte per color
+    /// component; alpha untouched), copy-on-write (PyMuPDF `Pixmap.set_rect`).
+    /// Returns `True` when any pixel was written.
+    fn set_rect(&mut self, irect: (i64, i64, i64, i64), color: Vec<u8>) -> bool {
+        let (x0, y0, x1, y1) = irect;
+        let written = self.pix.set_rect(
+            x0.max(0) as u32,
+            y0.max(0) as u32,
+            x1.max(0) as u32,
+            y1.max(0) as u32,
+            &color,
+        );
+        written > 0
+    }
+
+    /// Halves the pixmap's dimensions `factor` times by 2×2 box-averaging
+    /// (PyMuPDF `Pixmap.shrink`).
+    fn shrink(&mut self, factor: u8) {
+        self.pix.shrink(factor);
+    }
+
+    /// PNG (or `format`) bytes for the Pillow bridge (PyMuPDF
+    /// `Pixmap.pil_tobytes`). `format` is a PIL-style name (`"PNG"`, `"PPM"`,
+    /// `"PAM"`); it is matched case-insensitively against the native encoders.
+    #[pyo3(signature = (format="PNG", **_kwargs))]
+    fn pil_tobytes<'py>(
+        &self,
+        py: Python<'py>,
+        format: &str,
+        _kwargs: Option<&Bound<'py, PyDict>>,
+    ) -> PyResult<Bound<'py, PyBytes>> {
+        let fmt = format.to_ascii_lowercase();
+        let bytes = py
+            .detach(|| pdf_api::pixmap_tobytes(&self.pix, &fmt))
+            .map_err(map_err)?;
+        Ok(PyBytes::new(py, &bytes))
+    }
+
+    /// Saves the pixmap for the Pillow bridge (PyMuPDF `Pixmap.pil_save`). The
+    /// format is `format` or inferred from the extension (PNG default).
+    #[pyo3(signature = (filename, format=None, **_kwargs))]
+    fn pil_save(
+        &self,
+        py: Python<'_>,
+        filename: &str,
+        format: Option<&str>,
+        _kwargs: Option<&Bound<'_, PyDict>>,
+    ) -> PyResult<()> {
+        let fmt = format
+            .map(|s| s.to_ascii_lowercase())
+            .or_else(|| {
+                std::path::Path::new(filename)
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .map(|e| e.to_ascii_lowercase())
+            })
+            .unwrap_or_else(|| "png".to_string());
+        let bytes = py
+            .detach(|| pdf_api::pixmap_tobytes(&self.pix, &fmt))
+            .map_err(map_err)?;
+        std::fs::write(filename, bytes).map_err(|e| PyOSError::new_err(e.to_string()))
     }
 
     /// Encodes the pixmap and returns the bytes (PyMuPDF `Pixmap.tobytes`).

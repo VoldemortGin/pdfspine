@@ -211,3 +211,74 @@ fn pixmap_cmyk_001_png_rgb() {
     assert_eq!(&rgb[0..3], &[0, 255, 255]);
     assert_eq!(&rgb[3..6], &[0, 0, 0]);
 }
+
+// --- PIXMAP-COPY-001: copy is independent (copy-on-write) -----------------
+
+#[test]
+fn pixmap_copy_001_independent() {
+    let mut a = Pixmap::new(2, 2, Colorspace::Rgb, false, vec![0u8; 12]);
+    let mut b = a.copy();
+    b.set_pixel(0, 0, &[1, 2, 3]).unwrap();
+    // Mutating the copy leaves the original untouched.
+    assert_eq!(a.pixel(0, 0).unwrap(), vec![0, 0, 0]);
+    assert_eq!(b.pixel(0, 0).unwrap(), vec![1, 2, 3]);
+    // And vice-versa.
+    a.set_pixel(1, 1, &[9, 9, 9]).unwrap();
+    assert_eq!(b.pixel(1, 1).unwrap(), vec![0, 0, 0]);
+}
+
+// --- PIXMAP-SETRECT-001: set_rect fills a region, returns count -----------
+
+#[test]
+fn pixmap_setrect_001_fill_region() {
+    let mut pm = Pixmap::new(4, 4, Colorspace::Rgb, false, vec![0u8; 4 * 4 * 3]);
+    let n = pm.set_rect(1, 1, 3, 3, &[10, 20, 30]);
+    assert_eq!(n, 4); // a 2x2 region
+    assert_eq!(pm.pixel(1, 1).unwrap(), vec![10, 20, 30]);
+    assert_eq!(pm.pixel(2, 2).unwrap(), vec![10, 20, 30]);
+    assert_eq!(pm.pixel(0, 0).unwrap(), vec![0, 0, 0]); // outside
+                                                        // An empty / inverted rect writes nothing.
+    assert_eq!(pm.set_rect(2, 2, 2, 2, &[1, 1, 1]), 0);
+}
+
+#[test]
+fn pixmap_setrect_002_alpha_untouched() {
+    let mut pm = Pixmap::new(2, 1, Colorspace::Rgb, true, vec![0, 0, 0, 50, 0, 0, 0, 60]);
+    pm.set_rect(0, 0, 2, 1, &[7, 8, 9]);
+    // Color set, alpha left as-is.
+    assert_eq!(pm.pixel(0, 0).unwrap(), vec![7, 8, 9, 50]);
+    assert_eq!(pm.pixel(1, 0).unwrap(), vec![7, 8, 9, 60]);
+}
+
+// --- PIXMAP-SHRINK-001: 2x2 box-average downscale -------------------------
+
+#[test]
+fn pixmap_shrink_001_halves_dimensions() {
+    // 4x4 gray, top-left 2x2 = 0, rest = 200; one shrink → 2x2.
+    let mut samples = vec![200u8; 16];
+    for y in 0..2 {
+        for x in 0..2 {
+            samples[y * 4 + x] = 0;
+        }
+    }
+    let mut pm = Pixmap::new(4, 4, Colorspace::Gray, false, samples);
+    pm.shrink(1);
+    assert_eq!(pm.width, 2);
+    assert_eq!(pm.height, 2);
+    // The top-left output pixel averages the four 0s → 0.
+    assert_eq!(pm.pixel(0, 0).unwrap(), vec![0]);
+    // The bottom-right output pixel averages four 200s → 200.
+    assert_eq!(pm.pixel(1, 1).unwrap(), vec![200]);
+}
+
+#[test]
+fn pixmap_shrink_002_factor_and_floor() {
+    let mut pm = Pixmap::new(8, 8, Colorspace::Rgb, false, vec![100u8; 8 * 8 * 3]);
+    pm.shrink(2); // 8 -> 4 -> 2
+    assert_eq!((pm.width, pm.height), (2, 2));
+    // factor 0 is a no-op.
+    pm.shrink(0);
+    assert_eq!((pm.width, pm.height), (2, 2));
+    // Averaging a uniform field preserves the value.
+    assert_eq!(pm.pixel(0, 0).unwrap(), vec![100, 100, 100]);
+}

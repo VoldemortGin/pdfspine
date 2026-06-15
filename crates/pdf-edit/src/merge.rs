@@ -18,10 +18,12 @@
 use std::collections::HashMap;
 
 use pdf_core::error::{Error, Result};
+use pdf_core::geom::{Matrix, Rect};
 use pdf_core::object::{Dict, Name, ObjRef, Object, StreamData, StreamObj};
 use pdf_core::pagetree;
 use pdf_core::{DocumentStore, Limits, SaveOptions};
 
+use crate::content::{fmt_num, PageContent};
 use crate::page_ops::PageEditor;
 
 /// Options for [`insert_pdf`] (PRD §8.7). All fields default to "append every
@@ -120,6 +122,177 @@ pub fn extract_pages(src: &DocumentStore, indices: &[usize]) -> Result<Vec<u8>> 
         editor.insert_page(k, leaf)?;
     }
     dst.save_to_vec(&SaveOptions::default().with_garbage(1))
+}
+
+/// Places source page `src_pno` of `src` onto the destination page `dst_leaf`
+/// as a Form XObject filling `rect` (PyMuPDF `Page.show_pdf_page`).
+///
+/// The source page's content streams + `/Resources` are deep-copied (grafted)
+/// into `dst` and wrapped in a single Form XObject whose `/BBox` is the source
+/// media box. The form is registered under the destination page's
+/// `/Resources /XObject` and invoked with a `q cm /Fm Do Q` chunk whose matrix
+/// maps the BBox to `rect` (PyMuPDF top-left page space). Source `/Rotate` is
+/// baked into the placement matrix. Returns the chosen XObject resource name.
+///
+/// # Errors
+///
+/// [`Error::Unsupported`] for an out-of-range `src_pno`; resolution / object-edit
+/// errors propagate.
+pub fn show_pdf_page(
+    dst: &DocumentStore,
+    dst_leaf: ObjRef,
+    src: &DocumentStore,
+    src_pno: usize,
+    rect: Rect,
+) -> Result<String> {
+    let src_pages = pagetree::page_refs(src);
+    let src_leaf = *src_pages.get(src_pno).ok_or(Error::Unsupported(
+        "show_pdf_page: source page out of range",
+    ))?;
+
+    // Source page geometry drives the form `/BBox` and the placement matrix.
+    let src_mb = pagetree::mediabox(src, src_leaf);
+    let src_rot = pagetree::rotation(src, src_leaf);
+
+    // Concatenate the source page's decoded content into the form body.
+    let body = concat_page_content(src, src_leaf);
+
+    // Graft the source page's /Resources into the destination (deep copy).
+    let src_dict = src
+        .resolve(src_leaf)?
+        .as_dict()
+        .cloned()
+        .ok_or_else(|| Error::xref(0, "show_pdf_page: source page is not a dictionary"))?;
+    let mut graft = Graft::new(src, dst);
+    let resources = match resolve_inherited_resources(src, src_leaf, &src_dict) {
+        Some(res) => graft.copy_value(&res)?,
+        None => Object::Dictionary(Dict::new()),
+    };
+
+    // Build the Form XObject: /BBox = source media box, identity /Matrix (the
+    // page→form coordinate flip is folded into the placement `cm` below).
+    let mut form = Dict::new();
+    form.insert(Name::new("Type"), Object::Name(Name::new("XObject")));
+    form.insert(Name::new("Subtype"), Object::Name(Name::new("Form")));
+    form.insert(Name::new("FormType"), Object::Integer(1));
+    form.insert(
+        Name::new("BBox"),
+        Object::Array(vec![
+            Object::Real(src_mb.x0),
+            Object::Real(src_mb.y0),
+            Object::Real(src_mb.x1),
+            Object::Real(src_mb.y1),
+        ]),
+    );
+    form.insert(Name::new("Resources"), resources);
+    let form_ref = dst.add_object(Object::Stream(StreamObj {
+        dict: form,
+        data: StreamData::Decoded(body.into()),
+    }))?;
+
+    // Register the form under the destination page's /Resources /XObject and
+    // append the placement chunk. The placement matrix maps the (unrotated)
+    // source BBox onto `rect` (PyMuPDF top-left page space); source /Rotate is
+    // pre-applied so a rotated source page lands upright.
+    let pc = PageContent::from_leaf(dst, dst_leaf);
+    let name = pc.add_resource("XObject", "Fm", Object::Reference(form_ref))?;
+
+    let dst_rect = pc.rect_to_user_space(rect);
+    let placement = placement_matrix(src_mb, src_rot, dst_rect);
+    let chunk = format!(
+        "q\n{} {} {} {} {} {} cm\n/{} Do\nQ\n",
+        fmt_num(placement.a),
+        fmt_num(placement.b),
+        fmt_num(placement.c),
+        fmt_num(placement.d),
+        fmt_num(placement.e),
+        fmt_num(placement.f),
+        name,
+    );
+    pc.append_content(chunk.as_bytes())?;
+    Ok(name)
+}
+
+/// The CTM that maps the source media box (after applying `src_rot`) into the
+/// destination user-space rectangle `dst_rect`. Applied as
+/// `point · (rot · scale · translate)` — i.e. rotate the source about its
+/// lower-left to the origin, scale-to-fit, then translate to `dst_rect`'s
+/// lower-left (matrices compose left-to-right, see [`Matrix::concat`]).
+fn placement_matrix(src_mb: Rect, src_rot: i32, dst_rect: Rect) -> Matrix {
+    let sw = (src_mb.x1 - src_mb.x0).abs().max(f64::MIN_POSITIVE);
+    let sh = (src_mb.y1 - src_mb.y0).abs().max(f64::MIN_POSITIVE);
+    // Effective source extent after rotation (90/270 swap w/h).
+    let (ew, eh) = if src_rot == 90 || src_rot == 270 {
+        (sh, sw)
+    } else {
+        (sw, sh)
+    };
+    let dw = (dst_rect.x1 - dst_rect.x0).abs();
+    let dh = (dst_rect.y1 - dst_rect.y0).abs();
+    let sx = dw / ew;
+    let sy = dh / eh;
+
+    // `rot` brings the source media box into the unrotated first quadrant with
+    // its lower-left at the origin (so a subsequent scale-then-translate fits it
+    // exactly into `dst_rect`).
+    let rot = match src_rot {
+        90 => Matrix::new(0.0, 1.0, -1.0, 0.0, src_mb.y1, -src_mb.x0),
+        180 => Matrix::new(-1.0, 0.0, 0.0, -1.0, src_mb.x1, src_mb.y1),
+        270 => Matrix::new(0.0, -1.0, 1.0, 0.0, -src_mb.y0, src_mb.x1),
+        _ => Matrix::new(1.0, 0.0, 0.0, 1.0, -src_mb.x0, -src_mb.y0),
+    };
+    let scale = Matrix::scale(sx, sy);
+    let translate = Matrix::translate(dst_rect.x0, dst_rect.y0);
+    Matrix::concat(&Matrix::concat(&rot, &scale), &translate)
+}
+
+/// The source page's effective `/Resources`, walking inheritance.
+fn resolve_inherited_resources(doc: &DocumentStore, leaf: ObjRef, dict: &Dict) -> Option<Object> {
+    if let Ok(Some(v)) = doc.resolve_dict_key(dict, &Name::new("Resources")) {
+        if !v.is_null() {
+            return Some((*v).clone());
+        }
+    }
+    inherited_value(doc, leaf, "Resources")
+}
+
+/// Concatenates a source page's decoded content streams (single newline-joined),
+/// mirroring the interpreter's page-content assembly.
+fn concat_page_content(doc: &DocumentStore, leaf: ObjRef) -> Vec<u8> {
+    let Some(dict) = pagetree::page_dict(doc, leaf) else {
+        return Vec::new();
+    };
+    let Ok(Some(contents)) = doc.resolve_dict_key(&dict, &Name::new("Contents")) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    let push = |obj: &Object, out: &mut Vec<u8>| {
+        if let Some(s) = obj.as_stream() {
+            if let Ok(bytes) = doc.decode_stream(s).and_then(|o| o.into_decoded()) {
+                if !out.is_empty() {
+                    out.push(b'\n');
+                }
+                out.extend_from_slice(&bytes);
+            }
+        }
+    };
+    match contents.as_ref() {
+        Object::Stream(_) => push(contents.as_ref(), &mut out),
+        Object::Array(arr) => {
+            for item in arr {
+                match item {
+                    Object::Reference(r) => {
+                        if let Ok(obj) = doc.resolve(*r) {
+                            push(obj.as_ref(), &mut out);
+                        }
+                    }
+                    other => push(other, &mut out),
+                }
+            }
+        }
+        _ => {}
+    }
+    out
 }
 
 /// Resolves an inclusive `[from, to]` source page range against `len` pages.
