@@ -10,6 +10,7 @@
 
 pub mod error;
 pub mod image;
+pub mod ocr;
 pub mod svg;
 pub mod tables;
 pub mod text;
@@ -77,6 +78,10 @@ pub use pdf_core::ocg::{LayerUiConfig, OcgInfo};
 
 // SVG export (M7): page → standalone SVG string (PRD §7).
 pub use svg::page_get_svg_image;
+
+// OCR (M8): `get_textpage_ocr` + sandwich-PDF export via the system Tesseract
+// (PRD §3.2 #3 post-v1). The bindings depend only on `pdf-api`.
+pub use ocr::{document_pdfocr_bytes, page_textpage_ocr, tesseract_available};
 
 /// The crate version string (the workspace version), surfaced to Python as
 /// `oxide_pdf.__version__`.

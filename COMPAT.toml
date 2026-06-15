@@ -28,11 +28,11 @@
 [meta]
 baseline = "1.24.x"
 baseline_detail = "PyMuPDF 1.24.14 / MuPDF 1.24.11"
-total = 766
-implemented = 324
+total = 769
+implemented = 330
 deferred = 361
-out_of_scope = 81
-coverage_pct = 42.3
+out_of_scope = 78
+coverage_pct = 42.9
 
 # ── Matrix ──
 [[symbol]]
@@ -2030,6 +2030,20 @@ disposition = "out-of-scope"
 milestone = "post-v1"
 note = "journalling out of scope (PRD §3.2 #5)"
 
+[[symbol]]
+name = "Document.pdfocr_save"
+group = "Document"
+disposition = "implemented"
+milestone = "M8"
+note = "OCR sandwich-PDF export (searchable invisible text layer)"
+
+[[symbol]]
+name = "Document.pdfocr_tobytes"
+group = "Document"
+disposition = "implemented"
+milestone = "M8"
+note = "OCR sandwich-PDF export (searchable invisible text layer)"
+
 # ── Page ──
 [[symbol]]
 name = "Page.get_text"
@@ -2082,9 +2096,9 @@ milestone = "M2"
 [[symbol]]
 name = "Page.get_textpage_ocr"
 group = "Page"
-disposition = "out-of-scope"
-milestone = "post-v1"
-note = "OCR out of scope (PRD §3.2 #3)"
+disposition = "implemented"
+milestone = "M8"
+note = "OCR via pluggable engine (Tesseract default)"
 
 [[symbol]]
 name = "Page.TEXTFLAGS"
@@ -2736,6 +2750,13 @@ disposition = "out-of-scope"
 milestone = "post-v1"
 note = "OCG out of scope (PRD §3.2 #5)"
 
+[[symbol]]
+name = "Page.getTextPageOCR"
+group = "Page"
+disposition = "implemented"
+milestone = "M8"
+note = "camelCase alias of get_textpage_ocr"
+
 # ── TextPage ──
 [[symbol]]
 name = "TextPage.extractText"
@@ -3079,28 +3100,28 @@ name = "Pixmap.pil_save"
 group = "Pixmap"
 disposition = "out-of-scope"
 milestone = "post-v1"
-note = "Pillow bridge / OCR out of scope (PRD §3.2 #3)"
+note = "Pillow bridge out of scope (PRD §3.2 #3)"
 
 [[symbol]]
 name = "Pixmap.pil_tobytes"
 group = "Pixmap"
 disposition = "out-of-scope"
 milestone = "post-v1"
-note = "Pillow bridge / OCR out of scope (PRD §3.2 #3)"
+note = "Pillow bridge out of scope (PRD §3.2 #3)"
 
 [[symbol]]
 name = "Pixmap.pdfocr_save"
 group = "Pixmap"
-disposition = "out-of-scope"
-milestone = "post-v1"
-note = "Pillow bridge / OCR out of scope (PRD §3.2 #3)"
+disposition = "implemented"
+milestone = "M8"
+note = "OCR sandwich-PDF export (implemented on Document)"
 
 [[symbol]]
 name = "Pixmap.pdfocr_tobytes"
 group = "Pixmap"
-disposition = "out-of-scope"
-milestone = "post-v1"
-note = "Pillow bridge / OCR out of scope (PRD §3.2 #3)"
+disposition = "implemented"
+milestone = "M8"
+note = "OCR sandwich-PDF export (implemented on Document)"
 
 # ── Annot ──
 [[symbol]]

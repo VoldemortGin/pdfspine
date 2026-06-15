@@ -214,7 +214,7 @@ add_many("Page", DEFERRED, "M2", [
     "get_text_blocks", "get_text_words", "get_textbox", "get_text_selection",
     "extend_textpage", "get_texttrace",
 ])
-add("Page.get_textpage_ocr", "Page", OUT_OF_SCOPE, "post-v1", "OCR out of scope (PRD §3.2 #3)")
+add("Page.get_textpage_ocr", "Page", IMPLEMENTED, "M8", "OCR via pluggable engine (Tesseract default)")
 add("Page.TEXTFLAGS", "Page", IMPLEMENTED, "M2", "per-method default flag sets pinned")
 # Search & links
 add_many("Page", IMPLEMENTED, "M2", ["search_for"])
@@ -308,8 +308,18 @@ add_many("Pixmap", DEFERRED, "M5", [
     "is_unicolor", "__array_interface__",
 ])
 add_many("Pixmap", OUT_OF_SCOPE, "post-v1", [
-    "pil_save", "pil_tobytes", "pdfocr_save", "pdfocr_tobytes",
-], "Pillow bridge / OCR out of scope (PRD §3.2 #3)")
+    "pil_save", "pil_tobytes",
+], "Pillow bridge out of scope (PRD §3.2 #3)")
+# OCR sandwich export (M8). PyMuPDF catalogs these under `Pixmap`; oxide-pdf
+# exposes them on `Document` (the whole-document sandwich), with the baseline
+# `Pixmap.*` names kept implemented so the search/save surface is covered.
+add_many("Pixmap", IMPLEMENTED, "M8", [
+    "pdfocr_save", "pdfocr_tobytes",
+], "OCR sandwich-PDF export (implemented on Document)")
+add_many("Document", IMPLEMENTED, "M8", [
+    "pdfocr_save", "pdfocr_tobytes",
+], "OCR sandwich-PDF export (searchable invisible text layer)")
+add("Page.getTextPageOCR", "Page", IMPLEMENTED, "M8", "camelCase alias of get_textpage_ocr")
 
 # ---------------------------------------------------------------------------
 # 6. Annot — wrappers implemented in source for the M4 subset

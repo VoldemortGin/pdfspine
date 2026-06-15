@@ -687,6 +687,27 @@ class Page:
         """Builds a reusable :class:`TextPage` (PyMuPDF ``page.get_textpage``)."""
         return TextPage(self._page.get_textpage(flags, _as_clip(clip)))
 
+    def get_textpage_ocr(
+        self,
+        flags: int = 3,
+        language: str = "eng",
+        dpi: int = 72,
+        full: bool = True,
+        tessdata: str | None = None,
+    ) -> TextPage:
+        """Builds an OCR :class:`TextPage` via the system Tesseract (PyMuPDF
+        ``page.get_textpage_ocr``).
+
+        Rasterizes the page at ``dpi``, recognizes it with Tesseract
+        (``language``), and returns a :class:`TextPage` whose ``get_text`` /
+        ``search_for`` work on the OCR result. ``full=False`` (image-region-only
+        OCR) is not yet implemented and falls back to full-page OCR. Raises
+        ``PdfUnsupportedError`` if Tesseract is not installed.
+        """
+        return TextPage(
+            self._page.get_textpage_ocr(flags, language, dpi, full, tessdata)
+        )
+
     def get_text(
         self,
         option: str = "text",
@@ -1195,6 +1216,9 @@ class Page:
     def getPixmap(self, *args, **kw) -> Pixmap:  # noqa: N802
         return self.get_pixmap(*args, **kw)
 
+    def getTextPageOCR(self, *args, **kw) -> TextPage:  # noqa: N802
+        return self.get_textpage_ocr(*args, **kw)
+
     def getDisplayList(self) -> "DisplayList":  # noqa: N802
         return self.get_displaylist()
 
@@ -1478,6 +1502,46 @@ class Document:
         )
 
     write = tobytes
+
+    def pdfocr_tobytes(
+        self,
+        *,
+        compress: bool = True,
+        language: str = "eng",
+        tessdata: str | None = None,
+        dpi: int = 300,
+    ) -> bytes:
+        """Produces a searchable OCR "sandwich" PDF as bytes (PyMuPDF
+        ``doc.pdfocr_tobytes``).
+
+        Each page is rendered, OCR'd via the system Tesseract (``language``), and
+        rebuilt with the page image plus an invisible OCR text layer, so the
+        result is selectable / searchable. ``dpi`` (an oxide extension) tunes the
+        recognition resolution. Raises ``PdfUnsupportedError`` if Tesseract is
+        not installed.
+        """
+        return self._doc.pdfocr_tobytes(
+            compress=compress, language=language, tessdata=tessdata, dpi=dpi
+        )
+
+    def pdfocr_save(
+        self,
+        filename: str | os.PathLike[str],
+        *,
+        compress: bool = True,
+        language: str = "eng",
+        tessdata: str | None = None,
+        dpi: int = 300,
+    ) -> None:
+        """Writes a searchable OCR "sandwich" PDF to ``filename`` (PyMuPDF
+        ``doc.pdfocr_save``). See :meth:`pdfocr_tobytes`."""
+        self._doc.pdfocr_save(
+            os.fspath(filename),
+            compress=compress,
+            language=language,
+            tessdata=tessdata,
+            dpi=dpi,
+        )
 
     def ez_save(self, filename: str | os.PathLike[str], **kwargs) -> None:
         """PyMuPDF ``ez_save`` — save with garbage collection + deflate defaults."""

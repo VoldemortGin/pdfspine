@@ -127,5 +127,23 @@ impl From<pdf_render::Error> for Error {
     }
 }
 
+impl From<pdf_ocr::Error> for Error {
+    fn from(e: pdf_ocr::Error) -> Self {
+        use pdf_ocr::Error as O;
+        let msg = e.to_string();
+        match e {
+            // A missing / failed OCR engine is an unsupported request (PyMuPDF
+            // raises on the same condition) -> `PdfUnsupportedError`.
+            O::Unsupported(_) | O::InvalidArgument(_) => Error::Unsupported(msg),
+            O::Io(io) => Error::Io(io),
+            O::Core(c) => Error::from(c),
+            O::Render(r) => Error::from(r),
+            O::Image(i) => Error::from(i),
+            // `pdf_ocr::Error` is `#[non_exhaustive]`; conservative default.
+            _ => Error::Unsupported(msg),
+        }
+    }
+}
+
 /// Convenience alias used throughout `pdf-api`.
 pub type Result<T> = std::result::Result<T, Error>;

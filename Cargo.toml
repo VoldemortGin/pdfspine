@@ -8,6 +8,7 @@ members = [
     "crates/pdf-edit",
     "crates/pdf-image",
     "crates/pdf-render",
+    "crates/pdf-ocr",
     "crates/pdf-api",
     "crates/py-bindings",
     "crates/pdf-testdata",
@@ -36,6 +37,7 @@ pdf-text = { path = "crates/pdf-text", version = "0.0.0" }
 pdf-edit = { path = "crates/pdf-edit", version = "0.0.0" }
 pdf-image = { path = "crates/pdf-image", version = "0.0.0" }
 pdf-render = { path = "crates/pdf-render", version = "0.0.0" }
+pdf-ocr = { path = "crates/pdf-ocr", version = "0.0.0" }
 pdf-api = { path = "crates/pdf-api", version = "0.0.0" }
 
 # --- shared third-party deps (versions per PRD §11.1) ---

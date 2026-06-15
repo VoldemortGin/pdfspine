@@ -177,6 +177,8 @@ Document.pagemode
 Document.pages
 Document.pdf_catalog
 Document.pdf_trailer
+Document.pdfocr_save
+Document.pdfocr_tobytes
 Document.permissions
 Document.prev_location
 Document.reload_page
@@ -401,6 +403,7 @@ Page.find_tables
 Page.first_annot
 Page.first_link
 Page.first_widget
+Page.getTextPageOCR
 Page.get_bboxlog
 Page.get_cdrawings
 Page.get_contents

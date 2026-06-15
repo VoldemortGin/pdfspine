@@ -1,0 +1,29 @@
+[package]
+name = "pdf-ocr"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+description = "Pluggable OCR (Tesseract default) -> OCR TextPage + searchable sandwich PDF for oxide-pdf (M8)."
+
+[dependencies]
+# Objects + geometry (Matrix/Point/Rect) + the typed Error this crate wraps.
+pdf-core.workspace = true
+# The page rasterizer: a page -> Pixmap is the OCR engine's input (PRD §8.11).
+pdf-render.workspace = true
+# Pixmap (the engine input raster) + image-document -> PDF conversion (the
+# sandwich page image layer).
+pdf-image.workspace = true
+# The TextPage / Block / Line / Span / Char model the OCR result is mapped into,
+# plus the device/page transform helpers used for pixel -> page-point mapping.
+pdf-text.workspace = true
+# Content insertion (invisible Tr-3 text layer) + page merge for assembling the
+# multi-page sandwich document.
+pdf-edit.workspace = true
+# Typed error wrapping (`From` impls for the upstream crate errors).
+thiserror.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true

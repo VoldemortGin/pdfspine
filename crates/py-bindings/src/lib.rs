@@ -1009,6 +1009,37 @@ impl PyPage {
         }
     }
 
+    /// Builds an OCR [`PyTextPage`] by rasterizing the page and recognizing it
+    /// with the system Tesseract (PyMuPDF `page.get_textpage_ocr`). `flags` is
+    /// accepted for API symmetry; `language` is a Tesseract code (e.g. `"eng"`);
+    /// `dpi` is the render resolution; `full=False` (image-region-only OCR) is
+    /// not yet implemented and falls back to full-page OCR; `tessdata` overrides
+    /// the language-data directory. Raises `PdfUnsupportedError` if Tesseract is
+    /// not installed. Heavy render + OCR work runs with the GIL released.
+    #[pyo3(signature = (flags=3, language="eng", dpi=72, full=true, tessdata=None))]
+    fn get_textpage_ocr(
+        &self,
+        py: Python<'_>,
+        flags: u32,
+        language: &str,
+        dpi: u32,
+        full: bool,
+        tessdata: Option<String>,
+    ) -> PyResult<PyTextPage> {
+        let _ = flags; // model is build-flag-agnostic (flags apply at serialize).
+        let page = self.page.clone();
+        let lang = language.to_string();
+        let tp = py
+            .detach(move || {
+                pdf_api::page_textpage_ocr(&page, &lang, dpi, full, tessdata.as_deref())
+            })
+            .map_err(map_err)?;
+        Ok(PyTextPage {
+            page: self.page.clone(),
+            tp,
+        })
+    }
+
     /// Extracts text in `option` (PyMuPDF `page.get_text`). Returns the native
     /// Python object per option: `str` for text/html/xhtml/xml/json/rawjson,
     /// `list[tuple]` for blocks/words, `dict` for dict/rawdict. `textpage`
@@ -2006,6 +2037,55 @@ impl PyDocument {
             .map_err(map_err)?;
         std::fs::write(path, bytes).map_err(|e| PyOSError::new_err(e.to_string()))?;
         Ok(())
+    }
+
+    // --- OCR sandwich export (M8, PRD §3.2 #3 post-v1) -------------------
+
+    /// Produces a searchable "sandwich" PDF as bytes (PyMuPDF
+    /// `Document.pdfocr_tobytes`): every page is rendered, OCR'd via the system
+    /// Tesseract, and rebuilt with the page image plus an invisible OCR text
+    /// layer. `compress` is accepted for API symmetry; `language` is a Tesseract
+    /// code; `tessdata` overrides the language-data directory. Raises
+    /// `PdfUnsupportedError` if Tesseract is not installed. The heavy render +
+    /// OCR work runs with the GIL released. `dpi` (an oxide extension) tunes the
+    /// recognition resolution.
+    #[pyo3(signature = (*, compress=true, language="eng", tessdata=None, dpi=300))]
+    fn pdfocr_tobytes<'py>(
+        &self,
+        py: Python<'py>,
+        compress: bool,
+        language: &str,
+        tessdata: Option<String>,
+        dpi: u32,
+    ) -> PyResult<Bound<'py, PyBytes>> {
+        let _ = compress; // output is always object-stream-light; reserved.
+        let store = Arc::clone(self.doc.store());
+        let lang = language.to_string();
+        let bytes = py
+            .detach(move || pdf_api::document_pdfocr_bytes(&store, &lang, dpi, tessdata.as_deref()))
+            .map_err(map_err)?;
+        Ok(PyBytes::new(py, &bytes))
+    }
+
+    /// Writes a searchable "sandwich" PDF to `filename` (PyMuPDF
+    /// `Document.pdfocr_save`). See [`PyDocument::pdfocr_tobytes`].
+    #[pyo3(signature = (filename, *, compress=true, language="eng", tessdata=None, dpi=300))]
+    fn pdfocr_save(
+        &self,
+        py: Python<'_>,
+        filename: &str,
+        compress: bool,
+        language: &str,
+        tessdata: Option<String>,
+        dpi: u32,
+    ) -> PyResult<()> {
+        let _ = compress;
+        let store = Arc::clone(self.doc.store());
+        let lang = language.to_string();
+        let bytes = py
+            .detach(move || pdf_api::document_pdfocr_bytes(&store, &lang, dpi, tessdata.as_deref()))
+            .map_err(map_err)?;
+        std::fs::write(filename, bytes).map_err(|e| PyOSError::new_err(e.to_string()))
     }
 
     // --- metadata write (PRD §8.9) ---------------------------------------
