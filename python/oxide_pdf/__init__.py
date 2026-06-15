@@ -1,4 +1,4 @@
-"""oxide_pdf — an MIT-licensed, pure-Rust reimplementation of PyMuPDF (``fitz``).
+"""oxide_pdf — an Apache-2.0-licensed, pure-Rust reimplementation of PyMuPDF (``fitz``).
 
 This is the native, idiomatic-Python package backed by the Rust ``_core``
 extension module. M1f exposes the read surface (PRD §7 / §9.2): :func:`open`

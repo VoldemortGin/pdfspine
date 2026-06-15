@@ -2,7 +2,7 @@
 name = "pdf-fuzz"
 version = "0.0.0"
 edition = "2021"
-license = "MIT"
+license = "Apache-2.0"
 publish = false
 
 # cargo-fuzz target crate. Excluded from the main workspace (see root

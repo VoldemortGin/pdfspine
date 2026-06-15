@@ -6,15 +6,15 @@ build-backend = "maturin"
 name = "oxide-pdf"
 # Keep in sync with the Rust workspace version (Cargo.toml [workspace.package]).
 version = "0.0.0"
-description = "MIT-licensed, pure-Rust reimplementation of PyMuPDF (fitz) with PyO3 bindings."
+description = "Apache-2.0-licensed, pure-Rust reimplementation of PyMuPDF (fitz) with PyO3 bindings."
 readme = "README.md"
-license = { text = "MIT" }
+license = "Apache-2.0"
 requires-python = ">=3.11"
 authors = [{ name = "oxide-pdf contributors" }]
 keywords = ["pdf", "pymupdf", "fitz", "mupdf", "rust"]
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Rust",
     "Programming Language :: Python :: 3 :: Only",
     "Topic :: Software Development :: Libraries",

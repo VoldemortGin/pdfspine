@@ -1,6 +1,6 @@
 # oxide-pdf
 
-**An MIT-licensed, pure-Rust reimplementation of [PyMuPDF](https://pymupdf.readthedocs.io/) (`fitz`), with PyO3 Python bindings.**
+**An Apache-2.0-licensed, pure-Rust reimplementation of [PyMuPDF](https://pymupdf.readthedocs.io/) (`fitz`), with PyO3 Python bindings.**
 
 > Status: **early / work-in-progress (Milestone M0).** Today the wheel imports
 > and the geometry layer is complete and tested; PDF parsing, text extraction,
@@ -15,13 +15,13 @@ PyMuPDF is excellent, but it is **AGPL-3.0** (or a commercial license from
 Artifex). That licensing makes it a non-starter for many closed-source products,
 SaaS backends, and permissively-licensed open-source projects.
 
-oxide-pdf exists to provide a **drop-in-shaped, permissively-licensed (MIT)**
+oxide-pdf exists to provide a **drop-in-shaped, permissively-licensed (Apache-2.0)**
 alternative:
 
-- **MIT throughout.** Every first-party crate is MIT; the dependency graph is
-  gated by `cargo-deny` to **exclude GPL / AGPL / LGPL / MPL / SSPL** from the
-  shipped wheel. License cleanliness is a tested, CI-enforced property — not a
-  promise.
+- **Apache-2.0 throughout.** Every first-party crate is Apache-2.0 — a permissive
+  license with an explicit patent grant — and the dependency graph is gated by
+  `cargo-deny` to **exclude GPL / AGPL / LGPL / MPL / SSPL** from the shipped
+  wheel. License cleanliness is a tested, CI-enforced property — not a promise.
 - **Pure Rust, no C blob.** Self-contained wheels with no system `zlib`/C
   linkage and no bundled prebuilt engine (the differentiator vs pdfium-based
   wrappers).
@@ -125,5 +125,7 @@ clean-room / licensing policy — is in [`PRD.md`](PRD.md).
 
 ## License
 
-MIT. See [`LICENSE`](LICENSE). Third-party dependency licenses are bundled with
-each release; the shipped graph is verified free of copyleft licenses by CI.
+Apache-2.0. See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE). Third-party
+dependency licenses (all permissive: MIT / Apache-2.0 / BSD / Zlib / …) are
+bundled with each release; the shipped graph is verified free of copyleft
+licenses by CI.

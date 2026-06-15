@@ -6,10 +6,10 @@ I'll produce the requested PRD sections. This is a writing/synthesis task ground
 
 The task is pure PRD synthesis from research. No matching skill (the closest, `to-prd`, publishes to an issue tracker, which isn't requested). I'll write the sections directly.
 
-# PRD: MIT-Licensed Rust Reimplementation of PyMuPDF
+# PRD: Apache-2.0-Licensed Rust Reimplementation of PyMuPDF
 ## Sections: Roadmap, Milestones, Risks, Effort, Success Metrics
 
-Working name: **oxide-pdf** (final name TBD — must avoid "PyMuPDF/MuPDF/fitz/Artifex"). PDF-first; image-docs in v1; rendering of vector PDF pages deferred past v1. Strict TDD. Permissive (MIT / MIT-OR-Apache-2.0) deps only.
+Working name: **oxide-pdf** (final name TBD — must avoid "PyMuPDF/MuPDF/fitz/Artifex"). PDF-first; image-docs in v1; rendering of vector PDF pages deferred past v1. Strict TDD. Permissive (Apache-2.0 / MIT / BSD) deps only.
 
 ---
 
@@ -250,7 +250,7 @@ Likelihood (L) / Impact (I): Low / Med / High.
 | R11 | **`hayro` is "experimental"** (no encryption, partial blend modes) — API churn / gaps when leaned on for M5/M6. | Med | Med | Encryption is *our* core anyway; pin versions; keep `pdfium-render` fallback feature until hayro matures; contribute upstream; M5 only needs hayro's *codec leaves*, which are independently stable. |
 | R12 | **Untrusted-input attack surface** (parser + codecs are classic CVE vectors). | High | High | `#![forbid(unsafe_code)]` core; `cargo-fuzz` from M1 continuously (+ OSS-Fuzz when public); `Limits` (recursion/decompression-ratio/zip-bomb/object-count/timeout); checked arithmetic + no-panic parsing (clippy `unwrap_used`/`indexing_slicing` = deny in core/fonts/crypto). |
 | R13 | **abi3t (free-threaded) tooling immaturity (2026).** | Low | Low | Ship `abi3-py310` stable baseline now; add `abi3t-py3xx` wheel once green in CI; not on the critical path. |
-| R14 | **pypdfium2 already covers "permissive + fast render."** | Med | Med | Differentiate on the *intersection nobody owns*: MIT + pure-Rust (memory-safe, embeddable, WASM-friendly) + render+extract+edit+generate + fitz-API + Python bindings. Be honest in positioning; target AGPL-blocked PyMuPDF migrants, not raw render speed. |
+| R14 | **pypdfium2 already covers "permissive + fast render."** | Med | Med | Differentiate on the *intersection nobody owns*: Apache-2.0 + pure-Rust (memory-safe, embeddable, WASM-friendly) + render+extract+edit+generate + fitz-API + Python bindings. Be honest in positioning; target AGPL-blocked PyMuPDF migrants, not raw render speed. |
 | R15 | **Scope creep** — PyMuPDF's surface is enormous (Story/Xml, OCR, tables, OCG, signatures, non-PDF inputs). | High | Med | Hard v1 non-goals (§5); P3 items explicitly deferred; `PdfUnsupportedError` with matrix link; milestone exit gated on a 100%-green catalog so unscoped work can't sneak in. |
 | R16 | **Effort underestimate on M1/M2/M4 long poles.** | Med | High | AWE ranges carry headroom; M1 repair budgeted above the writer; de-risk M5 via hayro; sequence so M1→M2 deliver standalone value (read+extract) even if later milestones slip. |
 

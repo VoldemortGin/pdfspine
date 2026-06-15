@@ -1,15 +1,15 @@
 # Product Requirements Document
-# oxide-pdf — An MIT-Licensed, Pure-Rust Reimplementation of PyMuPDF
+# oxide-pdf — An Apache-2.0-Licensed, Pure-Rust Reimplementation of PyMuPDF
 
 ---
 
 ## 1. Title, Summary & Document Meta
 
-**Title:** `oxide-pdf` — An MIT-Licensed, Mostly-From-Scratch Rust Reimplementation of PyMuPDF (`fitz`), with a Rust-Native Core API and a `fitz`-Compatible Python Shim
+**Title:** `oxide-pdf` — An Apache-2.0-Licensed, Mostly-From-Scratch Rust Reimplementation of PyMuPDF (`fitz`), with a Rust-Native Core API and a `fitz`-Compatible Python Shim
 
 **Working name:** `oxide-pdf` (final name TBD; must avoid "PyMuPDF", "MuPDF", "fitz", "Artifex", "Ghostscript" in the package/crate/domain name — nominative use in docs only).
 
-**One-paragraph summary.** PyMuPDF is the fastest and most capable PDF toolkit in the Python ecosystem — rendering, text/layout extraction, editing, annotation, redaction, and generation in one library — but it is dual-licensed **AGPL-3.0 or commercial-from-Artifex**, which makes it legally radioactive for closed-source products and SaaS, and there is no third party from whom a license can be purchased. `oxide-pdf` removes that landmine: a **pure-Rust, MIT-licensed** PDF engine whose **first-party crates are written from scratch** (the COS object model, parser, cross-reference machinery, repair subsystem, filters, encryption, fonts-for-mapping, text extraction, and the incremental/full writer are all original work; permissive Rust crates are used only for leaf problems — codecs, font parsing, crypto primitives), exposed to Python via **PyO3** through both a clean **Rust-native core API** and a **`fitz`-compatible Python shim** so existing `import fitz` code can migrate with near-zero friction. Scope for v1 is **PDF-first plus image documents** (PNG/JPEG/TIFF/GIF/BMP/WEBP); **vector page rasterization is deferred** to a later phase (the precise boundary of which `Pixmap` paths ship in v1 is pinned in §3.3 and §8.10). The project is built under **strict TDD**: every function is decomposed into named, numbered test cases catalogued before implementation, and "done" means implemented **and** the catalogued tests pass, behind a machine-enforced Definition-of-Done gate.
+**One-paragraph summary.** PyMuPDF is the fastest and most capable PDF toolkit in the Python ecosystem — rendering, text/layout extraction, editing, annotation, redaction, and generation in one library — but it is dual-licensed **AGPL-3.0 or commercial-from-Artifex**, which makes it legally radioactive for closed-source products and SaaS, and there is no third party from whom a license can be purchased. `oxide-pdf` removes that landmine: a **pure-Rust, Apache-2.0-licensed** PDF engine whose **first-party crates are written from scratch** (the COS object model, parser, cross-reference machinery, repair subsystem, filters, encryption, fonts-for-mapping, text extraction, and the incremental/full writer are all original work; permissive Rust crates are used only for leaf problems — codecs, font parsing, crypto primitives), exposed to Python via **PyO3** through both a clean **Rust-native core API** and a **`fitz`-compatible Python shim** so existing `import fitz` code can migrate with near-zero friction. Scope for v1 is **PDF-first plus image documents** (PNG/JPEG/TIFF/GIF/BMP/WEBP); **vector page rasterization is deferred** to a later phase (the precise boundary of which `Pixmap` paths ship in v1 is pinned in §3.3 and §8.10). The project is built under **strict TDD**: every function is decomposed into named, numbered test cases catalogued before implementation, and "done" means implemented **and** the catalogued tests pass, behind a machine-enforced Definition-of-Done gate.
 
 **Document meta.**
 
@@ -20,7 +20,7 @@
 | Date | 2026-06-15 |
 | Status | Approved for build (pending legal sign-off on the four items in §6.5) |
 | Target deliverable | v1 = milestones M0–M5; rendering (M6) explicitly post-v1 |
-| Primary license | MIT (or `MIT OR Apache-2.0` to match the Rust ecosystem; either is policy-compliant) |
+| Primary license | Apache-2.0 (single license; permissive, with an explicit patent grant and NOTICE-based attribution — compatible with the permissive Rust-ecosystem dependency graph) |
 | Reference baseline | PyMuPDF 1.24.14 / MuPDF 1.24.11 (API surface only, via public docs; behavioral expectations seeded only as allowed by §6.1) |
 | Baseline-evolution policy | §17.2 (what happens at PyMuPDF 1.25+) |
 | Spec basis | ISO 32000-1 (PDF 1.7), ISO 32000-2 (PDF 2.0), ISO/TS 32003 (AES-GCM), ISO/TS 32004 |
@@ -51,11 +51,16 @@ Why this is a non-starter for most companies:
 
 > **Note on claims.** Items 1–3 are sourced as follows: (1) is the plain reading of AGPL §13 and standard OSS-counsel guidance; (2) is the cited Google policy; (3) is explicitly flagged as indicative community report, not a vendor quote. No claim in this section relies on inspecting Artifex source.
 
-### 2.2 Why MIT matters
+### 2.2 Why a permissive (Apache-2.0) license matters
 
-MIT is permissive: no copyleft, no network clause, no commercial gatekeeper, no per-seat negotiation. It is also more permissive than PDFium's BSD-3 (no binary-attribution friction at the source level) and categorically clear of AGPL. An MIT, pure-Rust engine lets the entire spectrum of users — closed-source SaaS, OSS maintainers who must stay permissive end-to-end, security-sensitive shops, and WASM/edge developers — adopt without copyleft legal review.
+Apache-2.0 is permissive: no copyleft, no network clause, no commercial gatekeeper, no per-seat negotiation. Like MIT/BSD it is categorically clear of AGPL — closed-source SaaS, OSS maintainers who must stay permissive end-to-end, security-sensitive shops, and WASM/edge developers can all adopt it without copyleft legal review. We choose Apache-2.0 specifically over a bare MIT/BSD because, on top of the same permissive freedoms, it adds two things that matter for a PDF engine and its users:
 
-**Motivation, in one line:** *PyMuPDF owns "fast + complete + great API" but is AGPL; no permissive library unifies render+extract+edit+generate with a `fitz` API in a memory-safe, embeddable form. `oxide-pdf` fills exactly that gap.*
+- **An express patent grant (§3).** Every contributor grants downstream users a royalty-free patent license to their contributions, and the license terminates for parties who bring patent litigation over the Work. PDF, font, and image-codec technology is a historically patent-heavy space; the explicit grant + retaliation clause gives adopters a defensive posture that an MIT/BSD license is silent on. This is the single biggest reason to prefer Apache-2.0 here.
+- **Clear contribution + attribution mechanics (§5 + NOTICE).** §5 puts inbound contributions under the same terms by default (a clean inbound-equals-outbound rule for a project that will take outside PRs), and the standard `NOTICE` mechanism gives a well-defined, redistribution-friendly home for the third-party attributions we must carry (e.g. the BSD-3 Adobe Glyph List bundled data), instead of relying on ad-hoc README prose.
+
+Apache-2.0 remains fully compatible with the permissive Rust dependency graph (the `MIT OR Apache-2.0` / BSD / Zlib / ISC crates we depend on all combine cleanly under an Apache-2.0 distribution), so this strengthens the legal posture without costing any of the permissive adoption story.
+
+**Motivation, in one line:** *PyMuPDF owns "fast + complete + great API" but is AGPL; no permissive library unifies render+extract+edit+generate with a `fitz` API in a memory-safe, embeddable form. `oxide-pdf` fills exactly that gap — permissively, with an explicit patent grant.*
 
 ### 2.3 Why pure Rust (not another C/C++ binding)
 
@@ -78,7 +83,7 @@ All corpus-relative goals are measured against **`CONF-CORPUS-v1`**, a frozen, v
 - **G5.** **Image-document** support (PNG/JPEG/TIFF/GIF/BMP/WEBP) as one-page-per-image documents, image codec decode, and a `Pixmap` produced from decoded images and image XObjects (the exact in-scope `Pixmap` matrix is §3.3).
 - **G6.** **Encryption read & write** for the Standard Security Handler R2–R6 (RC4-40/128, AES-128, AES-256), with the R5/R6 write policy and `/ID`-absent fallback in §8.4.
 - **G7.** A **clean Rust-native API** plus a **`fitz`/`pymupdf`-compatible Python shim** with a machine-checked compatibility matrix; the legal limits on how PyMuPDF output shapes may be discovered are in §6.1.
-- **G8.** **MIT licensing with zero copyleft in the shipped dependency tree**, enforced in CI (dev-only MPL tooling carve-out defined in §6.3).
+- **G8.** **Apache-2.0 licensing with zero copyleft in the shipped dependency tree**, enforced in CI (dev-only MPL tooling carve-out defined in §6.3).
 - **G9.** **Strict TDD**: every function decomposed into catalogued test cases written before implementation; Definition-of-Done gate enforced on every PR via the concrete two-PR / `#[ignore]` workflow in §10.1.1.
 
 ### 3.2 Non-Goals (v1)
@@ -184,7 +189,7 @@ Page-label *authoring* and rich label formats are deferred (§3.2 #5), but **rea
 | **pdfrw** | MIT | pure Python | ❌ | ❌ | ✅ read/write/merge | ⚠️ low-level | minimally maintained |
 | **borb** | AGPL-3.0 + commercial | pure Python | ❌ | ✅ some | ✅ | ✅ | same AGPL trap, pure Python |
 | **WeasyPrint** | BSD-3 | pure Python | n/a (HTML→PDF) | ❌ | ❌ | ✅ HTML→PDF | different job |
-| **`oxide-pdf`** | **MIT** | **pure Rust (first-party from scratch)** | image-docs + image-only pages now; vector deferred (M6) | ✅ PyMuPDF-class | ✅ incl. incremental/merge/redaction | ✅ | vector rendering deferred to M6 |
+| **`oxide-pdf`** | **Apache-2.0** | **pure Rust (first-party from scratch)** | image-docs + image-only pages now; vector deferred (M6) | ✅ PyMuPDF-class | ✅ incl. incremental/merge/redaction | ✅ | vector rendering deferred to M6 |
 
 > **Table accuracy notes (credibility is our core asset):** (a) pypdf never shipped a raster renderer; the "❌ render" is correct, but it *does* extract embedded images, now reflected. (b) pikepdf is MPL-2.0 **binding** over an **Apache-2.0** qpdf engine — binding and engine licenses are now separated, matching the discipline we use for ourselves. (c) ReportLab's open-source library is BSD-3; the commercial offering is a *separate paid product*, not a dual-license of the same source — the misleading "BSD + commercial dual-license" framing is removed. (d) pypdfium2 wheels and PDFium are both permissive but the engine is a **prebuilt C/C++ binary blob** in the wheel — that is the differentiator we lean on, not raw speed.
 
@@ -194,11 +199,11 @@ We are candid: the "permissive + fast + render + extract" need is **partially al
 
 ### 5.3 The unmet niche & positioning
 
-No single library is **all** of: from-scratch **pure-Rust first-party** (memory-safe authored code, embeddable, WASM-friendly, no shipped C blob) + **MIT** + **render+extract+edit+generate** in one + **`fitz`-compatible API** + **Python bindings**. That intersection is empty, and it is the product.
+No single library is **all** of: from-scratch **pure-Rust first-party** (memory-safe authored code, embeddable, WASM-friendly, no shipped C blob) + **permissive (Apache-2.0)** + **render+extract+edit+generate** in one + **`fitz`-compatible API** + **Python bindings**. That intersection is empty, and it is the product.
 
-> **For** developers and companies who need PyMuPDF's speed and breadth **but cannot accept AGPL or pay Artifex,** **`oxide-pdf`** is a **pure-Rust, MIT-licensed PDF toolkit** with first-class **Python bindings and a PyMuPDF-compatible API.** **Unlike PyMuPDF** it imposes no copyleft and no fee; **unlike pypdfium2** it is from-scratch first-party Rust with full editing/authoring and no shipped C blob; **unlike pypdf/pdfplumber** it is fast. *One library, four capabilities, zero copyleft risk.*
+> **For** developers and companies who need PyMuPDF's speed and breadth **but cannot accept AGPL or pay Artifex,** **`oxide-pdf`** is a **pure-Rust, Apache-2.0-licensed PDF toolkit** with first-class **Python bindings and a PyMuPDF-compatible API.** **Unlike PyMuPDF** it imposes no copyleft and no fee; **unlike pypdfium2** it is from-scratch first-party Rust with full editing/authoring and no shipped C blob; **unlike pypdf/pdfplumber** it is fast. *One library, four capabilities, zero copyleft risk.*
 
-Taglines: *"PyMuPDF's power, MIT's freedom, Rust's safety."* / *"PDF processing without the AGPL."*
+Taglines: *"PyMuPDF's power, Apache-2.0's freedom, Rust's safety."* / *"PDF processing without the AGPL."*
 
 ### 5.4 Naming caution
 
@@ -256,7 +261,9 @@ The oracle is a **discrepancy flagger of last resort**, not an expectation sourc
 
 > **Residual-risk acknowledgment.** Even with this protocol, "a human looks at AGPL output and then a fix happens" carries non-zero legal risk. Counsel sign-off on the oracle protocol is a **gating item** (§6.5). If counsel rejects it, the oracle is removed entirely and we rely solely on ISO spec + self-generated ground truth + permissive cross-checkers (qpdf/pikepdf/pdfminer/pdf.js).
 
-### 6.3 License compatibility matrix (our shipped library is MIT)
+### 6.3 License compatibility matrix (our shipped library is Apache-2.0)
+
+Our distribution is **Apache-2.0**, which is one-way compatible with every permissive license in our dependency graph: MIT/BSD/Zlib/ISC/Unicode/IJG terms can all be satisfied within an Apache-2.0 distribution (by carrying their notices), and Apache-2.0's own conditions (LICENSE + NOTICE propagation, change notices) are met by shipping `LICENSE`/`NOTICE` with each release. The verdicts below are for **incoming dependency licenses** against our Apache-2.0 shipped graph; they are unchanged by the relicense because they were always about license cleanliness, not about which permissive license we ourselves ship.
 
 | License | Verdict (shipped graph) | Dev-only tooling | Why |
 |---|---|---|---|
@@ -1003,7 +1010,7 @@ Likelihood (L) / Impact (I): Low / Med / High.
 | R11 | **`hayro` "experimental"** (no encryption, partial blend, single-vendor) | Med | Med | Encryption is *our* core (not hayro's); pin versions + `cargo-vet`; keep pdfium-render fallback; M5 needs only hayro's codec leaves with §8.4.1 fallback; **single-vendor governance risk noted in §17.3**; contribute upstream |
 | R12 | **Untrusted-input attack surface incl. dependency `unsafe`/mmap-UB** | High | High | `forbid(unsafe)` **first-party** + precise scoped claim (§9.6.1); cargo-fuzz from M1 (+OSS-Fuzz when public); `Limits` pinned defaults (§9.6.2); **mmap-truncation mitigation + `mmap:Never` untrusted preset + WASM no-mmap (§9.6.1)**; `cargo-geiger` whole-tree tracking; checked arithmetic + no-panic clippy deny |
 | R13 | **abi3t (free-threaded) tooling immaturity / abi3 conflation** | Low | Low | Ship abi3-py310 GIL baseline; **separate** free-threaded wheel, PyO3-version-gated (§9.4); not critical path |
-| R14 | **pypdfium2 already covers permissive+fast vector render** | Med | Med | Differentiate on MIT + pure-Rust first-party (no shipped C blob) + render+extract+edit+generate + fitz-API + bindings; target AGPL-blocked migrants; image-only-page Pixmap covers the scanned-doc path **now** without waiting for M6 |
+| R14 | **pypdfium2 already covers permissive+fast vector render** | Med | Med | Differentiate on Apache-2.0 + pure-Rust first-party (no shipped C blob) + render+extract+edit+generate + fitz-API + bindings; target AGPL-blocked migrants; image-only-page Pixmap covers the scanned-doc path **now** without waiting for M6 |
 | R15 | **Scope creep** (Story/OCR/tables/OCG/sig/non-PDF) | High | Med | Hard non-goals (§3.2); P3 deferred; `PdfUnsupportedError` + matrix link; `compat-symbol-guard` forces explicit disposition of every baseline symbol; milestone exit gated on 100%-green catalog |
 | R16 | **Effort underestimate on M1/M2/M4** | Med | High | **AWE corrected (§12) so M1 is the largest and M2 is funded above prior figure** — numbers now match the stated risk; ranges carry headroom; M1→M2 deliver standalone value even if later slips |
 | R17 | **Corpus license exposure** (the fixtures themselves) | Med | High | **Affirmative-permissive-license-required (§10.3)**; named Corpus Steward clears veraPDF/PDF-Association per-file; **GovDocs1 removed from shipped/committed corpus**, allowed only as non-committed local fuzz input; manifest lint fails on non-affirmative license, not just AGPL strings |
