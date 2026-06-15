@@ -419,6 +419,11 @@ struct FontCache {
     entries: Vec<(u64, Box<[u8]>)>,
     /// `fingerprint → Some(index into entries)` or `None` (no usable program).
     index: HashMap<u64, Option<usize>>,
+    /// Per-`(entry index, glyph id)` extracted outline path. A glyph appears
+    /// many times on a page; extracting + building its [`tiny_skia::Path`] is
+    /// done once and reused for every occurrence. `None` caches a
+    /// whitespace/missing/degenerate glyph (no outline) so it is not re-probed.
+    glyph_paths: HashMap<(usize, u16), Option<tiny_skia::Path>>,
 }
 
 impl FontCache {
@@ -426,6 +431,7 @@ impl FontCache {
         FontCache {
             entries: Vec::new(),
             index: HashMap::new(),
+            glyph_paths: HashMap::new(),
         }
     }
 }
@@ -471,11 +477,19 @@ fn draw_text(
     let Some(idx) = idx else {
         return Ok(()); // unparseable program (e.g. bare Type1): documented gap.
     };
-    let bytes = &cache.entries[idx].1;
-    let font = match GlyphFont::from_program(bytes, 0) {
+
+    // Split-borrow the cache: `font` borrows `entries[idx]` immutably while we
+    // mutate `glyph_paths` (disjoint fields, so both borrows are valid at once).
+    let FontCache {
+        entries,
+        glyph_paths,
+        ..
+    } = cache;
+    let font = match GlyphFont::from_program(&entries[idx].1, 0) {
         Ok(f) => f,
         Err(_) => return Ok(()),
     };
+    let upem = f64::from(font.units_per_em());
 
     // The stroke paint (for stroked text render modes) + device width.
     let stroke_paint = Paint::from_rgb_alpha(run.stroke_color, run.fill_alpha);
@@ -484,6 +498,9 @@ fn draw_text(
         width: (run.stroke_width as f32 * dev_scale).max(f32::MIN_POSITIVE),
         ..StrokeStyle::default()
     };
+    // One reusable paint for the whole run: each glyph only updates its color,
+    // avoiding a fresh paint/shader allocation per glyph occurrence.
+    let mut scratch = tiny_skia::Paint::default();
 
     for (glyph, &gid) in run.glyphs.iter().zip(run.gids.iter()) {
         // GID resolution:
@@ -493,15 +510,24 @@ fn draw_text(
         // - Type0/CID fonts: the supplied `gid` is the CIDToGIDMap-resolved glyph
         //   id (Identity CID programs usually have no usable cmap), so use it.
         let resolved = resolve_gid(&font, glyph, gid);
-        crate::text::draw_glyph_with_font(
+        // The glyph outline is extracted once per `(font, gid)` and reused for
+        // every later occurrence (the per-render glyph-Path cache).
+        let path = glyph_paths
+            .entry((idx, resolved))
+            .or_insert_with(|| font.outline_path(resolved));
+        let Some(path) = path.as_ref() else {
+            continue; // whitespace / missing / degenerate glyph: no draw.
+        };
+        crate::text::draw_glyph_path(
             canvas,
             glyph,
-            resolved,
-            &font,
+            path,
+            upem,
             stroke_paint,
             &stroke,
             run.ctm,
-        )?;
+            &mut scratch,
+        );
     }
     Ok(())
 }

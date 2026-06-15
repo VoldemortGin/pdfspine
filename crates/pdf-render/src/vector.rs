@@ -245,11 +245,9 @@ pub fn fill_items(
     } else {
         FillRule::Winding
     };
-    // Clone the clip mask out so the &mut pixmap borrow doesn't conflict.
-    let clip = canvas.clip().cloned();
-    canvas
-        .pixmap_mut()
-        .fill_path(&skpath, &sk_paint, rule, transform, clip.as_ref());
+    // Split-borrow the pixmap + clip (no per-op clone of the device-size mask).
+    let (pixmap, clip) = canvas.pixmap_and_clip_mut();
+    pixmap.fill_path(&skpath, &sk_paint, rule, transform, clip);
     Ok(())
 }
 
@@ -288,10 +286,9 @@ pub fn stroke_items(
     let transform = canvas.device_transform(ctm);
     let sk_paint = paint.to_sk_paint();
     let stroke = style.to_sk();
-    let clip = canvas.clip().cloned();
-    canvas
-        .pixmap_mut()
-        .stroke_path(&skpath, &sk_paint, &stroke, transform, clip.as_ref());
+    // Split-borrow the pixmap + clip (no per-op clone of the device-size mask).
+    let (pixmap, clip) = canvas.pixmap_and_clip_mut();
+    pixmap.stroke_path(&skpath, &sk_paint, &stroke, transform, clip);
     Ok(())
 }
 
