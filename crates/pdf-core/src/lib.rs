@@ -30,6 +30,7 @@ pub mod lexer;
 pub mod limits;
 pub mod object;
 pub mod objstm;
+pub mod ocg;
 pub mod page;
 pub mod pagetree;
 pub mod repair;
