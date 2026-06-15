@@ -4,9 +4,9 @@ Honest, reproducible comparison of **oxide_pdf** against two popular Python PDF 
 
 ## Summary
 
-- **open** — vs pypdf: oxide 3.26x faster; vs pypdfium2: oxide 5.21x slower.
-- **text extraction** — vs pypdf: oxide 1.32x slower; vs pypdfium2: oxide 10.99x slower.
-- **render @150dpi** — vs pypdfium2: oxide 22.38x slower; pypdf: unsupported.
+- **open** — vs pypdf: oxide 24.76x faster; vs pypdfium2: oxide 1.56x faster.
+- **text extraction** — vs pypdf: oxide 14.76x faster; vs pypdfium2: oxide 1.80x faster.
+- **render @150dpi** — vs pypdfium2: oxide 2.51x slower; pypdf: unsupported.
 
 Read the ratios as *oxide relative to the competitor*: "faster" means oxide took less wall-clock time per document. All numbers are warm medians (see Methodology).
 
@@ -29,9 +29,9 @@ Corpus: **30** public-domain PDFs in `fixtures/corpus/` (US gov / IRS / NASA / N
 
 | Operation | oxide_pdf | pypdf | pypdfium2 | oxide vs pypdf | oxide vs pypdfium2 |
 |---|---|---|---|---|---|
-| open + page_count | 1.90 ms | 6.21 ms | 365 us | oxide 3.26x faster | oxide 5.21x slower |
-| get_text (whole doc) | 178.59 ms | 135.55 ms | 16.25 ms | oxide 1.32x slower | oxide 10.99x slower |
-| render page 1 @ 150dpi | 266.24 ms | n/a (unsupported) | 11.89 ms | oxide n/a | oxide 22.38x slower |
+| open + page_count | 251 us | 6.22 ms | 392 us | oxide 24.76x faster | oxide 1.56x faster |
+| get_text (whole doc) | 9.65 ms | 142.37 ms | 17.33 ms | oxide 14.76x faster | oxide 1.80x faster |
+| render page 1 @ 150dpi | 30.60 ms | n/a (unsupported) | 12.21 ms | oxide n/a | oxide 2.51x slower |
 
 *Cell = median across the per-document medians (each document timed as the median of 5 warm runs). "render" is page 1 only.*
 
@@ -39,9 +39,9 @@ Corpus: **30** public-domain PDFs in `fixtures/corpus/` (US gov / IRS / NASA / N
 
 | Operation | oxide_pdf | pypdf | pypdfium2 | #docs (oxide) |
 |---|---|---|---|---|
-| open + page_count | 90.48 ms | 275.51 ms | 15.18 ms | 30 |
-| get_text (whole doc) | 17.060 s | 12.777 s | 1.401 s | 30 |
-| render page 1 @ 150dpi | 21.669 s | n/a | 670.49 ms | 30 |
+| open + page_count | 10.34 ms | 268.16 ms | 14.58 ms | 30 |
+| get_text (whole doc) | 963.84 ms | 11.734 s | 1.358 s | 30 |
+| render page 1 @ 150dpi | 1.701 s | n/a | 646.26 ms | 30 |
 
 ## Documents a library failed to process
 

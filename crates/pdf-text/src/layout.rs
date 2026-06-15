@@ -55,8 +55,18 @@ pub fn build_textpage(doc: &DocumentStore, page: &Page, _limits: &Limits) -> Tex
     let mediabox = page.mediabox();
     let rotate = page.rotation();
     let clip = page.cropbox();
-    let glyphs = enrich_glyph_fonts(doc, &page_dict, res.glyphs);
-    textpage_from_glyphs_clipped(&glyphs, &res.images, mediabox, rotate, Some(clip))
+    // Resource-name → resolved `/BaseFont` map (built once per page). The
+    // device-transform pass applies it inline, so font-name enrichment costs one
+    // pass over the *distinct* fonts instead of one clone per glyph.
+    let resolver = build_font_resolver(doc, &page_dict);
+    textpage_core(
+        &res.glyphs,
+        &res.images,
+        mediabox,
+        rotate,
+        Some(clip),
+        Some(&resolver),
+    )
 }
 
 /// Builds a [`TextPage`] directly from a glyph list + image inventory in **PDF
@@ -85,16 +95,54 @@ pub fn textpage_from_glyphs_clipped(
     rotate: i32,
     clip: Option<Rect>,
 ) -> TextPage {
+    textpage_core(glyphs, images, mediabox, rotate, clip, None)
+}
+
+/// The shared TextPage builder. `resolver`, when present, maps each glyph's
+/// resource font name to its resolved `/BaseFont` (font-name enrichment) inline
+/// during the device-transform pass, avoiding a separate O(glyphs) pass.
+fn textpage_core(
+    glyphs: &[PositionedGlyph],
+    images: &[ImageRef],
+    mediabox: Rect,
+    rotate: i32,
+    clip: Option<Rect>,
+    resolver: Option<&FontResolver>,
+) -> TextPage {
     let p = page_transform(mediabox, rotate);
     let (width, height) = page_size(mediabox, rotate);
 
     // 1. Transform every glyph to device space, dropping out-of-CropBox glyphs.
+    // `dir` depends only on the page transform + writing mode (not the glyph), so
+    // both vectors are computed once. The font name is resolved (enriched) and
+    // its style flags memoized per distinct resource name — both repeat across
+    // nearly every glyph, so this is one map lookup per glyph instead of a clone
+    // + lowercase scan.
     let clip = clip.map(|c| c.normalize());
-    let dev: Vec<DevGlyph> = glyphs
-        .iter()
-        .filter(|g| clip.is_none_or(|c| origin_in_clip(g.origin, &c)))
-        .map(|g| DevGlyph::new(g, &p))
-        .collect();
+    let dir_h = writing_dir_vector(&p, 0);
+    let dir_v = writing_dir_vector(&p, 1);
+    // Per distinct resource name: (resolved font name, style flags).
+    let mut font_cache: std::collections::HashMap<SmolStr, (SmolStr, u32)> =
+        std::collections::HashMap::new();
+    let mut dev: Vec<DevGlyph> = Vec::with_capacity(glyphs.len());
+    for g in glyphs {
+        if let Some(c) = clip.as_ref() {
+            if !origin_in_clip(g.origin, c) {
+                continue;
+            }
+        }
+        let (font, flags) = font_cache
+            .entry(g.font_name.clone())
+            .or_insert_with(|| {
+                let resolved = resolver
+                    .and_then(|r| r.resolve(&g.font_name))
+                    .unwrap_or_else(|| g.font_name.clone());
+                let flags = name_flags(&resolved);
+                (resolved, flags)
+            })
+            .clone();
+        dev.push(DevGlyph::new(g, &p, dir_h, dir_v, font, flags));
+    }
 
     // 2/3. lines + spans.
     let lines = group_lines(&dev);
@@ -202,7 +250,18 @@ struct DevGlyph {
 }
 
 impl DevGlyph {
-    fn new(g: &PositionedGlyph, p: &Matrix) -> Self {
+    /// Builds a device-space glyph. `dir_h`/`dir_v` are the precomputed
+    /// writing-direction vectors for this page transform (horizontal/vertical);
+    /// `font` is the resolved (enriched) font name and `flags` its memoized style
+    /// flags — all hoisted out of the per-glyph hot path in [`textpage_core`].
+    fn new(
+        g: &PositionedGlyph,
+        p: &Matrix,
+        dir_h: (f64, f64),
+        dir_v: (f64, f64),
+        font: SmolStr,
+        flags: u32,
+    ) -> Self {
         let origin = g.origin.transform(p);
         let bbox = g.bbox.transform(p).normalize();
         let text = if g.unicode.is_empty() {
@@ -214,13 +273,12 @@ impl DevGlyph {
             WritingDir::Vertical => 1,
             WritingDir::Horizontal => 0,
         };
-        let dir = writing_dir_vector(g, p, wmode);
-        let flags = style_flags(g);
+        let dir = if wmode == 1 { dir_v } else { dir_h };
         DevGlyph {
             origin,
             bbox,
             text,
-            font: g.font_name.clone(),
+            font,
             size: g.size,
             color: g.color,
             flags,
@@ -243,13 +301,14 @@ impl DevGlyph {
     }
 }
 
-/// The device-space writing-direction unit vector. We transform the user-space
-/// advance direction (x+ for horizontal, y- for vertical writing) through the
-/// page transform's linear part and normalize. Falls back to `(1, 0)`.
-fn writing_dir_vector(g: &PositionedGlyph, p: &Matrix, wmode: u8) -> (f64, f64) {
-    // A unit advance step in user space, derived from the glyph bbox if we have
-    // width, else the canonical axis. For horizontal writing the advance is +x;
-    // for vertical writing the advance is -y (top-to-bottom).
+/// The device-space writing-direction unit vector for a writing mode. We
+/// transform the user-space advance direction (x+ for horizontal, y- for
+/// vertical writing) through the page transform's linear part and normalize.
+/// Falls back to `(1, 0)`. Independent of any individual glyph, so callers
+/// compute it once per page transform.
+fn writing_dir_vector(p: &Matrix, wmode: u8) -> (f64, f64) {
+    // A unit advance step in user space. For horizontal writing the advance is
+    // +x; for vertical writing the advance is -y (top-to-bottom).
     let (ux, uy) = if wmode == 1 { (0.0, -1.0) } else { (1.0, 0.0) };
     // Apply only the linear part of the page transform (drop translation).
     let dx = p.a * ux + p.c * uy;
@@ -258,15 +317,7 @@ fn writing_dir_vector(g: &PositionedGlyph, p: &Matrix, wmode: u8) -> (f64, f64) 
     if n <= f64::EPSILON {
         return (1.0, 0.0);
     }
-    let _ = g;
     (dx / n, dy / n)
-}
-
-/// Derives the font-property span flags (italic/serif/mono/bold) from the font
-/// name (PRD §8.6.2, §8.5). The superscript bit is layout-derived and added in
-/// `build_line` once the line baseline is known.
-fn style_flags(g: &PositionedGlyph) -> u32 {
-    name_flags(&g.font_name)
 }
 
 /// Font-name heuristics → italic / serif / mono / bold bits.
@@ -314,14 +365,21 @@ fn group_lines(dev: &[DevGlyph]) -> Vec<Line> {
     // the main baseline.
     let mut clusters: Vec<Vec<usize>> = Vec::new();
     let mut cluster_cross: Vec<f64> = Vec::new();
+    // Representative size/dir per cluster, kept in parallel arrays so the hot
+    // inner scan never chases the `dev[clusters[ci][0]]` indirection (which is a
+    // cache-hostile random access). Iteration order and tie-break are unchanged,
+    // so the output is identical.
+    let mut cluster_size: Vec<f64> = Vec::new();
+    let mut cluster_dir: Vec<(f64, f64)> = Vec::new();
 
     for (i, g) in dev.iter().enumerate() {
         let cross = g.cross();
+        let g_size = g.size.abs();
+        let g_dir = g.dir;
         let mut found = None;
-        for (ci, cc) in cluster_cross.iter().enumerate() {
-            let rep = &dev[clusters[ci][0]];
-            let tol = rep.size.abs().max(g.size.abs()).max(1.0) * LINE_TOL_FRAC;
-            if (cc - cross).abs() <= tol && dir_matches(&rep.dir, &g.dir) {
+        for ci in 0..cluster_cross.len() {
+            let tol = cluster_size[ci].max(g_size).max(1.0) * LINE_TOL_FRAC;
+            if (cluster_cross[ci] - cross).abs() <= tol && dir_matches(&cluster_dir[ci], &g_dir) {
                 found = Some(ci);
                 break;
             }
@@ -331,6 +389,8 @@ fn group_lines(dev: &[DevGlyph]) -> Vec<Line> {
             None => {
                 clusters.push(vec![i]);
                 cluster_cross.push(cross);
+                cluster_size.push(g_size);
+                cluster_dir.push(g_dir);
             }
         }
     }
@@ -343,9 +403,18 @@ fn group_lines(dev: &[DevGlyph]) -> Vec<Line> {
 
     let mut lines = Vec::new();
     for ci in order {
-        let mut idxs = clusters[ci].clone();
-        // Order along the reading axis (advance direction).
-        idxs.sort_by(|&a, &b| dev[a].along().total_cmp(&dev[b].along()));
+        // Move the cluster's index list out (no clone — `clusters` is consumed).
+        let mut idxs = std::mem::take(&mut clusters[ci]);
+        // Order along the reading axis (advance direction). `along()` is a dot
+        // product; sorting recomputes it for every comparison, so precompute it
+        // once per glyph and sort the pairs (same ordering, fewer ops).
+        if idxs.len() > 1 {
+            let mut keyed: Vec<(f64, usize)> = idxs.iter().map(|&i| (dev[i].along(), i)).collect();
+            keyed.sort_by(|a, b| a.0.total_cmp(&b.0));
+            for (slot, (_, i)) in idxs.iter_mut().zip(keyed) {
+                *slot = i;
+            }
+        }
         // A single baseline cluster may straddle a column gutter; split it into
         // separate lines wherever a large along-axis gap appears so a line never
         // crosses a column boundary.
@@ -977,17 +1046,34 @@ fn image_bbox(img: &ImageRef, p: &Matrix) -> Rect {
 
 // === font-name enrichment =================================================
 
-/// Replaces each glyph's resource font name with the resolved `/BaseFont` when
-/// the page's `/Resources /Font` dict provides one — so span flags can use the
-/// real font name (e.g. `Helvetica-Bold`) rather than the resource alias (`F1`).
-/// Falls back to the resource name when unresolvable.
-fn enrich_glyph_fonts(
-    doc: &DocumentStore,
-    page_dict: &pdf_core::Dict,
-    mut glyphs: Vec<PositionedGlyph>,
-) -> Vec<PositionedGlyph> {
-    use std::collections::HashMap;
-    let mut cache: HashMap<SmolStr, Option<SmolStr>> = HashMap::new();
+/// Resolves a page's resource font names to their `/BaseFont` so span flags can
+/// use the real font name (e.g. `Helvetica-Bold`) rather than the resource alias
+/// (`F1`). Built once per page; the device-transform pass calls [`Self::resolve`]
+/// once per *distinct* resource name (its caller memoizes), so no separate
+/// O(glyphs) enrichment pass is needed.
+struct FontResolver<'a> {
+    doc: &'a DocumentStore,
+    /// The page's `/Resources /Font` dict, if present.
+    fonts: Option<pdf_core::Dict>,
+}
+
+impl<'a> FontResolver<'a> {
+    /// Resolves `name`'s `/BaseFont` (tag-stripped). `None` when unresolvable —
+    /// the caller keeps the resource name verbatim, matching the prior behavior.
+    fn resolve(&self, name: &SmolStr) -> Option<SmolStr> {
+        let fonts = self.fonts.as_ref()?;
+        let fd = self
+            .doc
+            .resolve_dict_key(fonts, &Name::new(name.as_str()))
+            .ok()
+            .flatten()?;
+        let fd = fd.as_dict()?;
+        base_font_name(self.doc, fd)
+    }
+}
+
+/// Builds the [`FontResolver`] for a page (resolves `/Resources /Font` once).
+fn build_font_resolver<'a>(doc: &'a DocumentStore, page_dict: &pdf_core::Dict) -> FontResolver<'a> {
     let fonts = doc
         .resolve_dict_key(page_dict, &Name::new("Resources"))
         .ok()
@@ -999,22 +1085,7 @@ fn enrich_glyph_fonts(
                 .flatten()
         })
         .and_then(|o| o.as_dict().cloned());
-
-    for g in &mut glyphs {
-        let resolved = cache.entry(g.font_name.clone()).or_insert_with(|| {
-            let fonts = fonts.as_ref()?;
-            let fd = doc
-                .resolve_dict_key(fonts, &Name::new(g.font_name.as_str()))
-                .ok()
-                .flatten()?;
-            let fd = fd.as_dict()?;
-            base_font_name(doc, fd)
-        });
-        if let Some(base) = resolved {
-            g.font_name = base.clone();
-        }
-    }
-    glyphs
+    FontResolver { doc, fonts }
 }
 
 /// The `/BaseFont` of a font dict (following a Type0 descendant), tag-stripped

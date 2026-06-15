@@ -15,4 +15,9 @@ smol_str.workspace = true
 unicode-normalization.workspace = true
 
 [dev-dependencies]
+criterion = { version = "0.8.2", default-features = false, features = ["cargo_bench_support"] }
 proptest.workspace = true
+
+[[bench]]
+name = "textpage"
+harness = false

@@ -733,32 +733,39 @@ impl<'a> ContentInterpreter<'a> {
             return;
         };
         self.ensure_font(&font_name, resources, font_cache);
+        // Hold `cached` for the whole show op: `font_cache` is a parameter and
+        // `self.out` a field, so the immutable borrow on `cached` and the mutable
+        // push into `self.out.glyphs` do not conflict — no per-glyph re-lookup,
+        // no up-front `codes` Vec.
         let cached = match font_cache.get(&font_name).and_then(Option::as_ref) {
             Some(c) => c,
             None => return,
         };
-        // Collect codes up front (the borrow on `cached` ends before mutation).
-        let codes: Vec<(u32, u8)> = cached.mapper.iter_codes(bytes).collect();
 
-        // Render-op recording: capture this show op as one ordered TextRun. The
-        // glyphs' `origin`/`bbox` already carry the full CTM (Trm = params·Tm·CTM),
-        // so the renderer paints them with an identity CTM.
         let start = self.out.glyphs.len();
-        let (gids, font_dict): (Vec<u32>, Option<Dict>) = if self.recording() {
-            let gids = codes
-                .iter()
-                .map(|&(code, _)| cached.mapper.gid(code))
-                .collect();
-            (gids, Some(cached.dict.clone()))
-        } else {
-            (Vec::new(), None)
-        };
-
-        for (code, n_bytes) in codes {
-            self.emit_glyph(code, n_bytes, &font_name, gs, tm, font_cache);
+        // Render-op recording captures per-glyph GIDs; the text-extraction path
+        // (no recording) skips that allocation entirely.
+        let mut gids: Vec<u32> = Vec::new();
+        let recording = self.render_ops.is_some();
+        for (code, n_bytes) in cached.mapper.iter_codes(bytes) {
+            if recording {
+                gids.push(cached.mapper.gid(code));
+            }
+            emit_glyph_into(
+                &mut self.out.glyphs,
+                cached,
+                code,
+                n_bytes,
+                &font_name,
+                gs,
+                tm,
+            );
         }
 
-        if let Some(font_dict) = font_dict {
+        if recording {
+            // The glyphs' `origin`/`bbox` already carry the full CTM
+            // (Trm = params·Tm·CTM), so the renderer paints with an identity CTM.
+            let font_dict = cached.dict.clone();
             let glyphs: Vec<PositionedGlyph> = self.out.glyphs[start..].to_vec();
             if !glyphs.is_empty() {
                 self.emit(RenderOp::Text(TextRun {
@@ -799,69 +806,6 @@ impl<'a> ContentInterpreter<'a> {
                 _ => {}
             }
         }
-    }
-
-    /// Emits one positioned glyph for `code` and advances `tm`.
-    fn emit_glyph(
-        &mut self,
-        code: u32,
-        n_bytes: u8,
-        font_name: &SmolStr,
-        gs: &GraphicsState,
-        tm: &mut Matrix,
-        font_cache: &mut std::collections::HashMap<SmolStr, Option<CachedFont>>,
-    ) {
-        let Some(cached) = font_cache.get(font_name).and_then(Option::as_ref) else {
-            return;
-        };
-        let ts = &gs.text;
-        let w0 = cached.mapper.width(code) / 1000.0; // glyph advance, text units
-        let unicode = cached.mapper.to_unicode(code).unwrap_or_default();
-
-        // params = [Tfs·Th, 0, 0, Tfs, 0, Trise]
-        let params = Matrix::new(
-            ts.font_size * ts.h_scale,
-            0.0,
-            0.0,
-            ts.font_size,
-            0.0,
-            ts.rise,
-        );
-        // Trm = params · Tm · CTM
-        let trm = Matrix::concat(&Matrix::concat(&params, tm), &gs.ctm);
-
-        // Glyph origin = (0,0) · Trm.
-        let origin = Point::new(0.0, 0.0).transform(&trm);
-
-        // Glyph cell in 1000-unit glyph space → text space is /1000, then params
-        // already carries the size scaling. Build the cell in the *unit* space
-        // params operates on: x ∈ [0, w0], y ∈ [descent/1000, ascent/1000].
-        let asc = cached.ascent / 1000.0;
-        let desc = cached.descent / 1000.0;
-        let cell = Rect::new(0.0, desc, w0, asc);
-        // Transform the cell by Trm and take the axis-aligned envelope (correct
-        // for rotated Tm).
-        let bbox = cell.transform(&trm);
-
-        self.out.glyphs.push(PositionedGlyph {
-            unicode,
-            code,
-            origin: sanitize_point(origin),
-            bbox: sanitize_rect(bbox),
-            font_name: font_name.clone(),
-            size: ts.font_size,
-            color: gs.fill_color,
-            render_mode: ts.render_mode,
-            writing_dir: WritingDir::Horizontal,
-            ascender: asc,
-            descender: desc,
-        });
-
-        // Advance: tx = ((w0)·Tfs + Tc + Tw_if_space)·Th  (w0 already /1000).
-        let is_space = n_bytes == 1 && code == 0x20;
-        let tw = if is_space { ts.word_spacing } else { 0.0 };
-        let tx = (w0 * ts.font_size + ts.char_spacing + tw) * ts.h_scale;
-        *tm = Matrix::concat(&Matrix::translate(tx, 0.0), tm);
     }
 
     // --- fonts ------------------------------------------------------------
@@ -1278,6 +1222,70 @@ impl<'a> ContentInterpreter<'a> {
 }
 
 // === free helpers =========================================================
+
+/// Emits one positioned glyph for `code` into `out` and advances `tm`. Free
+/// function (not a method) so the caller can hold an immutable borrow of
+/// `cached` across the show-op loop while pushing into `out` — avoiding a
+/// per-glyph font-cache lookup. Geometry is identical to the previous method.
+#[allow(clippy::too_many_arguments)]
+fn emit_glyph_into(
+    out: &mut Vec<PositionedGlyph>,
+    cached: &CachedFont,
+    code: u32,
+    n_bytes: u8,
+    font_name: &SmolStr,
+    gs: &GraphicsState,
+    tm: &mut Matrix,
+) {
+    let ts = &gs.text;
+    let w0 = cached.mapper.width(code) / 1000.0; // glyph advance, text units
+    let unicode = cached.mapper.to_unicode(code).unwrap_or_default();
+
+    // params = [Tfs·Th, 0, 0, Tfs, 0, Trise]
+    let params = Matrix::new(
+        ts.font_size * ts.h_scale,
+        0.0,
+        0.0,
+        ts.font_size,
+        0.0,
+        ts.rise,
+    );
+    // Trm = params · Tm · CTM
+    let trm = Matrix::concat(&Matrix::concat(&params, tm), &gs.ctm);
+
+    // Glyph origin = (0,0) · Trm.
+    let origin = Point::new(0.0, 0.0).transform(&trm);
+
+    // Glyph cell in 1000-unit glyph space → text space is /1000, then params
+    // already carries the size scaling. Build the cell in the *unit* space
+    // params operates on: x ∈ [0, w0], y ∈ [descent/1000, ascent/1000].
+    let asc = cached.ascent / 1000.0;
+    let desc = cached.descent / 1000.0;
+    let cell = Rect::new(0.0, desc, w0, asc);
+    // Transform the cell by Trm and take the axis-aligned envelope (correct
+    // for rotated Tm).
+    let bbox = cell.transform(&trm);
+
+    out.push(PositionedGlyph {
+        unicode,
+        code,
+        origin: sanitize_point(origin),
+        bbox: sanitize_rect(bbox),
+        font_name: font_name.clone(),
+        size: ts.font_size,
+        color: gs.fill_color,
+        render_mode: ts.render_mode,
+        writing_dir: WritingDir::Horizontal,
+        ascender: asc,
+        descender: desc,
+    });
+
+    // Advance: tx = ((w0)·Tfs + Tc + Tw_if_space)·Th  (w0 already /1000).
+    let is_space = n_bytes == 1 && code == 0x20;
+    let tw = if is_space { ts.word_spacing } else { 0.0 };
+    let tx = (w0 * ts.font_size + ts.char_spacing + tw) * ts.h_scale;
+    *tm = Matrix::concat(&Matrix::translate(tx, 0.0), tm);
+}
 
 /// The `n`-th numeric operand as `f64` (operands are in source order).
 fn nth_f64(ops: &[Object], n: usize) -> Option<f64> {
