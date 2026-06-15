@@ -11,8 +11,11 @@
 //! released via [`Python::detach`]. Errors map to a typed exception hierarchy
 //! rooted at `_core.PdfError` (PRD §9.3).
 
-use pdf_api::geom::{Matrix, Quad, Rect};
-use pdf_api::{Document as ApiDocument, Error as ApiError, ParseMode, SearchOptions, TextOutput};
+use pdf_api::geom::{Matrix, Point, Quad, Rect};
+use pdf_api::{
+    Align, AnnotHandle, Document as ApiDocument, DrawItem, Drawing, Error as ApiError,
+    FinishParams, ParseMode, ScrubOptions, SearchOptions, ShapeHandle, TextOutput, WidgetHandle,
+};
 use pyo3::create_exception;
 use pyo3::exceptions::{PyFileNotFoundError, PyIndexError, PyOSError};
 use pyo3::prelude::*;
@@ -29,6 +32,7 @@ create_exception!(_core, PdfPasswordError, PdfError);
 create_exception!(_core, PdfUnsupportedError, PdfError);
 create_exception!(_core, PdfDecodeError, PdfError);
 create_exception!(_core, PdfLimitError, PdfError);
+create_exception!(_core, PdfRedactionError, PdfError);
 
 /// Maps a `pdf_api::Error` onto the appropriate Python exception (PRD §9.3).
 fn map_err(e: ApiError) -> PyErr {
@@ -47,6 +51,7 @@ fn map_err(e: ApiError) -> PyErr {
         "unsupported" => PdfUnsupportedError::new_err(msg),
         "decode" => PdfDecodeError::new_err(msg),
         "limit" => PdfLimitError::new_err(msg),
+        "redaction" => PdfRedactionError::new_err(msg),
         _ => PdfSyntaxError::new_err(msg),
     }
 }
@@ -111,6 +116,45 @@ struct PyPage {
 /// Converts a `Rect` to the 4-tuple `(x0, y0, x1, y1)` the Python layer wraps.
 fn rect_tuple(r: pdf_api::Rect) -> (f64, f64, f64, f64) {
     (r.x0, r.y0, r.x1, r.y1)
+}
+
+/// Builds a [`Rect`] from the `(x0, y0, x1, y1)` 4-tuple the Python layer sends.
+fn rect_of(t: (f64, f64, f64, f64)) -> Rect {
+    Rect::new(t.0, t.1, t.2, t.3)
+}
+
+/// Builds a [`Point`] from the `(x, y)` 2-tuple the Python layer sends.
+fn point_of(t: (f64, f64)) -> Point {
+    Point::new(t.0, t.1)
+}
+
+/// Converts a `Point` to the `(x, y)` 2-tuple the Python layer wraps.
+fn point_tuple(p: Point) -> (f64, f64) {
+    (p.x, p.y)
+}
+
+/// The corner-coord 8-tuple `(ul.x, ul.y, ur.x, ur.y, ll.x, ll.y, lr.x, lr.y)`
+/// the Python layer sends for a [`Quad`].
+type QuadTuple = (f64, f64, f64, f64, f64, f64, f64, f64);
+
+/// Builds a [`Quad`] from the corner-coord 8-tuple
+/// `(ul.x, ul.y, ur.x, ur.y, ll.x, ll.y, lr.x, lr.y)` the Python layer sends.
+fn quad_of(t: QuadTuple) -> Quad {
+    Quad {
+        ul: Point::new(t.0, t.1),
+        ur: Point::new(t.2, t.3),
+        ll: Point::new(t.4, t.5),
+        lr: Point::new(t.6, t.7),
+    }
+}
+
+/// Maps a packed `0x00RRGGBB` color to the PyMuPDF `(r, g, b)` float tuple.
+fn unpack_color(rgb: u32) -> (f64, f64, f64) {
+    (
+        f64::from((rgb >> 16) & 0xff) / 255.0,
+        f64::from((rgb >> 8) & 0xff) / 255.0,
+        f64::from(rgb & 0xff) / 255.0,
+    )
 }
 
 // --- TextPage handle ------------------------------------------------------
@@ -350,6 +394,409 @@ fn quad_tuple(q: &Quad) -> (f64, f64, f64, f64, f64, f64, f64, f64) {
     (
         q.ul.x, q.ul.y, q.ur.x, q.ur.y, q.ll.x, q.ll.y, q.lr.x, q.lr.y,
     )
+}
+
+// --- Annot handle (PRD §8.8 / §9.4) ---------------------------------------
+
+/// An annotation handle (PyMuPDF `Annot`). Owns an `AnnotHandle` (its own
+/// `Arc` onto the store + the annot xref) — `'static`, no borrow crosses the
+/// boundary.
+#[pyclass(name = "Annot", module = "oxipdf._core", frozen)]
+struct PyAnnot {
+    annot: AnnotHandle,
+}
+
+#[pymethods]
+impl PyAnnot {
+    /// The annotation object number (PyMuPDF `Annot.xref`).
+    #[getter]
+    fn xref(&self) -> u32 {
+        self.annot.xref()
+    }
+
+    /// The annotation `/Rect` as `(x0, y0, x1, y1)` (PyMuPDF `Annot.rect`).
+    #[getter]
+    fn rect(&self) -> (f64, f64, f64, f64) {
+        rect_tuple(self.annot.rect())
+    }
+
+    /// The annotation subtype name string, e.g. `"Highlight"` (PyMuPDF
+    /// `Annot.type` is `(int, str)`; the Python layer builds the pair).
+    #[getter]
+    fn type_string(&self) -> String {
+        self.annot.type_string()
+    }
+
+    /// The annotation info dict `{content, name, title, …}` (PyMuPDF
+    /// `Annot.info`).
+    fn info<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        let info = self.annot.info();
+        let d = PyDict::new(py);
+        d.set_item("content", info.content)?;
+        d.set_item("name", info.name)?;
+        d.set_item("title", info.title)?;
+        Ok(d)
+    }
+
+    /// The `{stroke, fill}` color dict (PyMuPDF `Annot.colors`); each value is an
+    /// `(r, g, b)` tuple or `None`.
+    fn colors<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        let (stroke, fill) = self.annot.colors();
+        let d = PyDict::new(py);
+        d.set_item("stroke", stroke)?;
+        d.set_item("fill", fill)?;
+        Ok(d)
+    }
+
+    /// The constant opacity `/CA` (PyMuPDF `Annot.opacity`).
+    #[getter]
+    fn opacity(&self) -> f64 {
+        self.annot.opacity()
+    }
+
+    /// The border width (PyMuPDF `Annot.border` is a dict; the Python layer
+    /// wraps this scalar width).
+    #[getter]
+    fn border_width(&self) -> f64 {
+        self.annot.border_width()
+    }
+
+    /// The annotation flags `/F` (PyMuPDF `Annot.flags`).
+    #[getter]
+    fn flags(&self) -> i64 {
+        self.annot.flags()
+    }
+
+    /// The `/Vertices` as `(x, y)` tuples (PyMuPDF `Annot.vertices`).
+    fn vertices(&self) -> Vec<(f64, f64)> {
+        self.annot.vertices().into_iter().map(point_tuple).collect()
+    }
+
+    /// Whether an `/AP /N` appearance stream is present (PyMuPDF
+    /// `Annot.has_appearance`-style check).
+    #[getter]
+    fn has_appearance(&self) -> bool {
+        self.annot.has_appearance()
+    }
+
+    /// Sets the `/Rect` (PyMuPDF `Annot.set_rect`).
+    fn set_rect(&self, rect: (f64, f64, f64, f64)) -> PyResult<()> {
+        self.annot.set_rect(rect_of(rect)).map_err(map_err)
+    }
+
+    /// Sets stroke/fill colors (PyMuPDF `Annot.set_colors`). Each `None` leaves
+    /// the key untouched.
+    #[pyo3(signature = (stroke=None, fill=None))]
+    fn set_colors(
+        &self,
+        stroke: Option<(f64, f64, f64)>,
+        fill: Option<(f64, f64, f64)>,
+    ) -> PyResult<()> {
+        self.annot.set_colors(stroke, fill).map_err(map_err)
+    }
+
+    /// Sets the constant opacity `/CA` (PyMuPDF `Annot.set_opacity`).
+    fn set_opacity(&self, opacity: f64) -> PyResult<()> {
+        self.annot.set_opacity(opacity).map_err(map_err)
+    }
+
+    /// Sets the border width (PyMuPDF `Annot.set_border`).
+    #[pyo3(signature = (width=1.0))]
+    fn set_border(&self, width: f64) -> PyResult<()> {
+        self.annot.set_border(width).map_err(map_err)
+    }
+
+    /// Sets the annotation flags `/F` (PyMuPDF `Annot.set_flags`).
+    fn set_flags(&self, flags: i64) -> PyResult<()> {
+        self.annot.set_flags(flags).map_err(map_err)
+    }
+
+    /// Sets info fields (PyMuPDF `Annot.set_info`). Each `None` leaves the key
+    /// untouched.
+    #[pyo3(signature = (content=None, title=None, name=None))]
+    fn set_info(
+        &self,
+        content: Option<&str>,
+        title: Option<&str>,
+        name: Option<&str>,
+    ) -> PyResult<()> {
+        self.annot.set_info(content, title, name).map_err(map_err)
+    }
+
+    /// Regenerates the `/AP /N` appearance stream (PyMuPDF `Annot.update`).
+    fn update(&self) -> PyResult<()> {
+        self.annot.update().map_err(map_err)
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "<oxipdf._core.Annot type={} xref={}>",
+            self.annot.type_string(),
+            self.annot.xref()
+        )
+    }
+}
+
+// --- Widget handle (PRD §8.8 / §9.4) --------------------------------------
+
+/// A form-widget handle (PyMuPDF `Widget`). Owns a `WidgetHandle`.
+#[pyclass(name = "Widget", module = "oxipdf._core", frozen)]
+struct PyWidget {
+    widget: WidgetHandle,
+}
+
+#[pymethods]
+impl PyWidget {
+    /// The widget object number (PyMuPDF `Widget.xref`).
+    #[getter]
+    fn xref(&self) -> u32 {
+        self.widget.xref()
+    }
+
+    /// The widget `/Rect` as `(x0, y0, x1, y1)` (PyMuPDF `Widget.rect`).
+    #[getter]
+    fn rect(&self) -> (f64, f64, f64, f64) {
+        rect_tuple(self.widget.rect())
+    }
+
+    /// The PyMuPDF field-type integer (PyMuPDF `Widget.field_type`).
+    #[getter]
+    fn field_type(&self) -> i32 {
+        field_type_int(self.widget.field_type())
+    }
+
+    /// The field-type string (PyMuPDF `Widget.field_type_string`).
+    #[getter]
+    fn field_type_string(&self) -> String {
+        self.widget.field_type_string()
+    }
+
+    /// The fully-qualified field name (PyMuPDF `Widget.field_name`).
+    #[getter]
+    fn field_name(&self) -> Option<String> {
+        let n = self.widget.field_name();
+        if n.is_empty() {
+            None
+        } else {
+            Some(n)
+        }
+    }
+
+    /// The field label `/TU` (PyMuPDF `Widget.field_label`).
+    #[getter]
+    fn field_label(&self) -> Option<String> {
+        self.widget.field_label()
+    }
+
+    /// The current field value (PyMuPDF `Widget.field_value`).
+    #[getter]
+    fn field_value(&self) -> Option<String> {
+        self.widget.field_value()
+    }
+
+    /// The field flags `/Ff` (PyMuPDF `Widget.field_flags`).
+    #[getter]
+    fn field_flags(&self) -> i64 {
+        self.widget.field_flags()
+    }
+
+    /// The choice option values (PyMuPDF `Widget.choice_values`).
+    #[getter]
+    fn choice_values(&self) -> Vec<String> {
+        self.widget.choice_values()
+    }
+
+    /// The checkbox/radio on-state names (PyMuPDF `Widget.button_states`).
+    #[getter]
+    fn button_states(&self) -> Vec<String> {
+        self.widget.button_states()
+    }
+
+    /// Sets the field value (PyMuPDF `Widget.field_value = …`).
+    fn set_field_value(&self, value: &str) -> PyResult<()> {
+        self.widget.set_field_value(value).map_err(map_err)
+    }
+
+    /// Writes the field value back, regenerating appearances (PyMuPDF
+    /// `Widget.update`). The Python layer sets `field_value` then calls this.
+    #[pyo3(signature = (value=None))]
+    fn update(&self, value: Option<&str>) -> PyResult<()> {
+        if let Some(v) = value {
+            self.widget.set_field_value(v).map_err(map_err)?;
+        }
+        Ok(())
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "<oxipdf._core.Widget field={:?} xref={}>",
+            self.widget.field_name(),
+            self.widget.xref()
+        )
+    }
+}
+
+/// Maps a [`pdf_api::FieldType`] to the PyMuPDF `PDF_WIDGET_TYPE_*` integer.
+fn field_type_int(ft: pdf_api::FieldType) -> i32 {
+    use pdf_api::FieldType as F;
+    match ft {
+        F::Unknown => 0,
+        F::PushButton => 1,
+        F::CheckBox => 2,
+        F::RadioButton => 3,
+        F::Text => 4,
+        F::ListBox => 5,
+        F::ComboBox => 6,
+        F::Signature => 7,
+    }
+}
+
+// --- Shape handle (PRD §8.8 / §9.4) ---------------------------------------
+
+/// A path/paint builder over one page (PyMuPDF `Shape`). Wraps the owned
+/// [`ShapeHandle`] in an `Option` so `commit` (which consumes the handle) can
+/// take it out of the `&mut self`.
+#[pyclass(name = "Shape", module = "oxipdf._core")]
+struct PyShape {
+    shape: Option<ShapeHandle>,
+}
+
+impl PyShape {
+    /// Mutable access to the live handle, erroring once committed.
+    fn handle(&mut self) -> PyResult<&mut ShapeHandle> {
+        self.shape
+            .as_mut()
+            .ok_or_else(|| PdfError::new_err("Shape already committed"))
+    }
+}
+
+#[pymethods]
+impl PyShape {
+    /// Records a straight segment (PyMuPDF `Shape.draw_line`).
+    fn draw_line(&mut self, p1: (f64, f64), p2: (f64, f64)) -> PyResult<()> {
+        self.handle()?.draw_line(point_of(p1), point_of(p2));
+        Ok(())
+    }
+
+    /// Records a rectangle (PyMuPDF `Shape.draw_rect`).
+    fn draw_rect(&mut self, rect: (f64, f64, f64, f64)) -> PyResult<()> {
+        self.handle()?.draw_rect(rect_of(rect));
+        Ok(())
+    }
+
+    /// Records a circle (PyMuPDF `Shape.draw_circle`).
+    fn draw_circle(&mut self, center: (f64, f64), radius: f64) -> PyResult<()> {
+        self.handle()?.draw_circle(point_of(center), radius);
+        Ok(())
+    }
+
+    /// Records an ellipse fitting `rect` (PyMuPDF `Shape.draw_oval`).
+    fn draw_oval(&mut self, rect: (f64, f64, f64, f64)) -> PyResult<()> {
+        self.handle()?.draw_oval(rect_of(rect));
+        Ok(())
+    }
+
+    /// Records a cubic Bézier (PyMuPDF `Shape.draw_bezier`).
+    fn draw_bezier(
+        &mut self,
+        p1: (f64, f64),
+        p2: (f64, f64),
+        p3: (f64, f64),
+        p4: (f64, f64),
+    ) -> PyResult<()> {
+        self.handle()?
+            .draw_bezier(point_of(p1), point_of(p2), point_of(p3), point_of(p4));
+        Ok(())
+    }
+
+    /// Records a polyline (PyMuPDF `Shape.draw_polyline`).
+    fn draw_polyline(&mut self, points: Vec<(f64, f64)>) -> PyResult<()> {
+        let pts: Vec<Point> = points.into_iter().map(point_of).collect();
+        self.handle()?.draw_polyline(pts);
+        Ok(())
+    }
+
+    /// Records a smooth curve (PyMuPDF `Shape.draw_curve`).
+    fn draw_curve(&mut self, points: Vec<(f64, f64)>) -> PyResult<()> {
+        let pts: Vec<Point> = points.into_iter().map(point_of).collect();
+        self.handle()?.draw_curve(pts);
+        Ok(())
+    }
+
+    /// Finishes the current styled block (PyMuPDF `Shape.finish`).
+    #[pyo3(signature = (color=None, fill=None, width=1.0, dashes=None, even_odd=false, close_path=false))]
+    fn finish(
+        &mut self,
+        color: Option<(f64, f64, f64)>,
+        fill: Option<(f64, f64, f64)>,
+        width: f64,
+        dashes: Option<String>,
+        even_odd: bool,
+        close_path: bool,
+    ) -> PyResult<()> {
+        self.handle()?.finish(FinishParams {
+            color,
+            fill,
+            width,
+            dashes,
+            even_odd,
+            close_path,
+        });
+        Ok(())
+    }
+
+    /// Writes all recorded blocks to the page (PyMuPDF `Shape.commit`). Heavy
+    /// work runs with the GIL released.
+    #[pyo3(signature = (overlay=true))]
+    fn commit(&mut self, py: Python<'_>, overlay: bool) -> PyResult<()> {
+        let _ = overlay;
+        let handle = self
+            .shape
+            .take()
+            .ok_or_else(|| PdfError::new_err("Shape already committed"))?;
+        py.detach(|| handle.commit()).map_err(map_err)
+    }
+}
+
+/// Converts a [`Drawing`] to the PyMuPDF `get_drawings` dict shape: `type`,
+/// `rect`, `color`, `fill`, `width`, `dashes`, `closePath`, `even_odd`, and
+/// `items` (a list of operator tuples).
+fn drawing_to_py<'py>(py: Python<'py>, d: &Drawing) -> PyResult<Bound<'py, PyDict>> {
+    let out = PyDict::new(py);
+    out.set_item("type", d.type_str())?;
+    out.set_item("rect", rect_tuple(d.rect))?;
+    out.set_item("color", d.color.map(unpack_color))?;
+    out.set_item("fill", d.fill.map(unpack_color))?;
+    out.set_item("width", d.width)?;
+    out.set_item("dashes", &d.dashes)?;
+    out.set_item("closePath", d.close_path)?;
+    out.set_item("even_odd", d.even_odd)?;
+    let items = PyList::empty(py);
+    for it in &d.items {
+        match it {
+            DrawItem::Line(a, b) => {
+                let t = ("l", point_tuple(*a), point_tuple(*b)).into_pyobject(py)?;
+                items.append(t)?;
+            }
+            DrawItem::Curve(a, b, c, e) => {
+                let t = (
+                    "c",
+                    point_tuple(*a),
+                    point_tuple(*b),
+                    point_tuple(*c),
+                    point_tuple(*e),
+                )
+                    .into_pyobject(py)?;
+                items.append(t)?;
+            }
+            DrawItem::Rect(r) => {
+                let t = ("re", rect_tuple(*r)).into_pyobject(py)?;
+                items.append(t)?;
+            }
+        }
+    }
+    out.set_item("items", items)?;
+    Ok(out)
 }
 
 #[pymethods]
@@ -596,8 +1043,488 @@ impl PyPage {
         pdf_api::page_set_rotation(&self.page, rotation).map_err(map_err)
     }
 
+    // --- content insertion (PRD §8.8 / §9.4) -----------------------------
+
+    /// Inserts `text` at `point` (PyMuPDF `Page.insert_text`). Heavy work runs
+    /// with the GIL released. Returns the number of lines written.
+    #[pyo3(signature = (point, text, *, fontname="helv", fontsize=11.0, color=(0.0,0.0,0.0), fontfile=None))]
+    #[allow(clippy::too_many_arguments)]
+    fn insert_text(
+        &self,
+        py: Python<'_>,
+        point: (f64, f64),
+        text: &str,
+        fontname: &str,
+        fontsize: f64,
+        color: (f64, f64, f64),
+        fontfile: Option<Vec<u8>>,
+    ) -> PyResult<usize> {
+        let page = self.page.clone();
+        let text = text.to_string();
+        let fontname = fontname.to_string();
+        py.detach(move || {
+            pdf_api::page_insert_text(
+                &page,
+                point_of(point),
+                &text,
+                &fontname,
+                fontsize,
+                color,
+                fontfile.as_deref(),
+            )
+        })
+        .map_err(map_err)
+    }
+
+    /// Inserts wrapped `text` into `rect` (PyMuPDF `Page.insert_textbox`).
+    /// `align`: 0=left, 1=center, 2=right, 3=justify. Returns free height.
+    #[pyo3(signature = (rect, text, *, fontname="helv", fontsize=11.0, color=(0.0,0.0,0.0), align=0, fontfile=None))]
+    #[allow(clippy::too_many_arguments)]
+    fn insert_textbox(
+        &self,
+        py: Python<'_>,
+        rect: (f64, f64, f64, f64),
+        text: &str,
+        fontname: &str,
+        fontsize: f64,
+        color: (f64, f64, f64),
+        align: i32,
+        fontfile: Option<Vec<u8>>,
+    ) -> PyResult<f64> {
+        let page = self.page.clone();
+        let text = text.to_string();
+        let fontname = fontname.to_string();
+        let align = align_of(align);
+        py.detach(move || {
+            pdf_api::page_insert_textbox(
+                &page,
+                rect_of(rect),
+                &text,
+                &fontname,
+                fontsize,
+                color,
+                align,
+                fontfile.as_deref(),
+            )
+        })
+        .map_err(map_err)
+    }
+
+    /// Inserts an image into `rect` (PyMuPDF `Page.insert_image`). `stream` is
+    /// the image bytes; JPEG is passthrough, otherwise raw RGB requires
+    /// `width`/`height`. Heavy work runs with the GIL released.
+    #[pyo3(signature = (rect, *, stream, width=None, height=None))]
+    fn insert_image(
+        &self,
+        py: Python<'_>,
+        rect: (f64, f64, f64, f64),
+        stream: Vec<u8>,
+        width: Option<u32>,
+        height: Option<u32>,
+    ) -> PyResult<()> {
+        let page = self.page.clone();
+        py.detach(move || -> Result<(), ApiError> {
+            match (width, height) {
+                (Some(w), Some(h)) => {
+                    pdf_api::page_insert_image_rgb(&page, rect_of(rect), w, h, &stream)?;
+                }
+                _ => {
+                    pdf_api::page_insert_image_jpeg(&page, rect_of(rect), &stream)?;
+                }
+            }
+            Ok(())
+        })
+        .map_err(map_err)
+    }
+
+    // --- vector drawing (PRD §8.8) ---------------------------------------
+
+    /// Draws a line (PyMuPDF `Page.draw_line`).
+    #[pyo3(signature = (p1, p2, *, color=(0.0,0.0,0.0), width=1.0))]
+    fn draw_line(
+        &self,
+        p1: (f64, f64),
+        p2: (f64, f64),
+        color: (f64, f64, f64),
+        width: f64,
+    ) -> PyResult<()> {
+        pdf_api::page_draw_line(&self.page, point_of(p1), point_of(p2), color, width)
+            .map_err(map_err)
+    }
+
+    /// Draws a rectangle (PyMuPDF `Page.draw_rect`).
+    #[pyo3(signature = (rect, *, color=(0.0,0.0,0.0), fill=None, width=1.0))]
+    fn draw_rect(
+        &self,
+        rect: (f64, f64, f64, f64),
+        color: Option<(f64, f64, f64)>,
+        fill: Option<(f64, f64, f64)>,
+        width: f64,
+    ) -> PyResult<()> {
+        pdf_api::page_draw_rect(&self.page, rect_of(rect), color, fill, width).map_err(map_err)
+    }
+
+    /// Draws a circle (PyMuPDF `Page.draw_circle`).
+    #[pyo3(signature = (center, radius, *, color=(0.0,0.0,0.0), fill=None, width=1.0))]
+    fn draw_circle(
+        &self,
+        center: (f64, f64),
+        radius: f64,
+        color: Option<(f64, f64, f64)>,
+        fill: Option<(f64, f64, f64)>,
+        width: f64,
+    ) -> PyResult<()> {
+        pdf_api::page_draw_circle(&self.page, point_of(center), radius, color, fill, width)
+            .map_err(map_err)
+    }
+
+    /// Draws an oval fitting `rect` (PyMuPDF `Page.draw_oval`).
+    #[pyo3(signature = (rect, *, color=(0.0,0.0,0.0), fill=None, width=1.0))]
+    fn draw_oval(
+        &self,
+        rect: (f64, f64, f64, f64),
+        color: Option<(f64, f64, f64)>,
+        fill: Option<(f64, f64, f64)>,
+        width: f64,
+    ) -> PyResult<()> {
+        pdf_api::page_draw_oval(&self.page, rect_of(rect), color, fill, width).map_err(map_err)
+    }
+
+    /// Draws a cubic Bézier (PyMuPDF `Page.draw_bezier`).
+    #[pyo3(signature = (p1, p2, p3, p4, *, color=(0.0,0.0,0.0), width=1.0))]
+    #[allow(clippy::too_many_arguments)]
+    fn draw_bezier(
+        &self,
+        p1: (f64, f64),
+        p2: (f64, f64),
+        p3: (f64, f64),
+        p4: (f64, f64),
+        color: (f64, f64, f64),
+        width: f64,
+    ) -> PyResult<()> {
+        pdf_api::page_draw_bezier(
+            &self.page,
+            point_of(p1),
+            point_of(p2),
+            point_of(p3),
+            point_of(p4),
+            color,
+            width,
+        )
+        .map_err(map_err)
+    }
+
+    /// Draws a polyline (PyMuPDF `Page.draw_polyline`).
+    #[pyo3(signature = (points, *, color=(0.0,0.0,0.0), width=1.0))]
+    fn draw_polyline(
+        &self,
+        points: Vec<(f64, f64)>,
+        color: (f64, f64, f64),
+        width: f64,
+    ) -> PyResult<()> {
+        let pts: Vec<Point> = points.into_iter().map(point_of).collect();
+        pdf_api::page_draw_polyline(&self.page, &pts, color, width).map_err(map_err)
+    }
+
+    /// Begins a [`PyShape`] over this page (PyMuPDF `Page.new_shape`).
+    fn new_shape(&self) -> PyShape {
+        PyShape {
+            shape: Some(pdf_api::page_new_shape(&self.page)),
+        }
+    }
+
+    // --- annotations (PRD §8.8) ------------------------------------------
+
+    /// Adds a `/Text` (sticky-note) annotation (PyMuPDF `Page.add_text_annot`).
+    #[pyo3(signature = (point, text, *, icon="Note"))]
+    fn add_text_annot(&self, point: (f64, f64), text: &str, icon: &str) -> PyResult<PyAnnot> {
+        wrap_annot(pdf_api::page_add_text_annot(
+            &self.page,
+            point_of(point),
+            text,
+            icon,
+        ))
+    }
+
+    /// Adds a `/FreeText` annotation (PyMuPDF `Page.add_freetext_annot`).
+    #[pyo3(signature = (rect, text, *, fontsize=11.0, text_color=(0.0,0.0,0.0), fill_color=None, align=0))]
+    fn add_freetext_annot(
+        &self,
+        rect: (f64, f64, f64, f64),
+        text: &str,
+        fontsize: f64,
+        text_color: (f64, f64, f64),
+        fill_color: Option<(f64, f64, f64)>,
+        align: i64,
+    ) -> PyResult<PyAnnot> {
+        wrap_annot(pdf_api::page_add_freetext_annot(
+            &self.page,
+            rect_of(rect),
+            text,
+            fontsize,
+            text_color,
+            fill_color,
+            align,
+        ))
+    }
+
+    /// Adds a `/Highlight` annotation over `quads` (PyMuPDF
+    /// `Page.add_highlight_annot`).
+    fn add_highlight_annot(&self, quads: Vec<QuadTuple>) -> PyResult<PyAnnot> {
+        let qs: Vec<Quad> = quads.into_iter().map(quad_of).collect();
+        wrap_annot(pdf_api::page_add_highlight_annot(&self.page, &qs))
+    }
+
+    /// Adds an `/Underline` annotation (PyMuPDF `Page.add_underline_annot`).
+    fn add_underline_annot(&self, quads: Vec<QuadTuple>) -> PyResult<PyAnnot> {
+        let qs: Vec<Quad> = quads.into_iter().map(quad_of).collect();
+        wrap_annot(pdf_api::page_add_underline_annot(&self.page, &qs))
+    }
+
+    /// Adds a `/StrikeOut` annotation (PyMuPDF `Page.add_strikeout_annot`).
+    fn add_strikeout_annot(&self, quads: Vec<QuadTuple>) -> PyResult<PyAnnot> {
+        let qs: Vec<Quad> = quads.into_iter().map(quad_of).collect();
+        wrap_annot(pdf_api::page_add_strikeout_annot(&self.page, &qs))
+    }
+
+    /// Adds a `/Squiggly` annotation (PyMuPDF `Page.add_squiggly_annot`).
+    fn add_squiggly_annot(&self, quads: Vec<QuadTuple>) -> PyResult<PyAnnot> {
+        let qs: Vec<Quad> = quads.into_iter().map(quad_of).collect();
+        wrap_annot(pdf_api::page_add_squiggly_annot(&self.page, &qs))
+    }
+
+    /// Adds a `/Square` (rect) annotation (PyMuPDF `Page.add_rect_annot`).
+    #[pyo3(signature = (rect, *, color=(0.0,0.0,0.0), fill=None))]
+    fn add_rect_annot(
+        &self,
+        rect: (f64, f64, f64, f64),
+        color: Option<(f64, f64, f64)>,
+        fill: Option<(f64, f64, f64)>,
+    ) -> PyResult<PyAnnot> {
+        wrap_annot(pdf_api::page_add_rect_annot(
+            &self.page,
+            rect_of(rect),
+            color,
+            fill,
+        ))
+    }
+
+    /// Adds a `/Circle` annotation (PyMuPDF `Page.add_circle_annot`).
+    #[pyo3(signature = (rect, *, color=(0.0,0.0,0.0), fill=None))]
+    fn add_circle_annot(
+        &self,
+        rect: (f64, f64, f64, f64),
+        color: Option<(f64, f64, f64)>,
+        fill: Option<(f64, f64, f64)>,
+    ) -> PyResult<PyAnnot> {
+        wrap_annot(pdf_api::page_add_circle_annot(
+            &self.page,
+            rect_of(rect),
+            color,
+            fill,
+        ))
+    }
+
+    /// Adds a `/Line` annotation (PyMuPDF `Page.add_line_annot`).
+    #[pyo3(signature = (p1, p2, *, color=(0.0,0.0,0.0)))]
+    fn add_line_annot(
+        &self,
+        p1: (f64, f64),
+        p2: (f64, f64),
+        color: Option<(f64, f64, f64)>,
+    ) -> PyResult<PyAnnot> {
+        wrap_annot(pdf_api::page_add_line_annot(
+            &self.page,
+            point_of(p1),
+            point_of(p2),
+            color,
+        ))
+    }
+
+    /// Adds a `/Polygon` annotation (PyMuPDF `Page.add_polygon_annot`).
+    #[pyo3(signature = (points, *, color=(0.0,0.0,0.0), fill=None))]
+    fn add_polygon_annot(
+        &self,
+        points: Vec<(f64, f64)>,
+        color: Option<(f64, f64, f64)>,
+        fill: Option<(f64, f64, f64)>,
+    ) -> PyResult<PyAnnot> {
+        let pts: Vec<Point> = points.into_iter().map(point_of).collect();
+        wrap_annot(pdf_api::page_add_polygon_annot(
+            &self.page, &pts, color, fill,
+        ))
+    }
+
+    /// Adds a `/PolyLine` annotation (PyMuPDF `Page.add_polyline_annot`).
+    #[pyo3(signature = (points, *, color=(0.0,0.0,0.0)))]
+    fn add_polyline_annot(
+        &self,
+        points: Vec<(f64, f64)>,
+        color: Option<(f64, f64, f64)>,
+    ) -> PyResult<PyAnnot> {
+        let pts: Vec<Point> = points.into_iter().map(point_of).collect();
+        wrap_annot(pdf_api::page_add_polyline_annot(&self.page, &pts, color))
+    }
+
+    /// Adds an `/Ink` annotation (PyMuPDF `Page.add_ink_annot`). `strokes` is a
+    /// list of point lists.
+    #[pyo3(signature = (strokes, *, color=(0.0,0.0,0.0)))]
+    fn add_ink_annot(
+        &self,
+        strokes: Vec<Vec<(f64, f64)>>,
+        color: Option<(f64, f64, f64)>,
+    ) -> PyResult<PyAnnot> {
+        let ss: Vec<Vec<Point>> = strokes
+            .into_iter()
+            .map(|s| s.into_iter().map(point_of).collect())
+            .collect();
+        wrap_annot(pdf_api::page_add_ink_annot(&self.page, &ss, color))
+    }
+
+    /// Adds a `/Stamp` annotation (PyMuPDF `Page.add_stamp_annot`).
+    #[pyo3(signature = (rect, *, stamp="Approved"))]
+    fn add_stamp_annot(&self, rect: (f64, f64, f64, f64), stamp: &str) -> PyResult<PyAnnot> {
+        wrap_annot(pdf_api::page_add_stamp_annot(
+            &self.page,
+            rect_of(rect),
+            stamp,
+        ))
+    }
+
+    /// Adds a `/FileAttachment` annotation embedding `bytes` (PyMuPDF
+    /// `Page.add_file_annot`).
+    fn add_file_annot(
+        &self,
+        point: (f64, f64),
+        bytes: Vec<u8>,
+        filename: &str,
+    ) -> PyResult<PyAnnot> {
+        wrap_annot(pdf_api::page_add_file_annot(
+            &self.page,
+            point_of(point),
+            &bytes,
+            filename,
+        ))
+    }
+
+    /// Adds a `/Redact` annotation over `rect` (PyMuPDF `Page.add_redact_annot`).
+    #[pyo3(signature = (rect, *, fill=None, text=None))]
+    fn add_redact_annot(
+        &self,
+        rect: (f64, f64, f64, f64),
+        fill: Option<(f64, f64, f64)>,
+        text: Option<&str>,
+    ) -> PyResult<PyAnnot> {
+        wrap_annot(pdf_api::page_add_redact_annot(
+            &self.page,
+            rect_of(rect),
+            fill,
+            text,
+        ))
+    }
+
+    /// The annotations on this page (PyMuPDF `Page.annots`).
+    fn annots(&self) -> PyResult<Vec<PyAnnot>> {
+        let handles = pdf_api::page_annots(&self.page).map_err(map_err)?;
+        Ok(handles.into_iter().map(|annot| PyAnnot { annot }).collect())
+    }
+
+    /// The first annotation, or `None` (PyMuPDF `Page.first_annot`).
+    #[getter]
+    fn first_annot(&self) -> PyResult<Option<PyAnnot>> {
+        let h = pdf_api::page_first_annot(&self.page).map_err(map_err)?;
+        Ok(h.map(|annot| PyAnnot { annot }))
+    }
+
+    /// The annotation xrefs on this page (PyMuPDF `Page.annot_xrefs`).
+    fn annot_xrefs(&self) -> Vec<u32> {
+        pdf_api::page_annot_xrefs(&self.page)
+    }
+
+    /// The annotation names on this page (PyMuPDF `Page.annot_names`).
+    fn annot_names(&self) -> Vec<String> {
+        pdf_api::page_annot_names(&self.page)
+    }
+
+    /// Deletes the annotation `xref` (PyMuPDF `Page.delete_annot`).
+    fn delete_annot(&self, xref: u32) -> PyResult<()> {
+        pdf_api::page_delete_annot(&self.page, xref).map_err(map_err)
+    }
+
+    // --- redaction / drawings (PRD §8.8) ---------------------------------
+
+    /// Applies redaction annotations destructively (PyMuPDF
+    /// `Page.apply_redactions`). Heavy work runs with the GIL released. Returns
+    /// the number of redactions applied.
+    #[pyo3(signature = (*_args, **_kwargs))]
+    fn apply_redactions(
+        &self,
+        py: Python<'_>,
+        _args: &Bound<'_, PyTuple>,
+        _kwargs: Option<&Bound<'_, PyDict>>,
+    ) -> PyResult<usize> {
+        let page = self.page.clone();
+        py.detach(move || pdf_api::page_apply_redactions(&page))
+            .map_err(map_err)
+    }
+
+    /// The vector drawings on this page in device space (PyMuPDF
+    /// `Page.get_drawings`). Returns a list of dicts.
+    fn get_drawings<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
+        let page = self.page.clone();
+        let drawings = py.detach(move || pdf_api::page_get_drawings(&page));
+        let out = PyList::empty(py);
+        for d in &drawings {
+            out.append(drawing_to_py(py, d)?)?;
+        }
+        Ok(out)
+    }
+
+    /// The raw (user-space) vector drawings (PyMuPDF `Page.get_cdrawings`).
+    fn get_cdrawings<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
+        let page = self.page.clone();
+        let drawings = py.detach(move || pdf_api::page_get_cdrawings(&page));
+        let out = PyList::empty(py);
+        for d in &drawings {
+            out.append(drawing_to_py(py, d)?)?;
+        }
+        Ok(out)
+    }
+
+    // --- forms (PRD §8.8) ------------------------------------------------
+
+    /// The form widgets on this page (PyMuPDF `Page.widgets`).
+    fn widgets(&self) -> Vec<PyWidget> {
+        pdf_api::page_widgets(&self.page)
+            .into_iter()
+            .map(|widget| PyWidget { widget })
+            .collect()
+    }
+
+    /// The first widget, or `None` (PyMuPDF `Page.first_widget`).
+    #[getter]
+    fn first_widget(&self) -> Option<PyWidget> {
+        pdf_api::page_first_widget(&self.page).map(|widget| PyWidget { widget })
+    }
+
     fn __repr__(&self) -> String {
         format!("<oxipdf._core.Page number={}>", self.page.number())
+    }
+}
+
+/// Wraps an `AnnotHandle` result into a [`PyAnnot`], mapping errors.
+fn wrap_annot(r: Result<AnnotHandle, ApiError>) -> PyResult<PyAnnot> {
+    r.map(|annot| PyAnnot { annot }).map_err(map_err)
+}
+
+/// Maps a PyMuPDF align integer (0=left, 1=center, 2=right, 3=justify) to
+/// [`Align`].
+fn align_of(align: i32) -> Align {
+    match align {
+        1 => Align::Center,
+        2 => Align::Right,
+        3 => Align::Justify,
+        _ => Align::Left,
     }
 }
 
@@ -968,6 +1895,115 @@ impl PyDocument {
         self.doc.get_label(pno)
     }
 
+    // --- forms (PRD §8.8) ------------------------------------------------
+
+    /// Whether the document has an interactive form (PyMuPDF `is_form_pdf`).
+    #[getter]
+    fn is_form_pdf(&self) -> bool {
+        self.doc.is_form_pdf()
+    }
+
+    /// The fully-qualified names of every terminal form field (PyMuPDF
+    /// `Document.get_form_fields`-style listing).
+    fn form_field_names(&self) -> Vec<String> {
+        self.doc.form_field_names()
+    }
+
+    /// Sets a form field value by name (PyMuPDF `Document` form fill helper).
+    fn form_fill(&self, name: &str, value: &str) -> PyResult<()> {
+        self.doc.form_fill(name, value).map_err(map_err)
+    }
+
+    /// Flattens the form: bakes widget appearances into page content and removes
+    /// `/AcroForm` + widgets (PyMuPDF `Document` flatten helper).
+    fn form_flatten(&self, py: Python<'_>) -> PyResult<()> {
+        py.detach(|| self.doc.form_flatten()).map_err(map_err)
+    }
+
+    // --- embedded files (PRD §8.8) ---------------------------------------
+
+    /// Embeds `data` under `name` (PyMuPDF `Document.embfile_add`).
+    #[pyo3(signature = (name, data, *, filename=None, ufilename=None, desc=None))]
+    fn embfile_add(
+        &self,
+        name: &str,
+        data: Vec<u8>,
+        filename: Option<&str>,
+        ufilename: Option<&str>,
+        desc: Option<&str>,
+    ) -> PyResult<()> {
+        self.doc
+            .embfile_add(name, &data, filename, ufilename, desc)
+            .map_err(map_err)
+    }
+
+    /// Reads the embedded file `name` byte-exact (PyMuPDF `Document.embfile_get`).
+    fn embfile_get<'py>(&self, py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyBytes>> {
+        let bytes = self.doc.embfile_get(name).map_err(map_err)?;
+        Ok(PyBytes::new(py, &bytes))
+    }
+
+    /// Removes the embedded file `name` (PyMuPDF `Document.embfile_del`).
+    fn embfile_del(&self, name: &str) -> PyResult<()> {
+        self.doc.embfile_del(name).map_err(map_err)
+    }
+
+    /// The embedded-file names (PyMuPDF `Document.embfile_names`).
+    fn embfile_names(&self) -> Vec<String> {
+        self.doc.embfile_names()
+    }
+
+    /// The number of embedded files (PyMuPDF `Document.embfile_count`).
+    fn embfile_count(&self) -> usize {
+        self.doc.embfile_count()
+    }
+
+    /// The metadata of embedded file `name` as a dict (PyMuPDF
+    /// `Document.embfile_info`).
+    fn embfile_info<'py>(&self, py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyDict>> {
+        let info = self.doc.embfile_info(name).map_err(map_err)?;
+        let d = PyDict::new(py);
+        d.set_item("name", info.name)?;
+        d.set_item("filename", info.filename)?;
+        d.set_item("ufilename", info.ufilename)?;
+        d.set_item("desc", info.desc)?;
+        d.set_item("size", info.size)?;
+        d.set_item("length", info.length)?;
+        Ok(d)
+    }
+
+    // --- scrub / bake (PRD §8.8) -----------------------------------------
+
+    /// Removes sensitive data (PyMuPDF `Document.scrub`). Heavy work runs with
+    /// the GIL released.
+    #[pyo3(signature = (*, metadata=true, javascript=true, attached_files=true, remove_links=false, xml_metadata=true))]
+    fn scrub(
+        &self,
+        py: Python<'_>,
+        metadata: bool,
+        javascript: bool,
+        attached_files: bool,
+        remove_links: bool,
+        xml_metadata: bool,
+    ) -> PyResult<()> {
+        let opts = ScrubOptions {
+            metadata,
+            javascript,
+            attached_files,
+            remove_links,
+            xml_metadata,
+        };
+        py.detach(|| self.doc.scrub(&opts)).map_err(map_err)
+    }
+
+    /// Flattens annotations and/or widgets into page content (PyMuPDF
+    /// `Document.bake`). Heavy work runs with the GIL released.
+    #[pyo3(signature = (*, annots=true, widgets=true))]
+    fn bake(&self, py: Python<'_>, annots: bool, widgets: bool) -> PyResult<()> {
+        py.detach(|| self.doc.bake(annots, widgets))
+            .map_err(map_err)
+    }
+
     fn __repr__(&self) -> String {
         format!(
             "<oxipdf._core.Document page_count={}>",
@@ -1026,6 +2062,9 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyDocument>()?;
     m.add_class::<PyPage>()?;
     m.add_class::<PyTextPage>()?;
+    m.add_class::<PyAnnot>()?;
+    m.add_class::<PyWidget>()?;
+    m.add_class::<PyShape>()?;
 
     // Exception hierarchy (PRD §9.3).
     m.add("PdfError", py.get_type::<PdfError>())?;
@@ -1034,6 +2073,7 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("PdfUnsupportedError", py.get_type::<PdfUnsupportedError>())?;
     m.add("PdfDecodeError", py.get_type::<PdfDecodeError>())?;
     m.add("PdfLimitError", py.get_type::<PdfLimitError>())?;
+    m.add("PdfRedactionError", py.get_type::<PdfRedactionError>())?;
 
     Ok(())
 }

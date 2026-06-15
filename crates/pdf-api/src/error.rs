@@ -29,6 +29,9 @@ pub enum Error {
     /// A resource ceiling was exceeded — the never-OOM guard (maps to
     /// `PdfLimitError`).
     Limit(String),
+    /// A redaction could not be applied safely (e.g. an undecodable image under
+    /// the rect) — fail-closed (maps to `PdfRedactionError`, PRD §8.8 / §9.3).
+    Redaction(String),
 }
 
 impl Error {
@@ -43,6 +46,7 @@ impl Error {
             Error::Unsupported(_) => "unsupported",
             Error::Decode(_) => "decode",
             Error::Limit(_) => "limit",
+            Error::Redaction(_) => "redaction",
         }
     }
 }
@@ -56,6 +60,7 @@ impl fmt::Display for Error {
             Error::Unsupported(m) => write!(f, "unsupported: {m}"),
             Error::Decode(m) => write!(f, "{m}"),
             Error::Limit(m) => write!(f, "limit exceeded: {m}"),
+            Error::Redaction(m) => write!(f, "redaction failed: {m}"),
         }
     }
 }
@@ -76,6 +81,7 @@ impl From<pdf_core::Error> for Error {
             C::Decode { .. } | C::Filter { .. } => Error::Decode(e.to_string()),
             C::LimitExceeded(_) => Error::Limit(e.to_string()),
             C::Unsupported(m) => Error::Unsupported(m.to_string()),
+            C::Redaction(m) => Error::Redaction(m.to_string()),
             #[cfg(feature = "encryption")]
             C::NeedsPassword(_) | C::Crypto(_) => Error::Password(e.to_string()),
             // Lexical / structural / xref / object faults all surface as syntax.

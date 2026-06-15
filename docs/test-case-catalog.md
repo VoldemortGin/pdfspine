@@ -1924,3 +1924,112 @@ Tests live in `crates/pdf-edit/tests/{redact_e2e.rs,drawings_e2e.rs}`.
 | `DRAWINGS-006` | `get_cdrawings` (raw user-space variant) returns the same item geometry pre device transform | PRD §8.8 | green |
 | `DRAWINGS-007` | curve (`c`) captured as a `("c", p1,p2,p3,p4)` item | PRD §8.8 | green |
 | `DRAWINGS-PROP-001` | empty / text-only page → no drawings; never panics | PRD §8.8 | green |
+
+## M4e — scrub / bake (pdf-edit)
+
+`scrub` is a conservative PyMuPDF-style sanitizer over the catalog + trailer;
+`bake` flattens widgets (via `form::flatten`) and non-widget annotations (drawing
+each `/AP /N` as a Form XObject `Do` into page content) into static content.
+Tests live in `crates/pdf-edit/tests/scrub_e2e.rs`.
+
+### Scrub — `SCRUB-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `SCRUB-META-001` | `scrub(metadata=true)` detaches the trailer `/Info` (reopen: none) and removes catalog `/Metadata` (XMP); secret bytes absent from the decompressed corpus | PRD §8.8 | green |
+| `SCRUB-JS-001` | `scrub(javascript=true)` removes catalog `/OpenAction`, `/AA` and the `/Names /JavaScript` name-tree (asserted after reopen) | PRD §8.8 | green |
+| `SCRUB-EMBFILE-001` | `scrub(attached_files=true)` removes `/Names /EmbeddedFiles` | PRD §8.8 | green |
+| `SCRUB-LINKS-001` | `scrub(remove_links=true)` drops `/Link` annots from every page; non-link annots survive | PRD §8.8 | green |
+| `SCRUB-IDEMPOTENT-001` | running a full `scrub` twice is safe (no panic, no error); result stable | PRD §8.8 | green |
+| `SCRUB-PROP-001` | `scrub` on a minimal blank doc (none of those features) → no-op, never panics, nothing invented | PRD §8.8 | green |
+
+### Bake — `BAKE-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `BAKE-WIDGETS-001` | `bake(widgets=true)` on the AcroForm fixture → `/AcroForm` removed, no widgets remain, a Form XObject `Do` baked into page content | PRD §8.8 | green |
+| `BAKE-ANNOTS-001` | `bake(annots=true)` draws a markup annotation's `/AP /N` into page content via `Do`, removes it from `/Annots`, and frees the annotation object | PRD §8.8 | green |
+
+---
+
+## M4e — Embedded files (`pdf-edit`)
+
+Spec source of truth: PRD §8.8 (embedded-file collection over the catalog
+`/Names /EmbeddedFiles` name-tree). Self-built fixtures only (PRD §10). The core
+oracle is a **byte-exact** add → get round trip; persistence is asserted through
+the save/reopen reparse oracle. Reads walk a general (flat-leaf or
+`/Kids`+`/Limits`) tree; writes collapse to a single sorted flat leaf. Tests
+live in `crates/pdf-edit/tests/embfile_e2e.rs`.
+
+### Embedded files — `EMBFILE-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `EMBFILE-ADD-GET-001` | add then get returns the byte-exact original payload | PRD §8.8 | green |
+| `EMBFILE-ADD-002` | filename/ufilename/desc stored on the filespec + readable via `info` | PRD §8.8 | green |
+| `EMBFILE-NAMES-001` | `names()` lists added keys sorted byte-wise; `count()` matches | PRD §8.8 | green |
+| `EMBFILE-MULTI-001` | multiple files (4) each round-trip byte-exact (incl. empty/binary); names sorted | PRD §8.8 | green |
+| `EMBFILE-DEL-001` | `del` removes the key; `get` errors; count decremented; survivors intact | PRD §8.8 | green |
+| `EMBFILE-INFO-001` | `info` reports filename/ufilename/desc/size (size == decoded length; length aliases size) | PRD §8.8 | green |
+| `EMBFILE-PERSIST-001` | add → full save → reopen → get still byte-exact; metadata preserved; del survives reopen | PRD §12 M4 | green |
+| `EMBFILE-PROP-001` | get/del/info on a non-existent name → typed `InvalidArgument`, never panics; duplicate add rejected; no-`/Names` doc enumerates empty | PRD §8.8 | green |
+| `EMBFILE-EXISTING-TREE-001` | reading a pre-built multi-level (`/Kids`+`/Limits`) tree enumerates all keys; add collapses to flat leaf keeping every key (survives reopen) | PRD §8.8 | green |
+
+---
+
+## M4e — PyO3 / fitz wiring for the full M4 edit surface (Python gates) — `PYM4-*`
+
+Spec source of truth: PRD §9.4 (PyO3 handle/GIL), §9.5 (fitz shim), §8.8 (annot
+/ redaction / forms / drawings / embfile / scrub), and §12 M4 exit (Python
+redaction gone-after-reopen; annot `/AP` portability). These exercise the native
+`oxipdf` package and the `fitz` deprecated-alias shim end-to-end (build →
+edit → `tobytes`/`save` → reopen → assert). All fixtures self-generated in-test
+(PRD §10); the secret-bearing fixture uses a font with explicit `/Widths` so the
+interpreter can measure glyph advances (same convention as the Rust harness).
+Tests live in `python/tests/test_m4.py`.
+
+### Content insert / draw / Shape — `PYM4-INSERT-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `PYM4-INSERT-001` | `Page.insert_text(point, "X")` → `tobytes` → reopen → `get_text` contains it | PRD §8.8 | green |
+| `PYM4-INSERT-002` | `Page.insert_textbox(rect, text)` returns a float; reopen extracts the text | PRD §8.8 | green |
+| `PYM4-DRAW-001` | `draw_rect`/`draw_line` then reopen valid; `get_drawings()` lists the path | PRD §8.8 | green |
+| `PYM4-SHAPE-001` | `Page.new_shape()` → `draw_rect`+`finish`+`commit` → reopen valid; drawing present | PRD §8.8 | green |
+
+### Annotations + `/AP` portability — `PYM4-ANNOT-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `PYM4-ANNOT-001` | `add_highlight_annot`+`add_freetext_annot` → `annots()` lists both with correct `.type`/`.rect` | PRD §8.8 | green |
+| `PYM4-ANNOT-002` | `annot.set_colors(stroke=…)` then `update()` reflects in `.colors`; reopen persists subtype + `/AP /N` | PRD §12 M4 | green |
+| `PYM4-ANNOT-003` | `delete_annot` removes it; `annot_xrefs` shrinks; reopen lacks it | PRD §8.8 | green |
+| `PYM4-ANNOT-004` | every added subtype reopens with an appearance stream (`/AP /N`) present (portability gate) | PRD §12 M4 | green |
+
+### Redaction Python gate (gone-after-reopen) — `PYM4-REDACT-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `PYM4-REDACT-001` | `add_redact_annot` over a secret → `apply_redactions()` → save to tmp → reopen → `get_text()` lacks the secret; neighbouring text intact | PRD §12 M4 | green |
+| `PYM4-REDACT-002` | `apply_redactions` on a page with no redaction annots → returns 0 (no-op) | PRD §8.8 | green |
+
+### Forms / Widget — `PYM4-WIDGET-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `PYM4-WIDGET-001` | self-built AcroForm: `page.widgets()` lists the field with `field_name`/`field_type_string` | PRD §8.8 | green |
+| `PYM4-WIDGET-002` | `widget.update("new")` sets the value; reopen reflects `field_value`; `is_form_pdf` true | PRD §12 M4 | green |
+
+### Embedded files / scrub via Python — `PYM4-EMBFILE-*` / `PYM4-SCRUB-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `PYM4-EMBFILE-001` | `embfile_add`/`embfile_get`/`embfile_names`/`embfile_count`/`embfile_info` round-trip; persists across `tobytes`+reopen | PRD §8.8 | green |
+| `PYM4-SCRUB-001` | `set_metadata` then `scrub(metadata=True)` clears `metadata` (title/author empty after) | PRD §8.8 | green |
+
+### fitz deprecated-alias parity — `PYM4-FITZ-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `PYM4-FITZ-001` | `page.addHighlightAnnot`/`applyRedactions`/`getDrawings`/`insertText`/`newShape`/`firstAnnot` resolve and behave as the snake_case methods | PRD §9.5 | green |
+| `PYM4-FITZ-002` | `Annot`/`Widget`/`Shape` are exposed as `fitz` classes (identity with `oxipdf`) | PRD §9.5 | green |

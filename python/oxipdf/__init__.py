@@ -17,6 +17,7 @@ from ._core import (
     PdfError,
     PdfLimitError,
     PdfPasswordError,
+    PdfRedactionError,
     PdfSyntaxError,
     PdfUnsupportedError,
     identity_matrix,
@@ -27,9 +28,12 @@ from .document import (
     PDF_ENCRYPT_AES_256,
     PDF_ENCRYPT_NONE,
     PDF_ENCRYPT_RC4_128,
+    Annot,
     Document,
     Page,
+    Shape,
     TextPage,
+    Widget,
     open,
 )
 from .geometry import IRect, Matrix, Point, Quad, Rect
@@ -44,6 +48,9 @@ __all__ = [
     "Document",
     "Page",
     "TextPage",
+    "Annot",
+    "Widget",
+    "Shape",
     "Rect",
     "IRect",
     "Point",
@@ -59,4 +66,5 @@ __all__ = [
     "PdfUnsupportedError",
     "PdfDecodeError",
     "PdfLimitError",
+    "PdfRedactionError",
 ]
