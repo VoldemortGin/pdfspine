@@ -32,9 +32,11 @@ pub mod canvas;
 pub mod error;
 pub mod image;
 pub mod render;
+pub mod svg;
 pub mod text;
 pub mod vector;
 
 pub use canvas::Canvas;
 pub use error::{Error, Result};
 pub use render::{render_page, DisplayList, RenderOptions};
+pub use svg::{get_svg_image, SvgOptions};
