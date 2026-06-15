@@ -22,6 +22,7 @@ pub mod renderops;
 pub mod search;
 pub mod serialize;
 pub mod state;
+pub mod tables;
 pub mod tokenizer;
 pub mod words;
 
