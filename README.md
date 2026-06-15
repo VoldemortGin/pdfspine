@@ -2,97 +2,152 @@
 
 **An Apache-2.0-licensed, pure-Rust reimplementation of [PyMuPDF](https://pymupdf.readthedocs.io/) (`fitz`), with PyO3 Python bindings.**
 
-> Status: **early / work-in-progress (Milestone M0).** Today the wheel imports
-> and the geometry layer is complete and tested; PDF parsing, text extraction,
-> editing, and rendering are scheduled work (see [Roadmap](#roadmap)). It is not
-> yet usable for real PDF work — watch the milestones.
+> **Status: alpha / pre-1.0, but the core is feature-complete.** oxide-pdf can
+> already parse/repair/decrypt PDFs, extract text & tables, search, edit / merge /
+> split / save (incl. byte-exact incremental), encrypt, annotate, fill & flatten
+> forms, redact (destructively), open image files as documents, and **render
+> pages to images**. ~**42%** of the PyMuPDF 1.24 public API is implemented and
+> tested (climbing), with **1100+ Rust tests + 260+ Python tests** green.
+> Real-world accuracy validation is in progress (see [Accuracy](#accuracy)).
+> Not yet on PyPI — [build from source](#build--install) for now.
 
 ---
 
 ## Why oxide-pdf?
 
 PyMuPDF is excellent, but it is **AGPL-3.0** (or a commercial license from
-Artifex). That licensing makes it a non-starter for many closed-source products,
-SaaS backends, and permissively-licensed open-source projects.
+Artifex) — a non-starter for many closed-source products, SaaS backends, and
+permissively-licensed open-source projects.
 
-oxide-pdf exists to provide a **drop-in-shaped, permissively-licensed (Apache-2.0)**
-alternative:
+oxide-pdf is a **drop-in-shaped, permissively-licensed (Apache-2.0)** alternative:
 
-- **Apache-2.0 throughout.** Every first-party crate is Apache-2.0 — a permissive
-  license with an explicit patent grant — and the dependency graph is gated by
-  `cargo-deny` to **exclude GPL / AGPL / LGPL / MPL / SSPL** from the shipped
-  wheel. License cleanliness is a tested, CI-enforced property — not a promise.
-- **Pure Rust, no C blob.** Self-contained wheels with no system `zlib`/C
-  linkage and no bundled prebuilt engine (the differentiator vs pdfium-based
-  wrappers).
-- **`fitz` / `pymupdf` compatible surface.** A compatibility shim aims to let
-  existing `import fitz` / `import pymupdf` code run unmodified for the supported
-  subset, with a machine-readable `COMPAT.toml` documenting every deviation.
-- **Memory-safe by construction.** `#![forbid(unsafe_code)]` in all first-party
-  crates except the single audited PyO3 FFI chokepoint.
+- **Apache-2.0 throughout** — permissive, with an explicit patent grant. The
+  dependency graph is gated by `cargo-deny` to **exclude GPL / AGPL / LGPL / MPL /
+  SSPL** from the shipped wheel. License cleanliness is CI-enforced, not a promise.
+- **Pure Rust, no C blob.** Self-contained wheels, no system `zlib`/C linkage, no
+  bundled prebuilt engine (the differentiator vs pdfium-based wrappers).
+- **`import fitz` compatible.** A compatibility shim lets much existing PyMuPDF
+  code run unmodified, with a machine-readable [`COMPAT.toml`](COMPAT.toml)
+  documenting every symbol's status.
+- **Memory-safe by construction.** `#![forbid(unsafe_code)]` in every first-party
+  crate except the single audited PyO3 FFI chokepoint.
+- **Clean-room.** No code, tests, or fixtures derived from MuPDF / PyMuPDF / any
+  AGPL source.
 
-oxide-pdf is an independent **clean-room** project: no code, tests, or fixtures are
-derived from MuPDF / PyMuPDF or any AGPL source.
+## What works today
+
+| Area | Capabilities |
+|---|---|
+| **Read** | open (file/bytes), **malformed-PDF repair**, encrypted PDFs (RC4 / AES-128 / AES-256, R2–R6) |
+| **Text** | `get_text` (`text/words/blocks/dict/rawdict/json/html/xhtml/xml`), `search_for`, `TextPage`, fonts/images inventory |
+| **Tables** | `find_tables` with merged-cell detection → `extract()` / `to_markdown()` / **`to_html()`** |
+| **Edit & save** | full + **byte-exact incremental** save, garbage collection, page insert/delete/copy/move/select, **`insert_pdf`** merge, metadata/XMP, TOC, links, encryption write |
+| **Annotate** | all common annotation types with `/AP` appearance streams; AcroForm read / fill / flatten + `Widget`; **destructive redaction** (verified content removal) |
+| **Render** | `get_pixmap` (vector + text + image + shadings via a tiny-skia rasterizer), `Pixmap` (buffer-protocol/numpy), `DisplayList`, **`get_svg_image`** |
+| **Images** | open PNG/JPEG/TIFF/GIF/BMP/WEBP as documents, `convert_to_pdf`, image-XObject decode (DCT/CCITT/JBIG2/JPX), `extract_image` |
+| **Layers** | Optional Content Groups read/write (`get_ocgs` / `add_ocg` / `set_layer`) |
+| **CLI** | `oxide-pdf info / text / render / merge / split / pages / images / toc` |
+
+Planned next: OCR (pluggable engine, Tesseract default), reading-order accuracy
+improvements, Type1/Type3 glyph rendering, broader CJK. See [`PRD.md`](PRD.md) /
+[`docs/ROADMAP.md`](docs/ROADMAP.md). Out of scope: digital-signature *creation*.
+
+## Quick start
+
+```python
+import oxide_pdf
+
+doc = oxide_pdf.open("input.pdf")
+print(len(doc), "pages", doc.metadata)
+
+page = doc[0]
+print(page.get_text())                       # plain text
+print(page.search_for("invoice"))            # list[Rect]
+page.get_pixmap(dpi=150).save("page1.png")   # render to image
+
+tables = page.find_tables()
+for t in tables.tables:
+    print(t.to_markdown())                    # or t.to_html() for merged cells
+
+doc.save("output.pdf", garbage=4, deflate=True)
+```
+
+Existing PyMuPDF code often runs unchanged via the compat shim:
+
+```python
+import fitz                                   # -> oxide-pdf's fitz shim
+doc = fitz.open("input.pdf")
+text = doc[0].get_text("dict")
+```
+
+Command line:
+
+```bash
+oxide-pdf info report.pdf
+oxide-pdf text report.pdf --pages 1-3 --format json -o out.json
+oxide-pdf render report.pdf --dpi 200 -o images/
+oxide-pdf merge a.pdf b.pdf -o merged.pdf
+```
+
+## Accuracy
+
+First real-corpus validation (34 public-domain US-government PDFs, with PyMuPDF as
+the differential oracle — see [`conformance/REPORT.md`](conformance/REPORT.md)):
+
+- **Open rate 100%**, **0 panics/hangs**, **re-saved files 100% `qpdf --check`-clean**.
+- Text vs PyMuPDF: **word-set overlap (Jaccard) ~0.92–0.97** (we extract the right
+  words) — sequence similarity is lower, driven mainly by **multi-column reading
+  order**, which is the current focus of an ongoing diff-oracle improvement loop.
+
+This is an early data point (born-digital documents only); scanned / CJK / malformed
+corpora come with the OCR and long-tail work.
+
+## Build & install
+
+Requirements: Rust (pinned to **1.96.0** by `rust-toolchain.toml`), **Python ≥
+3.11**, [maturin](https://www.maturin.rs/) ≥ 1.7. [uv](https://docs.astral.sh/uv/)
+recommended.
+
+```bash
+uv venv .venv && source .venv/bin/activate
+maturin develop                 # build + install the extension in-place
+python -c "import oxide_pdf; print(oxide_pdf.__version__)"
+# redistributable wheel:
+maturin build --release         # -> target/wheels/
+```
 
 ## Architecture
 
-oxide-pdf is a Cargo workspace with a strict dependency DAG: the Python bindings
-touch exactly one façade crate, and core logic is split into independently
-testable units.
+A Cargo workspace with a strict dependency DAG; the Python bindings touch exactly
+one façade crate, and core logic is split into independently testable units.
 
 ```
-                  py-bindings   (PyO3 cdylib -> oxide_pdf._core, abi3)
-                       │   (depends on exactly one core crate)
+                  py-bindings   (PyO3 cdylib -> oxide_pdf._core, abi3-py311)
+                       │
                        ▼
                     pdf-api      facade / re-exports
         ┌──────────┬───┴────┬──────────┐
         ▼          ▼        ▼          ▼
-    pdf-text   pdf-edit  pdf-image  pdf-render (future)
-        │          │        │
-        └────┬─────┘        │
+    pdf-text   pdf-edit  pdf-image  pdf-render
+        │          │        │          │
+        └────┬─────┘        │     (fonts, text)
              ▼              │
          pdf-fonts ◄────────┘
              ▼
-         pdf-core   ◄────────  pdf-crypto   (core uses crypto behind the
-                                             `encryption` feature)
+         pdf-core   ◄────────  pdf-crypto
 ```
 
 | Crate | Responsibility |
 |---|---|
-| `pdf-core` | object model, lexer/parser, xref, filters, writer, **geometry** |
+| `pdf-core` | object model, lexer/parser, xref, repair, filters, writer, geometry |
 | `pdf-crypto` | Standard security handler (RC4 / AES-128 / AES-256) |
-| `pdf-fonts` | font parsing for mapping (encodings / ToUnicode / CMap / widths) |
-| `pdf-text` | content-stream text interpreter, `get_text`, search |
-| `pdf-edit` | page ops, merge, annotations / forms, metadata / TOC, redaction |
-| `pdf-image` | image-document support, image-XObject decode/encode, `Pixmap` |
-| `pdf-render` | *(reserved)* vector rasterizer → `Pixmap` (post-v1) |
-| `pdf-api` | unified ergonomic façade / re-exports |
+| `pdf-fonts` | font mapping (encodings / ToUnicode / CMap / widths) |
+| `pdf-text` | content-stream interpreter, `get_text`, search, `find_tables` |
+| `pdf-edit` | page ops, merge, annotations / forms, metadata / TOC, redaction, OCG |
+| `pdf-image` | image documents, image-XObject codecs, `Pixmap` |
+| `pdf-render` | tiny-skia rasterizer → `Pixmap`, `DisplayList`, SVG |
+| `pdf-api` | unified ergonomic façade |
 | `py-bindings` | PyO3 wrappers → the `_core` extension module |
-
-The Python side ships three packages: `oxide_pdf` (native, idiomatic), and the
-`fitz` / `pymupdf` compatibility shims.
-
-## Build & install (from source)
-
-Requirements: Rust (pinned by `rust-toolchain.toml` to **1.96.0**), Python ≥
-3.10, and [maturin](https://www.maturin.rs/) ≥ 1.12. [uv](https://docs.astral.sh/uv/)
-is recommended for the virtualenv.
-
-```bash
-# Create an isolated environment and build + install the extension in-place.
-uv venv .venv
-source .venv/bin/activate
-maturin develop
-
-# Smoke-test the import.
-python -c "import oxide_pdf; print(oxide_pdf.__version__)"
-```
-
-To build a redistributable wheel instead:
-
-```bash
-maturin build --release          # wheel lands in target/wheels/
-```
 
 ## Develop / test
 
@@ -100,32 +155,21 @@ maturin build --release          # wheel lands in target/wheels/
 cargo fmt --all --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace
-pytest                           # Python smoke tests (after `maturin develop`)
+maturin develop && pytest python/tests       # Python tests
+python conformance/run_validation.py …       # real-corpus accuracy harness
 ```
 
-oxide-pdf is built strictly **test-first** (red → green → refactor → harden). The
-full per-function test plan lives in
-[`docs/test-case-catalog.md`](docs/test-case-catalog.md); each test traces to a
-spec clause or the PyMuPDF Tier-A documented contract.
+oxide-pdf is built strictly **test-first** (red → green → refactor → harden); the
+per-function test plan is in [`docs/test-case-catalog.md`](docs/test-case-catalog.md).
 
-## Roadmap
+## Documentation
 
-| Milestone | Scope |
-|---|---|
-| **M0** *(current)* | workspace + CI + TDD harness + **geometry** + stub wheel |
-| M1 | PDF parse + object model + filters + crypto-read + repair |
-| M2 | text extraction + search |
-| M3 | save / incremental / GC + page ops + merge |
-| M4 | annotations / forms / redaction |
-| M5 | image documents + codecs + `Pixmap` + `fitz` shim hardening |
-| M6 *(post-v1)* | vector page rendering (`get_pixmap` / SVG) |
-
-The authoritative design — scope, priorities, milestone exit gates, and the
-clean-room / licensing policy — is in [`PRD.md`](PRD.md).
+Guide + API reference + PyMuPDF migration guide: build the docs site with
+`mkdocs serve` (see [`mkdocs.yml`](mkdocs.yml) / [`docs/`](docs/)). The
+authoritative design lives in [`PRD.md`](PRD.md).
 
 ## License
 
-Apache-2.0. See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE). Third-party
-dependency licenses (all permissive: MIT / Apache-2.0 / BSD / Zlib / …) are
-bundled with each release; the shipped graph is verified free of copyleft
-licenses by CI.
+**Apache-2.0** — see [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE). All third-party
+dependencies are permissive (MIT / Apache-2.0 / BSD / Zlib / …); the shipped graph
+is CI-verified free of copyleft.

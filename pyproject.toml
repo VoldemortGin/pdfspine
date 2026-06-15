@@ -22,8 +22,9 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/oxide-pdf/oxide-pdf"
-Repository = "https://github.com/oxide-pdf/oxide-pdf"
+Homepage = "https://github.com/VoldemortGin/oxide-pdf"
+Repository = "https://github.com/VoldemortGin/oxide-pdf"
+Issues = "https://github.com/VoldemortGin/oxide-pdf/issues"
 
 [project.optional-dependencies]
 test = ["pytest>=8", "hypothesis>=6"]
