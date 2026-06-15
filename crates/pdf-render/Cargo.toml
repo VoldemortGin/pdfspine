@@ -6,6 +6,6 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 rust-version.workspace = true
-description = "Reserved vector rasterizer crate for oxipdf (page -> Pixmap). Future (M6)."
+description = "Reserved vector rasterizer crate for oxide-pdf (page -> Pixmap). Future (M6)."
 
 [dependencies]

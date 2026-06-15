@@ -61,7 +61,7 @@ fn source_005_length_overflow_typed_error() {
 fn source_006_open_path_owned_hard_safe() {
     // SOURCE-006: open(path, Never) reads owned bytes.
     let dir = std::env::temp_dir();
-    let path = dir.join(format!("oxipdf-source-006-{}.bin", std::process::id()));
+    let path = dir.join(format!("oxide-pdf-source-006-{}.bin", std::process::id()));
     std::fs::write(&path, b"file contents here").unwrap();
     let s = Source::open(&path, MmapMode::Never).unwrap();
     assert_eq!(s.bytes(), b"file contents here");

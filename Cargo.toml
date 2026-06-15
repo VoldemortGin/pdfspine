@@ -23,8 +23,8 @@ exclude = ["fuzz"]
 version = "0.0.0"
 edition = "2021"
 license = "MIT"
-repository = "https://github.com/oxipdf/oxipdf"
-authors = ["oxipdf contributors"]
+repository = "https://github.com/oxide-pdf/oxide-pdf"
+authors = ["oxide-pdf contributors"]
 rust-version = "1.96"
 
 [workspace.dependencies]

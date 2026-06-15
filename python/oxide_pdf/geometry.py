@@ -210,7 +210,7 @@ class Matrix:
         self.a, self.b, self.c, self.d, self.e, self.f = (float(v) for v in vals)
 
     def _init_rotation(self, degrees: float) -> None:
-        # Bit-exact at cardinal angles (matches PyMuPDF / oxipdf COORD-ROT-*).
+        # Bit-exact at cardinal angles (matches PyMuPDF / oxide_pdf COORD-ROT-*).
         m = degrees % 360.0
         if m == 0.0:
             vals = (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)

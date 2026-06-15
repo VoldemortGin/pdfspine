@@ -6,7 +6,7 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 rust-version.workspace = true
-description = "PyO3 bindings for oxipdf; builds the _core extension module. FFI chokepoint."
+description = "PyO3 bindings for oxide-pdf; builds the _core extension module. FFI chokepoint."
 publish = false
 
 [lib]

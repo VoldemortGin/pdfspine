@@ -683,7 +683,7 @@ fn imgdoc_convert_qpdf_check() {
     for (label, bytes) in cases {
         let pdf = convert_to_pdf(&bytes, None).unwrap();
         let dir = std::env::temp_dir();
-        let path = dir.join(format!("oxipdf_imgdoc_{label}.pdf"));
+        let path = dir.join(format!("oxide-pdf_imgdoc_{label}.pdf"));
         std::fs::write(&path, &pdf).unwrap();
         let out = std::process::Command::new("qpdf")
             .arg("--check")

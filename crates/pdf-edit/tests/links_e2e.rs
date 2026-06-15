@@ -147,13 +147,13 @@ fn link_insert_001_uri() {
         &doc,
         0,
         &Rect::new(5.0, 5.0, 55.0, 25.0),
-        &LinkKind::Uri("https://oxipdf.dev".into()),
+        &LinkKind::Uri("https://oxide-pdf.dev".into()),
     )
     .unwrap();
     let re = save_reopen(&doc);
     let links = get_links(&re, 0);
     assert_eq!(links.len(), 1);
-    assert_eq!(links[0].kind, LinkKind::Uri("https://oxipdf.dev".into()));
+    assert_eq!(links[0].kind, LinkKind::Uri("https://oxide-pdf.dev".into()));
     assert_eq!(links[0].from, Rect::new(5.0, 5.0, 55.0, 25.0));
 }
 

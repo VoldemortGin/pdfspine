@@ -374,7 +374,7 @@ fn build_doc_with_info() -> Vec<u8> {
             0,
             Object::Dictionary(dict([(
                 "Producer",
-                Object::String(pdf_core::PdfString::literal(b"oxipdf".to_vec())),
+                Object::String(pdf_core::PdfString::literal(b"oxide-pdf".to_vec())),
             )])),
         )
         .root(1, 0)

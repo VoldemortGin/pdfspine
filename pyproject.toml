@@ -3,14 +3,14 @@ requires = ["maturin>=1.12,<2"]
 build-backend = "maturin"
 
 [project]
-name = "oxipdf"
+name = "oxide-pdf"
 # Keep in sync with the Rust workspace version (Cargo.toml [workspace.package]).
 version = "0.0.0"
 description = "MIT-licensed, pure-Rust reimplementation of PyMuPDF (fitz) with PyO3 bindings."
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.11"
-authors = [{ name = "oxipdf contributors" }]
+authors = [{ name = "oxide-pdf contributors" }]
 keywords = ["pdf", "pymupdf", "fitz", "mupdf", "rust"]
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
@@ -22,8 +22,8 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/oxipdf/oxipdf"
-Repository = "https://github.com/oxipdf/oxipdf"
+Homepage = "https://github.com/oxide-pdf/oxide-pdf"
+Repository = "https://github.com/oxide-pdf/oxide-pdf"
 
 [project.optional-dependencies]
 test = ["pytest>=8", "hypothesis>=6"]
@@ -31,9 +31,9 @@ test = ["pytest>=8", "hypothesis>=6"]
 [tool.maturin]
 # The Rust crate that builds the extension module.
 manifest-path = "crates/py-bindings/Cargo.toml"
-# Place the compiled `_core` inside the `oxipdf` package.
-module-name = "oxipdf._core"
-# Pure-Python sources (oxipdf / fitz / pymupdf packages) live here.
+# Place the compiled `_core` inside the `oxide_pdf` package.
+module-name = "oxide_pdf._core"
+# Pure-Python sources (oxide_pdf / fitz / pymupdf packages) live here.
 python-source = "python"
 # abi3 wheel covering CPython >= 3.11 (PRD §9.4 / §11.2). The 3.11 floor is
 # required by `Pixmap`'s zero-copy buffer protocol — the `bf_getbuffer` /

@@ -261,8 +261,8 @@ fn crypt_write_qpdf_decrypt() {
         return;
     }
     let dir = std::env::temp_dir();
-    let inp = dir.join(format!("oxipdf_cw_in_{}.pdf", std::process::id()));
-    let outp = dir.join(format!("oxipdf_cw_out_{}.pdf", std::process::id()));
+    let inp = dir.join(format!("oxide-pdf_cw_in_{}.pdf", std::process::id()));
+    let outp = dir.join(format!("oxide-pdf_cw_out_{}.pdf", std::process::id()));
     std::fs::write(&inp, &bytes).unwrap();
     let out = std::process::Command::new("qpdf")
         .arg("--decrypt")

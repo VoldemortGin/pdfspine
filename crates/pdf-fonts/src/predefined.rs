@@ -6,14 +6,14 @@
 //!   code`. These cover the overwhelming majority of real-world Type0 fonts
 //!   (every subset-embedded CIDFontType2 uses Identity-H).
 //! - **A predefined CJK CMap name** (e.g. `GBK-EUC-H`, `UniGB-UCS2-H`,
-//!   `90ms-RKSJ-H`, …) — the **framework** is here, but oxipdf bundles only the
+//!   `90ms-RKSJ-H`, …) — the **framework** is here, but oxide-pdf bundles only the
 //!   Identity maps. The full Adobe predefined CJK CMap set (Adobe-Japan1 /
 //!   GB1 / CNS1 / Korea1 ROS + their `-UCS2` tables) is large and is a
 //!   **documented coverage gap** for this milestone (see
 //!   `BUNDLED_PREDEFINED` / [`is_known_predefined`]).
 //! - **An embedded CMap stream** — handled directly by [`crate::cmap`].
 
-/// The names of the predefined CMaps that oxipdf bundles in full.
+/// The names of the predefined CMaps that oxide-pdf bundles in full.
 ///
 /// **Bundled:** `Identity-H`, `Identity-V` (2-byte identity, `CID == code`).
 ///

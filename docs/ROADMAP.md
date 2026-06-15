@@ -1,4 +1,4 @@
-# oxipdf — Detailed Roadmap, Milestones, Risks & KPIs
+# oxide-pdf — Detailed Roadmap, Milestones, Risks & KPIs
 
 *(Generated as the granular companion to PRD.md §12–§14.)*
 
@@ -9,7 +9,7 @@ The task is pure PRD synthesis from research. No matching skill (the closest, `t
 # PRD: MIT-Licensed Rust Reimplementation of PyMuPDF
 ## Sections: Roadmap, Milestones, Risks, Effort, Success Metrics
 
-Working name: **oxipdf** (final name TBD — must avoid "PyMuPDF/MuPDF/fitz/Artifex"). PDF-first; image-docs in v1; rendering of vector PDF pages deferred past v1. Strict TDD. Permissive (MIT / MIT-OR-Apache-2.0) deps only.
+Working name: **oxide-pdf** (final name TBD — must avoid "PyMuPDF/MuPDF/fitz/Artifex"). PDF-first; image-docs in v1; rendering of vector PDF pages deferred past v1. Strict TDD. Permissive (MIT / MIT-OR-Apache-2.0) deps only.
 
 ---
 
@@ -36,7 +36,7 @@ A standing rule across all milestones: parser/codec code is `#![forbid(unsafe_co
 **Exit criteria (TEST gates).**
 - `GEOM-*` unit + property tests green: `concat`/`invert` round-trip within ε, transform-then-inverse identity, rotation 0/90/180/270 exact, `Rect` normalize idempotent, union/intersect commutative, area = |det|.
 - CI is red-on-violation for each gate (proven by a deliberately-failing canary PR per gate).
-- A stub wheel imports (`python -c "import oxipdf"`) and passes a smoke test on all three OSes.
+- A stub wheel imports (`python -c "import oxide_pdf"`) and passes a smoke test on all three OSes.
 - `cargo-deny` passes; provenance lint fails a planted AGPL-hashed fixture.
 
 ---

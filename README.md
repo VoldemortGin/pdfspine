@@ -1,4 +1,4 @@
-# oxipdf
+# oxide-pdf
 
 **An MIT-licensed, pure-Rust reimplementation of [PyMuPDF](https://pymupdf.readthedocs.io/) (`fitz`), with PyO3 Python bindings.**
 
@@ -9,13 +9,13 @@
 
 ---
 
-## Why oxipdf?
+## Why oxide-pdf?
 
 PyMuPDF is excellent, but it is **AGPL-3.0** (or a commercial license from
 Artifex). That licensing makes it a non-starter for many closed-source products,
 SaaS backends, and permissively-licensed open-source projects.
 
-oxipdf exists to provide a **drop-in-shaped, permissively-licensed (MIT)**
+oxide-pdf exists to provide a **drop-in-shaped, permissively-licensed (MIT)**
 alternative:
 
 - **MIT throughout.** Every first-party crate is MIT; the dependency graph is
@@ -31,17 +31,17 @@ alternative:
 - **Memory-safe by construction.** `#![forbid(unsafe_code)]` in all first-party
   crates except the single audited PyO3 FFI chokepoint.
 
-oxipdf is an independent **clean-room** project: no code, tests, or fixtures are
+oxide-pdf is an independent **clean-room** project: no code, tests, or fixtures are
 derived from MuPDF / PyMuPDF or any AGPL source.
 
 ## Architecture
 
-oxipdf is a Cargo workspace with a strict dependency DAG: the Python bindings
+oxide-pdf is a Cargo workspace with a strict dependency DAG: the Python bindings
 touch exactly one façade crate, and core logic is split into independently
 testable units.
 
 ```
-                  py-bindings   (PyO3 cdylib -> oxipdf._core, abi3)
+                  py-bindings   (PyO3 cdylib -> oxide_pdf._core, abi3)
                        │   (depends on exactly one core crate)
                        ▼
                     pdf-api      facade / re-exports
@@ -69,7 +69,7 @@ testable units.
 | `pdf-api` | unified ergonomic façade / re-exports |
 | `py-bindings` | PyO3 wrappers → the `_core` extension module |
 
-The Python side ships three packages: `oxipdf` (native, idiomatic), and the
+The Python side ships three packages: `oxide_pdf` (native, idiomatic), and the
 `fitz` / `pymupdf` compatibility shims.
 
 ## Build & install (from source)
@@ -85,7 +85,7 @@ source .venv/bin/activate
 maturin develop
 
 # Smoke-test the import.
-python -c "import oxipdf; print(oxipdf.__version__)"
+python -c "import oxide_pdf; print(oxide_pdf.__version__)"
 ```
 
 To build a redistributable wheel instead:
@@ -103,7 +103,7 @@ cargo test --workspace
 pytest                           # Python smoke tests (after `maturin develop`)
 ```
 
-oxipdf is built strictly **test-first** (red → green → refactor → harden). The
+oxide-pdf is built strictly **test-first** (red → green → refactor → harden). The
 full per-function test plan lives in
 [`docs/test-case-catalog.md`](docs/test-case-catalog.md); each test traces to a
 spec clause or the PyMuPDF Tier-A documented contract.

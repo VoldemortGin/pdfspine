@@ -1,6 +1,6 @@
-# PARITY.md — PyMuPDF (`fitz`) Parity Checklist for `oxipdf`
+# PARITY.md — PyMuPDF (`fitz`) Parity Checklist for `oxide-pdf`
 
-> **What this file is.** The *living*, method-level source of truth for how far `oxipdf` has progressed
+> **What this file is.** The *living*, method-level source of truth for how far `oxide-pdf` has progressed
 > toward the hard goal: **"whatever PyMuPDF has, we want."** Every public class, method, property, and
 > module-level symbol of **PyMuPDF 1.24.x (baseline 1.24.14 / MuPDF 1.24.11)** is catalogued here, grouped
 > by class, with a checkbox, a **Priority** (P0–P3, from PRD §7), a **Milestone** (M0–M6 / post-v1 / out-of-scope),
@@ -893,7 +893,7 @@ are not catalogued separately. Most are needed wherever their owning subsystem l
 - [ ] **Unicode scripts** ~170 `UCDN_SCRIPT_*` — **deferred · M6 · catalogued** *(full shaping out of scope, PRD §3.2 #10)*
 - [ ] **Low-level PDF tokens/objects** `PDF_TOK_*`, `PDF_NAME`, `PDF_NULL/TRUE/FALSE`, `PDF_ENUM_*` — **P3 · M1 · catalogued** *(COS-level; expose only if low-level API needs them)*
 - [ ] **Version/info** `version`, `VersionBind`, `VersionFitz`, `VersionDate`, `pymupdf_version`, `mupdf_version` — **P1 · M1 · catalogued**
-- [ ] **Exceptions** `FileDataError`, `EmptyFileError`, `FileNotFoundError`, `FitzDeprecation`, plus oxipdf-typed `PdfUnsupportedError`/`PdfDecodeError`/`PdfRedactionError` — **P0 · M1 · catalogued**
+- [ ] **Exceptions** `FileDataError`, `EmptyFileError`, `FileNotFoundError`, `FitzDeprecation`, plus oxide-pdf-typed `PdfUnsupportedError`/`PdfDecodeError`/`PdfRedactionError` — **P0 · M1 · catalogued**
 - [ ] **`PdfUnsupportedError` catch-all** — every PyMuPDF symbol *not* listed here raises this (never `AttributeError`), enumerated in `COMPAT.toml` (PRD §7 catch-all + §17.2) — **P0 · M1 · catalogued**
 
 ---

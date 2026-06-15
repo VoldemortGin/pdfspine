@@ -1,15 +1,15 @@
 # Product Requirements Document
-# oxipdf — An MIT-Licensed, Pure-Rust Reimplementation of PyMuPDF
+# oxide-pdf — An MIT-Licensed, Pure-Rust Reimplementation of PyMuPDF
 
 ---
 
 ## 1. Title, Summary & Document Meta
 
-**Title:** `oxipdf` — An MIT-Licensed, Mostly-From-Scratch Rust Reimplementation of PyMuPDF (`fitz`), with a Rust-Native Core API and a `fitz`-Compatible Python Shim
+**Title:** `oxide-pdf` — An MIT-Licensed, Mostly-From-Scratch Rust Reimplementation of PyMuPDF (`fitz`), with a Rust-Native Core API and a `fitz`-Compatible Python Shim
 
-**Working name:** `oxipdf` (final name TBD; must avoid "PyMuPDF", "MuPDF", "fitz", "Artifex", "Ghostscript" in the package/crate/domain name — nominative use in docs only).
+**Working name:** `oxide-pdf` (final name TBD; must avoid "PyMuPDF", "MuPDF", "fitz", "Artifex", "Ghostscript" in the package/crate/domain name — nominative use in docs only).
 
-**One-paragraph summary.** PyMuPDF is the fastest and most capable PDF toolkit in the Python ecosystem — rendering, text/layout extraction, editing, annotation, redaction, and generation in one library — but it is dual-licensed **AGPL-3.0 or commercial-from-Artifex**, which makes it legally radioactive for closed-source products and SaaS, and there is no third party from whom a license can be purchased. `oxipdf` removes that landmine: a **pure-Rust, MIT-licensed** PDF engine whose **first-party crates are written from scratch** (the COS object model, parser, cross-reference machinery, repair subsystem, filters, encryption, fonts-for-mapping, text extraction, and the incremental/full writer are all original work; permissive Rust crates are used only for leaf problems — codecs, font parsing, crypto primitives), exposed to Python via **PyO3** through both a clean **Rust-native core API** and a **`fitz`-compatible Python shim** so existing `import fitz` code can migrate with near-zero friction. Scope for v1 is **PDF-first plus image documents** (PNG/JPEG/TIFF/GIF/BMP/WEBP); **vector page rasterization is deferred** to a later phase (the precise boundary of which `Pixmap` paths ship in v1 is pinned in §3.3 and §8.10). The project is built under **strict TDD**: every function is decomposed into named, numbered test cases catalogued before implementation, and "done" means implemented **and** the catalogued tests pass, behind a machine-enforced Definition-of-Done gate.
+**One-paragraph summary.** PyMuPDF is the fastest and most capable PDF toolkit in the Python ecosystem — rendering, text/layout extraction, editing, annotation, redaction, and generation in one library — but it is dual-licensed **AGPL-3.0 or commercial-from-Artifex**, which makes it legally radioactive for closed-source products and SaaS, and there is no third party from whom a license can be purchased. `oxide-pdf` removes that landmine: a **pure-Rust, MIT-licensed** PDF engine whose **first-party crates are written from scratch** (the COS object model, parser, cross-reference machinery, repair subsystem, filters, encryption, fonts-for-mapping, text extraction, and the incremental/full writer are all original work; permissive Rust crates are used only for leaf problems — codecs, font parsing, crypto primitives), exposed to Python via **PyO3** through both a clean **Rust-native core API** and a **`fitz`-compatible Python shim** so existing `import fitz` code can migrate with near-zero friction. Scope for v1 is **PDF-first plus image documents** (PNG/JPEG/TIFF/GIF/BMP/WEBP); **vector page rasterization is deferred** to a later phase (the precise boundary of which `Pixmap` paths ship in v1 is pinned in §3.3 and §8.10). The project is built under **strict TDD**: every function is decomposed into named, numbered test cases catalogued before implementation, and "done" means implemented **and** the catalogued tests pass, behind a machine-enforced Definition-of-Done gate.
 
 **Document meta.**
 
@@ -55,7 +55,7 @@ Why this is a non-starter for most companies:
 
 MIT is permissive: no copyleft, no network clause, no commercial gatekeeper, no per-seat negotiation. It is also more permissive than PDFium's BSD-3 (no binary-attribution friction at the source level) and categorically clear of AGPL. An MIT, pure-Rust engine lets the entire spectrum of users — closed-source SaaS, OSS maintainers who must stay permissive end-to-end, security-sensitive shops, and WASM/edge developers — adopt without copyleft legal review.
 
-**Motivation, in one line:** *PyMuPDF owns "fast + complete + great API" but is AGPL; no permissive library unifies render+extract+edit+generate with a `fitz` API in a memory-safe, embeddable form. `oxipdf` fills exactly that gap.*
+**Motivation, in one line:** *PyMuPDF owns "fast + complete + great API" but is AGPL; no permissive library unifies render+extract+edit+generate with a `fitz` API in a memory-safe, embeddable form. `oxide-pdf` fills exactly that gap.*
 
 ### 2.3 Why pure Rust (not another C/C++ binding)
 
@@ -184,7 +184,7 @@ Page-label *authoring* and rich label formats are deferred (§3.2 #5), but **rea
 | **pdfrw** | MIT | pure Python | ❌ | ❌ | ✅ read/write/merge | ⚠️ low-level | minimally maintained |
 | **borb** | AGPL-3.0 + commercial | pure Python | ❌ | ✅ some | ✅ | ✅ | same AGPL trap, pure Python |
 | **WeasyPrint** | BSD-3 | pure Python | n/a (HTML→PDF) | ❌ | ❌ | ✅ HTML→PDF | different job |
-| **`oxipdf`** | **MIT** | **pure Rust (first-party from scratch)** | image-docs + image-only pages now; vector deferred (M6) | ✅ PyMuPDF-class | ✅ incl. incremental/merge/redaction | ✅ | vector rendering deferred to M6 |
+| **`oxide-pdf`** | **MIT** | **pure Rust (first-party from scratch)** | image-docs + image-only pages now; vector deferred (M6) | ✅ PyMuPDF-class | ✅ incl. incremental/merge/redaction | ✅ | vector rendering deferred to M6 |
 
 > **Table accuracy notes (credibility is our core asset):** (a) pypdf never shipped a raster renderer; the "❌ render" is correct, but it *does* extract embedded images, now reflected. (b) pikepdf is MPL-2.0 **binding** over an **Apache-2.0** qpdf engine — binding and engine licenses are now separated, matching the discipline we use for ourselves. (c) ReportLab's open-source library is BSD-3; the commercial offering is a *separate paid product*, not a dual-license of the same source — the misleading "BSD + commercial dual-license" framing is removed. (d) pypdfium2 wheels and PDFium are both permissive but the engine is a **prebuilt C/C++ binary blob** in the wheel — that is the differentiator we lean on, not raw speed.
 
@@ -196,7 +196,7 @@ We are candid: the "permissive + fast + render + extract" need is **partially al
 
 No single library is **all** of: from-scratch **pure-Rust first-party** (memory-safe authored code, embeddable, WASM-friendly, no shipped C blob) + **MIT** + **render+extract+edit+generate** in one + **`fitz`-compatible API** + **Python bindings**. That intersection is empty, and it is the product.
 
-> **For** developers and companies who need PyMuPDF's speed and breadth **but cannot accept AGPL or pay Artifex,** **`oxipdf`** is a **pure-Rust, MIT-licensed PDF toolkit** with first-class **Python bindings and a PyMuPDF-compatible API.** **Unlike PyMuPDF** it imposes no copyleft and no fee; **unlike pypdfium2** it is from-scratch first-party Rust with full editing/authoring and no shipped C blob; **unlike pypdf/pdfplumber** it is fast. *One library, four capabilities, zero copyleft risk.*
+> **For** developers and companies who need PyMuPDF's speed and breadth **but cannot accept AGPL or pay Artifex,** **`oxide-pdf`** is a **pure-Rust, MIT-licensed PDF toolkit** with first-class **Python bindings and a PyMuPDF-compatible API.** **Unlike PyMuPDF** it imposes no copyleft and no fee; **unlike pypdfium2** it is from-scratch first-party Rust with full editing/authoring and no shipped C blob; **unlike pypdf/pdfplumber** it is fast. *One library, four capabilities, zero copyleft risk.*
 
 Taglines: *"PyMuPDF's power, MIT's freedom, Rust's safety."* / *"PDF processing without the AGPL."*
 
@@ -219,7 +219,7 @@ Grounded in **Google v. Oracle (2021)** (reimplementing an API's *declarations*/
 
 **Tier B — expressive/observed output that MUST NOT seed expectations (high risk):**
 - The **exact byte-for-byte serialization** of `html`/`xhtml`/`xml` output, the precise prose of error messages, the exact undocumented field set of `rawdict`, or any field-level detail **not present in public docs**. These may be **expressive**; cloning them from observed AGPL output is the contamination path clean-room exists to prevent.
-- Where PyMuPDF docs are silent on an exact shape detail, we **derive the shape from the ISO spec + our own design** and document it in `COMPAT.toml` as an **intentional `oxipdf`-defined shape** (a documented deviation), rather than reverse-engineering PyMuPDF's undocumented bytes.
+- Where PyMuPDF docs are silent on an exact shape detail, we **derive the shape from the ISO spec + our own design** and document it in `COMPAT.toml` as an **intentional `oxide-pdf`-defined shape** (a documented deviation), rather than reverse-engineering PyMuPDF's undocumented bytes.
 
 **We MAY:**
 - Reimplement the `fitz`/PyMuPDF **API surface** (Tier A) so `import fitz` code ports.
@@ -498,7 +498,7 @@ The apparent conflict between "output stays small (US-4)" and "full embedding by
 
 #### 8.5.2 `allsorts` single-point-dependency fallback (resolves critique #15)
 
-`allsorts` is the only realistic pure-Rust subsetter, making it a single point of failure for the P2 subsetting feature. Policy: **subsetting is best-effort with a defined fallback** — if `allsorts` cannot subset a given CFF/CID font (returns error or produces an invalid table), oxipdf **falls back to full embedding of that font** (the correct larger output), emits a `Warning{kind: SubsetFallback}`, and continues. Subsetting failure is therefore **never** a hard error and **never** produces a broken font. Tested by `SUBSET-FALLBACK-*`.
+`allsorts` is the only realistic pure-Rust subsetter, making it a single point of failure for the P2 subsetting feature. Policy: **subsetting is best-effort with a defined fallback** — if `allsorts` cannot subset a given CFF/CID font (returns error or produces an invalid table), oxide-pdf **falls back to full embedding of that font** (the correct larger output), emits a `Warning{kind: SubsetFallback}`, and continues. Subsetting failure is therefore **never** a hard error and **never** produces a broken font. Tested by `SUBSET-FALLBACK-*`.
 
 ### 8.6 Text extraction & search (`pdf-text`)
 
@@ -690,12 +690,12 @@ pub enum Object {
 ### 9.5 The `fitz`-compat shim
 
 ```
-oxipdf/         native package (Rust-backed, idiomatic Python) — _core.abi3.so + thin wrappers
+oxide_pdf/      native package (Rust-backed, idiomatic Python) — _core.abi3.so + thin wrappers
 fitz/           compat package: re-exports + geometry value types + exception aliases + constants
 pymupdf/        alias: from fitz import *
 ```
 
-Mostly pure Python over `_core` (cheap to express PyMuPDF's huge surface + deprecated aliases; iterate without recompiling). Geometry (`Point/Rect/Matrix/Quad/IRect`) are pure-Python value types matching PyMuPDF arithmetic exactly (arithmetic semantics are Tier-A documented facts). Documented deviations (vector rendering deferred → `PdfUnsupportedError`; dict numeric *exactness* → tolerance per §14.5; html/xhtml/xml byte-exactness is `oxipdf`-defined per §6.1; Story/OCR out of scope) encoded in machine-readable `COMPAT.toml`; unimplemented-but-known methods raise `PdfUnsupportedError` with a matrix link, never `AttributeError`.
+Mostly pure Python over `_core` (cheap to express PyMuPDF's huge surface + deprecated aliases; iterate without recompiling). Geometry (`Point/Rect/Matrix/Quad/IRect`) are pure-Python value types matching PyMuPDF arithmetic exactly (arithmetic semantics are Tier-A documented facts). Documented deviations (vector rendering deferred → `PdfUnsupportedError`; dict numeric *exactness* → tolerance per §14.5; html/xhtml/xml byte-exactness is `oxide-pdf`-defined per §6.1; Story/OCR out of scope) encoded in machine-readable `COMPAT.toml`; unimplemented-but-known methods raise `PdfUnsupportedError` with a matrix link, never `AttributeError`.
 
 ### 9.6 Security / fuzzing / robustness
 
@@ -706,7 +706,7 @@ Mostly pure Python over `_core` (cheap to express PyMuPDF's huge surface + depre
 
 #### 9.6.1 Memory-safety claim scoped precisely + mmap-truncation UB handled (resolves critique #6)
 
-**Precise claim (this replaces any "memory-safe engine" blanket statement):** *All first-party `oxipdf` Rust crates are `#![forbid(unsafe_code)]`. Memory-unsafety in `oxipdf` can therefore originate only from (a) the single audited `unsafe` block in `py-bindings` (buffer protocol, §9.4) and (b) third-party dependencies that contain or wrap `unsafe` (notably `memmap2`, `bytes`, `rustybuzz`, `ttf-parser`, and the image codecs).* We do **not** claim a transitively-unsafe-free tree. Dependency `unsafe` is mitigated, not ignored:
+**Precise claim (this replaces any "memory-safe engine" blanket statement):** *All first-party `oxide-pdf` Rust crates are `#![forbid(unsafe_code)]`. Memory-unsafety in `oxide-pdf` can therefore originate only from (a) the single audited `unsafe` block in `py-bindings` (buffer protocol, §9.4) and (b) third-party dependencies that contain or wrap `unsafe` (notably `memmap2`, `bytes`, `rustybuzz`, `ttf-parser`, and the image codecs).* We do **not** claim a transitively-unsafe-free tree. Dependency `unsafe` is mitigated, not ignored:
 
 - **`cargo-geiger`** runs in CI over the **entire** dependency graph and the unsafe-surface count is tracked; a regression (new unsafe-bearing dep, or a jump in count) requires explicit reviewer sign-off.
 - **Codec/font unsafe** is exercised by the per-codec/font fuzz targets (above) under `Limits`, treating those crates as untrusted attack surface (which they are).
@@ -738,7 +738,7 @@ Everything `Send + Sync` (`Object`, `DocumentStore`, `Page`, `Pixmap`, the `#[py
 **What is *not* enforced (logical correctness) — stated honestly:** The "shared-immutable for parallel reads, edits funneled through one thread" rule is a **documented usage convention, not a compiler-enforced invariant**. Specifically:
 - A read concurrent with a write is **memory-safe** but its *result* is "whichever side won the lock" — i.e., you may read pre-edit or post-edit state. This is a normal `RwLock` ordering property, not a bug.
 - **Derived/cached data staleness is a real footgun** and is handled, not hand-waved: a `TextPage` (or any cached derived structure) captures a **content snapshot version** at creation. Any document edit **bumps the `Document`'s content-version counter**; a derived object built from an older version is **invalidated** — using it raises `PdfStaleError` rather than silently returning stale text. This converts the "stale `TextPage` after edit" footgun into a typed, catchable error. Tested by `CONCURRENCY-STALE-*`.
-- We therefore **scope the safety claim precisely**: *oxipdf is memory-safe under any thread interleaving (enforced); it is logically race-free only when callers follow the documented single-writer convention (recommended), and stale-derived-data is turned into a typed error rather than a silent correctness bug.*
+- We therefore **scope the safety claim precisely**: *oxide-pdf is memory-safe under any thread interleaving (enforced); it is logically race-free only when callers follow the documented single-writer convention (recommended), and stale-derived-data is turned into a typed error rather than a silent correctness bug.*
 
 No `async` in core (PDF work is CPU-bound).
 
@@ -915,7 +915,7 @@ Order: 001→002→003 (working decode) → 006/007 (errors) → predictors → 
 - **GIL build:** one **`abi3-py310`** wheel per (OS, arch) → covers CPython ≥3.10 GIL builds.
 - **Free-threaded build:** a **separate** wheel (PEP 703), **not** folded into the abi3 wheel (§9.4), shipped once the PyO3 free-threaded/abi3t support matrix is green; not on the v1 critical path.
 - **Platforms:** Linux manylinux2014 + musllinux_1_2 (x86_64, aarch64 via `--zig`), macOS universal2, Windows x86_64. Pure-Rust backends only (no system zlib/C linkage; the optional `jpx-openjpeg-c` feature is **off** in published wheels, §8.4.1) → self-contained wheels with no shipped C blob.
-- **Each wheel** smoke-imported (`python -c "import oxipdf"`) and pytest-smoked in CI before publish; bundled `THIRD-PARTY-LICENSES` via `cargo-about` (incl. IJG/Unicode-DFS notices); `cargo-deny` green (zero GPL/AGPL/LGPL/SSPL **and zero MPL in the shipped graph**).
+- **Each wheel** smoke-imported (`python -c "import oxide_pdf"`) and pytest-smoked in CI before publish; bundled `THIRD-PARTY-LICENSES` via `cargo-about` (incl. IJG/Unicode-DFS notices); `cargo-deny` green (zero GPL/AGPL/LGPL/SSPL **and zero MPL in the shipped graph**).
 
 ### 11.3 CI matrix
 
@@ -968,7 +968,7 @@ Effort in **agent-week-equivalents (AWE)** + T-shirt size (planning units, not c
 
 **M1 — Parse + objects + filters + crypto-read + repair (XXL, 18–24).** Tokenizer; object model + lazy `Arc` cache + mmap source (truncation mitigation §9.6.1); xref (classic + stream + objstm + `/Prev` + hybrid + linearization-read); **repair subsystem** + `parse_was_repaired`/`header_offset` tracking; filters (Flate+predictors/LZW/ASCII*/RunLength decode); page tree + inheritance; encryption read R2–R6 + crypt filters + exemptions + SASLprep + **`/ID`-absent fallback** + **R5-read/R6-write policy**; low-level xref API; `Document.open`/`open_with(untrusted())`/`page_count`/`load_page`/`metadata`/`needs_pass`/`authenticate`/`permissions`/`is_repaired`; `Page.bound/rect/rotation/*box`; `Limits` with pinned defaults (§9.6.2). **Exit:** `LEXER-*`/`XREF-*`/`OBJSTM-*`/filter/`REPAIR-*`/`CRYPT-*`/`LIMITS-DEFAULT-*` catalogs 100% green (incl. per-filter round-trips + predictor inverse + per-object-key `min(len+5,16)`/`sAlT`-AESV2-only + R6-no-salt); **≥99% of `CONF-CORPUS-v1` opens per §3.4 definition (page_count correct on the verified subset) in Lenient mode; malformed set repairs-with-warning or typed-error — never panics/OOM/hangs** (fuzz, in `mmap:Never`); every re-serialized fixture passes `qpdf --check`/pikepdf; crypto round-trips RC4/AES-128/AES-256(R6), R5 decrypts but never writes, wrong password fails cleanly, `/Encrypt`+`/ID` verified never-encrypted, `/ID`-absent path proven, one fixture vs `qpdf --decrypt`; fuzz `fuzz_open`/`fuzz_xref`/`fuzz_repair`/per-filter clean nightly; `pdf-core` parser/filter ≥95% line; mmap-truncation nightly job characterized.
 
-**M2 — Text extraction + search (XL, 14–18).** Content-stream interpreter (incl. inline-image capture-not-just-skip, pattern/shading classify); font mapping layer (encodings/Differences/Type0-CID/ToUnicode/AGL/CJK CMaps/widths/Core-14 AFM/descriptor flags — **after §6.5 #2 data-license clearance**); layout (spans/lines/blocks/words, XY-cut order, super/subscript, rotated/vertical/RTL, dehyphenation); **per-method `TEXTFLAGS_*` defaults pinned**; serializers (text/blocks/words/dict/json/rawdict/rawjson/html/xhtml/xml + textbox/selection); `search_for`; `get_fonts`/`get_images`; `TEXT_*` flags. **Exit:** `WORDS-*`/`DICT-*`/`CMAP-*`/`ENCODING-*`/`GLYPHLIST-*`/`WIDTHS-*`/`LAYOUT-*`/`SEARCH-*`/`TEXTFLAGS-DEFAULT-*`/`COORD-ROT-*` green + cross-mode property; **serializer key/nesting/arity == PyMuPDF *documented* shape (Tier-A); html/xhtml/xml validated as `oxipdf`-defined valid serialization (Tier-B, own goldens)**; insta goldens human-validated vs `pdftotext -bbox`; **char accuracy ≥0.98 (norm. Levenshtein) vs self-generated ground truth (primary); ≥0.95 CJK on ground truth where ToUnicode/CMaps exist; word-bbox IoU ≥0.90 vs ground-truth boxes; pdfminer agreement reported as secondary diagnostic, not a gate**; search recall/precision vs ground truth; fuzz `fuzz_cmap`/`fuzz_content_stream`/`fuzz_get_text` clean.
+**M2 — Text extraction + search (XL, 14–18).** Content-stream interpreter (incl. inline-image capture-not-just-skip, pattern/shading classify); font mapping layer (encodings/Differences/Type0-CID/ToUnicode/AGL/CJK CMaps/widths/Core-14 AFM/descriptor flags — **after §6.5 #2 data-license clearance**); layout (spans/lines/blocks/words, XY-cut order, super/subscript, rotated/vertical/RTL, dehyphenation); **per-method `TEXTFLAGS_*` defaults pinned**; serializers (text/blocks/words/dict/json/rawdict/rawjson/html/xhtml/xml + textbox/selection); `search_for`; `get_fonts`/`get_images`; `TEXT_*` flags. **Exit:** `WORDS-*`/`DICT-*`/`CMAP-*`/`ENCODING-*`/`GLYPHLIST-*`/`WIDTHS-*`/`LAYOUT-*`/`SEARCH-*`/`TEXTFLAGS-DEFAULT-*`/`COORD-ROT-*` green + cross-mode property; **serializer key/nesting/arity == PyMuPDF *documented* shape (Tier-A); html/xhtml/xml validated as `oxide-pdf`-defined valid serialization (Tier-B, own goldens)**; insta goldens human-validated vs `pdftotext -bbox`; **char accuracy ≥0.98 (norm. Levenshtein) vs self-generated ground truth (primary); ≥0.95 CJK on ground truth where ToUnicode/CMaps exist; word-bbox IoU ≥0.90 vs ground-truth boxes; pdfminer agreement reported as secondary diagnostic, not a gate**; search recall/precision vs ground truth; fuzz `fuzz_cmap`/`fuzz_content_stream`/`fuzz_get_text` clean.
 
 **M3 — Save/incremental/GC + page ops + merge (XL, 12–16).** Serializer; object-edit API; full save (classic + xref/objstm authoring, `/ID`, free-list); GC 1–4 (**exclusion list + COW-unshare §8.7.1**); deflate options; **incremental save (clean-parse precondition §8.7)**; encryption write (R6 only); page ops + `insert_pdf`; metadata write + `get/set_xml_metadata` + TOC + named dests + `/PageLabels` read + `get_label`. **Exit:** `SAVE-*`/`INCR-*`/`GC-*`/`GC3-EXCLUDE-*`/`GC3-COW-*`/`MERGE-*`/`PAGEOPS-*`/`TOC-*`/`META-*`/`PAGELABEL-*` green + serializer property; **incremental byte-exactness `out[..orig.len()]==orig` on clean-parse fixtures; repaired fixtures rejected (or upgraded only when opted in)**, new `/Prev` == prior `startxref`, both revisions reopen; signature-preservation fixture: a clean signed PDF edited incrementally keeps `out[..orig.len()]==orig` and the signature byte range intact; round-trip invariants across full/full+GC/incremental/encrypted; GC levels each proven incl. dedup-exclusion and COW-unshare-after-merge; merge order/count/refs correct, shared font deduped single, every saved fixture `qpdf --check` clean; TOC round-trip equals input, level-jump rejected; named dest resolves to correct physical page under non-trivial `/PageLabels`.
 
@@ -1071,7 +1071,7 @@ Diff-coverage **≥90%** every merged PR; `pdf-core` parser/filter **≥95% line
 
 The previously-"open" items that **block** milestones (MSRV/PyO3-matrix data **needed for build**, Adobe data licensing, tolerance definitions, `Limits` defaults) have been **resolved or promoted**: tolerances are pinned in §14.5; `Limits` defaults in §9.6.2; Adobe data licensing is now a **legal gating release-blocker** (§6.5 #2, blocks M2) rather than an open question; the oracle legality is a gating item (§6.5 #1). What remains genuinely open does **not** block any milestone gate:
 
-1. **Final name & clearance.** `oxipdf` is a placeholder — needs PyPI/crates.io/USPTO/EU/domain clearance and counsel sign-off (esp. before naming any artifact `fitz`). (Gating only for *public naming*, §6.5 #3.)
+1. **Final name & clearance.** `oxide-pdf` is a placeholder — needs PyPI/crates.io/USPTO/EU/domain clearance and counsel sign-off (esp. before naming any artifact `fitz`). (Gating only for *public naming*, §6.5 #3.)
 2. **`fitz` shim packaging.** Ship `import fitz` literally, or only an opt-in, clearly-labeled compat package? (Counsel + migration-friction tradeoff.)
 3. **fitz-API coverage target.** ≥85% `implemented` is the KPI — confirm which specific P2/P3 symbols are `out-of-scope` vs `partial` (does not block; `compat-symbol-guard` forces a disposition either way).
 4. **MSRV + PyO3 free-threaded matrix.** Pin MSRV (1.74 vs 1.75) against the chosen PyO3 release; pin the **first PyO3 version with stable free-threaded/abi3t** for the separate free-threaded wheel (§9.4). Resolve before the free-threaded wheel job is enabled (not on v1 critical path).
@@ -1125,7 +1125,7 @@ The previously-"open" items that **block** milestones (MSRV/PyO3-matrix data **n
 ### 17.1 SemVer & API-stability policy
 
 - **Rust crates** follow **Cargo SemVer**. Pre-1.0, breaking changes bump the minor (0.x.0); the public surface of `pdf-api` is the stability contract — internal crates (`pdf-core` etc.) may break more freely until 1.0. A `#[doc(hidden)]`/`__internal` boundary marks non-contract items. The **1.0 Rust release** is gated on M1–M5 complete + the public `pdf-api` surface frozen.
-- **Python package** follows **PEP 440 / SemVer-aligned** versioning independent of the Rust crate versions (they may differ). The Python public API (the `oxipdf` package, **not** `_core`) is the stability contract; `_core` is private and may change between any releases.
+- **Python package** follows **PEP 440 / SemVer-aligned** versioning independent of the Rust crate versions (they may differ). The Python public API (the `oxide_pdf` package, **not** `_core`) is the stability contract; `_core` is private and may change between any releases.
 - **`fitz` shim** versions track the **PyMuPDF baseline** they target (e.g., a shim version metadata field records `targets PyMuPDF 1.24.x`), so consumers know which surface they're getting.
 
 ### 17.2 PyMuPDF-baseline-evolution policy (what happens at 1.25+)

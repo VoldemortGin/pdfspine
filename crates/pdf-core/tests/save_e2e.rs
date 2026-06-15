@@ -82,7 +82,10 @@ fn save_prop_004_optional_qpdf_check() {
     }
 
     let dir = std::env::temp_dir();
-    let path = dir.join(format!("oxipdf_save_prop_004_{}.pdf", std::process::id()));
+    let path = dir.join(format!(
+        "oxide-pdf_save_prop_004_{}.pdf",
+        std::process::id()
+    ));
     std::fs::write(&path, &bytes).unwrap();
 
     let out = std::process::Command::new("qpdf")

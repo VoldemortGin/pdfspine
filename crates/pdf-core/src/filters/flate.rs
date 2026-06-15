@@ -3,7 +3,7 @@
 //! The most common PDF stream filter. The encoded bytes are a zlib stream
 //! (RFC 1950: a 2-byte header, raw DEFLATE data, then an Adler-32 trailer),
 //! and decoding produces the original bytes. This module wraps the pure-Rust
-//! `miniz_oxide` backend of `flate2` and layers the oxipdf decode policies on
+//! `miniz_oxide` backend of `flate2` and layers the oxide-pdf decode policies on
 //! top (PRD §8.3, §9.6).
 //!
 //! # Policies

@@ -1,4 +1,4 @@
-"""``pymupdf`` alias package for oxipdf (PRD §9.5).
+"""``pymupdf`` alias package for oxide_pdf (PRD §9.5).
 
 PyMuPDF can also be imported as ``import pymupdf``; this mirrors the :mod:`fitz`
 shim by re-exporting it wholesale, so ``pymupdf.open`` / ``pymupdf.Rect`` / the

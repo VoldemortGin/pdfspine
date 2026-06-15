@@ -1,4 +1,4 @@
-# oxipdf fixture corpus manifest — affirmative-license schema (PRD §10.3).
+# oxide-pdf fixture corpus manifest — affirmative-license schema (PRD §10.3).
 #
 # POLICY: affirmative-permissive-license-REQUIRED, not merely "AGPL-absent".
 # Every fixture committed under `fixtures/` MUST have an entry here. A file with

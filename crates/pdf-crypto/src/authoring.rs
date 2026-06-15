@@ -227,10 +227,10 @@ fn build_aes256_r6(p: i32, user_pwd: &[u8], owner_pwd: &[u8]) -> (Vec<u8>, Encry
     let mut file_key = [0u8; 32];
     let mut salts = [0u8; 32];
     if getrandom::getrandom(&mut file_key).is_err() {
-        file_key = crate::primitives::sha256(b"oxipdf-aes256-key-fallback");
+        file_key = crate::primitives::sha256(b"oxide-pdf-aes256-key-fallback");
     }
     if getrandom::getrandom(&mut salts).is_err() {
-        salts = crate::primitives::sha256(b"oxipdf-aes256-salt-fallback");
+        salts = crate::primitives::sha256(b"oxide-pdf-aes256-salt-fallback");
     }
     let u_vsalt = &salts[0..8];
     let u_ksalt = &salts[8..16];

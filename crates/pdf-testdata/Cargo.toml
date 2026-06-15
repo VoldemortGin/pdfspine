@@ -6,7 +6,7 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 rust-version.workspace = true
-description = "Dev-only corpus loader and golden helpers for oxipdf tests. Internal."
+description = "Dev-only corpus loader and golden helpers for oxide-pdf tests. Internal."
 publish = false
 
 [dependencies]

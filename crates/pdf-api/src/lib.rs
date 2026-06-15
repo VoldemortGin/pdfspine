@@ -1,5 +1,5 @@
 #![forbid(unsafe_code)]
-//! `pdf-api` — the unified ergonomic facade over the oxipdf core crates and the
+//! `pdf-api` — the unified ergonomic facade over the oxide-pdf core crates and the
 //! only crate `py-bindings` depends on (PRD §9.1).
 //!
 //! M1f adds the [`Document`] / [`Page`] read surface (PRD §7): `open`/`open_bytes`,
@@ -62,7 +62,7 @@ pub use pdf_text::{
 };
 
 /// The crate version string (the workspace version), surfaced to Python as
-/// `oxipdf.__version__`.
+/// `oxide_pdf.__version__`.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Geometry value types, re-exported from `pdf-core` (PRD §7 / M0).

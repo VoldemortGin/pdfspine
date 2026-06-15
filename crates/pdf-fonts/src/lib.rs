@@ -1,5 +1,5 @@
 #![forbid(unsafe_code)]
-//! `pdf-fonts` — font *mapping* for oxipdf (PRD §8.5): char-code → Unicode and
+//! `pdf-fonts` — font *mapping* for oxide-pdf (PRD §8.5): char-code → Unicode and
 //! char-code → width. **No rasterization** (that is M6).
 //!
 //! The public surface is the [`FontMapper`], built from a resolved font

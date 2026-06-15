@@ -15,7 +15,7 @@ recorded upstream source. License-uncertain data is **never** embedded.
 | **Version** | AGL 2.0 line set (`# Table version: 2.0`), Copyright 2002–2019 Adobe. |
 | **License** | **BSD-3-Clause** (Adobe). Full text is the comment header of the file itself (retained verbatim — the BSD clause-1 source-retention requirement is satisfied by shipping the file unmodified, header included). SPDX: `BSD-3-Clause`. |
 | **Fetched** | 2026-06-15 via `curl` from the canonical raw URL (no modification). |
-| **Cleared by** | oxipdf maintainers — BSD-3-Clause is in the PRD §6.3 permitted set. |
+| **Cleared by** | oxide-pdf maintainers — BSD-3-Clause is in the PRD §6.3 permitted set. |
 
 The file is shipped **byte-for-byte unmodified**; the parser ignores `#` comment
 lines, so the license header travels with the data. See `NOTICE` for the
@@ -30,7 +30,7 @@ attribution that must accompany binary distributions (BSD clause 2).
 | **Canonical URL** | <https://raw.githubusercontent.com/adobe-type-tools/agl-aglfn/master/zapfdingbats.txt> |
 | **License** | **BSD-3-Clause** (Adobe) — same file/header/copyright as `glyphlist.txt`. SPDX: `BSD-3-Clause`. |
 | **Fetched** | 2026-06-15 via `curl` from the canonical raw URL (no modification). |
-| **Cleared by** | oxipdf maintainers — BSD-3-Clause is in the PRD §6.3 permitted set. |
+| **Cleared by** | oxide-pdf maintainers — BSD-3-Clause is in the PRD §6.3 permitted set. |
 
 The `aNN` names do **not** appear in `glyphlist.txt`, so this is a
 non-overlapping fallback table consulted after the AGL; it lets the

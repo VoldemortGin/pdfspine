@@ -8,7 +8,7 @@
 //! - [`to_words`] — `(x0,y0,x1,y1,word,block_no,line_no,word_no)` tuples;
 //! - [`to_dict`] / [`to_json`] — the structured tree (`dict`/`rawdict` and
 //!   `json`/`rawjson`), as a neutral [`TextDict`] that M2e converts to Python;
-//! - [`to_html`] / [`to_xhtml`] / [`to_xml`] — oxipdf-defined valid markup
+//! - [`to_html`] / [`to_xhtml`] / [`to_xml`] — oxide-pdf-defined valid markup
 //!   (Tier-B, PRD §6.1: own goldens, not PyMuPDF-byte-exact);
 //! - [`get_textbox`] — text within a clip rect.
 //!
@@ -678,14 +678,14 @@ fn base64_encode(data: &[u8]) -> String {
     out
 }
 
-// === html / xhtml / xml (oxipdf-defined; Tier-B, PRD §6.1) ===============
+// === html / xhtml / xml (oxide-pdf-defined; Tier-B, PRD §6.1) ===============
 
-/// Serializes a [`TextPage`] to oxipdf-defined **HTML** (`get_text("html")`).
+/// Serializes a [`TextPage`] to oxide-pdf-defined **HTML** (`get_text("html")`).
 ///
 /// Each text block becomes an absolutely-positioned `<div>` (page-relative
 /// `left`/`top` from the block bbox); each line a `<p>`; each span a `<span>`
 /// styled with font size / color / bold / italic. Image blocks become an empty
-/// positioned `<div class="oxipdf-image">` placeholder (bytes deferred to M5).
+/// positioned `<div class="oxide-pdf-image">` placeholder (bytes deferred to M5).
 /// This is **not** PyMuPDF-byte-exact — it is validated against our own goldens
 /// (Tier-B, PRD §6.1).
 #[must_use]
@@ -693,10 +693,10 @@ pub fn to_html(tp: &TextPage, _flags: u32) -> String {
     let mut s = String::new();
     s.push_str("<!DOCTYPE html>\n<html>\n<head>\n");
     s.push_str("<meta charset=\"utf-8\">\n");
-    s.push_str("<style>.oxipdf-page{position:relative;}</style>\n");
+    s.push_str("<style>.oxide-pdf-page{position:relative;}</style>\n");
     s.push_str("</head>\n<body>\n");
     s.push_str(&format!(
-        "<div class=\"oxipdf-page\" style=\"width:{}pt;height:{}pt\">\n",
+        "<div class=\"oxide-pdf-page\" style=\"width:{}pt;height:{}pt\">\n",
         fmt_num(tp.width),
         fmt_num(tp.height)
     ));
@@ -710,7 +710,7 @@ pub fn to_html(tp: &TextPage, _flags: u32) -> String {
     s
 }
 
-/// Serializes a [`TextPage`] to oxipdf-defined **XHTML** (`get_text("xhtml")`):
+/// Serializes a [`TextPage`] to oxide-pdf-defined **XHTML** (`get_text("xhtml")`):
 /// semantic, well-formed XML markup — `<div>` blocks → `<p>` lines → `<span>`
 /// runs, without absolute positioning (reflowable). Tier-B (PRD §6.1).
 #[must_use]
@@ -718,14 +718,14 @@ pub fn to_xhtml(tp: &TextPage, _flags: u32) -> String {
     let mut s = String::new();
     s.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
     s.push_str(
-        "<html xmlns=\"http://www.w3.org/1999/xhtml\">\n<head>\n<title>oxipdf</title>\n</head>\n",
+        "<html xmlns=\"http://www.w3.org/1999/xhtml\">\n<head>\n<title>oxide-pdf</title>\n</head>\n",
     );
     s.push_str("<body>\n");
     for block in &tp.blocks {
         match block.kind {
             BlockKind::Text => html_text_block(&mut s, block, true),
             BlockKind::Image => {
-                s.push_str("<div class=\"oxipdf-image\"></div>\n");
+                s.push_str("<div class=\"oxide-pdf-image\"></div>\n");
             }
         }
     }
@@ -777,7 +777,7 @@ fn html_span(s: &mut String, span: &Span) {
 fn html_image_block(s: &mut String, block: &Block) {
     let b = block.bbox.normalize();
     s.push_str(&format!(
-        "<div class=\"oxipdf-image\" style=\"position:absolute;left:{}pt;top:{}pt;width:{}pt;height:{}pt\"></div>\n",
+        "<div class=\"oxide-pdf-image\" style=\"position:absolute;left:{}pt;top:{}pt;width:{}pt;height:{}pt\"></div>\n",
         fmt_num(b.x0),
         fmt_num(b.y0),
         fmt_num(b.x1 - b.x0),
@@ -790,7 +790,7 @@ fn css_font(font: &str) -> String {
     font.replace(['"', ';', '{', '}'], "")
 }
 
-/// Serializes a [`TextPage`] to oxipdf-defined **XML** (`get_text("xml")`):
+/// Serializes a [`TextPage`] to oxide-pdf-defined **XML** (`get_text("xml")`):
 /// the char-level structural dump — `<page>` → `<block>` → `<line>` → `<font>`
 /// (span) → `<char>` with bbox attributes. Well-formed; Tier-B (PRD §6.1).
 #[must_use]

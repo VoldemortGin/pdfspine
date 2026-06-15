@@ -2,8 +2,8 @@
 handles (PRD §9.2 / §9.4 / §9.5).
 
 These thin wrappers add PyMuPDF-compatible names and return geometry value types
-(:class:`~oxipdf.geometry.Rect`) instead of raw tuples. Known-but-unimplemented
-PyMuPDF methods raise :class:`~oxipdf._core.PdfUnsupportedError` (never
+(:class:`~oxide_pdf.geometry.Rect`) instead of raw tuples. Known-but-unimplemented
+PyMuPDF methods raise :class:`~oxide_pdf._core.PdfUnsupportedError` (never
 ``AttributeError``), per PRD §9.5.
 """
 
@@ -304,7 +304,7 @@ class Annot:
 
     def __repr__(self) -> str:
         t = self._annot.type_string
-        return f"<oxipdf.Annot {t!r} xref={self._annot.xref}>"
+        return f"<oxide_pdf.Annot {t!r} xref={self._annot.xref}>"
 
 
 class Widget:
@@ -395,7 +395,7 @@ class Widget:
             self._widget.update()
 
     def __repr__(self) -> str:
-        return f"<oxipdf.Widget {self._widget.field_name!r} xref={self._widget.xref}>"
+        return f"<oxide_pdf.Widget {self._widget.field_name!r} xref={self._widget.xref}>"
 
 
 class Shape:
@@ -472,7 +472,7 @@ class Shape:
         self._shape.commit(overlay=bool(overlay))
 
     def __repr__(self) -> str:
-        return "<oxipdf.Shape>"
+        return "<oxide_pdf.Shape>"
 
 
 class TextPage:
@@ -645,9 +645,9 @@ class Page:
 
         In scope (PRD §3.3) for image documents and **image-only PDF pages**
         (the scanned-document case). A vector / text page raises
-        :class:`~oxipdf.PdfUnsupportedError` (real rasterization is M6).
+        :class:`~oxide_pdf.PdfUnsupportedError` (real rasterization is M6).
 
-        ``matrix`` (a :class:`~oxipdf.Matrix` / 6-sequence) or ``dpi`` set the
+        ``matrix`` (a :class:`~oxide_pdf.Matrix` / 6-sequence) or ``dpi`` set the
         output resolution; ``alpha`` adds an alpha channel. ``colorspace`` /
         ``clip`` are accepted for parity (full conversion / clip is partial).
         """
@@ -1130,14 +1130,14 @@ class Page:
         return self.first_widget
 
     def __repr__(self) -> str:
-        return f"<oxipdf.Page number={self.number}>"
+        return f"<oxide_pdf.Page number={self.number}>"
 
     def __getattr__(self, name: str):
         hint = _UNIMPLEMENTED_PAGE.get(name)
         if hint is not None:
             raise PdfUnsupportedError(
                 f"Page.{name} is not implemented yet: {hint}. "
-                "See the oxipdf parity matrix."
+                "See the oxide_pdf parity matrix."
             )
         raise AttributeError(f"'Page' object has no attribute {name!r}")
 
@@ -1509,14 +1509,14 @@ class Document:
         self.close()
 
     def __repr__(self) -> str:
-        return f"<oxipdf.Document page_count={self.page_count}>"
+        return f"<oxide_pdf.Document page_count={self.page_count}>"
 
     def __getattr__(self, name: str):
         hint = _UNIMPLEMENTED_DOC.get(name)
         if hint is not None:
             raise PdfUnsupportedError(
                 f"Document.{name} is not implemented yet: {hint}. "
-                "See the oxipdf parity matrix."
+                "See the oxide_pdf parity matrix."
             )
         raise AttributeError(f"'Document' object has no attribute {name!r}")
 

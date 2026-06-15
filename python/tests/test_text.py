@@ -1,6 +1,6 @@
 """M2e Python text-surface tests (PRD §8.6 / §9.4 / §9.5 / §12).
 
-``PYTEXT-*`` / ``PYSEARCH-*`` / ``PYINV-*`` exercise the native ``oxipdf`` text
+``PYTEXT-*`` / ``PYSEARCH-*`` / ``PYINV-*`` exercise the native ``oxide_pdf`` text
 extraction, search and inventory surface; ``PYFITZ-TEXT-*`` the ``fitz`` shim;
 ``ACCURACY-GT-*`` the M2 accuracy exit gate (normalized-Levenshtein similarity of
 ``get_text("text")`` against a known ground truth).
@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import json
 
-import oxipdf
+import oxide_pdf
 import pytest
 
 
@@ -252,8 +252,8 @@ def _normalize(s: str) -> str:
 # ==========================================================================
 
 
-def _page(pdf: bytes) -> "oxipdf.Page":
-    return oxipdf.open(stream=pdf)[0]
+def _page(pdf: bytes) -> "oxide_pdf.Page":
+    return oxide_pdf.open(stream=pdf)[0]
 
 
 def test_pytext_001_text_content():
@@ -476,7 +476,7 @@ def test_pyfitz_text_001_dict_parity():
     import fitz
 
     pdf = text_pdf(["Hello World"])
-    native = oxipdf.open(stream=pdf)[0].get_text("dict")
+    native = oxide_pdf.open(stream=pdf)[0].get_text("dict")
     shimmed = fitz.open(stream=pdf).load_page(0).get_text("dict")
     assert set(shimmed.keys()) == set(native.keys())
     assert set(shimmed["blocks"][0].keys()) == set(native["blocks"][0].keys())

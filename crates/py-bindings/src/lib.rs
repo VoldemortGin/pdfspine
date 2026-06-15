@@ -2,7 +2,7 @@
 // permitted to use `unsafe` (PyO3 generates FFI glue). It therefore does NOT
 // `forbid(unsafe_code)`; instead it requires `unsafe` to be explicitly scoped.
 #![deny(unsafe_op_in_unsafe_fn)]
-//! PyO3 bindings exposing oxipdf's Rust core to Python as the `_core` module.
+//! PyO3 bindings exposing oxide_pdf's Rust core to Python as the `_core` module.
 //!
 //! M1f exposes the read surface (PRD §7 / §9.2 / §9.4): `open`, a `Document`
 //! handle and a `Page` handle, both using the **handle/index pattern** — each
@@ -115,7 +115,7 @@ fn build_save_opts(
 
 /// A page handle (PRD §9.2). Holds a cloned `pdf_api::Page` (its own `Arc` onto
 /// the document store) — `'static`, no borrow crosses the boundary.
-#[pyclass(name = "Page", module = "oxipdf._core", frozen)]
+#[pyclass(name = "Page", module = "oxide_pdf._core", frozen)]
 struct PyPage {
     page: pdf_api::Page,
 }
@@ -169,7 +169,7 @@ fn unpack_color(rgb: u32) -> (f64, f64, f64) {
 /// A reusable text-extraction handle (PyMuPDF `TextPage`, PRD §9.4). Holds the
 /// model built once from a [`Page`]; `Page.get_text(..., textpage=tp)` and
 /// `Page.search_for(..., textpage=tp)` reuse it instead of re-parsing.
-#[pyclass(name = "TextPage", module = "oxipdf._core", frozen)]
+#[pyclass(name = "TextPage", module = "oxide_pdf._core", frozen)]
 struct PyTextPage {
     page: pdf_api::Page,
     tp: pdf_api::TextPage,
@@ -224,7 +224,7 @@ impl PyTextPage {
 
     fn __repr__(&self) -> String {
         format!(
-            "<oxipdf._core.TextPage blocks={} {:.0}x{:.0}>",
+            "<oxide_pdf._core.TextPage blocks={} {:.0}x{:.0}>",
             self.tp.blocks.len(),
             self.tp.width,
             self.tp.height
@@ -408,7 +408,7 @@ fn quad_tuple(q: &Quad) -> (f64, f64, f64, f64, f64, f64, f64, f64) {
 /// An annotation handle (PyMuPDF `Annot`). Owns an `AnnotHandle` (its own
 /// `Arc` onto the store + the annot xref) — `'static`, no borrow crosses the
 /// boundary.
-#[pyclass(name = "Annot", module = "oxipdf._core", frozen)]
+#[pyclass(name = "Annot", module = "oxide_pdf._core", frozen)]
 struct PyAnnot {
     annot: AnnotHandle,
 }
@@ -537,7 +537,7 @@ impl PyAnnot {
 
     fn __repr__(&self) -> String {
         format!(
-            "<oxipdf._core.Annot type={} xref={}>",
+            "<oxide_pdf._core.Annot type={} xref={}>",
             self.annot.type_string(),
             self.annot.xref()
         )
@@ -547,7 +547,7 @@ impl PyAnnot {
 // --- Widget handle (PRD §8.8 / §9.4) --------------------------------------
 
 /// A form-widget handle (PyMuPDF `Widget`). Owns a `WidgetHandle`.
-#[pyclass(name = "Widget", module = "oxipdf._core", frozen)]
+#[pyclass(name = "Widget", module = "oxide_pdf._core", frozen)]
 struct PyWidget {
     widget: WidgetHandle,
 }
@@ -636,7 +636,7 @@ impl PyWidget {
 
     fn __repr__(&self) -> String {
         format!(
-            "<oxipdf._core.Widget field={:?} xref={}>",
+            "<oxide_pdf._core.Widget field={:?} xref={}>",
             self.widget.field_name(),
             self.widget.xref()
         )
@@ -663,7 +663,7 @@ fn field_type_int(ft: pdf_api::FieldType) -> i32 {
 /// A path/paint builder over one page (PyMuPDF `Shape`). Wraps the owned
 /// [`ShapeHandle`] in an `Option` so `commit` (which consumes the handle) can
 /// take it out of the `&mut self`.
-#[pyclass(name = "Shape", module = "oxipdf._core")]
+#[pyclass(name = "Shape", module = "oxide_pdf._core")]
 struct PyShape {
     shape: Option<ShapeHandle>,
 }
@@ -1558,7 +1558,7 @@ impl PyPage {
     }
 
     fn __repr__(&self) -> String {
-        format!("<oxipdf._core.Page number={}>", self.page.number())
+        format!("<oxide_pdf._core.Page number={}>", self.page.number())
     }
 }
 
@@ -1582,7 +1582,7 @@ fn align_of(align: i32) -> Align {
 
 /// A document handle (PRD §9.2 / §9.4). Holds a `pdf_api::Document` (cheap to
 /// clone: `Arc` bumps) so every `Page` it produces is independent of this object.
-#[pyclass(name = "Document", module = "oxipdf._core", frozen)]
+#[pyclass(name = "Document", module = "oxide_pdf._core", frozen)]
 struct PyDocument {
     doc: ApiDocument,
 }
@@ -2078,7 +2078,7 @@ impl PyDocument {
 
     fn __repr__(&self) -> String {
         format!(
-            "<oxipdf._core.Document page_count={}>",
+            "<oxide_pdf._core.Document page_count={}>",
             self.doc.page_count()
         )
     }
@@ -2107,7 +2107,7 @@ fn open_bytes(py: Python<'_>, data: &[u8]) -> PyResult<PyDocument> {
     Ok(PyDocument { doc })
 }
 
-/// Returns the oxipdf version string.
+/// Returns the oxide_pdf version string.
 #[pyfunction]
 fn version() -> &'static str {
     VERSION
@@ -2142,7 +2142,7 @@ fn colorspace_name(cs: Colorspace) -> &'static str {
 ///   `Arc` clone is alive (a live export, or the boxed clone in a `Py_buffer`),
 ///   the mutation lands in a fresh allocation, so a view can never observe a
 ///   mutate-under-view or use-after-free.
-#[pyclass(name = "Pixmap", module = "oxipdf._core")]
+#[pyclass(name = "Pixmap", module = "oxide_pdf._core")]
 struct PyPixmap {
     pix: ApiPixmap,
     /// The number of live buffer exports (for `readonly` + diagnostics; the COW

@@ -6,7 +6,7 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 rust-version.workspace = true
-description = "Unified ergonomic facade and re-exports for oxipdf; the only crate py-bindings touches."
+description = "Unified ergonomic facade and re-exports for oxide-pdf; the only crate py-bindings touches."
 
 [dependencies]
 pdf-core.workspace = true

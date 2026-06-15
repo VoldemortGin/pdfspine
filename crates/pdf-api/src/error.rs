@@ -8,7 +8,7 @@
 
 use std::fmt;
 
-/// The unified oxipdf error (PRD §9.3). Wraps the core error plus the I/O and
+/// The unified oxide-pdf error (PRD §9.3). Wraps the core error plus the I/O and
 /// password cases the document-open surface needs.
 #[derive(Debug)]
 #[non_exhaustive]

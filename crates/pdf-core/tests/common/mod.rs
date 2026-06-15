@@ -484,7 +484,7 @@ pub fn find_first(hay: &[u8], needle: &[u8]) -> Option<usize> {
 
 /// The content-stream body used by [`simple_doc`] (a tiny `BT … Tj … ET`). Tests
 /// assert this survives a save → reopen round-trip.
-pub const SIMPLE_CONTENT: &[u8] = b"BT /F1 12 Tf 72 720 Td (Hello oxipdf) Tj ET";
+pub const SIMPLE_CONTENT: &[u8] = b"BT /F1 12 Tf 72 720 Td (Hello oxide-pdf) Tj ET";
 
 /// Builds a minimal but *fully openable* one-page PDF with a classic xref:
 ///

@@ -12,7 +12,7 @@ import gc
 import struct
 import zlib
 
-import oxipdf
+import oxide_pdf
 import pytest
 
 
@@ -91,7 +91,7 @@ _DRAW = "q 200 0 0 200 0 0 cm /Im0 Do Q"
 def test_pypixmap_001_image_only_get_pixmap():
     w, h = 8, 6
     samples = _rgb_samples(w, h)
-    doc = oxipdf.open(stream=image_only_pdf(w, h, samples, _DRAW))
+    doc = oxide_pdf.open(stream=image_only_pdf(w, h, samples, _DRAW))
     page = doc[0]
     assert page.is_image_only
     pix = page.get_pixmap()
@@ -108,7 +108,7 @@ def test_pypixmap_001_image_only_get_pixmap():
 def test_pypixmap_002_save_png_roundtrip(tmp_path):
     w, h = 8, 6
     samples = _rgb_samples(w, h)
-    doc = oxipdf.open(stream=image_only_pdf(w, h, samples, _DRAW))
+    doc = oxide_pdf.open(stream=image_only_pdf(w, h, samples, _DRAW))
     pix = doc[0].get_pixmap()
     out = tmp_path / "out.png"
     pix.save(str(out))
@@ -125,7 +125,7 @@ def test_pypixmap_002_save_png_roundtrip(tmp_path):
 
 def test_pypixmap_003_memoryview():
     w, h = 4, 4
-    doc = oxipdf.open(stream=image_only_pdf(w, h, _rgb_samples(w, h), _DRAW))
+    doc = oxide_pdf.open(stream=image_only_pdf(w, h, _rgb_samples(w, h), _DRAW))
     pix = doc[0].get_pixmap()
     mv = memoryview(pix)
     assert len(mv) == w * h * 3
@@ -141,7 +141,7 @@ def test_pypixmap_003_memoryview():
 
 def test_pixmap_buf_lifetime():
     # Build a blank gray pixmap and write a known pattern.
-    pix = oxipdf.Pixmap(1, (0, 0, 2, 2), False)  # n=1, 4 bytes
+    pix = oxide_pdf.Pixmap(1, (0, 0, 2, 2), False)  # n=1, 4 bytes
     for y in range(2):
         for x in range(2):
             pix.set_pixel(x, y, [10 * (y * 2 + x) + 1])
@@ -156,7 +156,7 @@ def test_pixmap_buf_lifetime():
 
     # (b) Mutate via a *fresh* handle (a new Pixmap can't touch this buffer);
     #     and an in-place mutation on a pixmap with a live view copies-on-write.
-    pix2 = oxipdf.Pixmap(1, (0, 0, 2, 2), False)
+    pix2 = oxide_pdf.Pixmap(1, (0, 0, 2, 2), False)
     mv2 = memoryview(pix2)
     base = bytes(mv2)
     pix2.clear_with(0xFF)  # in-place mutate under a live view → COW
@@ -174,10 +174,10 @@ def test_pypixmap_vector_page_raises():
     w, h = 4, 4
     samples = _rgb_samples(w, h)
     # Content paints a path (re/f) → vector page (deferred to M6).
-    doc = oxipdf.open(stream=image_only_pdf(w, h, samples, "0 0 10 10 re f"))
+    doc = oxide_pdf.open(stream=image_only_pdf(w, h, samples, "0 0 10 10 re f"))
     page = doc[0]
     assert not page.is_image_only
-    with pytest.raises(oxipdf.PdfUnsupportedError):
+    with pytest.raises(oxide_pdf.PdfUnsupportedError):
         page.get_pixmap()
 
 
@@ -219,12 +219,12 @@ def test_pypixmap_undecodable_image_text_independent():
         ],
         root=1,
     )
-    doc = oxipdf.open(stream=pdf)
+    doc = oxide_pdf.open(stream=pdf)
     page = doc[0]
     # get_text works regardless of the broken image.
     assert "hello" in page.get_text("text")
     # get_pixmap raises a typed error (text page here → unsupported).
-    with pytest.raises(oxipdf.PdfUnsupportedError):
+    with pytest.raises(oxide_pdf.PdfUnsupportedError):
         page.get_pixmap()
 
 
@@ -234,7 +234,7 @@ def test_pypixmap_undecodable_image_text_independent():
 def test_pyextract_image_001_dict():
     w, h = 8, 6
     samples = _rgb_samples(w, h)
-    doc = oxipdf.open(stream=image_only_pdf(w, h, samples, _DRAW))
+    doc = oxide_pdf.open(stream=image_only_pdf(w, h, samples, _DRAW))
     info = doc.extract_image(4)
     assert info["ext"] == "png"
     assert info["width"] == w
@@ -251,7 +251,7 @@ def test_pyextract_image_001_dict():
 def test_pyfitz_pixmap_parity(tmp_path):
     import fitz
 
-    assert fitz.Pixmap is oxipdf.Pixmap
+    assert fitz.Pixmap is oxide_pdf.Pixmap
     w, h = 4, 4
     samples = _rgb_samples(w, h)
     doc = fitz.open(stream=image_only_pdf(w, h, samples, _DRAW))
@@ -273,7 +273,7 @@ def test_pyfitz_pixmap_parity(tmp_path):
 def test_pypixmap_scale_and_alpha():
     w, h = 8, 6
     samples = _rgb_samples(w, h)
-    doc = oxipdf.open(stream=image_only_pdf(w, h, samples, _DRAW))
+    doc = oxide_pdf.open(stream=image_only_pdf(w, h, samples, _DRAW))
     page = doc[0]
     # dpi=144 → 2x scale.
     pix = page.get_pixmap(dpi=144)
@@ -291,7 +291,7 @@ def test_pypixmap_scale_and_alpha():
 
 
 def test_pypixmap_blank_and_pixel():
-    pix = oxipdf.Pixmap(3, (0, 0, 2, 2), False)
+    pix = oxide_pdf.Pixmap(3, (0, 0, 2, 2), False)
     assert (pix.width, pix.height, pix.n) == (2, 2, 3)
     assert pix.pixel(0, 0) == (0, 0, 0)
     pix.set_pixel(1, 1, [9, 8, 7])

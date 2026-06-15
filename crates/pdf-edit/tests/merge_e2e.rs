@@ -313,7 +313,7 @@ fn qpdf_check(bytes: &[u8]) {
         return; // qpdf not installed — skip.
     }
     let dir = std::env::temp_dir();
-    let path = dir.join(format!("oxipdf_merge_{}.pdf", std::process::id()));
+    let path = dir.join(format!("oxide-pdf_merge_{}.pdf", std::process::id()));
     let mut f = std::fs::File::create(&path).unwrap();
     f.write_all(bytes).unwrap();
     drop(f);
