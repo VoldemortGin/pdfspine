@@ -807,6 +807,7 @@ dependencies = [
 name = "pdf-render"
 version = "0.0.0"
 dependencies = [
+ "criterion",
  "pdf-core",
  "pdf-fonts",
  "pdf-image",

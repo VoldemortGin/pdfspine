@@ -119,10 +119,20 @@ impl Canvas {
         &self.pixmap
     }
 
-    /// The current device-space clip mask, if any (passed to the tiny-skia
-    /// `fill_path`/`stroke_path` drawcalls so painting is restricted to it).
+    /// The current device-space clip mask, if any. The paint path now reads the
+    /// clip via [`Canvas::pixmap_and_clip_mut`] (a split borrow that avoids
+    /// cloning the mask), so this read-only accessor is exercised only by the
+    /// canvas unit tests — hence `allow(dead_code)` for the lib build.
+    #[allow(dead_code)]
     pub(crate) fn clip(&self) -> Option<&Mask> {
         self.clip.as_ref()
+    }
+
+    /// Mutable pixmap **and** a shared borrow of the clip together (disjoint
+    /// fields), so a fill/stroke can pass the clip straight to tiny-skia without
+    /// cloning the whole device-size mask on every paint op.
+    pub(crate) fn pixmap_and_clip_mut(&mut self) -> (&mut SkPixmap, Option<&Mask>) {
+        (&mut self.pixmap, self.clip.as_ref())
     }
 
     /// Composes a PDF user-space CTM with the canvas base transform and converts
@@ -199,25 +209,55 @@ impl Canvas {
             return Err(Error::Unsupported("Canvas::into_pixmap colorspace"));
         }
         let n = cs.components() as usize + usize::from(alpha);
-        let mut samples = Vec::with_capacity(width as usize * height as usize * n);
+        let pixels = self.pixmap.pixels();
+        // Preallocate the exact buffer and write through a fixed `n`-byte stride
+        // per pixel (indexed writes, no per-channel `push`/capacity checks). The
+        // sample math is unchanged from the per-`push` form — only the write
+        // path differs — so output stays bit-identical.
+        let mut samples = vec![0u8; pixels.len() * n];
 
-        for px in self.pixmap.pixels() {
-            let c = px.demultiply();
-            let (r, g, b, a) = (c.red(), c.green(), c.blue(), c.alpha());
-            match cs {
-                Colorspace::Rgb => {
-                    samples.push(r);
-                    samples.push(g);
-                    samples.push(b);
+        // Straight (un-premultiplied) channels for one premultiplied pixel. A
+        // fully opaque pixel (the common case: white background + opaque fills)
+        // is already straight, so its `demultiply()` is the identity — skip it.
+        #[inline]
+        fn straight(px: tiny_skia::PremultipliedColorU8) -> (u8, u8, u8, u8) {
+            let a = px.alpha();
+            if a == 255 {
+                (px.red(), px.green(), px.blue(), 255)
+            } else {
+                let c = px.demultiply();
+                (c.red(), c.green(), c.blue(), c.alpha())
+            }
+        }
+
+        match cs {
+            Colorspace::Rgb => {
+                for (px, out) in pixels.iter().zip(samples.chunks_exact_mut(n)) {
+                    let (r, g, b, a) = straight(*px);
+                    out[0] = r;
+                    out[1] = g;
+                    out[2] = b;
+                    if alpha {
+                        out[3] = a;
+                    }
                 }
-                Colorspace::Gray => {
+            }
+            Colorspace::Gray => {
+                for (px, out) in pixels.iter().zip(samples.chunks_exact_mut(n)) {
+                    let (r, g, b, a) = straight(*px);
                     // Rec.601 luma of the straight (un-premultiplied) color.
                     let y = (0.299 * f32::from(r) + 0.587 * f32::from(g) + 0.114 * f32::from(b))
                         .round()
                         .clamp(0.0, 255.0) as u8;
-                    samples.push(y);
+                    out[0] = y;
+                    if alpha {
+                        out[1] = a;
+                    }
                 }
-                Colorspace::Cmyk => {
+            }
+            Colorspace::Cmyk => {
+                for (px, out) in pixels.iter().zip(samples.chunks_exact_mut(n)) {
+                    let (r, g, b, a) = straight(*px);
                     let rf = f32::from(r) / 255.0;
                     let gf = f32::from(g) / 255.0;
                     let bf = f32::from(b) / 255.0;
@@ -233,16 +273,16 @@ impl Canvas {
                         )
                     };
                     let q = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
-                    samples.push(q(cc));
-                    samples.push(q(mm));
-                    samples.push(q(yy));
-                    samples.push(q(k));
+                    out[0] = q(cc);
+                    out[1] = q(mm);
+                    out[2] = q(yy);
+                    out[3] = q(k);
+                    if alpha {
+                        out[4] = a;
+                    }
                 }
-                _ => unreachable!("colorspace guarded above"),
             }
-            if alpha {
-                samples.push(a);
-            }
+            _ => unreachable!("colorspace guarded above"),
         }
 
         Ok(Pixmap::try_new(width, height, cs, alpha, samples)?)

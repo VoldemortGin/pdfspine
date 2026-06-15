@@ -33,3 +33,8 @@ ttf-parser.workspace = true
 
 [dev-dependencies]
 proptest.workspace = true
+criterion = { version = "0.8.2", default-features = false, features = ["cargo_bench_support"] }
+
+[[bench]]
+name = "render"
+harness = false

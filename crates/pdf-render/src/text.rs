@@ -92,7 +92,11 @@ impl<'a> GlyphFont<'a> {
     /// Returns `None` for an absent, empty, or degenerate outline (a space
     /// glyph, `.notdef` with no contour, or a bad/unsupported glyph) — the
     /// caller then draws nothing without error.
-    fn outline_path(&self, gid: u16) -> Option<tiny_skia::Path> {
+    ///
+    /// `pub(crate)` so the page driver can build the outline once per
+    /// `(font, gid)` and cache the resulting [`tiny_skia::Path`] across repeated
+    /// occurrences of the same glyph (a glyph appears many times on a page).
+    pub(crate) fn outline_path(&self, gid: u16) -> Option<tiny_skia::Path> {
         let mut sink = PathSink {
             builder: PathBuilder::new(),
         };
@@ -228,33 +232,74 @@ pub fn draw_glyph_with_font(
         return Ok(()); // whitespace / missing / degenerate glyph: no draw.
     };
 
-    let Some(transform) = glyph_device_transform(glyph, font, canvas.base_transform(), ctm) else {
-        return Ok(()); // singular transform (zero size / collapsed ctm): no draw.
+    let upem = f64::from(font.units_per_em());
+    let mut scratch = SkPaint::default();
+    draw_glyph_path(
+        canvas,
+        glyph,
+        &path,
+        upem,
+        stroke_paint,
+        stroke,
+        ctm,
+        &mut scratch,
+    );
+    Ok(())
+}
+
+/// Paints a **prebuilt** glyph outline `path` (font units, y-up) at the glyph's
+/// device placement — the hot inner step the page driver calls for every glyph
+/// occurrence with a cached [`tiny_skia::Path`] (so the outline is extracted
+/// once per `(font, gid)`, not per occurrence).
+///
+/// `upem` is the source font's `units_per_em` (the divisor baked into the glyph
+/// placement transform). `scratch` is a reusable [`SkPaint`] the caller keeps
+/// across glyphs so each glyph does not allocate a fresh paint/shader; only its
+/// color is updated here. The render-mode logic mirrors
+/// [`draw_glyph_with_font`].
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn draw_glyph_path(
+    canvas: &mut Canvas,
+    glyph: &PositionedGlyph,
+    path: &tiny_skia::Path,
+    upem: f64,
+    stroke_paint: Paint,
+    stroke: &StrokeStyle,
+    ctm: Matrix,
+    scratch: &mut SkPaint<'static>,
+) {
+    let mode = glyph.render_mode;
+    if mode == 3 {
+        return;
+    }
+    let do_fill = matches!(mode, 0 | 2 | 4 | 6);
+    let do_stroke = matches!(mode, 1 | 2 | 5 | 6);
+    if !do_fill && !do_stroke {
+        return;
+    }
+
+    let Some(transform) = glyph_device_transform(glyph, upem, canvas.base_transform(), ctm) else {
+        return; // singular transform (zero size / collapsed ctm): no draw.
     };
 
     let pixmap = canvas.pixmap_mut();
+    scratch.anti_alias = true;
 
     if do_fill {
-        let mut paint = SkPaint::default();
         let [r, g, b] = unpack_rgb(glyph.color);
-        paint.set_color_rgba8(r, g, b, 0xFF);
-        paint.anti_alias = true;
-        pixmap.fill_path(&path, &paint, FillRule::Winding, transform, None);
+        scratch.set_color_rgba8(r, g, b, 0xFF);
+        pixmap.fill_path(path, scratch, FillRule::Winding, transform, None);
     }
 
     if do_stroke {
-        let mut paint = SkPaint::default();
         let [r, g, b, a] = stroke_paint.rgba;
-        paint.set_color_rgba8(r, g, b, a);
-        paint.anti_alias = true;
+        scratch.set_color_rgba8(r, g, b, a);
         let sk_stroke = Stroke {
             width: stroke.width.max(f32::MIN_POSITIVE),
             ..Stroke::default()
         };
-        pixmap.stroke_path(&path, &paint, &sk_stroke, transform, None);
+        pixmap.stroke_path(path, scratch, &sk_stroke, transform, None);
     }
-
-    Ok(())
 }
 
 /// Renders a run of glyphs that share one resolved font program.
@@ -293,11 +338,10 @@ pub fn draw_text_run_with_font(
 /// transform is non-finite or collapses to zero area.
 fn glyph_device_transform(
     glyph: &PositionedGlyph,
-    font: &GlyphFont,
+    upem: f64,
     base: Matrix,
     ctm: Matrix,
 ) -> Option<Transform> {
-    let upem = f64::from(font.units_per_em());
     let s = glyph.size / upem;
     if !s.is_finite() || s == 0.0 {
         return None;
