@@ -43,6 +43,15 @@ python-source = "python"
 # required by `Pixmap`'s zero-copy buffer protocol — the `bf_getbuffer` /
 # `bf_releasebuffer` stable-ABI slots were added in CPython 3.11.
 features = ["pyo3/abi3-py311"]
+# Ship PEP 561 type information (.pyi stubs + py.typed markers) in sdist + wheel.
+include = [
+    "python/oxide_pdf/py.typed",
+    "python/oxide_pdf/*.pyi",
+    "python/fitz/py.typed",
+    "python/fitz/*.pyi",
+    "python/pymupdf/py.typed",
+    "python/pymupdf/*.pyi",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["python/tests"]
