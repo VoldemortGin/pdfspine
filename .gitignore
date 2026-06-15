@@ -35,11 +35,14 @@ tarpaulin-report.html
 # Conformance / validation harness
 # Local-only diff-oracle venv (PyMuPDF is AGPL — never bundled/committed/shipped).
 .venv-oracle/
+# Local-only benchmark venv (pypdf MIT / pypdfium2 BSD — bench-only, never shipped).
+.venv-bench/
 # Tier-2 fetch-only corpus of unknown copyright — robustness only, NEVER committed.
 conformance/corpus-cache/
-# Harness machine-readable output (REPORT.md is committed; raw JSON is not).
+# Harness machine-readable output (REPORT.md / BENCH.md are committed; raw JSON is not).
 conformance/results.json
 conformance/fetch-summary.json
+conformance/bench-results.json
 
 # Editor / OS
 .DS_Store
