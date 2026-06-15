@@ -13,9 +13,9 @@
 //! - **Type1 (`FontFile`, PFB)** is not parseable by `ttf-parser` — documented
 //!   gap (text stays extractable; not rasterized) unless the producer re-embeds
 //!   as CFF.
-//! - **Type3 fonts** (each glyph is a mini content stream) are not handled here;
-//!   they would be rendered by recursively interpreting the glyph procedure
-//!   (documented gap — out of scope for the outline pipeline).
+//! - **Type3 fonts** (each glyph is a mini content stream) are not handled in
+//!   this outline pipeline; the page driver ([`crate::render`]) renders them by
+//!   recursively interpreting each glyph's `/CharProcs` procedure.
 //! - **Non-embedded standard-14 fonts** have no bundled outlines in this crate,
 //!   so they are not rasterized (documented gap — text stays extractable). No
 //!   substitute font is bundled, to avoid license-uncertain assets.
