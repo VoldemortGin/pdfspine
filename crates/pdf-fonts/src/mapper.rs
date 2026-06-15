@@ -19,7 +19,7 @@ use smol_str::SmolStr;
 use crate::cmap::{CMap, CodespaceRange};
 use crate::encodings::BaseEncoding;
 use crate::glyphlist::glyph_name_to_unicode;
-use crate::predefined::{self, PredefinedKind};
+use crate::predefined::{self, BundledCjk, PredefinedKind};
 use crate::widths::{self, CidWidths, SimpleWidths};
 
 /// The broad font-program kind (drives the build path).
@@ -38,6 +38,9 @@ enum CidEncoding {
     Identity,
     /// A parsed CMap (embedded stream). Carries its own codespace.
     CMap(CMap),
+    /// A bundled predefined CJK CMap (one of the four UCS2 families): code → CID
+    /// via the bundled encoding CMap; CID → Unicode via the inverted table.
+    Cjk(BundledCjk),
     /// A known-but-unbundled predefined CJK CMap (documented gap): 2-byte
     /// codespace assumed, `CID == code` best-effort, `to_unicode` only via a
     /// font `/ToUnicode`.
@@ -188,6 +191,7 @@ impl FontMapper {
     fn codespace(&self) -> &[CodespaceRange] {
         match &self.cid_encoding {
             Some(CidEncoding::CMap(c)) if !c.codespace().is_empty() => c.codespace(),
+            Some(CidEncoding::Cjk(c)) => c.codespace(),
             // Identity / unbundled / empty embedded → caller defaults to 2 bytes.
             _ => &[],
         }
@@ -216,7 +220,13 @@ impl FontMapper {
                 let name = self.glyph_names.as_ref()?.get(code as usize)?.as_ref()?;
                 glyph_name_to_unicode(name)
             }
-            FontKind::Type0 => None,
+            // A bundled predefined CJK CMap resolves code → CID → Unicode via the
+            // inverted UCS2 table; other Type0 encodings have no second path
+            // (the documented CJK-without-ToUnicode gap) and return None.
+            FontKind::Type0 => match &self.cid_encoding {
+                Some(CidEncoding::Cjk(c)) => c.cid_to_unicode(self.code_to_cid(code)),
+                _ => None,
+            },
         }
     }
 
@@ -260,6 +270,7 @@ impl FontMapper {
         match &self.cid_encoding {
             Some(CidEncoding::Identity) | Some(CidEncoding::UnbundledPredefined) | None => code,
             Some(CidEncoding::CMap(c)) => c.cid(code).unwrap_or(code),
+            Some(CidEncoding::Cjk(c)) => c.code_to_cid(code).unwrap_or(code),
         }
     }
 
@@ -533,6 +544,9 @@ fn resolve_cid_encoding(font: &Dict, doc: &DocumentStore) -> CidEncoding {
     match enc.as_ref() {
         Object::Name(n) => match predefined::classify(n.as_bytes()) {
             PredefinedKind::Identity => CidEncoding::Identity,
+            PredefinedKind::Cjk => {
+                BundledCjk::from_name(n.as_bytes()).map_or(CidEncoding::Identity, CidEncoding::Cjk)
+            }
             PredefinedKind::KnownUnbundled => CidEncoding::UnbundledPredefined,
             // Unknown name: best-effort Identity (most are 2-byte).
             PredefinedKind::Unknown => CidEncoding::Identity,
