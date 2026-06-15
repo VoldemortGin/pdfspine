@@ -2033,3 +2033,163 @@ Tests live in `python/tests/test_m4.py`.
 |---|---|---|---|
 | `PYM4-FITZ-001` | `page.addHighlightAnnot`/`applyRedactions`/`getDrawings`/`insertText`/`newShape`/`firstAnnot` resolve and behave as the snake_case methods | PRD §9.5 | green |
 | `PYM4-FITZ-002` | `Annot`/`Widget`/`Shape` are exposed as `fitz` classes (identity with `oxipdf`) | PRD §9.5 | green |
+
+---
+
+## M5 — Image documents, codecs, Pixmap (`pdf-image`)
+
+Spec source of truth: PRD §8.4 / §8.4.1 (image-XObject codecs + documented-subset
+degradation contract), §8.10 (image-document loader / `convert_to_pdf`), §3.3 /
+§9.4 (`Pixmap` / `get_pixmap` / `extract_image` + PyO3 buffer protocol), §9.6.2
+(pixel cap / never-OOM). Every codec is **total**: arbitrary / truncated / corrupt
+input yields a typed `Err` (`decode` / `unsupported` / `limit-exceeded`), never a
+panic, and a declared-huge raster trips the 256 Mpx pixel cap before allocating.
+Fixtures are **self-built** in-test (round-tripped through pure-Rust encoders, or
+hand-assembled segment/IFD grammars); no external/PyMuPDF files (PRD §10). Tests
+live in `crates/pdf-image/tests/{dct,ccitt,jbig2,jpx,dispatch,codec_property,imagedoc,pixmap,getpixmap}.rs`
+and `python/tests/test_pixmap.py`.
+
+### DCTDecode / JPEG (`codecs::dct`) — `DCT-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `DCT-RGB-001` | baseline RGB: dimensions + components + plausible pixels | PRD §8.4 | green |
+| `DCT-GRAY-001` | baseline grayscale → 1 component, `Gray` hint | PRD §8.4 | green |
+| `DCT-PROG-001` | progressive JPEG decodes to the right geometry | PRD §8.4 | green |
+| `DCT-XCHECK-001` | zune-jpeg vs `jpeg-decoder` oracle agree within IDCT tolerance | PRD §8.4.1 | green |
+| `DCT-CMYK-001` | native 4-component CMYK preserved (`Cmyk` hint) | PRD §8.4 | green |
+| `DCT-CMYK-DECODE-001` | `/Decode [1 0 …]` inverts; APP14 Adobe default un-inversion matches | PRD §8.4 | green |
+| `DCT-ERR-001` | garbage (non-JPEG) → typed `decode` error, no panic | PRD §8.4.1 | green |
+| `DCT-ERR-002` | truncated JPEG fails closed (never a wrong-size `Ok`) | PRD §8.4.1 | green |
+
+### CCITTFaxDecode / Group 4 (`codecs::ccitt`) — `CCITT-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `CCITT-G4-001` | G4 (K=-1) round-trips a known bitmap; 1-bpc `Gray` | PRD §8.4 | green |
+| `CCITT-G4-002` | G4 round-trips a richer diagonal + block pattern | PRD §8.4 | green |
+| `CCITT-BLACKIS1-001` | `/BlackIs1` inverts every pixel | PRD §8.4 | green |
+| `CCITT-DEFAULT-COLUMNS-001` | absent `/Columns` defaults to 1728 | PRD §8.4 | green |
+| `CCITT-ERR-001` | non-fax bytes → no panic; error or bounded declared-size raster | PRD §8.4.1 | green |
+
+### JBIG2Decode (`codecs::jbig2`) — `JBIG2-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `JBIG2-GENERIC-001` | embedded generic-region (MMR) bitmap round-trips | PRD §8.4.1 | green |
+| `JBIG2-GENERIC-002` | a richer generic-region pattern round-trips | PRD §8.4.1 | green |
+| `JBIG2-ERR-001` | garbage → typed `unsupported`/`decode`/`limit-exceeded`, no panic | PRD §8.4.1 | green |
+| `JBIG2-ERR-002` | empty input fails closed | PRD §8.4.1 | green |
+
+### JPXDecode / JPEG 2000 (`codecs::jpx`) — `JPX-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `JPX-GRAY-001` | baseline grayscale JP2 → 1 component, `Gray` hint | PRD §8.4.1 | green |
+| `JPX-RGB-001` | baseline sRGB JP2 → 3 components, `Rgb` hint | PRD §8.4.1 | green |
+| `JPX-ERR-001` | garbage → typed `unsupported`/`decode`/`limit-exceeded`, no panic | PRD §8.4.1 | green |
+| `JPX-ERR-002` | empty input fails closed | PRD §8.4.1 | green |
+
+### Dispatcher + raw samples + caps (`codecs::decode_image_xobject`) — `CODEC-DISPATCH-*` / `CODEC-CAP-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `CODEC-DISPATCH-001` | `DCTDecode` and the `DCT` abbreviation both route to the JPEG codec | PRD §8.4 | green |
+| `CODEC-DISPATCH-002` | unknown filter name → typed `unsupported` error, no panic | PRD §8.4.1 | green |
+| `CODEC-DISPATCH-003` | raw/Flate samples interpreted by `/ColorSpace` (DeviceRGB 8bpc) | PRD §8.4 | green |
+| `CODEC-DISPATCH-004` | 1-bpp `/ImageMask` raw samples preserved | PRD §8.4 | green |
+| `CODEC-DISPATCH-005` | 16-bit big-endian gray raw samples preserved | PRD §8.4 | green |
+| `CODEC-DISPATCH-006` | too-few raw bytes for declared geometry → typed `decode` error | PRD §8.4.1 | green |
+| `CODEC-CAP-001` | declared-huge raster (raw path) trips the pixel cap, no OOM | PRD §9.6.2 | green |
+| `CODEC-CAP-002` | cap applies to codec filters too (huge JBIG2 page rejected) | PRD §9.6.2 | green |
+
+### Codec totality (proptest, `codec_property.rs`) — `CODEC-PROP-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `CODEC-PROP-001` | `dct::decode` never panics on arbitrary bytes | PRD §8.4.1 | green |
+| `CODEC-PROP-002` | `ccitt::decode` never panics on arbitrary bytes + dims | PRD §8.4.1 | green |
+| `CODEC-PROP-003` | `jbig2::decode` never panics on arbitrary bytes | PRD §8.4.1 | green |
+| `CODEC-PROP-004` | `jpx::decode` never panics on arbitrary bytes | PRD §8.4.1 | green |
+| `CODEC-PROP-005` | dispatcher respects the pixel cap + total for any filter/bytes/dims | PRD §9.6.2 | green |
+
+### Image-document loader / `convert_to_pdf` (`imagedoc`) — `IMGDOC-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `IMGDOC-SNIFF-001` | `ImageFormat::sniff` detects PNG/JPEG/TIFF/GIF/BMP | PRD §8.10 | green |
+| `IMGDOC-SNIFF-002` | sniff rejects non-image / empty / PDF bytes → `None` | PRD §8.10 | green |
+| `IMGDOC-PNG-001` | PNG → single page; MediaBox == pixel dims (1px = 1pt, no DPI) | PRD §8.10 | green |
+| `IMGDOC-PNG-002` | PNG image XObject: Width/Height/`DeviceRGB`/8bpc/`FlateDecode` | PRD §8.10 | green |
+| `IMGDOC-PNG-003` | grayscale PNG → `/ColorSpace /DeviceGray` | PRD §8.10 | green |
+| `IMGDOC-PNG-004` | `open_image_document` PNG → 1 page, RGB pixmap (n=3, no alpha) | PRD §8.10 | green |
+| `IMGDOC-JPEG-001` | JPEG → `/DCTDecode` passthrough; embedded stream byte-equal | PRD §8.10 | green |
+| `IMGDOC-JPEG-002` | 3-component baseline JPEG → `/ColorSpace /DeviceRGB` from SOF | PRD §8.10 | green |
+| `IMGDOC-ALPHA-001` | RGBA PNG → `/SMask` DeviceGray image of matching dims | PRD §8.10 | green |
+| `IMGDOC-ALPHA-002` | `open_image_document` RGBA → pixmap reports alpha (n=4) | PRD §8.10 | green |
+| `IMGDOC-ALPHA-003` | LumaA PNG → `DeviceGray` + `/SMask` present | PRD §8.10 | green |
+| `IMGDOC-PALETTE-001` | native palette PNG → `[/Indexed /DeviceRGB hival lut]` colorspace | PRD §8.10 | green |
+| `IMGDOC-TIFF-001` | single-IFD TIFF → 1 page, correct dims | PRD §8.10 | green |
+| `IMGDOC-TIFF-002` | multi-IFD TIFF → `page_count == IFD count`, per-page dims | PRD §8.10 | green |
+| `IMGDOC-TIFF-003` | multi-IFD TIFF → one PDF page per IFD with per-page MediaBox | PRD §8.10 | green |
+| `IMGDOC-GIF-001` | animated GIF → one page per frame (loader + convert) | PRD §8.10 | green |
+| `IMGDOC-BMP-001` | BMP → single page; MediaBox == pixel dims | PRD §8.10 | green |
+| `IMGDOC-FORMAT-001` | `format = None` auto-detects via sniff (convert + open) | PRD §8.10 | green |
+| `IMGDOC-CONVERT-001` | PNG/JPEG/BMP convert output reparses clean, page found | PRD §8.10 | green |
+| `IMGDOC-CONVERT-002` | converted output passes `qpdf --check` (skipped if qpdf absent) | PRD §8.10 | green |
+| `IMGDOC-PROP-001` | non-image bytes → typed `invalid-argument`, no panic | PRD §8.10 | green |
+| `IMGDOC-PROP-002` | truncated PNG → typed `decode`/`invalid-argument` error | PRD §8.10 | green |
+| `IMGDOC-PROP-003` | corrupt JPEG (SOI, no SOF) → typed `decode` error | PRD §8.10 | green |
+| `IMGDOC-PROP-004` | arbitrary byte patterns never panic (open + convert) | PRD §9.6 | green |
+| `IMGDOC-PROP-005` | self-referential TIFF IFD cycle → typed `decode`, no hang | PRD §9.6 | green |
+
+### `Pixmap` value type (`pixmap`) — `PIXMAP-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `PIXMAP-NEW-001` | `Pixmap::new` from raw RGB → width/height/n/stride/colorspace | PRD §3.3 | green |
+| `PIXMAP-NEW-002` | alpha bumps `n` and `stride` | PRD §3.3 | green |
+| `PIXMAP-NEW-003` | `try_new` rejects a wrong-length buffer | PRD §3.3 | green |
+| `PIXMAP-BLANK-001` | `blank` fills + sizes; zero dimension rejected | PRD §3.3 | green |
+| `PIXMAP-DECODED-001` | from a `DecodedImage` (8-bit RGB) preserves samples | PRD §8.10 | green |
+| `PIXMAP-DECODED-002` | 1-bit gray upscales to 0/255 | PRD §8.10 | green |
+| `PIXMAP-DECODED-003` | 16-bit takes the high byte | PRD §8.10 | green |
+| `PIXMAP-SAVE-001` | `to_png_bytes` RGB round-trips through the `image` decoder | PRD §3.3 | green |
+| `PIXMAP-SAVE-002` | gray+alpha PNG round-trips | PRD §3.3 | green |
+| `PIXMAP-TOBYTES-001` | `tobytes("png")` == `to_png_bytes`; PAM carries alpha; bad fmt errors | PRD §3.3 | green |
+| `PIXMAP-PIXEL-001` | pixel get/set; out-of-range / wrong-arity rejected | PRD §3.3 | green |
+| `PIXMAP-COW-001` | mutation does not disturb an exported (Arc) clone | PRD §9.4 | green |
+| `PIXMAP-ALPHA-001` | `set_alpha` touches only the alpha lane; no-op without alpha | PRD §3.3 | green |
+| `PIXMAP-SMASK-001` | attach a gray `/SMask` as the alpha channel | PRD §8.10 | green |
+| `PIXMAP-INVERT-001` | `invert_irect` flips color, keeps alpha | PRD §3.3 | green |
+| `PIXMAP-CMYK-001` | CMYK pixmap saves as an RGB PNG | PRD §3.3 | green |
+
+### `get_pixmap` / `extract_image` on pages (`getpixmap`) — `PIXMAP-IMGONLY-*` / `EXTRACT-IMAGE-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `PIXMAP-IMGONLY-001` | classify a single-image page as image-only | PRD §8.10 | green |
+| `PIXMAP-IMGONLY-002` | `page_pixmap` == decoder output (pixel-equality) | PRD §8.10 | green |
+| `PIXMAP-IMGONLY-003` | vector page (path paint) → typed `unsupported` error | PRD §8.10 | green |
+| `PIXMAP-IMGONLY-004` | text page (`BT…Tj`) classified vector | PRD §8.10 | green |
+| `PIXMAP-IMGONLY-005` | scale arg scales the output dimensions | PRD §8.10 | green |
+| `PIXMAP-IMGONLY-006` | `alpha=true` adds an opaque alpha channel | PRD §8.10 | green |
+| `PIXMAP-IMGONLY-007` | undecodable image-only page → typed `decode`/`unsupported` error | PRD §8.4.1 | green |
+| `EXTRACT-IMAGE-001` | raw raster → PNG-encoded descriptor (dims/bpc/colorspace/components) | PRD §8.10 | green |
+| `EXTRACT-IMAGE-002` | DCT image → JPEG passthrough (verbatim bytes) | PRD §8.10 | green |
+| `EXTRACT-IMAGE-003` | non-image xref → typed `invalid-argument` error | PRD §8.10 | green |
+
+### Python `Pixmap` / `get_pixmap` / `extract_image` + buffer protocol — `PYPIXMAP-*` / `PIXMAP-BUF-LIFETIME` / `PYEXTRACT-IMAGE-*` / `PYFITZ-PIXMAP`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `PYPIXMAP-001` | image-only page `get_pixmap` → correct w/h/n/colorspace + pixel-equal samples | PRD §9.4 | green |
+| `PYPIXMAP-002` | `pix.save()` writes a PNG whose IHDR geometry round-trips | PRD §9.4 | green |
+| `PYPIXMAP-003` | `memoryview(pix)` is readonly `B`; `samples_mv` is the same zero-copy view | PRD §9.4 | green |
+| `PIXMAP-BUF-LIFETIME` | live view survives dropping the Pixmap; in-place mutate copies-on-write | PRD §9.4 | green |
+| `PYPIXMAP-VECTOR` | vector page `get_pixmap` → `PdfUnsupportedError` | PRD §8.10 | green |
+| `PYPIXMAP-UNDECODABLE` | broken image: `get_text` still works; `get_pixmap` raises typed error | PRD §8.10 | green |
+| `PYPIXMAP-SCALE` | `dpi=144` and `matrix=2` both double the output dims; `alpha=True` opaque | PRD §9.4 | green |
+| `PYPIXMAP-BLANK` | `Pixmap` constructor + `pixel`/`set_pixel` | PRD §9.4 | green |
+| `PYEXTRACT-IMAGE-001` | `doc.extract_image(xref)` → dict (ext/width/height/bpc/colorspace/n/image) | PRD §9.4 | green |
+| `PYFITZ-PIXMAP` | `fitz.Pixmap is oxipdf.Pixmap`; `get_pixmap`/`getPixmap` + `extract_image`/`extractImage` parity | PRD §9.5 | green |

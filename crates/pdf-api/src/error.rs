@@ -90,5 +90,24 @@ impl From<pdf_core::Error> for Error {
     }
 }
 
+impl From<pdf_image::Error> for Error {
+    fn from(e: pdf_image::Error) -> Self {
+        use pdf_image::Error as I;
+        let msg = e.to_string();
+        match e {
+            I::Unsupported(_) => Error::Unsupported(msg),
+            I::Decode { .. } => Error::Decode(msg),
+            // A non-image / bad-argument input maps to `PdfUnsupportedError`
+            // (PRD §3.2 #2 / §8.10): an unsupported input, not a syntax fault.
+            I::InvalidArgument(_) => Error::Unsupported(msg),
+            I::LimitExceeded(_) => Error::Limit(msg),
+            I::Core(c) => Error::from(c),
+            // `pdf_image::Error` is `#[non_exhaustive]`; any future variant maps
+            // to a decode failure (the conservative §8.4.1 default).
+            _ => Error::Decode(msg),
+        }
+    }
+}
+
 /// Convenience alias used throughout `pdf-api`.
 pub type Result<T> = std::result::Result<T, Error>;

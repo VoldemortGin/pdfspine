@@ -11,13 +11,20 @@
 //! released via [`Python::detach`]. Errors map to a typed exception hierarchy
 //! rooted at `_core.PdfError` (PRD §9.3).
 
+use std::ffi::{c_int, c_void, CString};
+use std::ptr;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
+
 use pdf_api::geom::{Matrix, Point, Quad, Rect};
 use pdf_api::{
-    Align, AnnotHandle, Document as ApiDocument, DrawItem, Drawing, Error as ApiError,
-    FinishParams, ParseMode, ScrubOptions, SearchOptions, ShapeHandle, TextOutput, WidgetHandle,
+    Align, AnnotHandle, Colorspace, Document as ApiDocument, DrawItem, Drawing, Error as ApiError,
+    FinishParams, ParseMode, Pixmap as ApiPixmap, ScrubOptions, SearchOptions, ShapeHandle,
+    TextOutput, WidgetHandle,
 };
 use pyo3::create_exception;
-use pyo3::exceptions::{PyFileNotFoundError, PyIndexError, PyOSError};
+use pyo3::exceptions::{PyFileNotFoundError, PyIndexError, PyOSError, PyValueError};
+use pyo3::ffi;
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict, PyList, PyTuple};
 
@@ -964,6 +971,49 @@ impl PyPage {
         Ok(list)
     }
 
+    // --- get_pixmap (PRD §3.3 / §8.10) -----------------------------------
+
+    /// Renders the page to a [`PyPixmap`] for the in-scope image path (PRD §3.3):
+    /// image documents and **image-only PDF pages**. A vector/text page raises
+    /// `PdfUnsupportedError` (real rasterization is M6).
+    ///
+    /// `matrix` is a `(a, b, c, d, e, f)` tuple whose average scale sets the
+    /// output resolution; `dpi` sets it to `dpi/72`. `alpha` adds an alpha
+    /// channel. `colorspace` / `clip` are accepted for API parity (full
+    /// colorspace conversion / clipping is the documented partial).
+    #[pyo3(signature = (*, matrix=None, dpi=None, colorspace=None, alpha=false, clip=None))]
+    fn get_pixmap(
+        &self,
+        py: Python<'_>,
+        matrix: Option<(f64, f64, f64, f64, f64, f64)>,
+        dpi: Option<f64>,
+        colorspace: Option<Bound<'_, PyAny>>,
+        alpha: bool,
+        clip: Option<(f64, f64, f64, f64)>,
+    ) -> PyResult<PyPixmap> {
+        let _ = (colorspace, clip);
+        let scale = match (dpi, matrix) {
+            (Some(d), _) => d / 72.0,
+            (None, Some((a, b, c, d, _, _))) => {
+                // Average of the x/y scale magnitudes (PyMuPDF Matrix scale).
+                let sx = (a * a + b * b).sqrt();
+                let sy = (c * c + d * d).sqrt();
+                ((sx + sy) / 2.0).max(f64::MIN_POSITIVE)
+            }
+            (None, None) => 1.0,
+        };
+        let pix = py
+            .detach(|| pdf_api::page_get_pixmap(&self.page, scale, alpha))
+            .map_err(map_err)?;
+        Ok(PyPixmap::new(pix))
+    }
+
+    /// Whether this page is an image-only page (in scope for `get_pixmap`).
+    #[getter]
+    fn is_image_only(&self) -> bool {
+        pdf_api::page_is_image_only(&self.page)
+    }
+
     // --- links + label + rotation (PRD §8.9) -----------------------------
 
     /// The link annotations on this page (PyMuPDF `Page.get_links`). Each link is
@@ -1653,6 +1703,28 @@ impl PyDocument {
         Ok(PyBytes::new(py, &bytes))
     }
 
+    // --- extract_image (PRD §8.10) ---------------------------------------
+
+    /// Extracts the image XObject at object number `xref` (PyMuPDF
+    /// `Document.extract_image`). Returns a dict with `ext`, `colorspace`,
+    /// `bpc`, `width`, `height`, `n` (components), `smask`, and `image` (bytes).
+    fn extract_image<'py>(&self, py: Python<'py>, xref: u32) -> PyResult<Bound<'py, PyDict>> {
+        let store = self.doc.store();
+        let ext = py
+            .detach(|| pdf_api::document_extract_image(store, xref))
+            .map_err(map_err)?;
+        let d = PyDict::new(py);
+        d.set_item("ext", ext.ext)?;
+        d.set_item("colorspace", ext.colorspace)?;
+        d.set_item("bpc", ext.bpc)?;
+        d.set_item("width", ext.width)?;
+        d.set_item("height", ext.height)?;
+        d.set_item("n", ext.components)?;
+        d.set_item("smask", ext.smask)?;
+        d.set_item("image", PyBytes::new(py, &ext.image))?;
+        Ok(d)
+    }
+
     // --- text convenience (PRD §9.5) -------------------------------------
 
     /// Extracts text from page `pno` (PyMuPDF `Document.get_page_text`). Loads
@@ -2049,6 +2121,334 @@ fn identity_matrix() -> (f64, f64, f64, f64, f64, f64) {
     (m.a, m.b, m.c, m.d, m.e, m.f)
 }
 
+// === Pixmap (PRD §8.10 / §9.4) ============================================
+
+/// Maps a colorspace component count to its PyMuPDF name string.
+fn colorspace_name(cs: Colorspace) -> &'static str {
+    cs.name()
+}
+
+/// A decoded raster (PyMuPDF `Pixmap`, PRD §8.10). Implements the **buffer
+/// protocol** with the enforced copy-on-write lifetime contract (PRD §9.4):
+///
+/// - the pixel bytes live in an `Arc<[u8]>` inside [`ApiPixmap`];
+/// - `__getbuffer__` clones that `Arc` into the `Py_buffer.internal` (a boxed
+///   `Arc<[u8]>`) so a `memoryview` / `numpy` view keeps the bytes alive even if
+///   the `Pixmap` Python object is GC'd while the view is live, and increments an
+///   export count;
+/// - `__releasebuffer__` drops that boxed `Arc` clone and decrements the count;
+/// - every mutator (`set_pixel`, `clear`, `set_alpha`, `invert_irect`) goes
+///   through `ApiPixmap`'s copy-on-write (`Arc::make_mut`): while any external
+///   `Arc` clone is alive (a live export, or the boxed clone in a `Py_buffer`),
+///   the mutation lands in a fresh allocation, so a view can never observe a
+///   mutate-under-view or use-after-free.
+#[pyclass(name = "Pixmap", module = "oxipdf._core")]
+struct PyPixmap {
+    pix: ApiPixmap,
+    /// The number of live buffer exports (for `readonly` + diagnostics; the COW
+    /// itself rides on the `Arc` strong count, which the boxed clone bumps).
+    /// Atomic so the `#[pyclass]` stays `Sync` (PyO3 0.29 requirement).
+    exports: AtomicUsize,
+}
+
+impl PyPixmap {
+    fn new(pix: ApiPixmap) -> Self {
+        PyPixmap {
+            pix,
+            exports: AtomicUsize::new(0),
+        }
+    }
+}
+
+#[pymethods]
+impl PyPixmap {
+    /// `Pixmap(colorspace, irect, alpha)` — a blank pixmap. `colorspace` is a
+    /// component count (1=gray, 3=rgb, 4=cmyk) or a name string; `irect` is the
+    /// `(x0, y0, x1, y1)` bounds. Matches the common PyMuPDF constructor shape.
+    #[new]
+    #[pyo3(signature = (colorspace, irect, alpha=false))]
+    fn py_new(
+        colorspace: &Bound<'_, PyAny>,
+        irect: (i64, i64, i64, i64),
+        alpha: bool,
+    ) -> PyResult<Self> {
+        let cs = parse_colorspace(colorspace)?;
+        let (x0, y0, x1, y1) = irect;
+        let w = u32::try_from((x1 - x0).max(0))
+            .map_err(|_| PyValueError::new_err("invalid irect width"))?;
+        let h = u32::try_from((y1 - y0).max(0))
+            .map_err(|_| PyValueError::new_err("invalid irect height"))?;
+        let pix = pdf_api::pixmap_blank(w, h, cs, alpha, 0).map_err(map_err)?;
+        Ok(PyPixmap::new(pix))
+    }
+
+    /// The pixel width (PyMuPDF `Pixmap.width` / `.w`).
+    #[getter]
+    fn width(&self) -> u32 {
+        self.pix.width
+    }
+
+    /// The pixel width alias (PyMuPDF `Pixmap.w`).
+    #[getter]
+    fn w(&self) -> u32 {
+        self.pix.width
+    }
+
+    /// The pixel height (PyMuPDF `Pixmap.height` / `.h`).
+    #[getter]
+    fn height(&self) -> u32 {
+        self.pix.height
+    }
+
+    /// The pixel height alias (PyMuPDF `Pixmap.h`).
+    #[getter]
+    fn h(&self) -> u32 {
+        self.pix.height
+    }
+
+    /// Components per pixel including alpha (PyMuPDF `Pixmap.n`).
+    #[getter]
+    fn n(&self) -> u8 {
+        self.pix.n
+    }
+
+    /// Whether the last component is alpha (PyMuPDF `Pixmap.alpha`).
+    #[getter]
+    fn alpha(&self) -> bool {
+        self.pix.alpha
+    }
+
+    /// Bytes per row (PyMuPDF `Pixmap.stride`).
+    #[getter]
+    fn stride(&self) -> usize {
+        self.pix.stride
+    }
+
+    /// `(x0, y0, x1, y1)` bounding box at the origin (PyMuPDF `Pixmap.irect`).
+    #[getter]
+    fn irect(&self) -> (i64, i64, i64, i64) {
+        (0, 0, self.pix.width as i64, self.pix.height as i64)
+    }
+
+    /// The colorspace name string (`"DeviceGray"`/`"DeviceRGB"`/`"DeviceCMYK"`).
+    #[getter]
+    fn colorspace(&self) -> &'static str {
+        colorspace_name(self.pix.colorspace)
+    }
+
+    /// The raw sample bytes as an owning `bytes` copy (PyMuPDF `Pixmap.samples`).
+    /// Zero lifetime concerns — see also the buffer protocol for zero-copy views.
+    #[getter]
+    fn samples<'py>(&self, py: Python<'py>) -> Bound<'py, PyBytes> {
+        PyBytes::new(py, self.pix.samples())
+    }
+
+    /// `len(samples)` (PyMuPDF `Pixmap.samples_mv` length).
+    #[getter]
+    fn size(&self) -> usize {
+        self.pix.samples().len()
+    }
+
+    /// A zero-copy `memoryview` of the pixels (PyMuPDF `Pixmap.samples_mv`).
+    /// Goes through the buffer protocol, so it carries the COW lifetime contract.
+    #[getter]
+    fn samples_mv<'py>(slf: Bound<'py, Self>, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let memoryview = py.import("builtins")?.getattr("memoryview")?;
+        memoryview.call1((slf,))
+    }
+
+    /// Reads pixel `(x, y)` as a tuple of `n` component ints (PyMuPDF
+    /// `Pixmap.pixel`).
+    fn pixel<'py>(&self, py: Python<'py>, x: u32, y: u32) -> PyResult<Bound<'py, PyTuple>> {
+        let px = self
+            .pix
+            .pixel(x, y)
+            .ok_or_else(|| PyValueError::new_err("pixel coordinate out of range"))?;
+        PyTuple::new(py, px.iter().map(|&b| b as u32))
+    }
+
+    /// Writes pixel `(x, y)` from a sequence of `n` component bytes (PyMuPDF
+    /// `Pixmap.set_pixel`). Copy-on-write if a buffer view is live.
+    fn set_pixel(&mut self, x: u32, y: u32, value: Vec<u8>) -> PyResult<()> {
+        pdf_api::pixmap_set_pixel(&mut self.pix, x, y, &value).map_err(map_err)
+    }
+
+    /// Sets every alpha byte to `value` (PyMuPDF `Pixmap.set_alpha` constant).
+    fn set_alpha(&mut self, value: u8) {
+        self.pix.set_alpha(value);
+    }
+
+    /// Fills the whole buffer with `value` (PyMuPDF `Pixmap.clear_with`).
+    #[pyo3(signature = (value=0))]
+    fn clear_with(&mut self, value: u8) {
+        self.pix.clear(value);
+    }
+
+    /// Inverts colors within `irect` (PyMuPDF `Pixmap.invert_irect`); without an
+    /// argument inverts the whole pixmap.
+    #[pyo3(signature = (irect=None))]
+    fn invert_irect(&mut self, irect: Option<(i64, i64, i64, i64)>) {
+        let (x0, y0, x1, y1) =
+            irect.unwrap_or((0, 0, self.pix.width as i64, self.pix.height as i64));
+        self.pix.invert_irect(
+            x0.max(0) as u32,
+            y0.max(0) as u32,
+            x1.max(0) as u32,
+            y1.max(0) as u32,
+        );
+    }
+
+    /// Encodes the pixmap and returns the bytes (PyMuPDF `Pixmap.tobytes`).
+    /// `output` is `"png"` (default), `"pam"`, or `"ppm"`/`"pnm"`.
+    #[pyo3(signature = (output="png"))]
+    fn tobytes<'py>(&self, py: Python<'py>, output: &str) -> PyResult<Bound<'py, PyBytes>> {
+        let bytes = py
+            .detach(|| pdf_api::pixmap_tobytes(&self.pix, output))
+            .map_err(map_err)?;
+        Ok(PyBytes::new(py, &bytes))
+    }
+
+    /// Saves the pixmap to `filename` (PyMuPDF `Pixmap.save`). The format is the
+    /// `output` arg or inferred from the extension (PNG default).
+    #[pyo3(signature = (filename, output=None))]
+    fn save(&self, py: Python<'_>, filename: &str, output: Option<&str>) -> PyResult<()> {
+        let fmt = output
+            .map(str::to_string)
+            .or_else(|| {
+                std::path::Path::new(filename)
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .map(|e| e.to_ascii_lowercase())
+            })
+            .unwrap_or_else(|| "png".to_string());
+        let bytes = py
+            .detach(|| pdf_api::pixmap_tobytes(&self.pix, &fmt))
+            .map_err(map_err)?;
+        std::fs::write(filename, bytes).map_err(|e| PyOSError::new_err(e.to_string()))
+    }
+
+    fn __len__(&self) -> usize {
+        self.pix.samples().len()
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "Pixmap({}, {}x{}, alpha={})",
+            colorspace_name(self.pix.colorspace),
+            self.pix.width,
+            self.pix.height,
+            self.pix.alpha
+        )
+    }
+
+    // --- buffer protocol (PRD §9.4) --------------------------------------
+
+    /// Exposes the samples as a read-only buffer. Clones the backing `Arc<[u8]>`
+    /// into `view.internal` so the bytes outlive this object while a view is
+    /// alive (the enforced COW lifetime contract, PRD §9.4).
+    ///
+    /// # Safety
+    ///
+    /// PyO3 calls this with a valid `view` pointer; we initialize every field.
+    unsafe fn __getbuffer__(
+        slf: Bound<'_, Self>,
+        view: *mut ffi::Py_buffer,
+        flags: c_int,
+    ) -> PyResult<()> {
+        if view.is_null() {
+            return Err(PyValueError::new_err("null buffer view"));
+        }
+        let this = slf.borrow();
+        // Clone the Arc; this raises the strong count so any in-place mutator
+        // copy-on-writes instead of touching the bytes this view points at.
+        let arc: Arc<[u8]> = this.pix.samples_arc();
+        let len = arc.len();
+        // Stash a heap-owned Arc clone in `internal`; reclaimed in releasebuffer.
+        let boxed: *mut Arc<[u8]> = Box::into_raw(Box::new(arc));
+        let data_ptr = unsafe { (*boxed).as_ptr() } as *mut c_void;
+
+        this.exports.fetch_add(1, Ordering::SeqCst);
+
+        unsafe {
+            (*view).obj = slf.clone().into_any().into_ptr();
+            (*view).buf = data_ptr;
+            (*view).len = len as isize;
+            (*view).readonly = 1;
+            (*view).itemsize = 1;
+            (*view).format = if (flags & ffi::PyBUF_FORMAT) == ffi::PyBUF_FORMAT {
+                CString::new("B").unwrap().into_raw()
+            } else {
+                ptr::null_mut()
+            };
+            (*view).ndim = 1;
+            (*view).shape = ptr::null_mut();
+            (*view).strides = ptr::null_mut();
+            (*view).suboffsets = ptr::null_mut();
+            (*view).internal = boxed as *mut c_void;
+        }
+        Ok(())
+    }
+
+    /// Releases a buffer export: drops the boxed `Arc` clone (lowering the strong
+    /// count) and the format string, and decrements the export count.
+    ///
+    /// # Safety
+    ///
+    /// `view` is the same pointer a prior `__getbuffer__` populated.
+    unsafe fn __releasebuffer__(&self, view: *mut ffi::Py_buffer) {
+        if view.is_null() {
+            return;
+        }
+        unsafe {
+            if !(*view).format.is_null() {
+                drop(CString::from_raw((*view).format));
+                (*view).format = ptr::null_mut();
+            }
+            if !(*view).internal.is_null() {
+                drop(Box::from_raw((*view).internal as *mut Arc<[u8]>));
+                (*view).internal = ptr::null_mut();
+            }
+        }
+        let prev = self.exports.load(Ordering::SeqCst);
+        if prev > 0 {
+            self.exports.store(prev - 1, Ordering::SeqCst);
+        }
+    }
+}
+
+/// Parses a Python colorspace argument (a component count int, or a name string
+/// like `"rgb"`/`"DeviceRGB"`) into a [`Colorspace`].
+fn parse_colorspace(obj: &Bound<'_, PyAny>) -> PyResult<Colorspace> {
+    if let Ok(n) = obj.extract::<i64>() {
+        return match n {
+            1 => Ok(Colorspace::Gray),
+            3 => Ok(Colorspace::Rgb),
+            4 => Ok(Colorspace::Cmyk),
+            _ => Err(PyValueError::new_err(
+                "unsupported colorspace component count",
+            )),
+        };
+    }
+    // A colorspace object often exposes `.n`; or a plain name string.
+    if let Ok(n) = obj.getattr("n").and_then(|v| v.extract::<i64>()) {
+        return match n {
+            1 => Ok(Colorspace::Gray),
+            3 => Ok(Colorspace::Rgb),
+            4 => Ok(Colorspace::Cmyk),
+            _ => Err(PyValueError::new_err("unsupported colorspace")),
+        };
+    }
+    let s: String = obj.extract().map_err(|_| {
+        PyValueError::new_err("colorspace must be an int, name string, or colorspace object")
+    })?;
+    match s.to_ascii_lowercase().as_str() {
+        "gray" | "grey" | "devicegray" | "csgray" | "g" => Ok(Colorspace::Gray),
+        "rgb" | "devicergb" | "csrgb" => Ok(Colorspace::Rgb),
+        "cmyk" | "devicecmyk" | "cscmyk" => Ok(Colorspace::Cmyk),
+        _ => Err(PyValueError::new_err("unrecognized colorspace name")),
+    }
+}
+
 /// The `_core` extension module.
 #[pymodule]
 fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -2065,6 +2465,7 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyAnnot>()?;
     m.add_class::<PyWidget>()?;
     m.add_class::<PyShape>()?;
+    m.add_class::<PyPixmap>()?;
 
     // Exception hierarchy (PRD §9.3).
     m.add("PdfError", py.get_type::<PdfError>())?;

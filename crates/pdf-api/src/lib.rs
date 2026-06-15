@@ -9,6 +9,7 @@
 //! types are re-exported from [`pdf_core::geom`].
 
 pub mod error;
+pub mod image;
 pub mod text;
 
 use std::path::Path;
@@ -44,6 +45,14 @@ pub use pdf_crypto::{EncryptMethod, EncryptSpec};
 // `Page` is defined in `pdf-core`).
 pub use text::{
     get_fonts, get_images, get_text, search, textpage, FontInfo, ImageInfo, TextOutput,
+};
+
+// Image path (M5): `Pixmap`, `get_pixmap`, `extract_image`, image documents
+// (PRD §3.3 / §8.10). The bindings depend only on `pdf-api`.
+pub use image::{
+    document_extract_image, image_document_page_pixmap, image_to_pdf, open_image_document,
+    page_get_pixmap, page_is_image_only, pixmap_blank, pixmap_set_pixel, pixmap_tobytes,
+    Colorspace, ExtractedImage, ImageDocument, ImageFormat, Pixmap,
 };
 
 // `pdf-text` types the bindings need so they only depend on `pdf-api` (PRD §9.1).

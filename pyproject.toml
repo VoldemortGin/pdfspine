@@ -9,7 +9,7 @@ version = "0.0.0"
 description = "MIT-licensed, pure-Rust reimplementation of PyMuPDF (fitz) with PyO3 bindings."
 readme = "README.md"
 license = { text = "MIT" }
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 authors = [{ name = "oxipdf contributors" }]
 keywords = ["pdf", "pymupdf", "fitz", "mupdf", "rust"]
 classifiers = [
@@ -35,8 +35,10 @@ manifest-path = "crates/py-bindings/Cargo.toml"
 module-name = "oxipdf._core"
 # Pure-Python sources (oxipdf / fitz / pymupdf packages) live here.
 python-source = "python"
-# abi3 wheel covering CPython >= 3.10 (PRD §9.4 / §11.2).
-features = ["pyo3/abi3-py310"]
+# abi3 wheel covering CPython >= 3.11 (PRD §9.4 / §11.2). The 3.11 floor is
+# required by `Pixmap`'s zero-copy buffer protocol — the `bf_getbuffer` /
+# `bf_releasebuffer` stable-ABI slots were added in CPython 3.11.
+features = ["pyo3/abi3-py311"]
 
 [tool.pytest.ini_options]
 testpaths = ["python/tests"]

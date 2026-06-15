@@ -514,6 +514,22 @@ class TextPage:
         return repr(self._tp)
 
 
+# ``Pixmap`` is the Rust ``_core.Pixmap`` directly (PyMuPDF ``fitz.Pixmap``,
+# PRD §8.10 / §3.3). Using the native pyclass — rather than a pure-Python wrapper
+# — means the zero-copy **buffer protocol** (``memoryview(pix)`` /
+# ``numpy.frombuffer(pix)``) works on every supported interpreter (PEP 688's
+# pure-Python ``__buffer__`` is 3.12-only; the native ``bf_getbuffer`` slot is
+# universal on our ≥3.11 abi3 floor). The enforced copy-on-write lifetime
+# contract (PRD §9.4) lives in the Rust class: a live view keeps the bytes alive
+# past the Pixmap's GC, and in-place mutators copy-on-write under a live view.
+#
+# Construct a blank pixmap as ``Pixmap(colorspace, irect, alpha=False)`` where
+# ``colorspace`` is a component count (1/3/4) or a name string, or obtain one
+# from :meth:`Page.get_pixmap`. ``pix.samples`` is an owning ``bytes`` copy;
+# ``memoryview(pix)`` is the zero-copy path.
+Pixmap = _core.Pixmap
+
+
 class Page:
     """One page of a :class:`Document` (PyMuPDF ``fitz.Page``)."""
 
@@ -614,6 +630,46 @@ class Page:
     def get_images(self, full: bool = False) -> list[tuple]:
         """The page's images as PyMuPDF tuples (PyMuPDF ``page.get_images``)."""
         return self._page.get_images(full)
+
+    # --- get_pixmap (PRD §3.3 / §8.10) ---
+    def get_pixmap(
+        self,
+        *,
+        matrix=None,
+        dpi: int | None = None,
+        colorspace=None,
+        alpha: bool = False,
+        clip=None,
+    ) -> Pixmap:
+        """Renders the page to a :class:`Pixmap` (PyMuPDF ``page.get_pixmap``).
+
+        In scope (PRD §3.3) for image documents and **image-only PDF pages**
+        (the scanned-document case). A vector / text page raises
+        :class:`~oxipdf.PdfUnsupportedError` (real rasterization is M6).
+
+        ``matrix`` (a :class:`~oxipdf.Matrix` / 6-sequence) or ``dpi`` set the
+        output resolution; ``alpha`` adds an alpha channel. ``colorspace`` /
+        ``clip`` are accepted for parity (full conversion / clip is partial).
+        """
+        mtx = None
+        if matrix is not None:
+            m = tuple(float(v) for v in matrix)
+            if len(m) != 6:
+                raise ValueError("matrix must be a 6-sequence (a, b, c, d, e, f)")
+            mtx = m
+        cs = colorspace.n if hasattr(colorspace, "n") else colorspace
+        return self._page.get_pixmap(
+            matrix=mtx,
+            dpi=dpi,
+            colorspace=cs,
+            alpha=alpha,
+            clip=_as_clip(clip),
+        )
+
+    @property
+    def is_image_only(self) -> bool:
+        """Whether the page is image-only (in scope for ``get_pixmap``)."""
+        return self._page.is_image_only
 
     # --- links / labels / rotation (PRD §8.9) ---
     def get_links(self) -> list[dict]:
@@ -966,6 +1022,12 @@ class Page:
         return Widget(core) if core is not None else None
 
     # PyMuPDF deprecated camelCase aliases.
+    def getPixmap(self, *args, **kw) -> Pixmap:  # noqa: N802
+        return self.get_pixmap(*args, **kw)
+
+    def getImages(self, full: bool = False) -> list[tuple]:  # noqa: N802
+        return self.get_images(full)
+
     def getLinks(self) -> list[dict]:  # noqa: N802
         return self.get_links()
 
@@ -1167,6 +1229,21 @@ class Document:
 
     def xref_stream(self, xref: int) -> bytes:
         return self._doc.xref_stream(xref)
+
+    # --- extract_image (PRD §8.10) ---
+    def extract_image(self, xref: int) -> dict:
+        """The image XObject ``xref`` as a PyMuPDF-shaped dict (PyMuPDF
+        ``doc.extract_image``): ``ext``, ``colorspace``, ``bpc``, ``width``,
+        ``height``, ``n``, ``smask``, ``image`` (bytes)."""
+        return self._doc.extract_image(int(xref))
+
+    def get_page_pixmap(self, pno: int, **kw) -> Pixmap:
+        """Renders page ``pno`` to a :class:`Pixmap` (PyMuPDF
+        ``doc.get_page_pixmap``)."""
+        return self.load_page(int(pno)).get_pixmap(**kw)
+
+    def extractImage(self, xref: int) -> dict:  # noqa: N802
+        return self.extract_image(xref)
 
     # --- save (PRD §8.7 / §8.4) ---
     def save(

@@ -28,6 +28,7 @@
 
 pub mod codecs;
 pub mod error;
+pub mod getpixmap;
 pub mod imagedoc;
 pub mod pixmap;
 

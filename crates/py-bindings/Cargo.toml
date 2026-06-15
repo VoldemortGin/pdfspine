@@ -16,4 +16,9 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 pdf-api.workspace = true
-pyo3 = { workspace = true, features = ["abi3-py310", "extension-module"] }
+# abi3-py311 (not py310): the buffer-protocol slots (`bf_getbuffer` /
+# `bf_releasebuffer`) used by `Pixmap` (PRD §9.4) entered the stable ABI in
+# CPython 3.11, so a single abi3 wheel that ships the zero-copy buffer protocol
+# requires the 3.11 floor. The wheel still covers every supported (>=3.11)
+# interpreter from one artifact.
+pyo3 = { workspace = true, features = ["abi3-py311", "extension-module"] }
