@@ -536,6 +536,49 @@ impl PyAnnot {
         self.annot.update().map_err(map_err)
     }
 
+    /// The `(start, end)` line-ending style codes (PyMuPDF `Annot.line_ends`).
+    fn line_ends(&self) -> (i64, i64) {
+        self.annot.line_ends()
+    }
+
+    /// Sets the line-ending style codes `/LE` (PyMuPDF `Annot.set_line_ends`).
+    fn set_line_ends(&self, start: i64, end: i64) -> PyResult<()> {
+        self.annot.set_line_ends(start, end).map_err(map_err)
+    }
+
+    /// The blend mode `/BM`, if set (PyMuPDF `Annot.blendmode`).
+    #[getter]
+    fn blendmode(&self) -> Option<String> {
+        self.annot.blendmode()
+    }
+
+    /// Sets the blend mode `/BM` (PyMuPDF `Annot.set_blendmode`).
+    fn set_blendmode(&self, mode: &str) -> PyResult<()> {
+        self.annot.set_blendmode(mode).map_err(map_err)
+    }
+
+    /// Sets the icon / appearance `/Name` (PyMuPDF `Annot.set_name`).
+    fn set_name(&self, name: &str) -> PyResult<()> {
+        self.annot.set_name(name).map_err(map_err)
+    }
+
+    /// Whether the annotation is open `/Open` (PyMuPDF `Annot.is_open`).
+    #[getter]
+    fn is_open(&self) -> bool {
+        self.annot.is_open()
+    }
+
+    /// Sets the `/Open` flag (PyMuPDF `Annot.set_open`).
+    fn set_open(&self, open: bool) -> PyResult<()> {
+        self.annot.set_open(open).map_err(map_err)
+    }
+
+    /// The border `(width, style, dashes)` (PyMuPDF `Annot.border` dict). The
+    /// Python layer wraps this triple into the PyMuPDF dict shape.
+    fn border_tuple(&self) -> (f64, String, Vec<f64>) {
+        self.annot.border()
+    }
+
     fn __repr__(&self) -> String {
         format!(
             "<oxide_pdf._core.Annot type={} xref={}>",
@@ -1194,6 +1237,37 @@ impl PyPage {
             list.append(t)?;
         }
         Ok(list)
+    }
+
+    /// The per-image placement info on the page (PyMuPDF `page.get_image_info`).
+    /// Returns a list of dicts with `number`, `xref`, `name`, `inline`, `bbox`,
+    /// `width`, `height`, `bpc`, `cs-name`/`colorspace`, and `filter` keys.
+    fn get_image_info<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
+        let entries = pdf_api::get_image_info(&self.page);
+        let list = PyList::empty(py);
+        for e in entries {
+            let d = PyDict::new(py);
+            d.set_item("number", e.number)?;
+            d.set_item("xref", e.xref)?;
+            d.set_item("name", e.name)?;
+            d.set_item("inline", e.inline)?;
+            d.set_item("bbox", e.bbox)?;
+            d.set_item("width", e.width)?;
+            d.set_item("height", e.height)?;
+            d.set_item("bpc", e.bpc)?;
+            d.set_item("colorspace", e.colorspace.clone())?;
+            d.set_item("cs-name", e.colorspace)?;
+            d.set_item("filter", e.filter)?;
+            list.append(d)?;
+        }
+        Ok(list)
+    }
+
+    /// The device-space bbox of the image identified by `name_or_xref` (PyMuPDF
+    /// `page.get_image_bbox`). `name_or_xref` is a resource name or an xref
+    /// integer (as a string). Returns the `(x0, y0, x1, y1)` tuple or `None`.
+    fn get_image_bbox(&self, name_or_xref: &str) -> Option<(f64, f64, f64, f64)> {
+        pdf_api::get_image_bbox(&self.page, name_or_xref)
     }
 
     /// The object numbers of the page's content streams (PyMuPDF
@@ -1972,10 +2046,81 @@ impl PyDocument {
         self.doc.resolve_link(uri)
     }
 
-    /// Deep-copies the page at `pno` to the end of the document, returning the
-    /// new page's 0-based index (PyMuPDF `Document.fullcopy_page`).
-    fn fullcopy_page(&self, py: Python<'_>, pno: usize) -> PyResult<usize> {
-        py.detach(|| self.doc.fullcopy_page(pno)).map_err(map_err)
+    /// Deep-copies the page at `pno` and inserts the copy at `to` (PyMuPDF
+    /// `Document.fullcopy_page`); `to < 0` appends. Returns the new page's
+    /// 0-based index.
+    #[pyo3(signature = (pno, to=-1))]
+    fn fullcopy_page(&self, py: Python<'_>, pno: usize, to: i64) -> PyResult<usize> {
+        py.detach(|| self.doc.fullcopy_page_to(pno, to))
+            .map_err(map_err)
+    }
+
+    /// The `/MediaBox` of page `pno` as `(x0, y0, x1, y1)` (PyMuPDF
+    /// `Document.page_mediabox`).
+    fn page_mediabox(&self, pno: usize) -> PyResult<(f64, f64, f64, f64)> {
+        self.doc.page_mediabox(pno).map(rect_tuple).map_err(map_err)
+    }
+
+    /// The `/CropBox` of page `pno` as `(x0, y0, x1, y1)` (PyMuPDF
+    /// `Document.page_cropbox`).
+    fn page_cropbox(&self, pno: usize) -> PyResult<(f64, f64, f64, f64)> {
+        self.doc.page_cropbox(pno).map(rect_tuple).map_err(map_err)
+    }
+
+    /// Writes `/Root /PageLabels` from `specs` (PyMuPDF
+    /// `Document.set_page_labels`). Each spec is `(start_page, style, prefix,
+    /// first_value)`; `style` is `"D"|"r"|"R"|"a"|"A"` or `None`. An empty list
+    /// removes the page labels.
+    fn set_page_labels(&self, specs: Vec<(usize, Option<String>, String, i64)>) -> PyResult<()> {
+        self.doc.set_page_labels(&specs).map_err(map_err)
+    }
+
+    /// The glyph widths of the font object `xref` as `(glyph_id, width)` pairs
+    /// (PyMuPDF `Document.get_char_widths`). `width` is in text-space units
+    /// (em-relative, i.e. `/Widths / 1000`).
+    fn get_char_widths(&self, xref: u32) -> Vec<(i64, f64)> {
+        self.doc.get_char_widths(xref)
+    }
+
+    // --- undo/redo journal (PyMuPDF Document.journal_*) ------------------
+
+    /// Enables the undo/redo journal, recording the baseline state (PyMuPDF
+    /// `Document.journal_enable`).
+    fn journal_enable(&self) {
+        self.doc.journal_enable();
+    }
+
+    /// Whether the journal is enabled (PyMuPDF `Document.journal_is_enabled`).
+    fn journal_is_enabled(&self) -> bool {
+        self.doc.journal_is_enabled()
+    }
+
+    /// Records the current state as a journal checkpoint (collapsing PyMuPDF's
+    /// per-op model into an explicit save).
+    fn journal_save_state(&self) {
+        self.doc.journal_save_state();
+    }
+
+    /// Whether an undo is possible (PyMuPDF `Document.journal_can_do` undo).
+    fn journal_can_undo(&self) -> bool {
+        self.doc.journal_can_undo()
+    }
+
+    /// Whether a redo is possible (PyMuPDF `Document.journal_can_do` redo).
+    fn journal_can_redo(&self) -> bool {
+        self.doc.journal_can_redo()
+    }
+
+    /// Reverts to the previous journal checkpoint (PyMuPDF
+    /// `Document.journal_undo`). Returns `True` when a state was restored.
+    fn journal_undo(&self) -> bool {
+        self.doc.journal_undo()
+    }
+
+    /// Re-applies the next journal checkpoint (PyMuPDF `Document.journal_redo`).
+    /// Returns `True` when a state was restored.
+    fn journal_redo(&self) -> bool {
+        self.doc.journal_redo()
     }
 
     /// The chapter count — always `1` for PDF (PyMuPDF `Document.chapter_count`).
@@ -2637,6 +2782,12 @@ struct PyPixmap {
     /// itself rides on the `Arc` strong count, which the boxed clone bumps).
     /// Atomic so the `#[pyclass]` stays `Sync` (PyO3 0.29 requirement).
     exports: AtomicUsize,
+    /// The pixmap origin `(x, y)` (PyMuPDF `Pixmap.x` / `.y`). Pure metadata that
+    /// does not affect the samples; mirrors PyMuPDF's `set_origin`.
+    origin: (i64, i64),
+    /// The pixmap resolution `(xres, yres)` in DPI (PyMuPDF `Pixmap.xres` /
+    /// `.yres`). Pure metadata; mirrors PyMuPDF's `set_dpi`.
+    dpi: (i32, i32),
 }
 
 impl PyPixmap {
@@ -2644,6 +2795,8 @@ impl PyPixmap {
         PyPixmap {
             pix,
             exports: AtomicUsize::new(0),
+            origin: (0, 0),
+            dpi: (96, 96),
         }
     }
 }
@@ -2811,6 +2964,85 @@ impl PyPixmap {
     /// (PyMuPDF `Pixmap.shrink`).
     fn shrink(&mut self, factor: u8) {
         self.pix.shrink(factor);
+    }
+
+    /// The pixmap origin x (PyMuPDF `Pixmap.x`).
+    #[getter]
+    fn x(&self) -> i64 {
+        self.origin.0
+    }
+
+    /// The pixmap origin y (PyMuPDF `Pixmap.y`).
+    #[getter]
+    fn y(&self) -> i64 {
+        self.origin.1
+    }
+
+    /// Sets the pixmap origin `(x, y)` (PyMuPDF `Pixmap.set_origin`).
+    fn set_origin(&mut self, x: i64, y: i64) {
+        self.origin = (x, y);
+    }
+
+    /// The horizontal resolution in DPI (PyMuPDF `Pixmap.xres`).
+    #[getter]
+    fn xres(&self) -> i32 {
+        self.dpi.0
+    }
+
+    /// The vertical resolution in DPI (PyMuPDF `Pixmap.yres`).
+    #[getter]
+    fn yres(&self) -> i32 {
+        self.dpi.1
+    }
+
+    /// Sets the resolution `(xres, yres)` in DPI (PyMuPDF `Pixmap.set_dpi`).
+    fn set_dpi(&mut self, xres: i32, yres: i32) {
+        self.dpi = (xres, yres);
+    }
+
+    /// Maps colors so `black`→0 and `white`→full intensity (PyMuPDF
+    /// `Pixmap.tint_with`). `black`/`white` are packed `0xRRGGBB` ints. No-op for
+    /// CMYK pixmaps.
+    #[pyo3(signature = (black=0x000000, white=0xffffff))]
+    fn tint_with(&mut self, black: u32, white: u32) {
+        self.pix.tint_with(black, white);
+    }
+
+    /// Applies a gamma transform to the color channels (PyMuPDF
+    /// `Pixmap.gamma_with`). `gamma == 1.0` is a no-op.
+    fn gamma_with(&mut self, gamma: f64) {
+        self.pix.gamma_with(gamma);
+    }
+
+    /// The number of distinct colors, ignoring alpha (PyMuPDF
+    /// `Pixmap.color_count`).
+    fn color_count(&self) -> usize {
+        self.pix.color_count()
+    }
+
+    /// `(ratio, pixel)` of the most frequent color (PyMuPDF
+    /// `Pixmap.color_topusage`); `pixel` is the color-component bytes.
+    fn color_topusage<'py>(&self, py: Python<'py>) -> (f64, Bound<'py, PyBytes>) {
+        let (ratio, pixel) = self.pix.color_topusage();
+        (ratio, PyBytes::new(py, &pixel))
+    }
+
+    /// Whether the pixmap is pure black-and-white only (PyMuPDF
+    /// `Pixmap.is_monochrome`).
+    #[getter]
+    fn is_monochrome(&self) -> bool {
+        self.pix.is_monochrome()
+    }
+
+    /// Whether every pixel is the same color (PyMuPDF `Pixmap.is_unicolor`).
+    #[getter]
+    fn is_unicolor(&self) -> bool {
+        self.pix.is_unicolor()
+    }
+
+    /// A stable 16-byte content digest of the samples (PyMuPDF `Pixmap.digest`).
+    fn digest<'py>(&self, py: Python<'py>) -> Bound<'py, PyBytes> {
+        PyBytes::new(py, &self.pix.digest())
     }
 
     /// PNG (or `format`) bytes for the Pillow bridge (PyMuPDF

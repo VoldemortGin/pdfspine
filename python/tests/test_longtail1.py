@@ -295,10 +295,11 @@ def test_lt1_fullcopy_page_appends_independent():
     assert "AAA" in re[2].get_text()
 
 
-def test_lt1_fullcopy_page_to_unsupported():
-    doc = oxide_pdf.open(stream=multi_page_pdf(["A"]))
-    with pytest.raises(oxide_pdf.PdfUnsupportedError):
-        doc.fullcopy_page(0, to=0)
+def test_lt1_fullcopy_page_to_position():
+    # fullcopy_page now supports an explicit insert position (long-tail batch 2).
+    doc = oxide_pdf.open(stream=multi_page_pdf(["A", "B"]))
+    doc.fullcopy_page(0, to=1)
+    assert doc.page_count == 3
 
 
 # --- Document chapter / location model ------------------------------------

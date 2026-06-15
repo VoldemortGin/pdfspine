@@ -47,8 +47,8 @@ pub use pdf_crypto::{EncryptMethod, EncryptSpec};
 // these free functions (the orphan rule forbids inherent `impl Page` here, since
 // `Page` is defined in `pdf-core`).
 pub use text::{
-    get_fonts, get_image_rects, get_images, get_text, get_xobjects, search, textpage, FontInfo,
-    ImageInfo, ImageRect, TextOutput, XObjectInfo,
+    get_fonts, get_image_bbox, get_image_info, get_image_rects, get_images, get_text, get_xobjects,
+    search, textpage, FontInfo, ImageInfo, ImageInfoEntry, ImageRect, TextOutput, XObjectInfo,
 };
 
 // Image path (M5): `Pixmap`, `get_pixmap`, `extract_image`, image documents
@@ -106,6 +106,17 @@ pub struct Document {
     /// The ordered page list, cached for the fast read path and refreshed by
     /// [`Document::refresh_pages`] after any structural edit (PRD §8.7).
     pages: Arc<RwLock<Vec<ObjRef>>>,
+    /// The undo/redo journal of `ChangeSet` snapshots (PyMuPDF journalling).
+    /// `None` until [`Document::journal_enable`] turns it on.
+    journal: Arc<RwLock<Option<Journal>>>,
+}
+
+/// A simple snapshot-based undo/redo journal over the document's pending-edit
+/// overlay (PyMuPDF `Document.journal_*`). Each saved state is a full clone of
+/// the [`pdf_core::ChangeSet`]; `cursor` points at the currently-applied state.
+struct Journal {
+    states: Vec<pdf_core::ChangeSet>,
+    cursor: usize,
 }
 
 impl Document {
@@ -158,6 +169,7 @@ impl Document {
         Document {
             store,
             pages: Arc::new(RwLock::new(pages)),
+            journal: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -946,6 +958,223 @@ impl Document {
     pub fn last_location(&self) -> (usize, usize) {
         (0, self.page_count().saturating_sub(1))
     }
+
+    // --- page boxes / copy splice (PRD §8.7) ------------------------------
+
+    /// The `/MediaBox` of the page at `pno` (PyMuPDF `Document.page_mediabox`).
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Syntax`] when `pno` is out of range.
+    pub fn page_mediabox(&self, pno: usize) -> Result<Rect> {
+        let leaf = *self
+            .page_refs()
+            .get(pno)
+            .ok_or_else(|| Error::Syntax(format!("page index {pno} out of range")))?;
+        Ok(pdf_core::pagetree::mediabox(&self.store, leaf))
+    }
+
+    /// The `/CropBox` of the page at `pno` (PyMuPDF `Document.page_cropbox`).
+    /// Falls back to the media box when no crop box is set.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Syntax`] when `pno` is out of range.
+    pub fn page_cropbox(&self, pno: usize) -> Result<Rect> {
+        let leaf = *self
+            .page_refs()
+            .get(pno)
+            .ok_or_else(|| Error::Syntax(format!("page index {pno} out of range")))?;
+        Ok(pdf_core::pagetree::cropbox(&self.store, leaf))
+    }
+
+    /// Deep-copies the page at `pno` and inserts the copy at `to` (PyMuPDF
+    /// `Document.fullcopy_page` with an explicit position). `to < 0` (or any value
+    /// `>= page_count`) appends. Returns the new page's 0-based index.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Syntax`] for an out-of-range `pno`; propagates graft errors.
+    pub fn fullcopy_page_to(&self, pno: usize, to: i64) -> Result<usize> {
+        // Append the deep copy first (reuses the graft machinery), then move it
+        // into place if a finite, earlier position was requested.
+        let appended = self.fullcopy_page(pno)?;
+        let count = self.page_count();
+        if to < 0 {
+            return Ok(appended);
+        }
+        let to = to as usize;
+        if to >= count {
+            return Ok(appended);
+        }
+        let mut ed = pdf_edit::PageEditor::new(&self.store)?;
+        ed.move_page(appended, to)?;
+        self.refresh_pages();
+        Ok(to)
+    }
+
+    // --- page labels (PRD §8.9) -------------------------------------------
+
+    /// Writes `/Root /PageLabels` from `specs` (PyMuPDF
+    /// `Document.set_page_labels`). Each spec is `(start_page, style, prefix,
+    /// first_value)`; `style` is `"D"|"r"|"R"|"a"|"A"` or `None`. An empty slice
+    /// removes the page labels.
+    ///
+    /// # Errors
+    ///
+    /// Propagates object-edit errors.
+    pub fn set_page_labels(&self, specs: &[(usize, Option<String>, String, i64)]) -> Result<()> {
+        let labels: Vec<pdf_edit::LabelSpec> = specs
+            .iter()
+            .map(
+                |(start_page, style, prefix, first_value)| pdf_edit::LabelSpec {
+                    start_page: *start_page,
+                    style: style.clone(),
+                    prefix: prefix.clone(),
+                    first_value: *first_value,
+                },
+            )
+            .collect();
+        pdf_edit::set_labels(&self.store, &labels)?;
+        Ok(())
+    }
+
+    // --- char widths (PRD §8.6) -------------------------------------------
+
+    /// The glyph widths of the font object `xref` (PyMuPDF
+    /// `Document.get_char_widths`), as `(glyph_id, width)` pairs in `/Widths`
+    /// order. `width` is in text-space units (PDF `/Widths` are already 1/1000 em
+    /// scaled by `1000`; returned verbatim divided by `1000.0`). Returns an empty
+    /// list when the font has no `/Widths` array.
+    #[must_use]
+    pub fn get_char_widths(&self, xref: u32) -> Vec<(i64, f64)> {
+        let Ok(obj) = self.store.resolve(ObjRef::new(xref, 0)) else {
+            return Vec::new();
+        };
+        let Some(font) = obj.as_dict() else {
+            return Vec::new();
+        };
+        let first_char = font
+            .get(&Name::new("FirstChar"))
+            .and_then(Object::as_i64)
+            .unwrap_or(0);
+        let widths = match font.get(&Name::new("Widths")) {
+            Some(Object::Array(a)) => a.clone(),
+            Some(Object::Reference(r)) => self
+                .store
+                .resolve(*r)
+                .ok()
+                .and_then(|o| o.as_array().map(<[Object]>::to_vec))
+                .unwrap_or_default(),
+            _ => Vec::new(),
+        };
+        widths
+            .iter()
+            .enumerate()
+            .filter_map(|(i, w)| {
+                let width = w.as_f64()?;
+                Some((first_char + i as i64, width / 1000.0))
+            })
+            .collect()
+    }
+
+    // --- undo/redo journal (PyMuPDF Document.journal_*) -------------------
+
+    /// Enables the undo/redo journal, recording the current state as the baseline
+    /// (PyMuPDF `Document.journal_enable`). Idempotent re-enable resets it.
+    pub fn journal_enable(&self) {
+        let baseline = self.store.snapshot_changeset();
+        if let Ok(mut j) = self.journal.write() {
+            *j = Some(Journal {
+                states: vec![baseline],
+                cursor: 0,
+            });
+        }
+    }
+
+    /// Whether the journal is enabled (PyMuPDF `Document.journal_is_enabled`).
+    #[must_use]
+    pub fn journal_is_enabled(&self) -> bool {
+        self.journal.read().map(|j| j.is_some()).unwrap_or(false)
+    }
+
+    /// Records the current overlay as a new journal checkpoint, dropping any redo
+    /// tail (PyMuPDF's per-op recording, collapsed to an explicit checkpoint). A
+    /// no-op when the journal is disabled.
+    pub fn journal_save_state(&self) {
+        let snap = self.store.snapshot_changeset();
+        if let Ok(mut guard) = self.journal.write() {
+            if let Some(j) = guard.as_mut() {
+                j.states.truncate(j.cursor + 1);
+                j.states.push(snap);
+                j.cursor = j.states.len() - 1;
+            }
+        }
+    }
+
+    /// Whether an undo is possible (PyMuPDF `Document.journal_can_do["undo"]`).
+    #[must_use]
+    pub fn journal_can_undo(&self) -> bool {
+        self.journal
+            .read()
+            .ok()
+            .and_then(|g| g.as_ref().map(|j| j.cursor > 0))
+            .unwrap_or(false)
+    }
+
+    /// Whether a redo is possible (PyMuPDF `Document.journal_can_do["redo"]`).
+    #[must_use]
+    pub fn journal_can_redo(&self) -> bool {
+        self.journal
+            .read()
+            .ok()
+            .and_then(|g| g.as_ref().map(|j| j.cursor + 1 < j.states.len()))
+            .unwrap_or(false)
+    }
+
+    /// Reverts to the previous journal checkpoint (PyMuPDF
+    /// `Document.journal_undo`). Returns `true` when a state was restored.
+    pub fn journal_undo(&self) -> bool {
+        let target = {
+            let mut guard = match self.journal.write() {
+                Ok(g) => g,
+                Err(_) => return false,
+            };
+            let Some(j) = guard.as_mut() else {
+                return false;
+            };
+            if j.cursor == 0 {
+                return false;
+            }
+            j.cursor -= 1;
+            j.states[j.cursor].clone()
+        };
+        self.store.restore_changeset(target);
+        self.refresh_pages();
+        true
+    }
+
+    /// Re-applies the next journal checkpoint (PyMuPDF `Document.journal_redo`).
+    /// Returns `true` when a state was restored.
+    pub fn journal_redo(&self) -> bool {
+        let target = {
+            let mut guard = match self.journal.write() {
+                Ok(g) => g,
+                Err(_) => return false,
+            };
+            let Some(j) = guard.as_mut() else {
+                return false;
+            };
+            if j.cursor + 1 >= j.states.len() {
+                return false;
+            }
+            j.cursor += 1;
+            j.states[j.cursor].clone()
+        };
+        self.store.restore_changeset(target);
+        self.refresh_pages();
+        true
+    }
 }
 
 // --- page-level edit free functions (PRD §8.9) ---------------------------
@@ -1225,6 +1454,71 @@ impl AnnotHandle {
     pub fn update(&self) -> Result<()> {
         self.annot().update()?;
         Ok(())
+    }
+
+    /// The `(start, end)` line-ending style codes `/LE` (PyMuPDF
+    /// `Annot.line_ends`).
+    #[must_use]
+    pub fn line_ends(&self) -> (i64, i64) {
+        self.annot().line_ends()
+    }
+
+    /// Sets the line-ending style codes `/LE` (PyMuPDF `Annot.set_line_ends`).
+    ///
+    /// # Errors
+    ///
+    /// Propagates object-edit errors.
+    pub fn set_line_ends(&self, start: i64, end: i64) -> Result<()> {
+        self.annot().set_line_ends(start, end)?;
+        Ok(())
+    }
+
+    /// The blend mode `/BM` name, if set (PyMuPDF `Annot.blendmode`).
+    #[must_use]
+    pub fn blendmode(&self) -> Option<String> {
+        self.annot().blendmode()
+    }
+
+    /// Sets the blend mode `/BM` (PyMuPDF `Annot.set_blendmode`).
+    ///
+    /// # Errors
+    ///
+    /// Propagates object-edit errors.
+    pub fn set_blendmode(&self, mode: &str) -> Result<()> {
+        self.annot().set_blendmode(mode)?;
+        Ok(())
+    }
+
+    /// Sets the icon / appearance `/Name` (PyMuPDF `Annot.set_name`).
+    ///
+    /// # Errors
+    ///
+    /// Propagates object-edit errors.
+    pub fn set_name(&self, name: &str) -> Result<()> {
+        self.annot().set_name(name)?;
+        Ok(())
+    }
+
+    /// Whether the annotation is open `/Open` (PyMuPDF `Annot.is_open`).
+    #[must_use]
+    pub fn is_open(&self) -> bool {
+        self.annot().is_open()
+    }
+
+    /// Sets the `/Open` flag (PyMuPDF `Annot.set_open`).
+    ///
+    /// # Errors
+    ///
+    /// Propagates object-edit errors.
+    pub fn set_open(&self, open: bool) -> Result<()> {
+        self.annot().set_open(open)?;
+        Ok(())
+    }
+
+    /// The border `(width, style, dashes)` (PyMuPDF `Annot.border` dict).
+    #[must_use]
+    pub fn border(&self) -> (f64, String, Vec<f64>) {
+        self.annot().border()
     }
 }
 
@@ -2116,6 +2410,19 @@ pub fn page_get_xobjects(page: &Page) -> Vec<XObjectInfo> {
 #[must_use]
 pub fn page_get_image_rects(page: &Page) -> Vec<ImageRect> {
     get_image_rects(page)
+}
+
+/// The per-image placement info dicts on `page` (PyMuPDF `Page.get_image_info()`).
+#[must_use]
+pub fn page_get_image_info(page: &Page) -> Vec<ImageInfoEntry> {
+    get_image_info(page)
+}
+
+/// The device-space bbox of the image identified by `name_or_xref` (PyMuPDF
+/// `Page.get_image_bbox()`).
+#[must_use]
+pub fn page_get_image_bbox(page: &Page, name_or_xref: &str) -> Option<(f64, f64, f64, f64)> {
+    get_image_bbox(page, name_or_xref)
 }
 
 /// The object numbers of `page`'s content streams, in order (PyMuPDF

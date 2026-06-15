@@ -29,10 +29,10 @@
 baseline = "1.24.x"
 baseline_detail = "PyMuPDF 1.24.14 / MuPDF 1.24.11"
 total = 769
-implemented = 368
-deferred = 328
-out_of_scope = 73
-coverage_pct = 47.9
+implemented = 398
+deferred = 304
+out_of_scope = 67
+coverage_pct = 51.8
 
 # ── Matrix ──
 [[symbol]]
@@ -1236,6 +1236,13 @@ disposition = "implemented"
 milestone = "M3"
 
 [[symbol]]
+name = "Document.page_cropbox"
+group = "Document"
+disposition = "implemented"
+milestone = "M3"
+note = "per-page /CropBox accessor"
+
+[[symbol]]
 name = "Document.insert_page"
 group = "Document"
 disposition = "deferred"
@@ -1255,12 +1262,6 @@ milestone = "M3"
 
 [[symbol]]
 name = "Document.delete_pages"
-group = "Document"
-disposition = "deferred"
-milestone = "M3"
-
-[[symbol]]
-name = "Document.page_cropbox"
 group = "Document"
 disposition = "deferred"
 milestone = "M3"
@@ -1623,8 +1624,9 @@ milestone = "M5"
 [[symbol]]
 name = "Document.get_char_widths"
 group = "Document"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M2"
+note = "font /Widths → (glyph, width) pairs"
 
 [[symbol]]
 name = "Document.bake"
@@ -1895,9 +1897,9 @@ milestone = "M3"
 [[symbol]]
 name = "Document.set_page_labels"
 group = "Document"
-disposition = "out-of-scope"
-milestone = "post-v1"
-note = "page-label write deferred (PRD §3.2 #5)"
+disposition = "implemented"
+milestone = "M3"
+note = "writes /Root /PageLabels number tree"
 
 [[symbol]]
 name = "Document.get_page_text"
@@ -1958,79 +1960,79 @@ milestone = "M4"
 [[symbol]]
 name = "Document.journal_enable"
 group = "Document"
-disposition = "out-of-scope"
-milestone = "post-v1"
-note = "journalling out of scope (PRD §3.2 #5)"
+disposition = "implemented"
+milestone = "M3"
+note = "ChangeSet-snapshot undo/redo (enable/checkpoint/undo/redo/can_do)"
 
 [[symbol]]
 name = "Document.journal_is_enabled"
 group = "Document"
-disposition = "out-of-scope"
-milestone = "post-v1"
-note = "journalling out of scope (PRD §3.2 #5)"
+disposition = "implemented"
+milestone = "M3"
+note = "ChangeSet-snapshot undo/redo (enable/checkpoint/undo/redo/can_do)"
+
+[[symbol]]
+name = "Document.journal_undo"
+group = "Document"
+disposition = "implemented"
+milestone = "M3"
+note = "ChangeSet-snapshot undo/redo (enable/checkpoint/undo/redo/can_do)"
+
+[[symbol]]
+name = "Document.journal_redo"
+group = "Document"
+disposition = "implemented"
+milestone = "M3"
+note = "ChangeSet-snapshot undo/redo (enable/checkpoint/undo/redo/can_do)"
+
+[[symbol]]
+name = "Document.journal_can_do"
+group = "Document"
+disposition = "implemented"
+milestone = "M3"
+note = "ChangeSet-snapshot undo/redo (enable/checkpoint/undo/redo/can_do)"
 
 [[symbol]]
 name = "Document.journal_start_op"
 group = "Document"
 disposition = "out-of-scope"
 milestone = "post-v1"
-note = "journalling out of scope (PRD §3.2 #5)"
+note = "per-op naming + journal persistence out of scope (PRD §3.2 #5)"
 
 [[symbol]]
 name = "Document.journal_stop_op"
 group = "Document"
 disposition = "out-of-scope"
 milestone = "post-v1"
-note = "journalling out of scope (PRD §3.2 #5)"
-
-[[symbol]]
-name = "Document.journal_undo"
-group = "Document"
-disposition = "out-of-scope"
-milestone = "post-v1"
-note = "journalling out of scope (PRD §3.2 #5)"
-
-[[symbol]]
-name = "Document.journal_redo"
-group = "Document"
-disposition = "out-of-scope"
-milestone = "post-v1"
-note = "journalling out of scope (PRD §3.2 #5)"
-
-[[symbol]]
-name = "Document.journal_can_do"
-group = "Document"
-disposition = "out-of-scope"
-milestone = "post-v1"
-note = "journalling out of scope (PRD §3.2 #5)"
+note = "per-op naming + journal persistence out of scope (PRD §3.2 #5)"
 
 [[symbol]]
 name = "Document.journal_op_name"
 group = "Document"
 disposition = "out-of-scope"
 milestone = "post-v1"
-note = "journalling out of scope (PRD §3.2 #5)"
+note = "per-op naming + journal persistence out of scope (PRD §3.2 #5)"
 
 [[symbol]]
 name = "Document.journal_position"
 group = "Document"
 disposition = "out-of-scope"
 milestone = "post-v1"
-note = "journalling out of scope (PRD §3.2 #5)"
+note = "per-op naming + journal persistence out of scope (PRD §3.2 #5)"
 
 [[symbol]]
 name = "Document.journal_save"
 group = "Document"
 disposition = "out-of-scope"
 milestone = "post-v1"
-note = "journalling out of scope (PRD §3.2 #5)"
+note = "per-op naming + journal persistence out of scope (PRD §3.2 #5)"
 
 [[symbol]]
 name = "Document.journal_load"
 group = "Document"
 disposition = "out-of-scope"
 milestone = "post-v1"
-note = "journalling out of scope (PRD §3.2 #5)"
+note = "per-op naming + journal persistence out of scope (PRD §3.2 #5)"
 
 [[symbol]]
 name = "Document.pdfocr_save"
@@ -2249,14 +2251,16 @@ milestone = "M2"
 [[symbol]]
 name = "Page.get_image_info"
 group = "Page"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M2"
+note = "per-image placement dicts / single-image bbox lookup"
 
 [[symbol]]
 name = "Page.get_image_bbox"
 group = "Page"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M2"
+note = "per-image placement dicts / single-image bbox lookup"
 
 [[symbol]]
 name = "Page.draw_line"
@@ -3005,26 +3009,93 @@ milestone = "M5"
 [[symbol]]
 name = "Pixmap.set_origin"
 group = "Pixmap"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M5"
+note = "pure-pixel ops + origin/dpi metadata + stable-hash digest"
 
 [[symbol]]
 name = "Pixmap.set_dpi"
 group = "Pixmap"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M5"
+note = "pure-pixel ops + origin/dpi metadata + stable-hash digest"
 
 [[symbol]]
 name = "Pixmap.tint_with"
 group = "Pixmap"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M5"
+note = "pure-pixel ops + origin/dpi metadata + stable-hash digest"
 
 [[symbol]]
 name = "Pixmap.gamma_with"
 group = "Pixmap"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M5"
+note = "pure-pixel ops + origin/dpi metadata + stable-hash digest"
+
+[[symbol]]
+name = "Pixmap.color_count"
+group = "Pixmap"
+disposition = "implemented"
+milestone = "M5"
+note = "pure-pixel ops + origin/dpi metadata + stable-hash digest"
+
+[[symbol]]
+name = "Pixmap.color_topusage"
+group = "Pixmap"
+disposition = "implemented"
+milestone = "M5"
+note = "pure-pixel ops + origin/dpi metadata + stable-hash digest"
+
+[[symbol]]
+name = "Pixmap.x"
+group = "Pixmap"
+disposition = "implemented"
+milestone = "M5"
+note = "pure-pixel ops + origin/dpi metadata + stable-hash digest"
+
+[[symbol]]
+name = "Pixmap.y"
+group = "Pixmap"
+disposition = "implemented"
+milestone = "M5"
+note = "pure-pixel ops + origin/dpi metadata + stable-hash digest"
+
+[[symbol]]
+name = "Pixmap.digest"
+group = "Pixmap"
+disposition = "implemented"
+milestone = "M5"
+note = "pure-pixel ops + origin/dpi metadata + stable-hash digest"
+
+[[symbol]]
+name = "Pixmap.xres"
+group = "Pixmap"
+disposition = "implemented"
+milestone = "M5"
+note = "pure-pixel ops + origin/dpi metadata + stable-hash digest"
+
+[[symbol]]
+name = "Pixmap.yres"
+group = "Pixmap"
+disposition = "implemented"
+milestone = "M5"
+note = "pure-pixel ops + origin/dpi metadata + stable-hash digest"
+
+[[symbol]]
+name = "Pixmap.is_monochrome"
+group = "Pixmap"
+disposition = "implemented"
+milestone = "M5"
+note = "pure-pixel ops + origin/dpi metadata + stable-hash digest"
+
+[[symbol]]
+name = "Pixmap.is_unicolor"
+group = "Pixmap"
+disposition = "implemented"
+milestone = "M5"
+note = "pure-pixel ops + origin/dpi metadata + stable-hash digest"
 
 [[symbol]]
 name = "Pixmap.warp"
@@ -3033,61 +3104,7 @@ disposition = "deferred"
 milestone = "M5"
 
 [[symbol]]
-name = "Pixmap.color_count"
-group = "Pixmap"
-disposition = "deferred"
-milestone = "M5"
-
-[[symbol]]
-name = "Pixmap.color_topusage"
-group = "Pixmap"
-disposition = "deferred"
-milestone = "M5"
-
-[[symbol]]
 name = "Pixmap.samples_ptr"
-group = "Pixmap"
-disposition = "deferred"
-milestone = "M5"
-
-[[symbol]]
-name = "Pixmap.x"
-group = "Pixmap"
-disposition = "deferred"
-milestone = "M5"
-
-[[symbol]]
-name = "Pixmap.y"
-group = "Pixmap"
-disposition = "deferred"
-milestone = "M5"
-
-[[symbol]]
-name = "Pixmap.digest"
-group = "Pixmap"
-disposition = "deferred"
-milestone = "M5"
-
-[[symbol]]
-name = "Pixmap.xres"
-group = "Pixmap"
-disposition = "deferred"
-milestone = "M5"
-
-[[symbol]]
-name = "Pixmap.yres"
-group = "Pixmap"
-disposition = "deferred"
-milestone = "M5"
-
-[[symbol]]
-name = "Pixmap.is_monochrome"
-group = "Pixmap"
-disposition = "deferred"
-milestone = "M5"
-
-[[symbol]]
-name = "Pixmap.is_unicolor"
 group = "Pixmap"
 disposition = "deferred"
 milestone = "M5"
@@ -3230,49 +3247,56 @@ disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
-name = "Annot.set_rotation"
-group = "Annot"
-disposition = "deferred"
-milestone = "M4"
-
-[[symbol]]
 name = "Annot.set_line_ends"
 group = "Annot"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
+note = "/LE, /BM, /Name, /Open getters+setters"
 
 [[symbol]]
 name = "Annot.line_ends"
 group = "Annot"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
+note = "/LE, /BM, /Name, /Open getters+setters"
 
 [[symbol]]
 name = "Annot.set_blendmode"
 group = "Annot"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
+note = "/LE, /BM, /Name, /Open getters+setters"
 
 [[symbol]]
 name = "Annot.blendmode"
 group = "Annot"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
+note = "/LE, /BM, /Name, /Open getters+setters"
 
 [[symbol]]
 name = "Annot.set_name"
 group = "Annot"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
+note = "/LE, /BM, /Name, /Open getters+setters"
 
 [[symbol]]
 name = "Annot.set_open"
 group = "Annot"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
+note = "/LE, /BM, /Name, /Open getters+setters"
 
 [[symbol]]
 name = "Annot.is_open"
+group = "Annot"
+disposition = "implemented"
+milestone = "M4"
+note = "/LE, /BM, /Name, /Open getters+setters"
+
+[[symbol]]
+name = "Annot.set_rotation"
 group = "Annot"
 disposition = "deferred"
 milestone = "M4"

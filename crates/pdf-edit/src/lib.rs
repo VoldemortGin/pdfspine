@@ -60,7 +60,7 @@ pub use merge::{extract_pages, insert_pdf, show_pdf_page, InsertOptions};
 pub use metadata::{get_xml_metadata, set_metadata, set_xml_metadata};
 pub use ocg::{add_ocg, set_layer, set_layer_state, set_oc};
 pub use page_ops::PageEditor;
-pub use pagelabel::get_label;
+pub use pagelabel::{get_label, set_labels, LabelSpec};
 pub use redact::apply_redactions;
 pub use scrub::{bake, scrub, ScrubOptions};
 pub use text::{insert_text, insert_textbox, Align, TextOptions};

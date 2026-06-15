@@ -6,7 +6,7 @@
 //! physical page is `prefix + format(style, start + offset_within_range)`.
 
 use pdf_core::object::Name;
-use pdf_core::{DocumentStore, ObjRef, Object};
+use pdf_core::{Dict, DocumentStore, ObjRef, Object, PdfString, Result, StringKind};
 
 /// One `/PageLabels` range: the first physical page it applies to plus its
 /// numbering dictionary fields.
@@ -46,6 +46,88 @@ pub fn get_label(doc: &DocumentStore, index: usize) -> String {
         out.push_str(&format_value(style, value));
     }
     out
+}
+
+/// One page-label range to write (PyMuPDF set_page_labels spec entry).
+#[derive(Clone, Debug)]
+pub struct LabelSpec {
+    pub start_page: usize,     // 0-based physical page where this range begins
+    pub style: Option<String>, // "D"|"r"|"R"|"a"|"A" or None (no numeric part)
+    pub prefix: String,        // may be empty
+    pub first_value: i64,      // /St start value (default 1)
+}
+
+/// Writes /Root /PageLabels as a flat number tree (a single /Nums array) from
+/// the given ranges (PyMuPDF Document.set_page_labels). Ranges are sorted by
+/// start_page. An empty slice removes /PageLabels. (PRD §8.9)
+///
+/// # Errors
+///
+/// Propagates [`pdf_core::Error`] from the object-edit path, or
+/// [`pdf_core::Error::InvalidArgument`] if the document has no catalog.
+pub fn set_labels(doc: &DocumentStore, specs: &[LabelSpec]) -> Result<()> {
+    let root = doc
+        .root()
+        .ok_or(pdf_core::Error::InvalidArgument("document has no /Root"))?;
+    let mut catalog = catalog_dict(doc).ok_or(pdf_core::Error::InvalidArgument(
+        "/Root is not a dictionary",
+    ))?;
+
+    if specs.is_empty() {
+        catalog.remove(&Name::new("PageLabels"));
+        doc.update_object(root, Object::Dictionary(catalog))?;
+        return Ok(());
+    }
+
+    let mut specs: Vec<LabelSpec> = specs.to_vec();
+    specs.sort_by_key(|s| s.start_page);
+
+    let mut nums: Vec<Object> = Vec::with_capacity(specs.len() * 2);
+    for spec in &specs {
+        nums.push(Object::Integer(spec.start_page as i64));
+        let mut d = Dict::new();
+        if let Some(style) = &spec.style {
+            d.insert(Name::new("S"), Object::Name(Name::new(style.as_str())));
+        }
+        if !spec.prefix.is_empty() {
+            d.insert(
+                Name::new("P"),
+                Object::String(encode_text_string(&spec.prefix)),
+            );
+        }
+        if spec.first_value != 1 {
+            d.insert(Name::new("St"), Object::Integer(spec.first_value));
+        }
+        nums.push(Object::Dictionary(d));
+    }
+
+    let mut tree = Dict::new();
+    tree.insert(Name::new("Nums"), Object::Array(nums));
+    let tree_ref = doc.add_object(Object::Dictionary(tree))?;
+
+    catalog.insert(Name::new("PageLabels"), Object::Reference(tree_ref));
+    doc.update_object(root, Object::Dictionary(catalog))?;
+    Ok(())
+}
+
+/// Encodes a `/P` prefix as a PDF text string: ASCII → Latin-1 literal bytes;
+/// non-ASCII → UTF-16BE with the `FE FF` BOM (matches [`decode_text`]).
+fn encode_text_string(s: &str) -> PdfString {
+    if s.is_ascii() {
+        PdfString {
+            bytes: s.as_bytes().to_vec(),
+            kind: StringKind::Literal,
+        }
+    } else {
+        let mut bytes = vec![0xFE, 0xFF];
+        for u in s.encode_utf16() {
+            bytes.extend_from_slice(&u.to_be_bytes());
+        }
+        PdfString {
+            bytes,
+            kind: StringKind::Literal,
+        }
+    }
 }
 
 /// Reads + sorts the `/PageLabels` number-tree ranges. Empty when absent.
@@ -210,4 +292,92 @@ fn deref(doc: &DocumentStore, obj: &Object) -> Object {
 fn catalog_dict(doc: &DocumentStore) -> Option<pdf_core::Dict> {
     let root: ObjRef = doc.root()?;
     doc.resolve(root).ok()?.as_dict().cloned()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pdf_core::Limits;
+
+    /// A minimal catalog-only PDF: labels live at the catalog level, so no real
+    /// page tree is needed for `get_label`/`set_labels` round-trips.
+    fn minimal_pdf() -> Vec<u8> {
+        let mut out = Vec::new();
+        out.extend_from_slice(b"%PDF-1.7\n%\xE2\xE3\xCF\xD3\n");
+        let mut offsets = Vec::new();
+
+        offsets.push((1u32, out.len()));
+        out.extend_from_slice(b"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+        offsets.push((2u32, out.len()));
+        out.extend_from_slice(b"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n");
+        offsets.push((3u32, out.len()));
+        out.extend_from_slice(
+            b"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>\nendobj\n",
+        );
+
+        let startxref = out.len();
+        out.extend_from_slice(b"xref\n0 4\n");
+        out.extend_from_slice(b"0000000000 65535 f \n");
+        let mut map = std::collections::HashMap::new();
+        for (num, off) in &offsets {
+            map.insert(*num, *off);
+        }
+        for num in 1..4u32 {
+            out.extend_from_slice(format!("{:010} 00000 n \n", map[&num]).as_bytes());
+        }
+        out.extend_from_slice(b"trailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n");
+        out.extend_from_slice(format!("{startxref}\n").as_bytes());
+        out.extend_from_slice(b"%%EOF\n");
+        out
+    }
+
+    fn doc() -> DocumentStore {
+        DocumentStore::from_bytes(minimal_pdf(), Limits::default()).unwrap()
+    }
+
+    #[test]
+    fn set_labels_round_trips_through_get_label() {
+        let doc = doc();
+        let specs = vec![
+            LabelSpec {
+                start_page: 0,
+                style: Some("r".to_string()),
+                prefix: String::new(),
+                first_value: 1,
+            },
+            LabelSpec {
+                start_page: 3,
+                style: Some("D".to_string()),
+                prefix: "A-".to_string(),
+                first_value: 1,
+            },
+        ];
+        set_labels(&doc, &specs).unwrap();
+
+        // Lowercase-roman range starting at page 0.
+        assert_eq!(get_label(&doc, 0), "i");
+        assert_eq!(get_label(&doc, 2), "iii");
+        // Decimal range with prefix starting at page 3.
+        assert_eq!(get_label(&doc, 3), "A-1");
+        assert_eq!(get_label(&doc, 4), "A-2");
+    }
+
+    #[test]
+    fn empty_specs_removes_labels() {
+        let doc = doc();
+        set_labels(
+            &doc,
+            &[LabelSpec {
+                start_page: 0,
+                style: Some("D".to_string()),
+                prefix: String::new(),
+                first_value: 1,
+            }],
+        )
+        .unwrap();
+        assert_eq!(get_label(&doc, 0), "1");
+
+        set_labels(&doc, &[]).unwrap();
+        assert_eq!(get_label(&doc, 0), "");
+    }
 }

@@ -114,8 +114,9 @@ add("Document.save_snapshot", "Document", OUT_OF_SCOPE, "post-v1", "journalling 
 add_many("Document", IMPLEMENTED, "M1", ["load_page", "__getitem__", "pages", "page_count"])
 add_many("Document", IMPLEMENTED, "M3", ["new_page", "insert_pdf", "delete_page", "select"])
 add_many("Document", IMPLEMENTED, "M3", ["fullcopy_page", "reload_page", "page_xref"])
+add_many("Document", IMPLEMENTED, "M3", ["page_cropbox"], "per-page /CropBox accessor")
 add_many("Document", DEFERRED, "M3", [
-    "insert_page", "copy_page", "move_page", "delete_pages", "page_cropbox",
+    "insert_page", "copy_page", "move_page", "delete_pages",
 ])
 add("Document.insert_file", "Document", DEFERRED, "M5", "image inputs in scope; non-image unsupported")
 add("Document.layout", "Document", OUT_OF_SCOPE, "out-of-scope", "EPUB-class reflow (PRD §3.2 #8)")
@@ -161,7 +162,7 @@ add_many("Document", IMPLEMENTED, "M4", [
 ])
 add_many("Document", DEFERRED, "M4", ["embfile_upd"])
 add_many("Document", DEFERRED, "M5", ["extract_font", "extract_image", "subset_fonts"])
-add_many("Document", DEFERRED, "M2", ["get_char_widths"])
+add_many("Document", IMPLEMENTED, "M2", ["get_char_widths"], "font /Widths → (glyph, width) pairs")
 add_many("Document", IMPLEMENTED, "M4", ["bake", "scrub"])
 add("Document.resolve_link", "Document", IMPLEMENTED, "M3", "URI fragment / named-destination → page index")
 add_many("Document", DEFERRED, "M3", [
@@ -191,7 +192,7 @@ add_many("Document", DEFERRED, "post-v1", [
 add_many("Document", DEFERRED, "M3", [
     "get_page_labels", "get_page_numbers", "get_label", "get_page_label",
 ])
-add("Document.set_page_labels", "Document", OUT_OF_SCOPE, "post-v1", "page-label write deferred (PRD §3.2 #5)")
+add("Document.set_page_labels", "Document", IMPLEMENTED, "M3", "writes /Root /PageLabels number tree")
 # Document-wide page-content helpers
 add_many("Document", IMPLEMENTED, "M2", ["get_page_text"])
 add("Document.get_page_pixmap", "Document", DEFERRED, "M5", "image-only path in scope; vector unsupported")
@@ -203,12 +204,15 @@ add_many("Document", DEFERRED, "M2", [
 add_many("Document", IMPLEMENTED, "M4", [
     "form_field_names", "form_fill", "form_flatten",
 ])
-# Journalling — out of scope
+# Journalling — minimal snapshot-based undo/redo (M3)
+add_many("Document", IMPLEMENTED, "M3", [
+    "journal_enable", "journal_is_enabled", "journal_undo", "journal_redo",
+    "journal_can_do",
+], "ChangeSet-snapshot undo/redo (enable/checkpoint/undo/redo/can_do)")
 add_many("Document", OUT_OF_SCOPE, "post-v1", [
-    "journal_enable", "journal_is_enabled", "journal_start_op",
-    "journal_stop_op", "journal_undo", "journal_redo", "journal_can_do",
+    "journal_start_op", "journal_stop_op",
     "journal_op_name", "journal_position", "journal_save", "journal_load",
-], "journalling out of scope (PRD §3.2 #5)")
+], "per-op naming + journal persistence out of scope (PRD §3.2 #5)")
 
 # ---------------------------------------------------------------------------
 # 3. Page
@@ -237,9 +241,9 @@ add_many("Page", IMPLEMENTED, "M2", ["get_fonts", "get_images"])
 add_many("Page", DEFERRED, "M4", ["get_bboxlog", "cluster_drawings"])
 add("Page.find_tables", "Page", IMPLEMENTED, "M7", "table detection: lines/lines_strict/text strategies (M7)")
 add_many("Page", IMPLEMENTED, "M2", ["get_image_rects", "get_xobjects"])
-add_many("Page", DEFERRED, "M2", [
+add_many("Page", IMPLEMENTED, "M2", [
     "get_image_info", "get_image_bbox",
-])
+], "per-image placement dicts / single-image bbox lookup")
 # Drawing primitives
 add_many("Page", IMPLEMENTED, "M4", [
     "draw_line", "draw_rect", "draw_circle", "draw_oval", "draw_bezier",
@@ -312,10 +316,13 @@ add_many("Pixmap", IMPLEMENTED, "M5", [
     "samples", "samples_mv", "stride", "width", "height", "w", "h",
     "irect", "n", "alpha", "colorspace", "size",
 ])
+add_many("Pixmap", IMPLEMENTED, "M5", [
+    "set_origin", "set_dpi", "tint_with", "gamma_with", "color_count",
+    "color_topusage", "x", "y", "digest", "xres", "yres",
+    "is_monochrome", "is_unicolor",
+], "pure-pixel ops + origin/dpi metadata + stable-hash digest")
 add_many("Pixmap", DEFERRED, "M5", [
-    "set_origin", "set_dpi", "tint_with", "gamma_with", "warp", "color_count",
-    "color_topusage", "samples_ptr", "x", "y", "digest", "xres", "yres",
-    "is_monochrome", "is_unicolor", "__array_interface__",
+    "warp", "samples_ptr", "__array_interface__",
 ])
 add_many("Pixmap", IMPLEMENTED, "M5", [
     "pil_save", "pil_tobytes",
@@ -339,9 +346,12 @@ add_many("Annot", IMPLEMENTED, "M4", [
     "set_border", "border", "set_flags", "flags", "set_info", "info",
     "type", "rect", "xref", "vertices", "has_ap",
 ])
+add_many("Annot", IMPLEMENTED, "M4", [
+    "set_line_ends", "line_ends", "set_blendmode", "blendmode",
+    "set_name", "set_open", "is_open",
+], "/LE, /BM, /Name, /Open getters+setters")
 add_many("Annot", DEFERRED, "M4", [
-    "set_rotation", "set_line_ends", "line_ends", "set_blendmode", "blendmode",
-    "set_name", "set_open", "is_open", "set_popup", "popup_rect", "popup_xref",
+    "set_rotation", "set_popup", "popup_rect", "popup_xref",
     "has_popup", "set_apn_bbox", "apn_bbox", "set_apn_matrix", "apn_matrix",
     "set_irt_xref", "irt_xref", "delete_responses", "get_text", "get_textbox",
     "get_textpage", "get_file", "update_file", "file_info", "clean_contents",

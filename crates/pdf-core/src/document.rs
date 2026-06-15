@@ -951,6 +951,20 @@ impl DocumentStore {
         self.changes.read().ok().and_then(|c| c.get(num).cloned())
     }
 
+    /// A deep clone of the pending-edit overlay for journal snapshotting
+    /// (PyMuPDF journalling).
+    #[must_use]
+    pub fn snapshot_changeset(&self) -> ChangeSet {
+        self.changes.read().map(|c| c.clone()).unwrap_or_default()
+    }
+
+    /// Restores a previously snapshotted overlay (journal undo/redo).
+    pub fn restore_changeset(&self, snap: ChangeSet) {
+        if let Ok(mut c) = self.changes.write() {
+            *c = snap;
+        }
+    }
+
     // --- full save (PRD §8.7) ---------------------------------------------
 
     /// Serializes the whole effective document (original live objects overlaid by
@@ -1219,4 +1233,75 @@ fn parse_version_name(bytes: &[u8]) -> Option<Version> {
     }
     let minor = bytes[2].checked_sub(b'0').filter(|&d| d <= 9)?;
     Some(Version { major, minor })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A minimal one-page PDF skeleton sufficient for the change-set tests.
+    fn minimal_pdf() -> Vec<u8> {
+        let mut out = Vec::new();
+        out.extend_from_slice(b"%PDF-1.7\n%\xE2\xE3\xCF\xD3\n");
+        let mut offsets = Vec::new();
+
+        offsets.push((1u32, out.len()));
+        out.extend_from_slice(b"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+        offsets.push((2u32, out.len()));
+        out.extend_from_slice(b"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n");
+        offsets.push((3u32, out.len()));
+        out.extend_from_slice(
+            b"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>\nendobj\n",
+        );
+
+        let startxref = out.len();
+        out.extend_from_slice(b"xref\n0 4\n");
+        out.extend_from_slice(b"0000000000 65535 f \n");
+        let mut map = std::collections::HashMap::new();
+        for (num, off) in &offsets {
+            map.insert(*num, *off);
+        }
+        for num in 1..4u32 {
+            out.extend_from_slice(format!("{:010} 00000 n \n", map[&num]).as_bytes());
+        }
+        out.extend_from_slice(b"trailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n");
+        out.extend_from_slice(format!("{startxref}\n").as_bytes());
+        out.extend_from_slice(b"%%EOF\n");
+        out
+    }
+
+    #[test]
+    fn snapshot_restore_round_trips_the_overlay() {
+        let doc = DocumentStore::from_bytes(minimal_pdf(), Limits::default()).unwrap();
+
+        // Clean parse: no pending edits.
+        assert!(!doc.is_dirty());
+        let clean = doc.snapshot_changeset();
+
+        // Mutate: create a new object and update an existing one.
+        let new_ref = doc.add_object(Object::Integer(42)).unwrap();
+        doc.update_object(ObjRef::new(3, 0), Object::Integer(7))
+            .unwrap();
+        assert!(doc.is_dirty());
+        assert_eq!(doc.changes_snapshot().len(), 2);
+        assert_eq!(*doc.resolve(new_ref).unwrap(), Object::Integer(42));
+
+        // A snapshot taken now should preserve both edits when restored later.
+        let dirty = doc.snapshot_changeset();
+
+        // Restore the clean overlay: the mutations vanish.
+        doc.restore_changeset(clean);
+        assert!(!doc.is_dirty());
+        assert_eq!(doc.changes_snapshot().len(), 0);
+        // The new object is gone (a dangling ref resolves to Null in Lenient
+        // mode); the page object reads back its original dict, not Integer(7).
+        assert_eq!(*doc.resolve(new_ref).unwrap(), Object::Null);
+        assert!(doc.resolve(ObjRef::new(3, 0)).unwrap().as_dict().is_some());
+
+        // Restoring the dirty snapshot brings the mutations back.
+        doc.restore_changeset(dirty);
+        assert!(doc.is_dirty());
+        assert_eq!(doc.changes_snapshot().len(), 2);
+        assert_eq!(*doc.resolve(new_ref).unwrap(), Object::Integer(42));
+    }
 }

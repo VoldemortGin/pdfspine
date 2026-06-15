@@ -17,6 +17,7 @@
 //! buffer export, or another `Pixmap` sharing the buffer), the mutation lands in
 //! a fresh allocation and never disturbs the bytes a view points at.
 
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use crate::codecs::DecodedImage;
@@ -357,6 +358,149 @@ impl Pixmap {
         count
     }
 
+    /// Tints the color components by a per-channel linear map between `black`
+    /// and `white` (PyMuPDF `Pixmap.tint_with(black, white)`). `black` and
+    /// `white` are packed `0xRRGGBB` ints; each color byte `c` is remapped to
+    /// `black_comp + c * (white_comp - black_comp) / 255` (clamped to `0..=255`).
+    /// Only `Gray`/`Rgb` pixmaps are affected — `Cmyk` is a no-op, matching
+    /// PyMuPDF. Alpha is left untouched, copy-on-write.
+    pub fn tint_with(&mut self, black: u32, white: u32) {
+        let comps = self.colorspace.components() as usize;
+        if !matches!(self.colorspace, Colorspace::Gray | Colorspace::Rgb) {
+            return;
+        }
+        let unpack = |v: u32| [(v >> 16) as u8, (v >> 8) as u8, v as u8];
+        let (b, w) = (unpack(black), unpack(white));
+        // For gray (1 component) use the red channel; for RGB use all three.
+        let map: [(u8, u8); 3] = [(b[0], w[0]), (b[1], w[1]), (b[2], w[2])];
+        let n = self.n as usize;
+        let samples = self.samples_mut();
+        for px in samples.chunks_exact_mut(n) {
+            for (c, byte) in px.iter_mut().take(comps).enumerate() {
+                let (bc, wc) = (map[c].0 as i32, map[c].1 as i32);
+                let v = bc + (*byte as i32) * (wc - bc) / 255;
+                *byte = v.clamp(0, 255) as u8;
+            }
+        }
+    }
+
+    /// Applies a gamma curve to the color components (PyMuPDF
+    /// `Pixmap.gamma_with(gamma)`): each color byte `c` becomes
+    /// `round(255 * (c / 255).powf(gamma))`. `gamma == 1.0` is a no-op. Alpha is
+    /// left untouched, copy-on-write.
+    pub fn gamma_with(&mut self, gamma: f64) {
+        if gamma == 1.0 {
+            return;
+        }
+        let mut lut = [0u8; 256];
+        for (c, slot) in lut.iter_mut().enumerate() {
+            let v = 255.0 * (c as f64 / 255.0).powf(gamma);
+            *slot = v.round().clamp(0.0, 255.0) as u8;
+        }
+        let comps = self.colorspace.components() as usize;
+        let n = self.n as usize;
+        let samples = self.samples_mut();
+        for px in samples.chunks_exact_mut(n) {
+            for byte in px.iter_mut().take(comps) {
+                *byte = lut[*byte as usize];
+            }
+        }
+    }
+
+    /// The number of distinct colors (PyMuPDF `Pixmap.color_count()`), counting
+    /// only the color components and ignoring any alpha channel.
+    #[must_use]
+    pub fn color_count(&self) -> usize {
+        let comps = self.colorspace.components() as usize;
+        let n = self.n as usize;
+        let mut seen: HashSet<&[u8]> = HashSet::new();
+        for px in self.samples.chunks_exact(n) {
+            seen.insert(&px[..comps]);
+        }
+        seen.len()
+    }
+
+    /// The most frequent color and its frequency (PyMuPDF
+    /// `Pixmap.color_topusage()`): returns `(ratio, pixel)` where `pixel` is the
+    /// color-component bytes (length `components`) of the most common color and
+    /// `ratio` is its share of all pixels in `0..=1`. An empty pixmap yields
+    /// `(1.0, vec![0; components])`.
+    #[must_use]
+    pub fn color_topusage(&self) -> (f64, Vec<u8>) {
+        let comps = self.colorspace.components() as usize;
+        let n = self.n as usize;
+        let total = self.width as usize * self.height as usize;
+        if total == 0 {
+            return (1.0, vec![0u8; comps]);
+        }
+        let mut counts: HashMap<&[u8], usize> = HashMap::new();
+        for px in self.samples.chunks_exact(n) {
+            *counts.entry(&px[..comps]).or_insert(0) += 1;
+        }
+        let (color, count) = counts
+            .into_iter()
+            .max_by_key(|&(_, c)| c)
+            .expect("non-empty pixmap has at least one color");
+        (count as f64 / total as f64, color.to_vec())
+    }
+
+    /// Whether the pixmap contains only pure black and pure white color pixels
+    /// (PyMuPDF `Pixmap.is_monochrome()`): every pixel's color components are all
+    /// `0x00` or all `0xFF`.
+    #[must_use]
+    pub fn is_monochrome(&self) -> bool {
+        let comps = self.colorspace.components() as usize;
+        let n = self.n as usize;
+        self.samples.chunks_exact(n).all(|px| {
+            let color = &px[..comps];
+            color.iter().all(|&b| b == 0) || color.iter().all(|&b| b == 255)
+        })
+    }
+
+    /// Whether every pixel shares the same color (PyMuPDF
+    /// `Pixmap.is_unicolor()`). An empty pixmap is considered unicolor.
+    #[must_use]
+    pub fn is_unicolor(&self) -> bool {
+        let comps = self.colorspace.components() as usize;
+        let n = self.n as usize;
+        let mut iter = self.samples.chunks_exact(n);
+        let Some(first) = iter.next() else {
+            return true;
+        };
+        let first = &first[..comps];
+        iter.all(|px| &px[..comps] == first)
+    }
+
+    /// A deterministic 16-byte content hash of the samples plus geometry
+    /// (PyMuPDF `Pixmap.digest()`). PyMuPDF returns an MD5 here; this crate has
+    /// no crypto-hash dependency, so this is a **stable, content-sensitive
+    /// non-cryptographic** digest (two interleaved FNV-1a 64-bit hashes) — equal
+    /// samples/geometry always produce the same bytes, and changes are very
+    /// likely to differ.
+    #[must_use]
+    pub fn digest(&self) -> [u8; 16] {
+        const FNV_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
+        const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
+        let mut h1 = FNV_OFFSET;
+        // Mix geometry into the second hash's seed so identical samples with
+        // different geometry still differ.
+        let mut h2 = FNV_OFFSET;
+        for v in [self.width, self.height, self.n as u32] {
+            for byte in v.to_le_bytes() {
+                h2 = (h2 ^ byte as u64).wrapping_mul(FNV_PRIME);
+            }
+        }
+        for (i, &byte) in self.samples.iter().enumerate() {
+            h1 = (h1 ^ byte as u64).wrapping_mul(FNV_PRIME);
+            // Position-mix the second hash so byte transpositions differ.
+            h2 = (h2 ^ (byte as u64).rotate_left((i & 63) as u32)).wrapping_mul(FNV_PRIME);
+        }
+        let mut out = [0u8; 16];
+        out[..8].copy_from_slice(&h1.to_le_bytes());
+        out[8..].copy_from_slice(&h2.to_le_bytes());
+        out
+    }
+
     /// Halves the pixmap's dimensions `factor` times by 2×2 box-averaging
     /// (PyMuPDF `Pixmap.shrink(factor)`). `factor == 0` is a no-op; each step
     /// rounds the new dimension down. Stops if a dimension would reach zero.
@@ -634,4 +778,131 @@ fn read_bits(row: &[u8], bit: usize, count: usize) -> u8 {
         v = (v << 1) | ((byte >> shift) & 1);
     }
     v
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tint_with_rgb_maps_each_channel() {
+        // 1x1 RGB pixel (100, 150, 200).
+        let mut pm = Pixmap::new(1, 1, Colorspace::Rgb, false, vec![100, 150, 200]);
+        // black = (10, 20, 30), white = (250, 240, 230).
+        pm.tint_with(0x0A_14_1E, 0xFA_F0_E6);
+        let expected = |old: i32, b: i32, w: i32| (b + old * (w - b) / 255).clamp(0, 255) as u8;
+        assert_eq!(
+            pm.pixel(0, 0).unwrap(),
+            vec![
+                expected(100, 10, 250),
+                expected(150, 20, 240),
+                expected(200, 30, 230),
+            ]
+        );
+    }
+
+    #[test]
+    fn tint_with_cmyk_is_noop() {
+        let mut pm = Pixmap::new(1, 1, Colorspace::Cmyk, false, vec![10, 20, 30, 40]);
+        pm.tint_with(0x00_00_00, 0xFF_FF_FF);
+        assert_eq!(pm.pixel(0, 0).unwrap(), vec![10, 20, 30, 40]);
+    }
+
+    #[test]
+    fn gamma_with_identity_is_noop() {
+        let mut pm = Pixmap::new(1, 2, Colorspace::Gray, false, vec![0, 128]);
+        pm.gamma_with(1.0);
+        assert_eq!(pm.samples(), &[0, 128]);
+    }
+
+    #[test]
+    fn gamma_with_nonidentity_changes_midtones() {
+        // gamma 2.0 darkens midtones: 128 -> round(255 * (128/255)^2) = 64.
+        let mut pm = Pixmap::new(1, 3, Colorspace::Gray, false, vec![0, 128, 255]);
+        pm.gamma_with(2.0);
+        let s = pm.samples();
+        assert_eq!(s[0], 0);
+        assert_eq!(s[2], 255);
+        let want = (255.0_f64 * (128.0 / 255.0_f64).powf(2.0)).round() as u8;
+        assert_eq!(s[1], want);
+    }
+
+    #[test]
+    fn color_count_two_color_image() {
+        // Two distinct RGB colors, each appearing twice.
+        let samples = vec![
+            255, 0, 0, // red
+            0, 255, 0, // green
+            255, 0, 0, // red
+            0, 255, 0, // green
+        ];
+        let pm = Pixmap::new(2, 2, Colorspace::Rgb, false, samples);
+        assert_eq!(pm.color_count(), 2);
+    }
+
+    #[test]
+    fn color_count_ignores_alpha() {
+        // Same RGB, different alpha -> still one color.
+        let samples = vec![10, 20, 30, 100, 10, 20, 30, 200];
+        let pm = Pixmap::new(2, 1, Colorspace::Rgb, true, samples);
+        assert_eq!(pm.color_count(), 1);
+    }
+
+    #[test]
+    fn color_topusage_ratio() {
+        // 3 red, 1 green -> red is top with ratio 3/4.
+        let samples = vec![
+            255, 0, 0, // red
+            255, 0, 0, // red
+            255, 0, 0, // red
+            0, 255, 0, // green
+        ];
+        let pm = Pixmap::new(2, 2, Colorspace::Rgb, false, samples);
+        let (ratio, color) = pm.color_topusage();
+        assert!((ratio - 0.75).abs() < 1e-9);
+        assert_eq!(color, vec![255, 0, 0]);
+    }
+
+    #[test]
+    fn color_topusage_empty() {
+        let pm = Pixmap::new(0, 0, Colorspace::Rgb, false, vec![]);
+        let (ratio, color) = pm.color_topusage();
+        assert_eq!(ratio, 1.0);
+        assert_eq!(color, vec![0, 0, 0]);
+    }
+
+    #[test]
+    fn is_monochrome_true_and_false() {
+        let mono = Pixmap::new(2, 1, Colorspace::Rgb, false, vec![0, 0, 0, 255, 255, 255]);
+        assert!(mono.is_monochrome());
+
+        let not_mono = Pixmap::new(2, 1, Colorspace::Rgb, false, vec![0, 0, 0, 255, 0, 255]);
+        assert!(!not_mono.is_monochrome());
+    }
+
+    #[test]
+    fn is_unicolor_true_and_false() {
+        let uni = Pixmap::new(2, 1, Colorspace::Rgb, false, vec![1, 2, 3, 1, 2, 3]);
+        assert!(uni.is_unicolor());
+
+        let multi = Pixmap::new(2, 1, Colorspace::Rgb, false, vec![1, 2, 3, 4, 5, 6]);
+        assert!(!multi.is_unicolor());
+
+        let empty = Pixmap::new(0, 0, Colorspace::Rgb, false, vec![]);
+        assert!(empty.is_unicolor());
+    }
+
+    #[test]
+    fn digest_is_deterministic_and_content_sensitive() {
+        let a = Pixmap::new(2, 1, Colorspace::Rgb, false, vec![1, 2, 3, 4, 5, 6]);
+        let b = Pixmap::new(2, 1, Colorspace::Rgb, false, vec![1, 2, 3, 4, 5, 6]);
+        assert_eq!(a.digest(), b.digest());
+
+        let c = Pixmap::new(2, 1, Colorspace::Rgb, false, vec![1, 2, 3, 4, 5, 7]);
+        assert_ne!(a.digest(), c.digest());
+
+        // Byte transposition should differ too.
+        let d = Pixmap::new(2, 1, Colorspace::Rgb, false, vec![2, 1, 3, 4, 5, 6]);
+        assert_ne!(a.digest(), d.digest());
+    }
 }

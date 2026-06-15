@@ -384,6 +384,112 @@ impl<'a> Annot<'a> {
         self.write_dict(d)
     }
 
+    /// The line-ending styles `/LE` `[start end]`, as PyMuPDF `PDF_ANNOT_LE_*`
+    /// integer codes (PyMuPDF `Annot.line_ends`). Defaults to `(0, 0)` when `/LE`
+    /// is absent.
+    #[must_use]
+    pub fn line_ends(&self) -> (i64, i64) {
+        let Ok(d) = self.dict() else {
+            return (0, 0);
+        };
+        let Some(a) = d.get(&Name::new("LE")).and_then(Object::as_array) else {
+            return (0, 0);
+        };
+        if a.len() != 2 {
+            return (0, 0);
+        }
+        let code = |o: &Object| o.as_name().map(|n| le_code(n.as_bytes())).unwrap_or(0);
+        (code(&a[0]), code(&a[1]))
+    }
+
+    /// Sets the line-ending styles `/LE` `[/<start> /<end>]` from PyMuPDF
+    /// `PDF_ANNOT_LE_*` integer codes (PyMuPDF `Annot.set_line_ends`).
+    ///
+    /// # Errors
+    /// Propagates object-edit errors.
+    pub fn set_line_ends(&self, start: i64, end: i64) -> Result<()> {
+        let mut d = self.dict()?;
+        d.insert(
+            Name::new("LE"),
+            Object::Array(vec![
+                Object::Name(Name::new(le_name(start))),
+                Object::Name(Name::new(le_name(end))),
+            ]),
+        );
+        self.write_dict(d)
+    }
+
+    /// The blend mode `/BM` name (PyMuPDF `Annot.blendmode`), `None` if absent.
+    #[must_use]
+    pub fn blendmode(&self) -> Option<String> {
+        self.dict().ok().and_then(|d| {
+            d.get(&Name::new("BM"))
+                .and_then(Object::as_name)
+                .map(|n| String::from_utf8_lossy(n.as_bytes()).into_owned())
+        })
+    }
+
+    /// Sets the blend mode `/BM` name (PyMuPDF `Annot.set_blendmode`).
+    ///
+    /// # Errors
+    /// Propagates object-edit errors.
+    pub fn set_blendmode(&self, mode: &str) -> Result<()> {
+        let mut d = self.dict()?;
+        d.insert(Name::new("BM"), Object::Name(Name::new(mode)));
+        self.write_dict(d)
+    }
+
+    /// Sets the icon/appearance name `/Name` (PyMuPDF `Annot.set_name`). This is
+    /// the appearance name (e.g. a `/Text` icon or `/Stamp` label), **not** the
+    /// `/NM` annotation identifier.
+    ///
+    /// # Errors
+    /// Propagates object-edit errors.
+    pub fn set_name(&self, name: &str) -> Result<()> {
+        let mut d = self.dict()?;
+        d.insert(Name::new("Name"), Object::Name(Name::new(name)));
+        self.write_dict(d)
+    }
+
+    /// Whether the `/Open` flag is set (PyMuPDF `Annot.is_open`); default `false`.
+    #[must_use]
+    pub fn is_open(&self) -> bool {
+        self.dict()
+            .ok()
+            .and_then(|d| d.get(&Name::new("Open")).and_then(Object::as_bool))
+            .unwrap_or(false)
+    }
+
+    /// Sets the `/Open` flag (PyMuPDF `Annot.set_open`).
+    ///
+    /// # Errors
+    /// Propagates object-edit errors.
+    pub fn set_open(&self, open: bool) -> Result<()> {
+        let mut d = self.dict()?;
+        d.insert(Name::new("Open"), Object::Boolean(open));
+        self.write_dict(d)
+    }
+
+    /// The border as `(width, style, dashes)` (backs PyMuPDF `Annot.border`'s
+    /// `{width, style, dashes}` dict): width from `/BS /W` (else `/Border[2]`),
+    /// style from `/BS /S` (default `"S"`), dashes from `/BS /D` (default empty).
+    #[must_use]
+    pub fn border(&self) -> (f64, String, Vec<f64>) {
+        let width = self.border_width();
+        let (mut style, mut dashes) = (String::from("S"), Vec::new());
+        if let Ok(d) = self.dict() {
+            if let Some(bs) = d.get(&Name::new("BS")).and_then(Object::as_dict) {
+                if let Some(s) = bs.get(&Name::new("S")).and_then(Object::as_name) {
+                    style = String::from_utf8_lossy(s.as_bytes()).into_owned();
+                }
+                if let Some(da) = bs.get(&Name::new("D")).and_then(Object::as_array) {
+                    dashes = da.iter().filter_map(Object::as_f64).collect();
+                }
+            }
+        }
+        (width, style, dashes)
+    }
+
     /// Regenerates the `/AP /N` appearance stream from the annotation's current
     /// properties (subtype, geometry, colors, opacity, border). This is what
     /// reflects a `set_colors` / `set_opacity` change into the appearance.
@@ -1549,6 +1655,39 @@ fn register_helv(resources: &mut Dict) {
 
 // === dict read/write helpers ==============================================
 
+/// Maps a `/LE` line-ending style name to its PyMuPDF `PDF_ANNOT_LE_*` code.
+fn le_code(name: &[u8]) -> i64 {
+    match name {
+        b"None" => 0,
+        b"Square" => 1,
+        b"Circle" => 2,
+        b"Diamond" => 3,
+        b"OpenArrow" => 4,
+        b"ClosedArrow" => 5,
+        b"Butt" => 6,
+        b"ROpenArrow" => 7,
+        b"RClosedArrow" => 8,
+        b"Slash" => 9,
+        _ => 0,
+    }
+}
+
+/// Maps a PyMuPDF `PDF_ANNOT_LE_*` code back to its `/LE` style name.
+fn le_name(code: i64) -> &'static str {
+    match code {
+        1 => "Square",
+        2 => "Circle",
+        3 => "Diamond",
+        4 => "OpenArrow",
+        5 => "ClosedArrow",
+        6 => "Butt",
+        7 => "ROpenArrow",
+        8 => "RClosedArrow",
+        9 => "Slash",
+        _ => "None",
+    }
+}
+
 fn rect_array(r: &Rect) -> Object {
     Object::Array(vec![
         Object::Real(r.x0),
@@ -1757,5 +1896,163 @@ fn decode_text_string(s: &PdfString) -> String {
         String::from_utf16_lossy(&units)
     } else {
         b.iter().map(|&c| c as char).collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pdf_core::Limits;
+
+    /// A minimal one-page PDF: catalog, single-page tree, one blank page leaf.
+    fn one_page_pdf() -> Vec<u8> {
+        let mut out = Vec::new();
+        out.extend_from_slice(b"%PDF-1.7\n%\xE2\xE3\xCF\xD3\n");
+        let mut offsets = Vec::new();
+
+        offsets.push((1u32, out.len()));
+        out.extend_from_slice(b"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+        offsets.push((2u32, out.len()));
+        out.extend_from_slice(b"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n");
+        offsets.push((3u32, out.len()));
+        out.extend_from_slice(
+            b"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>\nendobj\n",
+        );
+
+        let startxref = out.len();
+        out.extend_from_slice(b"xref\n0 4\n");
+        out.extend_from_slice(b"0000000000 65535 f \n");
+        let mut map = std::collections::HashMap::new();
+        for (num, off) in &offsets {
+            map.insert(*num, *off);
+        }
+        for num in 1..4u32 {
+            out.extend_from_slice(format!("{:010} 00000 n \n", map[&num]).as_bytes());
+        }
+        out.extend_from_slice(b"trailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n");
+        out.extend_from_slice(format!("{startxref}\n").as_bytes());
+        out.extend_from_slice(b"%%EOF\n");
+        out
+    }
+
+    /// Builds a doc with a `/Square` annotation and returns its xref.
+    fn doc_with_annot() -> DocumentStore {
+        DocumentStore::from_bytes(one_page_pdf(), Limits::default()).unwrap()
+    }
+
+    fn make_annot(doc: &DocumentStore) -> ObjRef {
+        let mut d = Dict::new();
+        d.insert(Name::new("Type"), Object::Name(Name::new("Annot")));
+        d.insert(Name::new("Subtype"), Object::Name(Name::new("Line")));
+        d.insert(
+            Name::new("Rect"),
+            rect_array(&Rect::new(0.0, 0.0, 100.0, 100.0)),
+        );
+        doc.add_object(Object::Dictionary(d)).unwrap()
+    }
+
+    #[test]
+    fn le_code_name_round_trip() {
+        let names: [&[u8]; 10] = [
+            b"None",
+            b"Square",
+            b"Circle",
+            b"Diamond",
+            b"OpenArrow",
+            b"ClosedArrow",
+            b"Butt",
+            b"ROpenArrow",
+            b"RClosedArrow",
+            b"Slash",
+        ];
+        for (code, name) in names.iter().enumerate() {
+            assert_eq!(le_code(name), code as i64);
+            assert_eq!(le_name(code as i64).as_bytes(), *name);
+        }
+        // Unknown name / code default to 0 / "None".
+        assert_eq!(le_code(b"Bogus"), 0);
+        assert_eq!(le_name(42), "None");
+    }
+
+    #[test]
+    fn line_ends_round_trip() {
+        let doc = doc_with_annot();
+        let leaf = *pagetree::page_refs(&doc).first().unwrap();
+        let obj = make_annot(&doc);
+        let annot = Annot::from_ref(&doc, leaf, obj);
+        assert_eq!(annot.line_ends(), (0, 0));
+        annot.set_line_ends(4, 5).unwrap();
+        assert_eq!(annot.line_ends(), (4, 5));
+        annot.set_line_ends(0, 9).unwrap();
+        assert_eq!(annot.line_ends(), (0, 9));
+    }
+
+    #[test]
+    fn blendmode_round_trip() {
+        let doc = doc_with_annot();
+        let leaf = *pagetree::page_refs(&doc).first().unwrap();
+        let obj = make_annot(&doc);
+        let annot = Annot::from_ref(&doc, leaf, obj);
+        assert_eq!(annot.blendmode(), None);
+        annot.set_blendmode("Multiply").unwrap();
+        assert_eq!(annot.blendmode().as_deref(), Some("Multiply"));
+    }
+
+    #[test]
+    fn open_round_trip() {
+        let doc = doc_with_annot();
+        let leaf = *pagetree::page_refs(&doc).first().unwrap();
+        let obj = make_annot(&doc);
+        let annot = Annot::from_ref(&doc, leaf, obj);
+        assert!(!annot.is_open());
+        annot.set_open(true).unwrap();
+        assert!(annot.is_open());
+        annot.set_open(false).unwrap();
+        assert!(!annot.is_open());
+    }
+
+    #[test]
+    fn set_name_writes_name_not_nm() {
+        let doc = doc_with_annot();
+        let leaf = *pagetree::page_refs(&doc).first().unwrap();
+        let obj = make_annot(&doc);
+        let annot = Annot::from_ref(&doc, leaf, obj);
+        annot.set_name("PushPin").unwrap();
+        let d = annot.dict().unwrap();
+        assert_eq!(
+            d.get(&Name::new("Name")).and_then(Object::as_name),
+            Some(&Name::new("PushPin"))
+        );
+        // /NM (the annotation id) is untouched.
+        assert!(!d.contains_key(&Name::new("NM")));
+    }
+
+    #[test]
+    fn border_reports_width_style_dashes() {
+        let doc = doc_with_annot();
+        let leaf = *pagetree::page_refs(&doc).first().unwrap();
+        let obj = make_annot(&doc);
+        let annot = Annot::from_ref(&doc, leaf, obj);
+        // Default (no /BS): width 1.0, style "S", no dashes.
+        let (w, style, dashes) = annot.border();
+        assert!((w - 1.0).abs() < 1e-9);
+        assert_eq!(style, "S");
+        assert!(dashes.is_empty());
+
+        // With a dashed /BS.
+        let mut d = annot.dict().unwrap();
+        let mut bs = Dict::new();
+        bs.insert(Name::new("W"), Object::Real(2.5));
+        bs.insert(Name::new("S"), Object::Name(Name::new("D")));
+        bs.insert(
+            Name::new("D"),
+            Object::Array(vec![Object::Integer(3), Object::Real(2.0)]),
+        );
+        d.insert(Name::new("BS"), Object::Dictionary(bs));
+        annot.write_dict(d).unwrap();
+        let (w, style, dashes) = annot.border();
+        assert!((w - 2.5).abs() < 1e-9);
+        assert_eq!(style, "D");
+        assert_eq!(dashes, vec![3.0, 2.0]);
     }
 }

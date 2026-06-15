@@ -216,8 +216,24 @@ class Annot:
 
     @property
     def border(self) -> dict:
-        """``{"width": w, "dashes": [], "style": "S"}`` (PyMuPDF ``annot.border``)."""
-        return {"width": self._annot.border_width, "dashes": [], "style": "S"}
+        """``{"width": w, "style": s, "dashes": [...]}`` (PyMuPDF ``annot.border``)."""
+        width, style, dashes = self._annot.border_tuple()
+        return {"width": width, "style": style, "dashes": list(dashes)}
+
+    @property
+    def line_ends(self) -> tuple[int, int]:
+        """The ``(start, end)`` line-ending style codes (PyMuPDF ``annot.line_ends``)."""
+        return self._annot.line_ends()
+
+    @property
+    def blendmode(self) -> str | None:
+        """The blend mode ``/BM``, or ``None`` (PyMuPDF ``annot.blendmode``)."""
+        return self._annot.blendmode
+
+    @property
+    def is_open(self) -> bool:
+        """Whether the annotation is open (PyMuPDF ``annot.is_open``)."""
+        return self._annot.is_open
 
     @property
     def vertices(self) -> list:
@@ -258,6 +274,22 @@ class Annot:
         if border is not None and isinstance(border, dict):
             width = border.get("width", width)
         self._annot.set_border(width=1.0 if width is None else float(width))
+
+    def set_line_ends(self, start: int, end: int) -> None:
+        """Sets the ``(start, end)`` line-ending styles (PyMuPDF ``annot.set_line_ends``)."""
+        self._annot.set_line_ends(int(start), int(end))
+
+    def set_blendmode(self, blend_mode: str) -> None:
+        """Sets the blend mode ``/BM`` (PyMuPDF ``annot.set_blendmode``)."""
+        self._annot.set_blendmode(str(blend_mode))
+
+    def set_name(self, name: str) -> None:
+        """Sets the icon/appearance ``/Name`` (PyMuPDF ``annot.set_name``)."""
+        self._annot.set_name(str(name))
+
+    def set_open(self, is_open: bool) -> None:
+        """Sets the ``/Open`` flag (PyMuPDF ``annot.set_open``)."""
+        self._annot.set_open(bool(is_open))
 
     def set_flags(self, flags: int) -> None:
         """Sets the annotation flags (PyMuPDF ``annot.set_flags``)."""
@@ -783,6 +815,32 @@ class Page:
         """The page's image placements as :class:`Rect` (PyMuPDF
         ``page.get_image_rects``). One rectangle per painted image."""
         return [_rect(bbox) for _name, _inline, bbox, _w, _h in self._page.get_image_rects()]
+
+    def get_image_info(self, *_args, **_kwargs) -> list[dict]:
+        """Per-image placement info dicts (PyMuPDF ``page.get_image_info``).
+
+        Each dict carries ``number``, ``xref``, ``name``, ``bbox`` (:class:`Rect`),
+        ``width``, ``height``, ``bpc``, ``colorspace``/``cs-name``, and ``filter``.
+        """
+        out = []
+        for info in self._page.get_image_info():
+            info = dict(info)
+            info["bbox"] = _rect(info["bbox"])
+            out.append(info)
+        return out
+
+    def get_image_bbox(self, name_or_xref, *_args, **_kwargs) -> Rect:
+        """The :class:`Rect` bbox of the image identified by ``name_or_xref``
+        (PyMuPDF ``page.get_image_bbox``). Accepts a resource name, an xref int,
+        or a ``get_images`` tuple. Returns an empty :class:`Rect` if not found."""
+        if isinstance(name_or_xref, (tuple, list)) and name_or_xref:
+            # A get_images() tuple: PyMuPDF accepts the whole entry; use its name
+            # (index 7) when present, else its xref (index 0).
+            key = name_or_xref[7] if len(name_or_xref) > 7 and name_or_xref[7] else name_or_xref[0]
+        else:
+            key = name_or_xref
+        bbox = self._page.get_image_bbox(str(key))
+        return _rect(bbox) if bbox is not None else Rect(0, 0, 0, 0)
 
     def get_contents(self) -> list[int]:
         """The object numbers of the page's content streams (PyMuPDF
@@ -1445,13 +1503,9 @@ class Document:
         return self._doc.resolve_link(str(uri))
 
     def fullcopy_page(self, pno: int, to: int = -1) -> None:
-        """Deep-copies page ``pno`` to the end of the document (PyMuPDF
-        ``doc.fullcopy_page``). Only ``to == -1`` (append) is supported."""
-        if to not in (-1, self._doc.page_count):
-            raise PdfUnsupportedError(
-                "fullcopy_page only supports appending (to=-1)"
-            )
-        self._doc.fullcopy_page(pno)
+        """Deep-copies page ``pno`` and inserts the copy at ``to`` (PyMuPDF
+        ``doc.fullcopy_page``); ``to == -1`` appends."""
+        self._doc.fullcopy_page(int(pno), int(to))
 
     @property
     def chapter_count(self) -> int:
@@ -1716,6 +1770,80 @@ class Document:
     def get_page_label(self, pno: int) -> str:
         """The page label of physical page ``pno`` (PyMuPDF helper)."""
         return self._doc.get_page_label(pno)
+
+    def set_page_labels(self, labels) -> None:
+        """Writes ``/Root /PageLabels`` (PyMuPDF ``doc.set_page_labels``).
+
+        ``labels`` is a list of range dicts, each with ``startpage`` (0-based),
+        ``prefix`` (str, optional), ``style`` (one of ``"D"``/``"r"``/``"R"``/
+        ``"a"``/``"A"`` or ``""``), and ``firstpagenum`` (int, default 1). An
+        empty list removes the labels.
+        """
+        specs = []
+        for entry in labels:
+            start = int(entry.get("startpage", 0))
+            style = entry.get("style", "D")
+            style = None if style in ("", None) else str(style)
+            prefix = str(entry.get("prefix", "") or "")
+            first = int(entry.get("firstpagenum", 1))
+            specs.append((start, style, prefix, first))
+        self._doc.set_page_labels(specs)
+
+    def get_char_widths(self, xref: int, *_args, **_kwargs) -> list[tuple[int, float]]:
+        """The glyph widths of font object ``xref`` (PyMuPDF ``doc.get_char_widths``).
+
+        Returns ``(glyph_id, width)`` pairs where ``width`` is em-relative
+        (``/Widths`` value divided by 1000)."""
+        return self._doc.get_char_widths(int(xref))
+
+    def page_cropbox(self, pno: int) -> Rect:
+        """The ``/CropBox`` of page ``pno`` as a :class:`Rect` (PyMuPDF ``doc.page_cropbox``)."""
+        if pno < 0:
+            pno += self._doc.page_count
+        return _rect(self._doc.page_cropbox(pno))
+
+    def page_mediabox(self, pno: int) -> Rect:
+        """The ``/MediaBox`` of page ``pno`` as a :class:`Rect` (PyMuPDF ``doc.page_mediabox``)."""
+        if pno < 0:
+            pno += self._doc.page_count
+        return _rect(self._doc.page_mediabox(pno))
+
+    # --- undo/redo journal (PyMuPDF ``doc.journal_*``) ---
+    def journal_enable(self) -> None:
+        """Enables the undo/redo journal, recording the baseline state
+        (PyMuPDF ``doc.journal_enable``)."""
+        self._doc.journal_enable()
+
+    def journal_is_enabled(self) -> bool:
+        """Whether the journal is enabled (PyMuPDF ``doc.journal_is_enabled``)."""
+        return self._doc.journal_is_enabled()
+
+    def journal_save_state(self) -> None:
+        """Records the current state as a journal checkpoint."""
+        self._doc.journal_save_state()
+
+    def journal_can_undo(self) -> bool:
+        """Whether an undo is possible (PyMuPDF ``doc.journal_can_do`` undo)."""
+        return self._doc.journal_can_undo()
+
+    def journal_can_redo(self) -> bool:
+        """Whether a redo is possible (PyMuPDF ``doc.journal_can_do`` redo)."""
+        return self._doc.journal_can_redo()
+
+    def journal_can_do(self) -> dict[str, bool]:
+        """``{"undo": bool, "redo": bool}`` (PyMuPDF ``doc.journal_can_do``)."""
+        return {
+            "undo": self._doc.journal_can_undo(),
+            "redo": self._doc.journal_can_redo(),
+        }
+
+    def journal_undo(self) -> bool:
+        """Reverts to the previous checkpoint (PyMuPDF ``doc.journal_undo``)."""
+        return self._doc.journal_undo()
+
+    def journal_redo(self) -> bool:
+        """Re-applies the next checkpoint (PyMuPDF ``doc.journal_redo``)."""
+        return self._doc.journal_redo()
 
     # --- AcroForm forms (PRD §8.8) ---
     @property

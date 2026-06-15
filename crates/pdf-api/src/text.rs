@@ -445,6 +445,87 @@ pub fn get_image_rects(page: &Page) -> Vec<ImageRect> {
         .collect()
 }
 
+// === get_image_info / get_image_bbox ======================================
+
+/// One `page.get_image_info()` entry: a per-placement dict merging the
+/// device-space `bbox` with the referenced image XObject's metadata (PyMuPDF
+/// `page.get_image_info`). Inline images carry an empty `name` and `xref == 0`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ImageInfoEntry {
+    /// The placement index on the page (PyMuPDF `number`).
+    pub number: usize,
+    /// The image XObject's xref, or `0` for an inline image.
+    pub xref: i32,
+    /// The XObject resource name (empty for an inline image).
+    pub name: String,
+    /// `true` for an inline `BI…ID…EI` image.
+    pub inline: bool,
+    /// The device-space placement bbox `(x0, y0, x1, y1)`.
+    pub bbox: (f64, f64, f64, f64),
+    /// The declared pixel width (`/Width`).
+    pub width: u32,
+    /// The declared pixel height (`/Height`).
+    pub height: u32,
+    /// `/BitsPerComponent` (`0` if unknown).
+    pub bpc: i32,
+    /// The colorspace name (e.g. `"DeviceRGB"`, `"ICCBased"`; empty if unknown).
+    pub colorspace: String,
+    /// The `/Filter` name (empty if none).
+    pub filter: String,
+}
+
+/// Every image placement on `page` with merged XObject metadata (PyMuPDF
+/// `page.get_image_info`). One image referenced N times yields N entries, each
+/// keyed by placement order. Image-XObject metadata (bpc/colorspace/filter/xref)
+/// is matched to a placement by resource name.
+#[must_use]
+pub fn get_image_info(page: &Page) -> Vec<ImageInfoEntry> {
+    // Index the XObject image metadata by resource name.
+    let metas = get_images(page);
+    let meta_by_name: std::collections::HashMap<&str, &ImageInfo> =
+        metas.iter().map(|m| (m.name.as_str(), m)).collect();
+
+    get_image_rects(page)
+        .into_iter()
+        .enumerate()
+        .map(|(number, r)| {
+            let meta = meta_by_name.get(r.name.as_str());
+            ImageInfoEntry {
+                number,
+                xref: meta.map(|m| m.xref).unwrap_or(0),
+                name: r.name,
+                inline: r.inline,
+                bbox: r.bbox,
+                width: r.width,
+                height: r.height,
+                bpc: meta.map(|m| m.bpc).unwrap_or(0),
+                colorspace: meta.map(|m| m.colorspace.clone()).unwrap_or_default(),
+                filter: meta.map(|m| m.filter.clone()).unwrap_or_default(),
+            }
+        })
+        .collect()
+}
+
+/// The device-space bbox of the image identified by `name_or_xref` on `page`
+/// (PyMuPDF `page.get_image_bbox`). The argument is matched first as a resource
+/// name, then (when it parses as an integer) as an xref. Returns the first
+/// matching placement's bbox, or `None`.
+#[must_use]
+pub fn get_image_bbox(page: &Page, name_or_xref: &str) -> Option<(f64, f64, f64, f64)> {
+    let info = get_image_info(page);
+    // Match by resource name first.
+    if let Some(e) = info.iter().find(|e| e.name == name_or_xref) {
+        return Some(e.bbox);
+    }
+    // Then by xref (integer).
+    if let Ok(xref) = name_or_xref.parse::<i32>() {
+        if let Some(e) = info.iter().find(|e| e.xref == xref && xref != 0) {
+            return Some(e.bbox);
+        }
+    }
+    None
+}
+
 // === reusable TextPage ====================================================
 
 /// A neutral `get_text` result the PyO3 layer converts to the right Python
