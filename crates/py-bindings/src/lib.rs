@@ -20,7 +20,8 @@ use pdf_api::geom::{IRect, Matrix, Point, Quad, Rect};
 use pdf_api::{
     Align, AnnotHandle, Colorspace, DisplayList as ApiDisplayList, Document as ApiDocument,
     DrawItem, Drawing, Error as ApiError, FinishParams, ParseMode, Pixmap as ApiPixmap, RenderArgs,
-    ScrubOptions, SearchOptions, ShapeHandle, TextOutput, WidgetHandle,
+    ScrubOptions, SearchOptions, ShapeHandle, Table as ApiTable, TableFinder as ApiTableFinder,
+    TableOptions, TextOutput, WidgetHandle,
 };
 use pyo3::create_exception;
 use pyo3::exceptions::{PyFileNotFoundError, PyIndexError, PyOSError, PyValueError};
@@ -806,6 +807,153 @@ fn drawing_to_py<'py>(py: Python<'py>, d: &Drawing) -> PyResult<Bound<'py, PyDic
     Ok(out)
 }
 
+// --- Table / TableFinder (PRD §7, M7) -------------------------------------
+
+/// One detected table (PyMuPDF `Table`). Owns an [`ApiTable`] (its own `Arc`
+/// onto the page words + the table geometry) — `'static`, no borrow crosses the
+/// boundary.
+#[pyclass(name = "Table", module = "oxide_pdf._core", frozen)]
+struct PyTable {
+    table: ApiTable,
+}
+
+#[pymethods]
+impl PyTable {
+    /// The table bounding box as `(x0, y0, x1, y1)` (PyMuPDF `Table.bbox`).
+    #[getter]
+    fn bbox(&self) -> (f64, f64, f64, f64) {
+        rect_tuple(self.table.bbox())
+    }
+
+    /// The number of cell rows (PyMuPDF `Table.row_count`).
+    #[getter]
+    fn row_count(&self) -> usize {
+        self.table.row_count()
+    }
+
+    /// The number of cell columns (PyMuPDF `Table.col_count`).
+    #[getter]
+    fn col_count(&self) -> usize {
+        self.table.col_count()
+    }
+
+    /// The header row's cell text, or `[]` when no header row (PyMuPDF
+    /// `Table.header`).
+    #[getter]
+    fn header(&self) -> Vec<Option<String>> {
+        self.table.header().to_vec()
+    }
+
+    /// The snapped horizontal grid-line y positions (PyMuPDF `Table.rows`).
+    #[getter]
+    fn rows(&self) -> Vec<f64> {
+        self.table.rows().to_vec()
+    }
+
+    /// The snapped vertical grid-line x positions (PyMuPDF `Table.cols`).
+    #[getter]
+    fn cols(&self) -> Vec<f64> {
+        self.table.cols().to_vec()
+    }
+
+    /// The per-slot cell rects (row-major); each is a `(x0,y0,x1,y1)` tuple or
+    /// `None` for an absent / merge-continuation slot (PyMuPDF `Table.cells`).
+    #[getter]
+    #[allow(clippy::type_complexity)]
+    fn cells(&self) -> Vec<Vec<Option<(f64, f64, f64, f64)>>> {
+        self.table
+            .cells()
+            .iter()
+            .map(|row| row.iter().map(|c| c.map(rect_tuple)).collect())
+            .collect()
+    }
+
+    /// One span descriptor per originating cell as
+    /// `(row, col, row_span, col_span, (x0,y0,x1,y1))` (PyMuPDF `Table.spans`).
+    #[getter]
+    #[allow(clippy::type_complexity)]
+    fn spans(&self) -> Vec<(usize, usize, usize, usize, (f64, f64, f64, f64))> {
+        self.table
+            .spans()
+            .iter()
+            .map(|s| (s.row, s.col, s.row_span, s.col_span, rect_tuple(s.rect)))
+            .collect()
+    }
+
+    /// The cell text grid (row-major); `None` for an empty / continuation slot
+    /// (PyMuPDF `Table.extract`).
+    fn extract(&self) -> Vec<Vec<Option<String>>> {
+        self.table.extract()
+    }
+
+    /// The table as GitHub-Flavored-Markdown (PyMuPDF `Table.to_markdown`).
+    fn to_markdown(&self) -> String {
+        self.table.to_markdown()
+    }
+
+    /// The table as an HTML `<table>` string (oxide-pdf extra; not in PyMuPDF).
+    fn to_html(&self) -> String {
+        self.table.to_html()
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "<oxide_pdf._core.Table {}x{}>",
+            self.table.row_count(),
+            self.table.col_count()
+        )
+    }
+}
+
+/// A page's detected tables (PyMuPDF `TableFinder`). Iterable; `len()` is the
+/// table count.
+#[pyclass(name = "TableFinder", module = "oxide_pdf._core", frozen)]
+struct PyTableFinder {
+    finder: ApiTableFinder,
+}
+
+#[pymethods]
+impl PyTableFinder {
+    /// The detected tables (PyMuPDF `TableFinder.tables`).
+    #[getter]
+    fn tables(&self) -> Vec<PyTable> {
+        self.finder
+            .tables
+            .iter()
+            .cloned()
+            .map(|table| PyTable { table })
+            .collect()
+    }
+
+    fn __len__(&self) -> usize {
+        self.finder.len()
+    }
+
+    /// `finder[i]` — the i-th detected table.
+    fn __getitem__(&self, index: usize) -> PyResult<PyTable> {
+        self.finder
+            .tables
+            .get(index)
+            .cloned()
+            .map(|table| PyTable { table })
+            .ok_or_else(|| PyIndexError::new_err("table index out of range"))
+    }
+
+    /// Iterates the detected tables.
+    fn __iter__(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let tables: Vec<PyTable> = self.tables();
+        let list = PyList::empty(py);
+        for t in tables {
+            list.append(t.into_pyobject(py)?)?;
+        }
+        Ok(list.try_iter()?.into_any().unbind())
+    }
+
+    fn __repr__(&self) -> String {
+        format!("<oxide_pdf._core.TableFinder tables={}>", self.finder.len())
+    }
+}
+
 #[pymethods]
 impl PyPage {
     /// The zero-based page index (PyMuPDF `page.number`).
@@ -1010,6 +1158,50 @@ impl PyPage {
     #[getter]
     fn is_image_only(&self) -> bool {
         pdf_api::page_is_image_only(&self.page)
+    }
+
+    // --- table detection (PRD §7, M7) ------------------------------------
+
+    /// Detects the tables on this page (PyMuPDF `Page.find_tables`). `strategy`
+    /// is `"lines"` (default), `"lines_strict"`, or `"text"`; the tuning kwargs
+    /// mirror the core `TableOptions`. Heavy work runs with the GIL released.
+    #[pyo3(signature = (*, strategy="lines", line_max_thickness=3.0, snap_tolerance=3.0, min_line_length=3.0))]
+    fn find_tables(
+        &self,
+        py: Python<'_>,
+        strategy: &str,
+        line_max_thickness: f64,
+        snap_tolerance: f64,
+        min_line_length: f64,
+    ) -> PyTableFinder {
+        let opts = TableOptions {
+            strategy: pdf_api::strategy_from_str(strategy),
+            line_max_thickness,
+            snap_tolerance,
+            min_line_length,
+        };
+        let page = self.page.clone();
+        let finder = py.detach(move || pdf_api::page_find_tables(&page, &opts));
+        PyTableFinder { finder }
+    }
+
+    // --- SVG export (PRD §7, M7) -----------------------------------------
+
+    /// Renders this page to a standalone SVG document string (PyMuPDF
+    /// `Page.get_svg_image`). `matrix` is an optional `(a,b,c,d,e,f)` page-space
+    /// transform. Heavy work runs with the GIL released.
+    #[pyo3(signature = (*, matrix=None))]
+    fn get_svg_image(
+        &self,
+        py: Python<'_>,
+        matrix: Option<(f64, f64, f64, f64, f64, f64)>,
+    ) -> PyResult<String> {
+        let m = matrix
+            .map(|(a, b, c, d, e, f)| Matrix::new(a, b, c, d, e, f))
+            .unwrap_or(Matrix::IDENTITY);
+        let page = self.page.clone();
+        py.detach(move || pdf_api::page_get_svg_image(&page, m))
+            .map_err(map_err)
     }
 
     // --- links + label + rotation (PRD §8.9) -----------------------------
@@ -2074,6 +2266,74 @@ impl PyDocument {
             .map_err(map_err)
     }
 
+    // --- optional content / layers (PRD §7, M7) --------------------------
+
+    /// The optional-content groups, keyed by `xref` (PyMuPDF `Document.get_ocgs`).
+    /// Each value is a dict with `name`, `intent` (list), `on`, `locked`.
+    fn get_ocgs<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        let out = PyDict::new(py);
+        for (xref, info) in self.doc.get_ocgs() {
+            let d = PyDict::new(py);
+            d.set_item("name", info.name)?;
+            d.set_item("intent", info.intent)?;
+            d.set_item("on", info.on)?;
+            d.set_item("locked", info.locked)?;
+            out.set_item(xref, d)?;
+        }
+        Ok(out)
+    }
+
+    /// The layer-panel UI configuration rows (PyMuPDF
+    /// `Document.layer_ui_configs`). Each is a dict with `number`, `text`,
+    /// `depth`, `type`, `on`, `locked`.
+    fn layer_ui_configs<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
+        let list = PyList::empty(py);
+        for c in self.doc.layer_ui_configs() {
+            let d = PyDict::new(py);
+            d.set_item("number", c.number)?;
+            d.set_item("text", c.text)?;
+            d.set_item("depth", c.depth)?;
+            d.set_item("type", c.kind)?;
+            d.set_item("on", c.on)?;
+            d.set_item("locked", c.locked)?;
+            list.append(d)?;
+        }
+        Ok(list)
+    }
+
+    /// Whether the OCG `xref` is ON in the default config (PyMuPDF layer state).
+    fn ocg_state(&self, xref: u32) -> bool {
+        self.doc.ocg_state(xref)
+    }
+
+    /// Adds a new optional-content group (PyMuPDF `Document.add_ocg`), returning
+    /// its `xref`. `config` is an optional UI-label group; `on` the initial
+    /// visibility; `intent` an `/Intent` name.
+    #[pyo3(signature = (name, *, config=None, on=true, intent="View"))]
+    fn add_ocg(&self, name: &str, config: Option<&str>, on: bool, intent: &str) -> PyResult<u32> {
+        let intents: Vec<&str> = if intent.is_empty() {
+            Vec::new()
+        } else {
+            vec![intent]
+        };
+        self.doc
+            .add_ocg(name, on, &intents, config)
+            .map_err(map_err)
+    }
+
+    /// Bulk-sets layer visibility (PyMuPDF `Document.set_layer`): `on` xrefs
+    /// turned ON, `off` xrefs OFF.
+    #[pyo3(signature = (*, on=Vec::new(), off=Vec::new()))]
+    fn set_layer(&self, on: Vec<u32>, off: Vec<u32>) -> PyResult<()> {
+        self.doc.set_layer(&on, &off).map_err(map_err)
+    }
+
+    /// Binds object `xref` to OCG `ocg` via its `/OC` entry (PyMuPDF
+    /// `Document.set_oc`).
+    fn set_oc(&self, xref: u32, ocg: u32) -> PyResult<()> {
+        self.doc.set_oc(xref, ocg).map_err(map_err)
+    }
+
     fn __repr__(&self) -> String {
         format!(
             "<oxide_pdf._core.Document page_count={}>",
@@ -2547,6 +2807,8 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyShape>()?;
     m.add_class::<PyPixmap>()?;
     m.add_class::<PyDisplayList>()?;
+    m.add_class::<PyTableFinder>()?;
+    m.add_class::<PyTable>()?;
 
     // Exception hierarchy (PRD §9.3).
     m.add("PdfError", py.get_type::<PdfError>())?;

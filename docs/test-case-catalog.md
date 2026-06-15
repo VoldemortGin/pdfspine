@@ -2232,3 +2232,128 @@ dispatching to the M6a/b/c primitives, and `into_pixmap`s the result. The
 | `PYRENDER-003` | `dpi=144` doubles the rendered dimensions of a vector page | PRD §9.4 | green |
 | `PYRENDER-004` | `page.get_displaylist().get_pixmap()` matches `page.get_pixmap()` | PRD §9.4 | green |
 | `PYRENDER-005` | `fitz.open(...).load_page(0).get_pixmap()` parity on a rendered page | PRD §9.5 | green |
+
+---
+
+## M7 — Tables / Optional Content (OCG) / SVG export
+
+Spec source of truth: PyMuPDF `Page.find_tables`/`Table`/`TableFinder`,
+`Document` OCG/layer API, and `Page.get_svg_image` (PRD §7). The Rust engine
+rows below were merged from the parallel M7 worktrees and are green; the
+`pdf-api` facade + PyO3 + `fitz` shim rows are the M7 consolidation.
+
+### M7 — table detection (`pdf_text::tables`) — `TABLES-LINES-*` / `TABLES-TEXT-*` / `TABLES-HTML-*` / `TABLES-SPAN-*` / `TABLES-NONE-*`
+
+Tests live in `crates/pdf-text/tests/tables_{lines,text,html,none}.rs`.
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `TABLES-LINES-001` | detect a single 2×3 ruled table | PRD §7 | green |
+| `TABLES-LINES-002` | `extract()` returns cell strings in order | PRD §7 | green |
+| `TABLES-LINES-003` | `to_markdown()` pipe-delimited shape | PRD §7 | green |
+| `TABLES-LINES-004` | every cell rect lies within `bbox` | PRD §7 | green |
+| `TABLES-LINES-005` | `lines_strict` also detects the ruled grid | PRD §7 | green |
+| `TABLES-LINES-006` | header is the first row | PRD §7 | green |
+| `TABLES-TEXT-001` | detect a grid from word spacing (no rulings) | PRD §7 | green |
+| `TABLES-TEXT-002` | `text` strategy extracts cell text | PRD §7 | green |
+| `TABLES-TEXT-003` | `to_markdown` uses the first row as header | PRD §7 | green |
+| `TABLES-TEXT-004` | `lines` strategy falls back to `text` when no rulings | PRD §7 | green |
+| `TABLES-HTML-001` | regular table → one `<td>` per cell | PRD §7 | green |
+| `TABLES-HTML-002` | HTML escapes `<`/`>`/`&` in cell text | PRD §7 | green |
+| `TABLES-HTML-003` | multi-line cell uses `<br>` | PRD §7 | green |
+| `TABLES-HTML-004` | well-formed balanced tags | PRD §7 | green |
+| `TABLES-SPAN-LINES-001` | merged header detected as a colspan | PRD §7 | green |
+| `TABLES-SPAN-LINES-002` | HTML emits `colspan` once (origin only) | PRD §7 | green |
+| `TABLES-SPAN-ROW-001` | rowspan detected | PRD §7 | green |
+| `TABLES-SPAN-ROW-002` | HTML emits `rowspan` once (origin only) | PRD §7 | green |
+| `TABLES-SPAN-003` | markdown over a merged grid is still valid GFM | PRD §7 | green |
+| `TABLES-SPAN-004` | `extract` origin holds text, continuation is `None` | PRD §7 | green |
+| `TABLES-NONE-001` | empty page → no tables | PRD §7 | green |
+| `TABLES-NONE-002` | prose (no grid) → no tables | PRD §7 | green |
+| `TABLES-NONE-003` | a single stroke is not a grid | PRD §7 | green |
+| `TABLES-PROP-001` | arbitrary content never panics | PRD §8.1 | green |
+
+### M7 — optional content (`pdf_core::ocg` / `pdf_edit::ocg`) — `OCG-READ-*` / `OCG-ADD-*` / `OCG-TOGGLE-*` / `OCG-BIND-*`
+
+Tests live in `crates/pdf-core/tests/ocg_unit.rs` (read) and
+`crates/pdf-edit/tests/ocg_e2e.rs` (write round-trip).
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `OCG-READ-COUNT` | `get_ocgs` counts the layers | PRD §7 | green |
+| `OCG-READ-NAME` | reads each OCG `/Name` | PRD §7 | green |
+| `OCG-READ-STATE` | reads the default ON/OFF state | PRD §7 | green |
+| `OCG-READ-LOCKED` | reads the `/Locked` flag | PRD §7 | green |
+| `OCG-READ-INTENT` | reads `/Intent` (defaults to View) | PRD §7 | green |
+| `OCG-READ-UI-CONFIG` | `layer_ui_configs` rows (number/text/depth/type/on/locked) | PRD §7 | green |
+| `OCG-READ-ORDER-LABEL` | `/Order` nesting-label rows | PRD §7 | green |
+| `OCG-READ-BASESTATE-OFF` | `/BaseState /OFF` honored | PRD §7 | green |
+| `OCG-NONE-EMPTY` | no `/OCProperties` → empty | PRD §7 | green |
+| `OCG-NONE-MALFORMED` | malformed OCG data → empty, no panic | PRD §8.1 | green |
+| `OCG-ADD-FRESH` | `add_ocg` → save → reopen → present in `get_ocgs` | PRD §7 | green |
+| `OCG-ADD-OFF` | add with `on=false` lands in `/OFF` | PRD §7 | green |
+| `OCG-ADD-MULTI` | adding several OCGs | PRD §7 | green |
+| `OCG-ADD-INTENT` | add with a custom `/Intent` | PRD §7 | green |
+| `OCG-ADD-CONFIG-LABEL` | add under a labelled `/Order` group | PRD §7 | green |
+| `OCG-ADD-EXISTING` | add into a pre-existing `/OCProperties` | PRD §7 | green |
+| `OCG-TOGGLE-OFF` | `set_layer(off=[…])` turns a layer OFF | PRD §7 | green |
+| `OCG-TOGGLE-ON` | `set_layer(on=[…])` turns a layer ON | PRD §7 | green |
+| `OCG-TOGGLE-BULK` | bulk on/off in one call | PRD §7 | green |
+| `OCG-BIND-XOBJECT` | `set_oc` binds an XObject stream | PRD §7 | green |
+| `OCG-BIND-DICT` | `set_oc` binds a dictionary object | PRD §7 | green |
+| `OCG-NOOP` | `set_layer` on a non-layered doc is a no-op | PRD §7 | green |
+
+### M7 — SVG export (`pdf_render::svg`) — `SVG-BASIC-*` / `SVG-EMPTY-*` / `SVG-ESCAPE-*` / `SVG-PROP-*`
+
+Tests live in `crates/pdf-render/tests/svg.rs`.
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `SVG-BASIC-001` | rect + glyph + image → `<svg>` root, viewBox, paths | PRD §7 | green |
+| `SVG-BASIC-002` | `matrix` scales the viewport | PRD §7 | green |
+| `SVG-BASIC-003` | stroke attributes emitted | PRD §7 | green |
+| `SVG-BASIC-004` | even-odd fill rule | PRD §7 | green |
+| `SVG-BASIC-005` | clip emits a `<clipPath>` | PRD §7 | green |
+| `SVG-BASIC-006` | shading → gradient | PRD §7 | green |
+| `SVG-EMPTY-001` | blank page → well-formed empty `<svg>` | PRD §7 | green |
+| `SVG-EMPTY-002` | page with no `/Contents` | PRD §7 | green |
+| `SVG-ESCAPE-001` | no unescaped XML specials | PRD §7 | green |
+| `SVG-ESCAPE-002` | text-fallback path escaped | PRD §7 | green |
+| `SVG-PROP-001` | arbitrary content → well-formed SVG | PRD §8.1 | green |
+| `SVG-PROP-002` | `/Rotate` swaps the viewport | PRD §7 | green |
+
+### M7 — `pdf-api` facade wiring — `TABLES-API-*` / `OCG-API-*` / `SVG-API-*`
+
+Tests live in `crates/pdf-api/tests/m7_facade.rs`.
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `TABLES-API-001` | `page_find_tables` assembles textpage+words+device-drawings → grid + `extract` | PRD §9.1 | green |
+| `TABLES-API-002` | facade `Table.to_markdown` / `to_html` shape | PRD §9.1 | green |
+| `TABLES-API-003` | `strategy_from_str` maps lines/lines_strict/text (lenient) | PRD §9.1 | green |
+| `OCG-API-001` | `Document` add → save → reopen → `get_ocgs` / `layer_ui_configs` round-trip | PRD §9.1 | green |
+| `OCG-API-002` | `set_layer` / `set_layer_state` toggle reflected in `ocg_state` | PRD §9.1 | green |
+| `SVG-API-001` | `page_get_svg_image` → well-formed SVG string | PRD §9.1 | green |
+
+### M7 — Python `find_tables` / OCG / `get_svg_image` + `fitz` parity — `PYTABLE-*` / `PYOCG-*` / `PYSVG-*` / `PYFITZ-M7-*`
+
+Tests live in `python/tests/test_m7.py`.
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `PYTABLE-001` | `page.find_tables()` → `TableFinder` (`len`/`.tables`), `bbox` is a `Rect` | PRD §9.5 | green |
+| `PYTABLE-002` | `Table.extract()` returns the cell-string grid | PRD §9.5 | green |
+| `PYTABLE-003` | `Table.to_markdown()` pipe-delimited shape | PRD §9.5 | green |
+| `PYTABLE-004` | `Table.to_html()` has `<table>`/`<td>` (oxide_pdf extra) | PRD §9.5 | green |
+| `PYTABLE-005` | merged-header table → `to_html` carries `colspan` | PRD §9.5 | green |
+| `PYTABLE-006` | `TableFinder` is iterable + indexable | PRD §9.5 | green |
+| `PYTABLE-007` | `strategy="text"` returns a `TableFinder` (never raises) | PRD §9.5 | green |
+| `PYOCG-001` | `add_ocg` → save → reopen → appears in `get_ocgs`/`layer_ui_configs` | PRD §9.5 | green |
+| `PYOCG-002` | `set_layer(off=[xref])` reflected in `ocg_state`/`get_layer` | PRD §9.5 | green |
+| `PYOCG-003` | `add_ocg(on=False)` lands OFF | PRD §9.5 | green |
+| `PYSVG-001` | `page.get_svg_image()` → string starting `<?xml`/`<svg`, well-formed | PRD §9.5 | green |
+| `PYSVG-002` | `get_svg_image(matrix=…)` accepted | PRD §9.5 | green |
+| `PYFITZ-M7-001` | `fitz` `find_tables`/`findTables` parity; `fitz.TableFinder`/`fitz.Table` | PRD §9.5 | green |
+| `PYFITZ-M7-002` | `fitz` `get_svg_image`/`getSVGimage` parity | PRD §9.5 | green |
+| `PYFITZ-M7-003` | `fitz` `addOCG`/`getOCGs`/`layerUIConfigs`/`setLayer` aliases | PRD §9.5 | green |
+| `PYFITZ-M7-004` | `pymupdf.open(...).find_tables().tables[0].to_markdown()` works | PRD §9.5 | green |

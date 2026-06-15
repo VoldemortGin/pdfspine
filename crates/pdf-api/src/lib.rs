@@ -10,6 +10,8 @@
 
 pub mod error;
 pub mod image;
+pub mod svg;
+pub mod tables;
 pub mod text;
 
 use std::path::Path;
@@ -61,6 +63,20 @@ pub use pdf_text::{
     defaults, BlockTuple, DictBlock, DictChar, DictImageBlock, DictLine, DictSpan, DictTextBlock,
     SearchOptions, TextDict, TextPage, WordTuple,
 };
+
+// Table detection (M7): `find_tables`, `TableFinder`, `Table` (PRD §7). The
+// bindings depend only on `pdf-api`.
+pub use tables::{
+    page_find_tables, strategy_from_str, CellSpan, Strategy, Table, TableFinder, TableOptions,
+};
+
+// Optional-content (OCG / layers, M7): the read/write surface used by the
+// `Document` OCG methods below (PRD §7). `OcgInfo`/`LayerUiConfig` are returned
+// by value so the bindings depend only on `pdf-api`.
+pub use pdf_core::ocg::{LayerUiConfig, OcgInfo};
+
+// SVG export (M7): page → standalone SVG string (PRD §7).
+pub use svg::page_get_svg_image;
 
 /// The crate version string (the workspace version), surfaced to Python as
 /// `oxide_pdf.__version__`.
@@ -742,6 +758,80 @@ impl Document {
     pub fn bake(&self, annots: bool, widgets: bool) -> Result<()> {
         pdf_edit::bake(&self.store, annots, widgets)?;
         self.refresh_pages();
+        Ok(())
+    }
+
+    // --- optional content / layers (PRD §7, M7) --------------------------
+
+    /// The document's optional-content groups keyed by object number (PyMuPDF
+    /// `Document.get_ocgs`).
+    #[must_use]
+    pub fn get_ocgs(&self) -> std::collections::BTreeMap<u32, OcgInfo> {
+        pdf_core::ocg::get_ocgs(&self.store)
+    }
+
+    /// The layer-panel UI configuration rows (PyMuPDF
+    /// `Document.layer_ui_configs`).
+    #[must_use]
+    pub fn layer_ui_configs(&self) -> Vec<LayerUiConfig> {
+        pdf_core::ocg::layer_ui_configs(&self.store)
+    }
+
+    /// Whether the OCG `xref` is ON in the default configuration (PyMuPDF
+    /// `Document.get_layer`-style state query).
+    #[must_use]
+    pub fn ocg_state(&self, xref: u32) -> bool {
+        pdf_core::ocg::ocg_state(&self.store, xref)
+    }
+
+    /// Adds a new optional-content group (PyMuPDF `Document.add_ocg`), returning
+    /// its object number. `intent` defaults to `["View"]` when empty.
+    ///
+    /// # Errors
+    ///
+    /// A typed [`Error`] from the object-edit path.
+    pub fn add_ocg(
+        &self,
+        name: &str,
+        on: bool,
+        intent: &[&str],
+        config: Option<&str>,
+    ) -> Result<u32> {
+        let r = pdf_edit::add_ocg(&self.store, name, on, intent, config)?;
+        Ok(r.num)
+    }
+
+    /// Bulk-sets layer visibility (PyMuPDF `Document.set_layer`): the OCG numbers
+    /// in `on` are turned ON, those in `off` OFF.
+    ///
+    /// # Errors
+    ///
+    /// A typed [`Error`] from the object-edit path.
+    pub fn set_layer(&self, on: &[u32], off: &[u32]) -> Result<()> {
+        pdf_edit::set_layer(&self.store, on, off)?;
+        Ok(())
+    }
+
+    /// Sets a single OCG's visibility (PyMuPDF `Document.set_layer` for one
+    /// layer).
+    ///
+    /// # Errors
+    ///
+    /// A typed [`Error`] from the object-edit path.
+    pub fn set_layer_state(&self, xref: u32, on: bool) -> Result<()> {
+        pdf_edit::set_layer_state(&self.store, xref, on)?;
+        Ok(())
+    }
+
+    /// Binds object `target` to OCG `ocg` by writing its `/OC` entry (PyMuPDF
+    /// `Document.set_oc`).
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Unsupported`] when `target` is not a dictionary or stream;
+    /// propagates object-edit errors.
+    pub fn set_oc(&self, target: u32, ocg: u32) -> Result<()> {
+        pdf_edit::set_oc(&self.store, ObjRef::new(target, 0), ObjRef::new(ocg, 0))?;
         Ok(())
     }
 }

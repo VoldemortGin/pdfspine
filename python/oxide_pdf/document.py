@@ -514,6 +514,116 @@ class TextPage:
         return repr(self._tp)
 
 
+class Table:
+    """One detected table on a page (PyMuPDF ``fitz.table.Table``).
+
+    Wraps a Rust ``_core.Table``, returning geometry as :class:`Rect` value
+    types. ``extract()`` returns the cell-text grid (PyMuPDF-compatible);
+    ``to_markdown()`` / ``to_html()`` render the table.
+    """
+
+    __slots__ = ("_table",)
+
+    def __init__(self, core_table: "_core.Table") -> None:
+        self._table = core_table
+
+    @property
+    def bbox(self) -> Rect:
+        """The table bounding box (PyMuPDF ``Table.bbox``)."""
+        return _rect(self._table.bbox)
+
+    @property
+    def row_count(self) -> int:
+        """The number of cell rows (PyMuPDF ``Table.row_count``)."""
+        return self._table.row_count
+
+    @property
+    def col_count(self) -> int:
+        """The number of cell columns (PyMuPDF ``Table.col_count``)."""
+        return self._table.col_count
+
+    @property
+    def header(self) -> list:
+        """The header row's cell text, or ``[]`` (PyMuPDF ``Table.header``)."""
+        return self._table.header
+
+    @property
+    def rows(self) -> list[float]:
+        """The snapped horizontal grid-line y positions (PyMuPDF ``Table.rows``)."""
+        return self._table.rows
+
+    @property
+    def cols(self) -> list[float]:
+        """The snapped vertical grid-line x positions (PyMuPDF ``Table.cols``)."""
+        return self._table.cols
+
+    @property
+    def cells(self) -> list:
+        """The per-slot cell rects (row-major), each a :class:`Rect` or ``None``
+        for an absent / merge-continuation slot (PyMuPDF ``Table.cells``)."""
+        return [
+            [(_rect(c) if c is not None else None) for c in row]
+            for row in self._table.cells
+        ]
+
+    @property
+    def spans(self) -> list:
+        """One span per originating cell as
+        ``(row, col, row_span, col_span, Rect)`` (PyMuPDF ``Table.spans``)."""
+        return [(r, c, rs, cs, _rect(rect)) for (r, c, rs, cs, rect) in self._table.spans]
+
+    def extract(self) -> list[list]:
+        """The cell-text grid (row-major); ``None`` for an empty /
+        continuation slot (PyMuPDF ``Table.extract``)."""
+        return self._table.extract()
+
+    def to_markdown(self) -> str:
+        """The table as GitHub-Flavored-Markdown (PyMuPDF ``Table.to_markdown``)."""
+        return self._table.to_markdown()
+
+    def to_html(self) -> str:
+        """The table as an HTML ``<table>`` string (oxide_pdf extra)."""
+        return self._table.to_html()
+
+    # PyMuPDF deprecated camelCase aliases.
+    def toMarkdown(self) -> str:  # noqa: N802
+        return self.to_markdown()
+
+    def __repr__(self) -> str:
+        return f"<oxide_pdf.Table {self.row_count}x{self.col_count}>"
+
+
+class TableFinder:
+    """A page's detected tables (PyMuPDF ``fitz.table.TableFinder``).
+
+    Iterable and indexable; ``len(finder)`` is the table count and
+    ``finder.tables`` is the list of :class:`Table`.
+    """
+
+    __slots__ = ("_finder",)
+
+    def __init__(self, core_finder: "_core.TableFinder") -> None:
+        self._finder = core_finder
+
+    @property
+    def tables(self) -> list[Table]:
+        """The detected tables (PyMuPDF ``TableFinder.tables``)."""
+        return [Table(t) for t in self._finder.tables]
+
+    def __len__(self) -> int:
+        return len(self._finder)
+
+    def __getitem__(self, index: int) -> Table:
+        return Table(self._finder[index])
+
+    def __iter__(self) -> Iterator[Table]:
+        for t in self._finder.tables:
+            yield Table(t)
+
+    def __repr__(self) -> str:
+        return f"<oxide_pdf.TableFinder tables={len(self)}>"
+
+
 # ``Pixmap`` is the Rust ``_core.Pixmap`` directly (PyMuPDF ``fitz.Pixmap``,
 # PRD §8.10 / §3.3). Using the native pyclass — rather than a pure-Python wrapper
 # — means the zero-copy **buffer protocol** (``memoryview(pix)`` /
@@ -680,6 +790,56 @@ class Page:
     def is_image_only(self) -> bool:
         """Whether the page is image-only (in scope for ``get_pixmap``)."""
         return self._page.is_image_only
+
+    # --- table detection (PRD §7, M7) ---
+    def find_tables(
+        self,
+        *,
+        strategy: str = "lines",
+        line_max_thickness: float = 3.0,
+        snap_tolerance: float = 3.0,
+        min_line_length: float = 3.0,
+        clip=None,
+        **_ignored,
+    ) -> "TableFinder":
+        """Detects the tables on this page (PyMuPDF ``page.find_tables``).
+
+        ``strategy`` is ``"lines"`` (default), ``"lines_strict"`` or ``"text"``.
+        PyMuPDF's ``vertical_strategy``/``horizontal_strategy`` kwargs are
+        accepted: a single non-default value selects that strategy. Returns a
+        :class:`TableFinder` (iterable; ``.tables`` is the list).
+        """
+        # PyMuPDF passes vertical_strategy / horizontal_strategy; honor either.
+        vs = _ignored.get("vertical_strategy")
+        hs = _ignored.get("horizontal_strategy")
+        for cand in (vs, hs):
+            if cand:
+                strategy = str(cand)
+                break
+        return TableFinder(
+            self._page.find_tables(
+                strategy=strategy,
+                line_max_thickness=float(line_max_thickness),
+                snap_tolerance=float(snap_tolerance),
+                min_line_length=float(min_line_length),
+            )
+        )
+
+    # --- SVG export (PRD §7, M7) ---
+    def get_svg_image(self, matrix=None, *, text_as_path: bool = True, **_ignored) -> str:
+        """Renders this page to a standalone SVG document string (PyMuPDF
+        ``page.get_svg_image``).
+
+        ``matrix`` is an optional :class:`Matrix` / 6-sequence page-space
+        transform. PyMuPDF's ``text_as_path`` kwarg is accepted and ignored.
+        """
+        mtx = None
+        if matrix is not None:
+            m = tuple(float(v) for v in matrix)
+            if len(m) != 6:
+                raise ValueError("matrix must be a 6-sequence (a, b, c, d, e, f)")
+            mtx = m
+        return self._page.get_svg_image(matrix=mtx)
 
     # --- links / labels / rotation (PRD §8.9) ---
     def get_links(self) -> list[dict]:
@@ -1037,6 +1197,12 @@ class Page:
 
     def getDisplayList(self) -> "DisplayList":  # noqa: N802
         return self.get_displaylist()
+
+    def findTables(self, **kw) -> "TableFinder":  # noqa: N802
+        return self.find_tables(**kw)
+
+    def getSVGimage(self, *args, **kw) -> str:  # noqa: N802
+        return self.get_svg_image(*args, **kw)
 
     def getImages(self, full: bool = False) -> list[tuple]:  # noqa: N802
         return self.get_images(full)
@@ -1487,6 +1653,99 @@ class Document:
     def bake(self, *, annots: bool = True, widgets: bool = True, **_ignored) -> None:
         """Bakes annotations and/or form widgets into page content (PyMuPDF ``doc.bake``)."""
         self._doc.bake(annots=annots, widgets=widgets)
+
+    # --- optional content / layers (PRD §7, M7) ---
+    def get_ocgs(self) -> dict[int, dict]:
+        """The optional-content groups keyed by ``xref`` (PyMuPDF ``doc.get_ocgs``).
+
+        Each value is a dict with ``name``, ``intent`` (list), ``on``, ``locked``.
+        """
+        return self._doc.get_ocgs()
+
+    def layer_ui_configs(self) -> list[dict]:
+        """The layer-panel UI configuration rows (PyMuPDF ``doc.layer_ui_configs``).
+
+        Each row is a dict with ``number``, ``text``, ``depth``, ``type``
+        (``"checkbox"``/``"label"``), ``on``, ``locked``.
+        """
+        return self._doc.layer_ui_configs()
+
+    def ocg_state(self, xref: int) -> bool:
+        """Whether the OCG ``xref`` is ON in the default config (layer state)."""
+        return self._doc.ocg_state(int(xref))
+
+    def get_layer(self, config: int = -1) -> dict:
+        """The current ON/OFF/locked layer state (PyMuPDF ``doc.get_layer``).
+
+        Returns a dict with ``on``/``off``/``locked`` xref lists for the default
+        configuration (``config`` is accepted for compatibility).
+        """
+        on, off, locked = [], [], []
+        for xref, info in self._doc.get_ocgs().items():
+            (on if info["on"] else off).append(xref)
+            if info["locked"]:
+                locked.append(xref)
+        return {"on": on, "off": off, "locked": locked}
+
+    def set_layer(
+        self,
+        config: int = -1,
+        *,
+        on: list[int] | None = None,
+        off: list[int] | None = None,
+        locked: list[int] | None = None,
+        **_ignored,
+    ) -> None:
+        """Bulk-sets layer visibility (PyMuPDF ``doc.set_layer``): ``on`` xrefs
+        turned ON, ``off`` xrefs OFF (``config``/``locked`` accepted)."""
+        self._doc.set_layer(
+            on=[int(x) for x in (on or [])],
+            off=[int(x) for x in (off or [])],
+        )
+
+    def add_ocg(
+        self,
+        name: str,
+        config: int | None = None,
+        *,
+        on: bool = True,
+        intent: str = "View",
+        usage: str | None = None,
+        **_ignored,
+    ) -> int:
+        """Adds an optional-content group, returning its ``xref`` (PyMuPDF
+        ``doc.add_ocg``).
+
+        ``config`` may be a string UI-label group (PyMuPDF also accepts an int
+        config index, which is ignored here); ``on`` the initial visibility;
+        ``intent`` the ``/Intent`` name.
+        """
+        cfg = config if isinstance(config, str) else None
+        return self._doc.add_ocg(name, config=cfg, on=bool(on), intent=intent)
+
+    def set_oc(self, xref: int, ocg: int) -> None:
+        """Binds object ``xref`` to OCG ``ocg`` via its ``/OC`` entry (PyMuPDF
+        ``doc.set_oc``)."""
+        self._doc.set_oc(int(xref), int(ocg))
+
+    # --- PyMuPDF deprecated camelCase aliases (OCG) ---
+    def getOCGs(self) -> dict[int, dict]:  # noqa: N802
+        return self.get_ocgs()
+
+    def layerUIConfigs(self) -> list[dict]:  # noqa: N802
+        return self.layer_ui_configs()
+
+    def getLayer(self, config: int = -1) -> dict:  # noqa: N802
+        return self.get_layer(config)
+
+    def setLayer(self, *args, **kw) -> None:  # noqa: N802
+        return self.set_layer(*args, **kw)
+
+    def addOCG(self, *args, **kw) -> int:  # noqa: N802
+        return self.add_ocg(*args, **kw)
+
+    def setOC(self, xref: int, ocg: int) -> None:  # noqa: N802
+        return self.set_oc(xref, ocg)
 
     # --- PyMuPDF deprecated camelCase aliases ---
     @property

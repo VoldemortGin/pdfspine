@@ -175,12 +175,14 @@ add_many("Document", DEFERRED, "M1", [
 add_many("Document", DEFERRED, "M3", [
     "update_object", "update_stream", "get_new_xref", "xref_set_key", "xref_copy",
 ])
-# Optional content (OCG/layers) — out of scope
-add_many("Document", OUT_OF_SCOPE, "post-v1", [
-    "add_ocg", "add_layer", "get_ocgs", "get_layer", "get_layers",
-    "set_layer", "switch_layer", "set_layer_ui_config", "layer_ui_configs",
-    "get_oc", "set_oc", "get_ocmd", "set_ocmd",
-], "OCG/layers out of scope (PRD §3.2 #5)")
+# Optional content (OCG/layers) — core read/write surface implemented (M7)
+add_many("Document", IMPLEMENTED, "M7", [
+    "add_ocg", "get_ocgs", "get_layer", "set_layer", "layer_ui_configs", "set_oc",
+], "OCG read + add/toggle/bind (M7)")
+add_many("Document", DEFERRED, "post-v1", [
+    "add_layer", "get_layers", "switch_layer", "set_layer_ui_config",
+    "get_oc", "get_ocmd", "set_ocmd",
+], "OCMD / layer-config nesting deferred (PRD §3.2 #5)")
 # Page labels
 add_many("Document", DEFERRED, "M3", [
     "get_page_labels", "get_page_numbers", "get_label", "get_page_label",
@@ -219,14 +221,16 @@ add_many("Page", IMPLEMENTED, "M2", ["search_for"])
 add_many("Page", IMPLEMENTED, "M4", ["get_links", "insert_link", "delete_link"])
 add_many("Page", DEFERRED, "M4", ["links", "load_links", "first_link", "update_link"])
 # Rendering — deferred
-add("Page.get_pixmap", "Page", DEFERRED, "M5", "image pages M5 / vector pages M6; explicit stub today")
-add_many("Page", OUT_OF_SCOPE, "M6", ["get_svg_image", "get_displaylist", "run"], "vector rendering (PRD §3.2 #1)")
+add("Page.get_pixmap", "Page", IMPLEMENTED, "M6", "image pages (M5) + full vector-page render (M6d)")
+add_many("Page", IMPLEMENTED, "M6", ["get_displaylist"], "records the ordered render-op stream (M6d)")
+add("Page.get_svg_image", "Page", IMPLEMENTED, "M7", "page → standalone SVG string (M7)")
+add("Page.run", "Page", DEFERRED, "M6", "device-callback replay deferred; get_pixmap covers the raster path")
 add_many("Page", IMPLEMENTED, "M1", ["bound"])
 # Vector / image / font inventory
 add_many("Page", IMPLEMENTED, "M4", ["get_drawings", "get_cdrawings"])
 add_many("Page", IMPLEMENTED, "M2", ["get_fonts", "get_images"])
 add_many("Page", DEFERRED, "M4", ["get_bboxlog", "cluster_drawings"])
-add("Page.find_tables", "Page", OUT_OF_SCOPE, "post-v1", "table detection out of scope (PRD §3.2 #4)")
+add("Page.find_tables", "Page", IMPLEMENTED, "M7", "table detection: lines/lines_strict/text strategies (M7)")
 add_many("Page", DEFERRED, "M2", [
     "get_image_info", "get_image_bbox", "get_image_rects", "get_xobjects",
 ])
@@ -364,11 +368,14 @@ add_many("Outline", DEFERRED, "M3", [
 ])
 
 # ---------------------------------------------------------------------------
-# 10. DisplayList — deferred to M6 (vector rendering)
+# 10. DisplayList — recorded/replayable page render (M6d)
 # ---------------------------------------------------------------------------
-add_many("DisplayList", OUT_OF_SCOPE, "M6", [
-    "DisplayList", "get_pixmap", "get_textpage", "run", "rect",
-], "vector rendering deferred (PRD §7 M6, post-v1)")
+add_many("DisplayList", IMPLEMENTED, "M6", [
+    "DisplayList", "get_pixmap", "rect",
+], "Page.get_displaylist records the render-op stream; replay via get_pixmap (M6d)")
+add_many("DisplayList", DEFERRED, "M6", [
+    "get_textpage", "run",
+], "TextPage-from-displaylist / device-callback replay deferred")
 
 # ---------------------------------------------------------------------------
 # 11. Shape — wrappers implemented for the M4 subset
@@ -443,9 +450,10 @@ add_many("module", DEFERRED, "M1", [
     "set_messages", "message", "set_log", "log", "Tools", "TOOLS",
 ])
 add("module.css_for_pymupdf_font", "module", OUT_OF_SCOPE, "post-v1", "Story-only")
+add_many("module", IMPLEMENTED, "M7", ["find_tables"], "table detection via Page.find_tables (M7)")
 add_many("module", OUT_OF_SCOPE, "post-v1", [
-    "find_tables", "make_table", "get_tessdata",
-], "table detection / OCR out of scope (PRD §3.2 #3/#4)")
+    "make_table", "get_tessdata",
+], "table-builder / OCR out of scope (PRD §3.2 #3/#4)")
 
 # ---------------------------------------------------------------------------
 # 17. Tools / TOOLS singleton
