@@ -245,6 +245,10 @@ pub struct Line {
     pub dir: (f64, f64),
     /// The spans of this line, in advance order.
     pub spans: Vec<Span>,
+    /// Content-order key: the smallest source-glyph (paint) index among this
+    /// line's glyphs. Used to order blocks in document/content order, which is
+    /// how MuPDF/PyMuPDF sequences its structured-text blocks (PRD §8.6.2).
+    pub seq: usize,
 }
 
 /// An image placed on the page (PyMuPDF image block), device-space bbox only;
@@ -273,6 +277,10 @@ pub struct Block {
     pub image: Option<ImageBlock>,
     /// The reading-order block number (PyMuPDF block `number`).
     pub number: usize,
+    /// Content-order key: the smallest source-glyph (paint) index among the
+    /// block's lines (image blocks default to `usize::MAX`). Drives the
+    /// document/content-order block sequencing in [`crate::layout`].
+    pub seq: usize,
 }
 
 /// The full layout-reconstructed page (PyMuPDF `TextPage`), device space.

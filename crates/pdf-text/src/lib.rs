@@ -30,7 +30,9 @@ use pdf_core::geom::Matrix;
 use pdf_core::{Dict, DocumentStore};
 
 pub use interp::ContentInterpreter;
-pub use layout::{build_textpage, page_size, page_transform, textpage_from_glyphs};
+pub use layout::{
+    build_textpage, page_size, page_transform, textpage_from_glyphs, textpage_from_glyphs_clipped,
+};
 pub use model::{
     flags, Block, BlockKind, Char, DrawPath, ImageBlock, ImageRef, InterpretResult, Line,
     PaintKind, PathItem, PositionedGlyph, Span, TextPage, Word, WritingDir,

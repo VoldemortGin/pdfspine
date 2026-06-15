@@ -37,14 +37,15 @@ const BLOCK_GAP_FRAC: f64 = 1.3;
 /// the same column during block grouping.
 const BLOCK_OVERLAP_FRAC: f64 = 0.1;
 
-/// XY-cut gutter width (fraction of page width / height) required to split a
-/// group of blocks into columns / row bands.
-const XY_GUTTER_FRAC: f64 = 0.05;
-
 // === public API ===========================================================
 
 /// Builds a [`TextPage`] for a page: runs the interpreter, applies the page
 /// transform and groups glyphs (PRD §8.6).
+///
+/// Glyphs whose origin falls outside the page **CropBox** are dropped — this is
+/// the `TEXT_MEDIABOX_CLIP` behavior in the default `get_text` flag set
+/// (`defaults::TEXT`), matching fitz: off-page print-control marks and bleed
+/// outside the visible/crop region do not appear in extracted text.
 #[must_use]
 pub fn build_textpage(doc: &DocumentStore, page: &Page, _limits: &Limits) -> TextPage {
     let Some(page_dict) = page.dict() else {
@@ -53,13 +54,15 @@ pub fn build_textpage(doc: &DocumentStore, page: &Page, _limits: &Limits) -> Tex
     let res: InterpretResult = ContentInterpreter::new(doc).run_page(&page_dict);
     let mediabox = page.mediabox();
     let rotate = page.rotation();
+    let clip = page.cropbox();
     let glyphs = enrich_glyph_fonts(doc, &page_dict, res.glyphs);
-    textpage_from_glyphs(&glyphs, &res.images, mediabox, rotate)
+    textpage_from_glyphs_clipped(&glyphs, &res.images, mediabox, rotate, Some(clip))
 }
 
 /// Builds a [`TextPage`] directly from a glyph list + image inventory in **PDF
 /// user space**, a MediaBox and a `/Rotate` value. The unit-test entry point
-/// (no document needed).
+/// (no document needed). No clipping is applied (see
+/// [`textpage_from_glyphs_clipped`] for the CropBox-clip variant).
 #[must_use]
 pub fn textpage_from_glyphs(
     glyphs: &[PositionedGlyph],
@@ -67,17 +70,39 @@ pub fn textpage_from_glyphs(
     mediabox: Rect,
     rotate: i32,
 ) -> TextPage {
+    textpage_from_glyphs_clipped(glyphs, images, mediabox, rotate, None)
+}
+
+/// Like [`textpage_from_glyphs`], but drops glyphs whose origin falls outside
+/// `clip` (a rect in **PDF user space**, e.g. the page CropBox) when `clip` is
+/// `Some` — the `TEXT_MEDIABOX_CLIP` behavior. A small epsilon tolerates glyphs
+/// sitting exactly on the box edge.
+#[must_use]
+pub fn textpage_from_glyphs_clipped(
+    glyphs: &[PositionedGlyph],
+    images: &[ImageRef],
+    mediabox: Rect,
+    rotate: i32,
+    clip: Option<Rect>,
+) -> TextPage {
     let p = page_transform(mediabox, rotate);
     let (width, height) = page_size(mediabox, rotate);
 
-    // 1. Transform every glyph to device space.
-    let dev: Vec<DevGlyph> = glyphs.iter().map(|g| DevGlyph::new(g, &p)).collect();
+    // 1. Transform every glyph to device space, dropping out-of-CropBox glyphs.
+    let clip = clip.map(|c| c.normalize());
+    let dev: Vec<DevGlyph> = glyphs
+        .iter()
+        .filter(|g| clip.is_none_or(|c| origin_in_clip(g.origin, &c)))
+        .map(|g| DevGlyph::new(g, &p))
+        .collect();
 
     // 2/3. lines + spans.
     let lines = group_lines(&dev);
 
-    // 4. blocks (paragraph grouping by vertical proximity / column overlap).
-    let mut blocks = group_blocks(lines);
+    // 4. blocks — column-aware paragraph grouping: cut the lines into column
+    //    regions first (so a paragraph block never straddles two columns), then
+    //    group each column's lines into paragraphs by vertical gaps.
+    let mut blocks = group_blocks_columned(lines, width, height);
 
     // image blocks (device-space bbox via the placement CTM → page transform).
     for img in images {
@@ -92,17 +117,30 @@ pub fn textpage_from_glyphs(
                 height: img.height,
             }),
             number: 0,
+            seq: usize::MAX,
         });
     }
 
-    // 5. reading order (XY-cut) + number assignment.
-    order_blocks(&mut blocks, width, height);
+    // 5. reading order + number assignment (content/document order, matching how
+    //    MuPDF/PyMuPDF sequences its structured-text blocks).
+    order_blocks(&mut blocks);
 
     TextPage {
         width,
         height,
         blocks,
     }
+}
+
+/// Whether a glyph origin (PDF user space) lies within `clip` (the CropBox),
+/// with a 1pt slack so glyphs sitting on the edge are kept (matches fitz, which
+/// keeps marginal glyphs and only drops clearly off-page ones).
+fn origin_in_clip(origin: Point, clip: &Rect) -> bool {
+    const SLACK: f64 = 1.0;
+    origin.x >= clip.x0 - SLACK
+        && origin.x <= clip.x1 + SLACK
+        && origin.y >= clip.y0 - SLACK
+        && origin.y <= clip.y1 + SLACK
 }
 
 // === device / page transform (PRD §8.6.1) ================================
@@ -316,8 +354,11 @@ fn group_lines(dev: &[DevGlyph]) -> Vec<Line> {
             if is_rtl_run(&run, dev) {
                 run.reverse();
             }
+            // Content-order key: the smallest source-glyph index in this run,
+            // i.e. the earliest-painted glyph of the line (document order).
+            let seq = run.iter().copied().min().unwrap_or(0);
             let line_glyphs: Vec<&DevGlyph> = run.iter().map(|&i| &dev[i]).collect();
-            lines.push(build_line(&line_glyphs));
+            lines.push(build_line(&line_glyphs, seq));
         }
     }
     lines
@@ -388,8 +429,9 @@ fn is_rtl_char(c: char) -> bool {
 }
 
 /// Builds a [`Line`] from advance-ordered glyphs, splitting into spans where the
-/// style (font / size / color / flags) changes.
-fn build_line(glyphs: &[&DevGlyph]) -> Line {
+/// style (font / size / color / flags) changes. `seq` is the line's content-order
+/// key (smallest source-glyph index).
+fn build_line(glyphs: &[&DevGlyph], seq: usize) -> Line {
     let wmode = glyphs.first().map_or(0, |g| g.wmode);
     let dir = glyphs.first().map_or((1.0, 0.0), |g| g.dir);
 
@@ -451,25 +493,58 @@ fn build_line(glyphs: &[&DevGlyph]) -> Line {
         wmode,
         dir,
         spans,
+        seq,
     }
 }
 
 // === block grouping =======================================================
 
-/// Groups lines into paragraph blocks by vertical proximity + horizontal
-/// overlap. Lines are assumed top-to-bottom (the order from `group_lines`).
-fn group_blocks(lines: Vec<Line>) -> Vec<Block> {
+/// Column-aware paragraph grouping (PRD §8.6.2).
+///
+/// The previous grouping walked lines strictly top-to-bottom and started a new
+/// block whenever the next line failed to x-overlap the current one. On a
+/// multi-column page this produced one *single-line* block per column row
+/// (left, right, left, right, …) — and a downstream geometric sort then
+/// interleaved the columns line-by-line, which is the dominant reading-order
+/// divergence vs fitz.
+///
+/// Instead we first partition the lines into **column regions** with a recursive
+/// XY-cut on the line bounding boxes (a vertical gutter splits columns; a
+/// horizontal gutter splits stacked regions like a full-width header above a
+/// two-column body). Within each leaf region the lines are grouped into
+/// paragraph blocks by vertical proximity, so a block never straddles a column.
+fn group_blocks_columned(lines: Vec<Line>, width: f64, height: f64) -> Vec<Block> {
     if lines.is_empty() {
         return Vec::new();
     }
-
-    // Typical line height drives the vertical-gap threshold.
+    // Typical line height (computed over all lines) drives the paragraph-gap
+    // threshold uniformly across regions.
     let typical_h = typical_line_height(&lines);
 
+    let idxs: Vec<usize> = (0..lines.len()).collect();
+    let mut regions: Vec<Vec<usize>> = Vec::new();
+    cut_lines(&lines, &idxs, width, height, &mut regions);
+
     let mut blocks: Vec<Block> = Vec::new();
+    // `lines` is consumed region-by-region: move each line out exactly once.
+    let mut slots: Vec<Option<Line>> = lines.into_iter().map(Some).collect();
+    for region in regions {
+        // Take the region's lines (top-to-bottom) and split into paragraphs.
+        let mut region_lines: Vec<Line> = region
+            .iter()
+            .map(|&i| slots[i].take().expect("each line placed once"))
+            .collect();
+        region_lines.sort_by(|a, b| a.bbox.y0.total_cmp(&b.bbox.y0));
+        group_region_paragraphs(region_lines, typical_h, &mut blocks);
+    }
+    blocks
+}
+
+/// Groups one column region's (y-sorted) lines into paragraph blocks by vertical
+/// proximity + horizontal overlap, appending to `out`.
+fn group_region_paragraphs(lines: Vec<Line>, typical_h: f64, out: &mut Vec<Block>) {
     let mut cur: Vec<Line> = Vec::new();
     let mut prev_bottom: Option<f64> = None;
-
     for line in lines {
         let top = line.bbox.y0;
         let start_new = match prev_bottom {
@@ -480,15 +555,339 @@ fn group_blocks(lines: Vec<Line>) -> Vec<Block> {
             }
         };
         if start_new && !cur.is_empty() {
-            blocks.push(make_text_block(std::mem::take(&mut cur)));
+            out.push(make_text_block(std::mem::take(&mut cur)));
         }
         prev_bottom = Some(line.bbox.y1);
         cur.push(line);
     }
     if !cur.is_empty() {
-        blocks.push(make_text_block(cur));
+        out.push(make_text_block(cur));
     }
-    blocks
+}
+
+/// Recursive XY-cut over **lines** into column / band regions.
+///
+/// At each node it considers the single widest *empty gutter* on each axis (a
+/// coordinate band that no line's projected interval crosses) and cuts on
+/// whichever gutter is wider. Cutting on the wider gutter is what lets a
+/// full-width header/title — which bridges the column gutter and would otherwise
+/// block a vertical cut — be peeled off by a horizontal cut first; the remaining
+/// pure multi-column body then yields a clean vertical (column) cut. A vertical
+/// gutter is a coverage valley at least `min_x_gut` wide (see [`column_gutter`]);
+/// a horizontal gutter must clear ~1.3 typical line heights (so paragraph/band
+/// gaps separate, but ordinary inter-line spacing does not). Final document order
+/// is decided later by each block's content `seq`.
+fn cut_lines(lines: &[Line], idxs: &[usize], width: f64, height: f64, out: &mut Vec<Vec<usize>>) {
+    if idxs.len() <= 1 {
+        if !idxs.is_empty() {
+            out.push(idxs.to_vec());
+        }
+        return;
+    }
+    let typ_h = typical_line_height_idx(lines, idxs);
+    let min_y_gut = (typ_h * BLOCK_GAP_FRAC).max(1.0);
+
+    // Column gutters are probed over **narrow** lines only, so a full-width
+    // header/title that bridges the gutter does not defeat column detection.
+    let region_w = region_width(lines, idxs);
+    // A real inter-column gutter is comfortably wider than a word space but on
+    // letter-size multi-column layouts is only ≈4% of the region width (≈22pt
+    // observed) — well under the 5% page-width rule used previously. Use a
+    // line-height floor (a gutter exceeds ~1.2 line heights) and a small
+    // region-relative term; an empty vertical band this wide that no narrow line
+    // crosses across the whole region does not occur in ordinary single-column
+    // justified text, so this does not over-split.
+    let min_x_gut = (typ_h * 1.2).max(region_w * 0.03);
+    // Column gutter via a coverage-profile valley that tolerates a few
+    // crossings: a centered title line or a footer string can clip across the
+    // gutter without filling it, so requiring *zero* crossings (a plain empty
+    // gutter) misses the column break. A valley whose crossing count stays at or
+    // below `tol` over a band ≥ `min_x_gut` wide is treated as the gutter.
+    let best_x = column_gutter(lines, idxs, min_x_gut, region_w);
+    let best_y = widest_y_gutter(lines, idxs, min_y_gut);
+
+    // Validate a candidate column cut: partition into left / right / straddling
+    // lines at the gutter midpoint, and accept only when **both** sides are
+    // substantial columns. A narrow marginal strip — e.g. a column of line
+    // numbers beside legal text — is not a real second column and must not be
+    // split off (fitz keeps the number with its line in content order).
+    let column_cut = best_x.and_then(|(_, at)| {
+        let mut left = Vec::new();
+        let mut right = Vec::new();
+        let mut spanning = Vec::new();
+        for &i in idxs {
+            let b = lines[i].bbox.normalize();
+            if b.x1 <= at {
+                left.push(i);
+            } else if b.x0 >= at {
+                right.push(i);
+            } else {
+                spanning.push(i);
+            }
+        }
+        if is_substantial_column(lines, &left, region_w)
+            && is_substantial_column(lines, &right, region_w)
+        {
+            Some((left, right, spanning))
+        } else {
+            None
+        }
+    });
+
+    // Cut on the axis whose widest empty gutter is larger. Ties prefer the
+    // vertical (column) cut so side-by-side columns separate before bands.
+    let prefer_x = match (best_x, best_y) {
+        _ if column_cut.is_none() => false,
+        (Some((xg, _)), Some((yg, _))) => xg >= yg,
+        (Some(_), None) => true,
+        _ => false,
+    };
+
+    if prefer_x {
+        if let Some((left, right, spanning)) = column_cut {
+            // Recurse each side; spanning lines form their own (band-cut) region.
+            cut_lines(lines, &left, width, height, out);
+            if !spanning.is_empty() {
+                cut_spanning(lines, &spanning, width, height, out);
+            }
+            cut_lines(lines, &right, width, height, out);
+            return;
+        }
+    }
+
+    if best_y.is_some() {
+        let groups = split_y_bands(lines, idxs, min_y_gut);
+        // A horizontal cut that did not actually separate anything (one group)
+        // means the region is irreducible — emit it whole to avoid recursion.
+        if groups.len() <= 1 {
+            out.push(idxs.to_vec());
+        } else {
+            for g in groups {
+                cut_lines(lines, &g, width, height, out);
+            }
+        }
+        return;
+    }
+
+    // No clean cut: this region is one column.
+    out.push(idxs.to_vec());
+}
+
+/// Handles a group of full-width "spanning" lines peeled out of a column cut:
+/// they are stacked bands (header line, title, caption, …). A `Y`-cut separates
+/// them into bands; each band becomes its own region so it is never merged into a
+/// neighbouring column's paragraph block.
+fn cut_spanning(
+    lines: &[Line],
+    idxs: &[usize],
+    width: f64,
+    height: f64,
+    out: &mut Vec<Vec<usize>>,
+) {
+    if idxs.len() <= 1 {
+        if !idxs.is_empty() {
+            out.push(idxs.to_vec());
+        }
+        return;
+    }
+    let min_y_gut = (typical_line_height_idx(lines, idxs) * BLOCK_GAP_FRAC).max(1.0);
+    let groups = split_y_bands(lines, idxs, min_y_gut);
+    for g in groups {
+        // Recurse so a spanning band that itself contains columns (rare) still
+        // splits; with one group it just emits that band.
+        if g.len() == idxs.len() {
+            out.push(g);
+        } else {
+            cut_lines(lines, &g, width, height, out);
+        }
+    }
+}
+
+/// Finds the column gutter as the widest **coverage valley** on the x-axis: a
+/// band that ≤ `tol` lines cross, at least `min_gap` wide, strictly interior to
+/// the region. Returns `(valley_width, valley_midpoint)`, or `None`.
+///
+/// `tol` lets a centered title line, a footer string, or a stray wide line clip
+/// across the gutter without hiding it — requiring an entirely empty gutter (as
+/// a plain endpoint sweep does) misses real columns on pages with a centered
+/// header. Coverage is sampled by sweeping the sorted interval endpoints; the
+/// valley is the widest maximal run of x where the active count stays ≤ `tol`.
+fn column_gutter(
+    lines: &[Line],
+    idxs: &[usize],
+    min_gap: f64,
+    region_w: f64,
+) -> Option<(f64, f64)> {
+    if idxs.len() < 4 {
+        return None;
+    }
+    // Tolerance: a small fraction of the line count (at least 1), so a handful
+    // of header/footer crossings don't fill the gutter.
+    let tol = ((idxs.len() as f64) * 0.10).floor().max(1.0) as i64;
+
+    // Region x-bounds (the valley must be interior, not the page margins).
+    let mut rx0 = f64::INFINITY;
+    let mut rx1 = f64::NEG_INFINITY;
+    let mut events: Vec<(f64, i64)> = Vec::with_capacity(idxs.len() * 2);
+    for &i in idxs {
+        let b = lines[i].bbox.normalize();
+        rx0 = rx0.min(b.x0);
+        rx1 = rx1.max(b.x1);
+        events.push((b.x0, 1)); // coverage starts
+        events.push((b.x1, -1)); // coverage ends
+    }
+    events.sort_by(|a, b| a.0.total_cmp(&b.0).then(b.1.cmp(&a.1)));
+
+    let mut cover: i64 = 0;
+    let mut best: Option<(f64, f64)> = None;
+    let mut valley_start: Option<f64> = None;
+    let mut prev_x = rx0;
+
+    for (x, delta) in events {
+        // The interval [prev_x, x) carries the current `cover` count.
+        if cover <= tol {
+            if valley_start.is_none() {
+                valley_start = Some(prev_x);
+            }
+        } else if let Some(vs) = valley_start.take() {
+            consider_valley(vs, prev_x, rx0, rx1, min_gap, &mut best);
+        }
+        // Apply the event(s) at x.
+        cover += delta;
+        if cover < 0 {
+            cover = 0;
+        }
+        if cover > tol {
+            if let Some(vs) = valley_start.take() {
+                consider_valley(vs, x, rx0, rx1, min_gap, &mut best);
+            }
+        }
+        prev_x = x;
+    }
+    if let Some(vs) = valley_start.take() {
+        consider_valley(vs, rx1, rx0, rx1, min_gap, &mut best);
+    }
+    // Ignore a valley that spans almost the whole region (a near-empty region).
+    best.filter(|&(w, _)| w < region_w * 0.95)
+}
+
+/// Records a candidate gutter valley `[lo, hi]` if it is interior to `[rx0, rx1]`
+/// and at least `min_gap` wide, keeping the widest seen in `best`.
+fn consider_valley(
+    lo: f64,
+    hi: f64,
+    rx0: f64,
+    rx1: f64,
+    min_gap: f64,
+    best: &mut Option<(f64, f64)>,
+) {
+    // Clip to strictly interior: a valley touching the region edge is just the
+    // outer margin, not a between-columns gutter.
+    let lo = lo.max(rx0);
+    let hi = hi.min(rx1);
+    if lo <= rx0 + f64::EPSILON || hi >= rx1 - f64::EPSILON {
+        return;
+    }
+    let w = hi - lo;
+    if w >= min_gap && best.is_none_or(|(bw, _)| w > bw) {
+        *best = Some((w, (lo + hi) / 2.0));
+    }
+}
+
+/// Whether a candidate column side is a *substantial* column rather than a
+/// narrow marginal strip (line numbers, a rule, a single gutter glyph). It must
+/// hold at least two lines and span at least ~18% of the region width.
+fn is_substantial_column(lines: &[Line], idxs: &[usize], region_w: f64) -> bool {
+    if idxs.len() < 2 {
+        return false;
+    }
+    region_width(lines, idxs) >= region_w * 0.18
+}
+
+/// The x-extent (max x1 − min x0) covered by a subset of `lines`.
+fn region_width(lines: &[Line], idxs: &[usize]) -> f64 {
+    let mut x0 = f64::INFINITY;
+    let mut x1 = f64::NEG_INFINITY;
+    for &i in idxs {
+        let b = lines[i].bbox.normalize();
+        x0 = x0.min(b.x0);
+        x1 = x1.max(b.x1);
+    }
+    (x1 - x0).max(1.0)
+}
+
+/// The widest empty **horizontal** gutter (a y-band no line crosses) that clears
+/// `min_gap`, returning its width and the y at which it opens, or `None`.
+fn widest_y_gutter(lines: &[Line], idxs: &[usize], min_gap: f64) -> Option<(f64, f64)> {
+    let interval = |i: usize| -> (f64, f64) {
+        let b = lines[i].bbox.normalize();
+        (b.y0, b.y1)
+    };
+    let mut sorted = idxs.to_vec();
+    sorted.sort_by(|&a, &b| interval(a).0.total_cmp(&interval(b).0));
+
+    let mut best: Option<(f64, f64)> = None;
+    let mut cur_max = f64::NEG_INFINITY;
+    for &i in &sorted {
+        let (lo, hi) = interval(i);
+        if cur_max.is_finite() {
+            let gap = lo - cur_max;
+            if gap >= min_gap && best.is_none_or(|(bw, _)| gap > bw) {
+                best = Some((gap, cur_max));
+            }
+        }
+        cur_max = cur_max.max(hi);
+    }
+    best
+}
+
+/// Splits line indices into **horizontal bands** wherever a y-gap of at least
+/// `min_gap` separates consecutive lines. Groups come back top-to-bottom.
+fn split_y_bands(lines: &[Line], idxs: &[usize], min_gap: f64) -> Vec<Vec<usize>> {
+    let interval = |i: usize| -> (f64, f64) {
+        let b = lines[i].bbox.normalize();
+        (b.y0, b.y1)
+    };
+    let mut sorted = idxs.to_vec();
+    sorted.sort_by(|&a, &b| interval(a).0.total_cmp(&interval(b).0));
+
+    let mut groups: Vec<Vec<usize>> = Vec::new();
+    let mut cur: Vec<usize> = Vec::new();
+    let mut cur_max = f64::NEG_INFINITY;
+    for &i in &sorted {
+        let (lo, hi) = interval(i);
+        if cur.is_empty() {
+            cur.push(i);
+            cur_max = hi;
+            continue;
+        }
+        if lo - cur_max >= min_gap {
+            groups.push(std::mem::take(&mut cur));
+            cur.push(i);
+            cur_max = hi;
+        } else {
+            cur.push(i);
+            cur_max = cur_max.max(hi);
+        }
+    }
+    if !cur.is_empty() {
+        groups.push(cur);
+    }
+    groups
+}
+
+/// Median line height over a subset of `lines` (the band-gap threshold base).
+fn typical_line_height_idx(lines: &[Line], idxs: &[usize]) -> f64 {
+    let mut hs: Vec<f64> = idxs
+        .iter()
+        .map(|&i| lines[i].bbox.height())
+        .filter(|h| *h > 0.0)
+        .collect();
+    if hs.is_empty() {
+        return 1.0;
+    }
+    hs.sort_by(f64::total_cmp);
+    hs[hs.len() / 2].max(1.0)
 }
 
 /// The median line height (a robust "typical" measure for gap thresholds).
@@ -524,11 +923,14 @@ fn overlaps_block(cur: &[Line], line: &Line) -> bool {
     overlap >= min_w * BLOCK_OVERLAP_FRAC
 }
 
-/// Wraps a run of lines into a text [`Block`] (number assigned later).
+/// Wraps a run of lines into a text [`Block`] (number assigned later). The
+/// block's content-order `seq` is the smallest line `seq` it contains.
 fn make_text_block(lines: Vec<Line>) -> Block {
     let mut bbox = Rect::default();
+    let mut seq = usize::MAX;
     for l in &lines {
         bbox = bbox.union(&l.bbox);
+        seq = seq.min(l.seq);
     }
     Block {
         bbox,
@@ -536,117 +938,30 @@ fn make_text_block(lines: Vec<Line>) -> Block {
         lines,
         image: None,
         number: 0,
+        seq,
     }
 }
 
-// === reading order (XY-cut) ===============================================
+// === reading order ========================================================
 
-/// Orders blocks via a recursive XY-cut and assigns sequential numbers
-/// (PRD §8.6.2): multi-column pages read column-by-column.
-fn order_blocks(blocks: &mut Vec<Block>, width: f64, height: f64) {
-    if blocks.len() <= 1 {
-        for (i, b) in blocks.iter_mut().enumerate() {
-            b.number = i;
-        }
-        return;
-    }
-    let idxs: Vec<usize> = (0..blocks.len()).collect();
-    let mut ordered: Vec<usize> = Vec::with_capacity(blocks.len());
-    xy_cut(blocks, &idxs, width, height, &mut ordered);
-
-    // Rebuild the vector in reading order and number it.
-    let mut taken: Vec<Option<Block>> = blocks.drain(..).map(Some).collect();
-    for (n, &i) in ordered.iter().enumerate() {
-        let mut b = taken[i].take().expect("each block placed once");
-        b.number = n;
-        blocks.push(b);
-    }
-}
-
-/// Recursive XY-cut: prefer a **vertical** cut (split into left/right columns)
-/// so columns read fully top-to-bottom before moving right; otherwise a
-/// **horizontal** cut (top/bottom bands); base case sorts by `(y0, x0)`.
-fn xy_cut(blocks: &[Block], idxs: &[usize], width: f64, height: f64, out: &mut Vec<usize>) {
-    if idxs.len() <= 1 {
-        out.extend_from_slice(idxs);
-        return;
-    }
-
-    // Try a vertical gutter (columns) first — column-major reading order.
-    if let Some(groups) = cut_axis(blocks, idxs, Axis::X, width * XY_GUTTER_FRAC) {
-        for g in groups {
-            xy_cut(blocks, &g, width, height, out);
-        }
-        return;
-    }
-    // Then a horizontal gutter (rows / paragraphs).
-    if let Some(groups) = cut_axis(blocks, idxs, Axis::Y, height * XY_GUTTER_FRAC) {
-        for g in groups {
-            xy_cut(blocks, &g, width, height, out);
-        }
-        return;
-    }
-    // No clean cut: stable reading order by (y0, x0).
-    let mut sorted = idxs.to_vec();
-    sorted.sort_by(|&a, &b| {
-        blocks[a]
-            .bbox
-            .y0
-            .total_cmp(&blocks[b].bbox.y0)
-            .then(blocks[a].bbox.x0.total_cmp(&blocks[b].bbox.x0))
-    });
-    out.extend(sorted);
-}
-
-#[derive(Clone, Copy)]
-enum Axis {
-    X,
-    Y,
-}
-
-/// Attempts to split `idxs` along `axis` wherever a gutter of at least
-/// `min_gap` separates consecutive projected intervals. Returns `None` when no
-/// gutter splits the set (i.e. a single group). Groups come back in increasing
-/// coordinate order along the axis.
-fn cut_axis(blocks: &[Block], idxs: &[usize], axis: Axis, min_gap: f64) -> Option<Vec<Vec<usize>>> {
-    let interval = |i: usize| -> (f64, f64) {
-        let b = &blocks[i].bbox;
-        match axis {
-            Axis::X => (b.x0, b.x1),
-            Axis::Y => (b.y0, b.y1),
-        }
-    };
-
-    let mut sorted = idxs.to_vec();
-    sorted.sort_by(|&a, &b| interval(a).0.total_cmp(&interval(b).0));
-
-    let mut groups: Vec<Vec<usize>> = Vec::new();
-    let mut cur: Vec<usize> = Vec::new();
-    let mut cur_max = f64::NEG_INFINITY;
-
-    for &i in &sorted {
-        let (lo, hi) = interval(i);
-        if cur.is_empty() {
-            cur.push(i);
-            cur_max = hi;
-            continue;
-        }
-        if lo - cur_max >= min_gap {
-            groups.push(std::mem::take(&mut cur));
-            cur.push(i);
-            cur_max = hi;
-        } else {
-            cur.push(i);
-            cur_max = cur_max.max(hi);
-        }
-    }
-    if !cur.is_empty() {
-        groups.push(cur);
-    }
-    if groups.len() <= 1 {
-        None
-    } else {
-        Some(groups)
+/// Orders blocks in **document / content order** and assigns sequential numbers
+/// (PRD §8.6.2).
+///
+/// MuPDF/PyMuPDF emit structured-text blocks in the order its content device
+/// encountered them (content order), *not* a geometric top-to-bottom sort — a
+/// pure geometric reordering of a page's blocks diverges sharply from fitz's
+/// default `get_text` sequence. Since our interpreter already walks the content
+/// stream in paint order, ordering blocks by their content-order `seq` (smallest
+/// source-glyph index) reproduces fitz's block sequence closely. Column grouping
+/// (in [`group_blocks_columned`]) guarantees a block's lines come from one
+/// column, so `seq` ordering keeps each column contiguous instead of
+/// interleaving columns line-by-line. The sort is **stable**, so image blocks
+/// (`seq == usize::MAX`) sort to the end while equal-`seq` blocks keep their
+/// relative position.
+fn order_blocks(blocks: &mut [Block]) {
+    blocks.sort_by_key(|b| b.seq);
+    for (i, b) in blocks.iter_mut().enumerate() {
+        b.number = i;
     }
 }
 

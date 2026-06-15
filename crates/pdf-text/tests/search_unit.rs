@@ -54,6 +54,7 @@ fn line_of(spans: Vec<Span>) -> Line {
         wmode: 0,
         dir: (1.0, 0.0),
         spans,
+        seq: 0,
     }
 }
 
@@ -68,6 +69,7 @@ fn block_of(number: usize, lines: Vec<Line>) -> Block {
         lines,
         image: None,
         number,
+        seq: number,
     }
 }
 
