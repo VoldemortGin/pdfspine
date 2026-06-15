@@ -18,7 +18,22 @@
 //! The output mirrors PyMuPDF's `Table`/`TableFinder`: a [`TableFinder`] holds a
 //! `Vec<Table>`; each [`Table`] exposes `bbox`, `row_count`, `col_count`, a
 //! `cells` grid of `Option<Rect>`, the detected `header`, the snapped `rows`/`cols`
-//! line positions, plus [`Table::extract`] and [`Table::to_markdown`].
+//! line positions, plus [`Table::extract`], [`Table::to_markdown`] and
+//! [`Table::to_html`].
+//!
+//! ## Merged / spanning cells
+//!
+//! Beyond the regular `Option<Rect>` grid, the detector recognizes **merged
+//! cells** (colspan / rowspan). Two adjacent grid slots collapse into one cell
+//! when the ruling segment that would separate them is **absent** (`Lines`
+//! strategy) or when a single word straddles the boundary between them (`Text`
+//! strategy). The merge result is the `spans` list of [`CellSpan`]s — one entry
+//! per *originating* cell, carrying its `row_span`/`col_span`. Continuation
+//! slots covered by a span are dropped from `cells` (set to `None`) and have no
+//! `spans` entry, so they are never double-emitted. [`Table::to_html`] uses this
+//! to emit faithful `colspan`/`rowspan`; [`Table::to_markdown`] and
+//! [`Table::extract`] degrade gracefully (text in the originating slot, blanks
+//! / `None` for continuation slots — see their docs).
 
 use pdf_core::geom::{Matrix, Point, Rect};
 
@@ -87,6 +102,23 @@ impl TableOptions {
     }
 }
 
+/// One merged (or unit) cell, anchored at its top-left grid slot `(row, col)`
+/// and covering `row_span` × `col_span` grid slots. `rect` is the cell's full
+/// merged bounding box (device space). A non-merged cell has both spans `1`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CellSpan {
+    /// The originating grid row (0-based, top row first).
+    pub row: usize,
+    /// The originating grid column (0-based, left column first).
+    pub col: usize,
+    /// How many grid rows this cell covers (`>= 1`).
+    pub row_span: usize,
+    /// How many grid columns this cell covers (`>= 1`).
+    pub col_span: usize,
+    /// The merged cell's bounding box (device space).
+    pub rect: Rect,
+}
+
 /// One detected table.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Table {
@@ -102,18 +134,39 @@ pub struct Table {
     /// The snapped horizontal grid-line y positions (`row_count + 1` entries when
     /// regular), top → bottom.
     pub rows: Vec<f64>,
-    /// The cell rectangles in row-major order. `None` marks a missing cell (a
-    /// merged / absent grid slot). Outer `Vec` is rows, inner is columns.
+    /// The cell rectangles in row-major order. `None` marks a missing cell (an
+    /// absent grid slot) **or** a continuation slot covered by a merged cell
+    /// originating elsewhere — the origin slot of a merged cell holds the full
+    /// merged [`Rect`]. Outer `Vec` is rows, inner is columns.
     pub cells: Vec<Vec<Option<Rect>>>,
+    /// The merged-cell model: one [`CellSpan`] per *originating* cell (the
+    /// top-left slot of each cell). Continuation slots have no entry here. A
+    /// regular grid yields one unit span (`row_span = col_span = 1`) per present
+    /// cell. Use [`Table::span_at`] to look up the originating span for a slot.
+    pub spans: Vec<CellSpan>,
     /// The detected header: the first row's cell text, when a plausible header
     /// row is present (else empty).
     pub header: Vec<Option<String>>,
 }
 
 impl Table {
+    /// The originating [`CellSpan`] anchored at grid slot `(row, col)`, or `None`
+    /// when that slot is empty or is a continuation slot covered by a merged
+    /// cell that originates elsewhere.
+    #[must_use]
+    pub fn span_at(&self, row: usize, col: usize) -> Option<&CellSpan> {
+        self.spans.iter().find(|s| s.row == row && s.col == col)
+    }
+
     /// Extracts the cell text in reading order: `rows[r][c]` is the joined text
     /// of all [`Word`]s whose center lies inside cell `(r, c)`, or `None` for an
     /// empty / missing cell.
+    ///
+    /// For **merged cells** the text appears in the originating (top-left) slot;
+    /// continuation slots covered by the merge are `None`. This matches
+    /// PyMuPDF's `Table.extract`, which likewise reports a merged cell's text in
+    /// its first slot and leaves the covered slots empty (it never repeats the
+    /// text across the span).
     #[must_use]
     pub fn extract(&self, words: &[Word]) -> Vec<Vec<Option<String>>> {
         self.cells
@@ -130,6 +183,12 @@ impl Table {
     /// used as the header (matching PyMuPDF `Table.to_markdown`); when no real
     /// header was detected a blank header row is emitted so the table is still
     /// well-formed.
+    ///
+    /// **Lossiness:** Markdown has no notion of merged cells, so a spanning cell
+    /// degrades — its text is emitted only in the originating slot and the
+    /// continuation slots render as blanks. The column/row count is preserved so
+    /// the result stays valid GFM, but colspan/rowspan information is lost. Use
+    /// [`Table::to_html`] for a faithful, span-aware rendering.
     #[must_use]
     pub fn to_markdown(&self, words: &[Word]) -> String {
         let grid = self.extract(words);
@@ -172,6 +231,79 @@ impl Table {
             out.push('\n');
         }
         out
+    }
+
+    /// Renders the table as a high-fidelity HTML `<table>`.
+    ///
+    /// Output shape (oxide-defined, own goldens): a `<table>` wrapping one
+    /// `<tr>` per grid row. Each *originating* cell is emitted once as a `<td>`
+    /// (or `<th>` in the detected header row) with `colspan`/`rowspan`
+    /// attributes when it spans more than one grid slot; continuation slots
+    /// covered by a span are skipped, so each merged cell appears exactly once.
+    /// Empty (absent) slots emit an empty `<td>`/`<th>`.
+    ///
+    /// Cell text is the [`Word`]s whose center lies inside the cell rect, joined
+    /// in reading order with lines separated by `<br>` (multi-line content is
+    /// preserved) and `&`, `<`, `>`, `"` HTML-escaped.
+    #[must_use]
+    pub fn to_html(&self, words: &[Word]) -> String {
+        let mut out = String::from("<table>");
+        if self.col_count == 0 || self.row_count == 0 {
+            out.push_str("</table>");
+            return out;
+        }
+        let has_header = self.header.iter().any(|h| h.is_some());
+        for r in 0..self.row_count {
+            out.push_str("<tr>");
+            let tag = if r == 0 && has_header { "th" } else { "td" };
+            for c in 0..self.col_count {
+                match self.span_at(r, c) {
+                    Some(span) => {
+                        out.push('<');
+                        out.push_str(tag);
+                        if span.col_span > 1 {
+                            out.push_str(&format!(" colspan=\"{}\"", span.col_span));
+                        }
+                        if span.row_span > 1 {
+                            out.push_str(&format!(" rowspan=\"{}\"", span.row_span));
+                        }
+                        out.push('>');
+                        if let Some(text) = cell_html_text(span.rect, words) {
+                            out.push_str(&text);
+                        }
+                        out.push_str("</");
+                        out.push_str(tag);
+                        out.push('>');
+                    }
+                    None => {
+                        // Either an absent slot (emit an empty cell) or a
+                        // continuation slot covered by a span (skip entirely).
+                        if !self.is_covered(r, c) {
+                            out.push('<');
+                            out.push_str(tag);
+                            out.push_str("></");
+                            out.push_str(tag);
+                            out.push('>');
+                        }
+                    }
+                }
+            }
+            out.push_str("</tr>");
+        }
+        out.push_str("</table>");
+        out
+    }
+
+    /// Whether grid slot `(row, col)` is a continuation slot covered by a merged
+    /// cell that originates at a different slot.
+    fn is_covered(&self, row: usize, col: usize) -> bool {
+        self.spans.iter().any(|s| {
+            row >= s.row
+                && row < s.row + s.row_span
+                && col >= s.col
+                && col < s.col + s.col_span
+                && !(row == s.row && col == s.col)
+        })
     }
 }
 
@@ -313,6 +445,41 @@ fn detect_lines(drawings: &[DrawPath], opt: &TableOptions) -> Vec<Table> {
     let bbox = Rect::new(cols[0], rows[0], cols[cols.len() - 1], rows[rows.len() - 1]);
     let row_count = rows.len() - 1;
     let col_count = cols.len() - 1;
+    // Build the lattice presence map for span detection: a slot belongs to the
+    // table when each side is *sufficiently bounded* — an outer side must carry a
+    // ruling, while an interior side may be unruled (that absence is exactly what
+    // signals a merge). The strict per-slot `build_cells` grid (all four edges
+    // ruled) feeds the regular no-span case; this looser map recovers merged
+    // cells whose internal separators were dropped.
+    let tol = opt.snap_tolerance;
+    let h_at = |y: f64, x0: f64, x1: f64| edge_covered(&h_segs, y, x0, x1, tol);
+    let v_at = |x: f64, y0: f64, y1: f64| edge_covered(&v_segs, x, y0, y1, tol);
+    let mut presence = vec![vec![false; col_count]; row_count];
+    for r in 0..row_count {
+        for c in 0..col_count {
+            let (y0, y1, x0, x1) = (rows[r], rows[r + 1], cols[c], cols[c + 1]);
+            // Outer sides must be ruled; interior sides are always acceptable.
+            let top = r > 0 || h_at(y0, x0, x1);
+            let bottom = r + 1 < row_count || h_at(y1, x0, x1);
+            let left = c > 0 || v_at(x0, y0, y1);
+            let right = c + 1 < col_count || v_at(x1, y0, y1);
+            // The strictly-ruled slots are always present; otherwise require the
+            // outer enclosure so stray interior rules can't invent a whole grid.
+            presence[r][c] = cells[r][c].is_some() || (top && bottom && left && right);
+        }
+    }
+    let col_split = |ri: usize, ci: usize| {
+        // Is there a vertical rule on grid line `ci+1` over row band `ri`?
+        v_at(cols[ci + 1], rows[ri], rows[ri + 1])
+    };
+    let row_split = |ri: usize, ci: usize| {
+        // Is there a horizontal rule on grid line `ri+1` over col band `ci`?
+        h_at(rows[ri + 1], cols[ci], cols[ci + 1])
+    };
+    let (spans, cells) = merge_spans(
+        &rows, &cols, &presence, row_count, col_count, col_split, row_split,
+    );
+
     vec![Table {
         bbox,
         row_count,
@@ -320,8 +487,86 @@ fn detect_lines(drawings: &[DrawPath], opt: &TableOptions) -> Vec<Table> {
         cols,
         rows,
         cells,
+        spans,
         header: Vec::new(), // populated by `find_tables` (needs the words)
     }]
+}
+
+/// Merges adjacent present grid slots into spanning cells.
+///
+/// `present[r][c]` marks the lattice slots that belong to the table. Two
+/// horizontally-adjacent present slots merge when `col_split(r, c)` is `false`
+/// (no separating vertical rule); two vertically-adjacent present slots merge
+/// when `row_split(r, c)` is `false` (no separating horizontal rule). Returns
+/// the originating [`CellSpan`]s plus a rewritten row-major `cells` grid where
+/// each origin holds its merged [`Rect`] and continuation/absent slots are
+/// `None`.
+///
+/// The merge is rectangular and greedy in reading order: each not-yet-claimed
+/// present slot becomes a span origin, grown right while every row in the
+/// candidate band is mergeable across the column boundary, then grown down while
+/// every column in the candidate band is mergeable across the row boundary.
+#[allow(clippy::too_many_arguments)]
+fn merge_spans(
+    rows: &[f64],
+    cols: &[f64],
+    present: &[Vec<bool>],
+    row_count: usize,
+    col_count: usize,
+    col_split: impl Fn(usize, usize) -> bool,
+    row_split: impl Fn(usize, usize) -> bool,
+) -> (Vec<CellSpan>, Vec<Vec<Option<Rect>>>) {
+    let mut claimed = vec![vec![false; col_count]; row_count];
+    let mut spans = Vec::new();
+    let mut cells: Vec<Vec<Option<Rect>>> = vec![vec![None; col_count]; row_count];
+
+    for r in 0..row_count {
+        for c in 0..col_count {
+            if claimed[r][c] || !present[r][c] {
+                continue;
+            }
+            // Grow the column span: extend right while the boundary rule is
+            // missing and the next slot is present and unclaimed.
+            let mut col_span = 1;
+            while c + col_span < col_count
+                && present[r][c + col_span]
+                && !claimed[r][c + col_span]
+                && !col_split(r, c + col_span - 1)
+            {
+                col_span += 1;
+            }
+            // Grow the row span: extend down while, for every column in the
+            // candidate band, the boundary rule is missing and the slot is
+            // present and unclaimed.
+            let mut row_span = 1;
+            'grow_down: while r + row_span < row_count {
+                for cc in c..c + col_span {
+                    if !present[r + row_span][cc]
+                        || claimed[r + row_span][cc]
+                        || row_split(r + row_span - 1, cc)
+                    {
+                        break 'grow_down;
+                    }
+                }
+                row_span += 1;
+            }
+            for crow in claimed.iter_mut().skip(r).take(row_span) {
+                for slot in crow.iter_mut().skip(c).take(col_span) {
+                    *slot = true;
+                }
+            }
+            let rect = Rect::new(cols[c], rows[r], cols[c + col_span], rows[r + row_span]);
+            cells[r][c] = Some(rect);
+            spans.push(CellSpan {
+                row: r,
+                col: c,
+                row_span,
+                col_span,
+                rect,
+            });
+        }
+    }
+    (spans, cells)
 }
 
 /// Reduces the page drawings to horizontal + vertical ruling [`Segment`]s.
@@ -502,13 +747,11 @@ fn detect_text(words: &[Word], opt: &TableOptions) -> Vec<Table> {
     let row_count = row_lines.len() - 1;
     let col_count = col_lines.len() - 1;
 
-    // Build cells; a text cell always exists (text strategy tiles fully), but we
-    // mark a cell None when no word centers inside it.
-    let mut cells = Vec::with_capacity(row_count);
+    // Presence: a slot is present when at least one word center lies inside it.
+    let mut presence = vec![vec![false; col_count]; row_count];
     let mut any = false;
-    for ri in 0..row_count {
-        let mut row = Vec::with_capacity(col_count);
-        for ci in 0..col_count {
+    for (ri, prow) in presence.iter_mut().enumerate() {
+        for (ci, slot) in prow.iter_mut().enumerate() {
             let rect = Rect::new(
                 col_lines[ci],
                 row_lines[ri],
@@ -517,16 +760,46 @@ fn detect_text(words: &[Word], opt: &TableOptions) -> Vec<Table> {
             );
             if words.iter().any(|w| rect.contains_point(word_center(w))) {
                 any = true;
-                row.push(Some(rect));
-            } else {
-                row.push(None);
+                *slot = true;
             }
         }
-        cells.push(row);
     }
     if !any {
         return Vec::new();
     }
+
+    // Span splits: a boundary between two adjacent slots is considered *missing*
+    // (so the slots merge) when a single word's bbox straddles that boundary
+    // within the shared band — i.e. one word spans more than one column/row.
+    let col_split = |ri: usize, ci: usize| {
+        // Vertical boundary x = col_lines[ci+1]; row band rows[ri].
+        let x = col_lines[ci + 1];
+        let (y0, y1) = (row_lines[ri], row_lines[ri + 1]);
+        // Boundary is a real split unless some word straddles it inside the band.
+        !words.iter().any(|w| {
+            let cy = center_y(w);
+            cy > y0
+                && cy < y1
+                && w.bbox.x0 < x - opt.snap_tolerance
+                && w.bbox.x1 > x + opt.snap_tolerance
+        })
+    };
+    let row_split = |ri: usize, ci: usize| {
+        // Horizontal boundary y = row_lines[ri+1]; col band cols[ci].
+        let y = row_lines[ri + 1];
+        let (x0, x1) = (col_lines[ci], col_lines[ci + 1]);
+        !words.iter().any(|w| {
+            let cx = (w.bbox.x0 + w.bbox.x1) / 2.0;
+            cx > x0
+                && cx < x1
+                && w.bbox.y0 < y - opt.snap_tolerance
+                && w.bbox.y1 > y + opt.snap_tolerance
+        })
+    };
+
+    let (spans, cells) = merge_spans(
+        &row_lines, &col_lines, &presence, row_count, col_count, col_split, row_split,
+    );
 
     vec![Table {
         bbox,
@@ -535,6 +808,7 @@ fn detect_text(words: &[Word], opt: &TableOptions) -> Vec<Table> {
         cols: col_lines,
         rows: row_lines,
         cells,
+        spans,
         header: Vec::new(),
     }]
 }
@@ -642,6 +916,86 @@ fn cell_text(rect: Rect, words: &[Word]) -> Option<String> {
         .collect::<Vec<_>>()
         .join(" ");
     Some(text)
+}
+
+/// The HTML-escaped, multi-line cell text for `rect`: words grouped into lines
+/// by vertical proximity (a new line starts when a word's center drops below the
+/// running line baseline by more than half the line's height), words within a
+/// line joined by a space, lines joined by `<br>`. Each word's text is
+/// HTML-escaped (`& < > "`). `None` when the cell holds no word.
+fn cell_html_text(rect: Rect, words: &[Word]) -> Option<String> {
+    let mut hits: Vec<&Word> = words
+        .iter()
+        .filter(|w| rect.contains_point(word_center(w)))
+        .collect();
+    if hits.is_empty() {
+        return None;
+    }
+    // Reading order: top→bottom, then left→right.
+    hits.sort_by(|a, b| {
+        center_y(a)
+            .partial_cmp(&center_y(b))
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then(
+                a.bbox
+                    .x0
+                    .partial_cmp(&b.bbox.x0)
+                    .unwrap_or(std::cmp::Ordering::Equal),
+            )
+    });
+    // Group into lines: a new line begins when the next word's vertical center
+    // separates from the current line's center by more than half its height.
+    let mut lines: Vec<Vec<&Word>> = Vec::new();
+    let mut cur_center = center_y(hits[0]);
+    let mut cur: Vec<&Word> = Vec::new();
+    for w in hits {
+        let cy = center_y(w);
+        let half_h = (w.bbox.y1 - w.bbox.y0).max(1.0) / 2.0;
+        if !cur.is_empty() && (cy - cur_center).abs() > half_h {
+            lines.push(std::mem::take(&mut cur));
+            cur_center = cy;
+        } else if cur.is_empty() {
+            cur_center = cy;
+        }
+        cur.push(w);
+    }
+    if !cur.is_empty() {
+        lines.push(cur);
+    }
+    let mut out = String::new();
+    for (i, line) in lines.iter().enumerate() {
+        if i > 0 {
+            out.push_str("<br>");
+        }
+        let mut sorted = line.clone();
+        sorted.sort_by(|a, b| {
+            a.bbox
+                .x0
+                .partial_cmp(&b.bbox.x0)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        for (j, w) in sorted.iter().enumerate() {
+            if j > 0 {
+                out.push(' ');
+            }
+            html_escape_into(&mut out, &w.text);
+        }
+    }
+    Some(out)
+}
+
+/// Escapes text for HTML element content (mirrors `serialize.rs` conventions,
+/// plus `"` so the output is safe to drop anywhere in cell content).
+fn html_escape_into(s: &mut String, raw: &str) {
+    for c in raw.chars() {
+        match c {
+            '&' => s.push_str("&amp;"),
+            '<' => s.push_str("&lt;"),
+            '>' => s.push_str("&gt;"),
+            '"' => s.push_str("&quot;"),
+            c => s.push(c),
+        }
+    }
 }
 
 /// The arithmetic mean of a non-empty slice.
