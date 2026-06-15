@@ -26,6 +26,10 @@ thiserror.workspace = true
 # Anti-aliased 2D path rasterizer (fill/stroke/clip/blend). Leaf primitive; the
 # PDF→drawcall intelligence stays first-party. See [workspace.dependencies].
 tiny-skia.workspace = true
+# Glyph-outline extraction (FontFile2 TrueType / FontFile3 OpenType-CFF). Its
+# `OutlineBuilder` feeds straight into a tiny-skia `PathBuilder` (PRD §8.11);
+# no separate glyph-raster crate is added. See [workspace.dependencies].
+ttf-parser.workspace = true
 
 [dev-dependencies]
 proptest.workspace = true
