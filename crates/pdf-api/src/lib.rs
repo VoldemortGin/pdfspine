@@ -62,9 +62,12 @@ pub use image::{
 
 // `pdf-text` types the bindings need so they only depend on `pdf-api` (PRD §9.1).
 pub use pdf_text::{
-    defaults, BlockTuple, DictBlock, DictChar, DictImageBlock, DictLine, DictSpan, DictTextBlock,
-    SearchOptions, TextDict, TextPage, WordTuple,
+    defaults, BBoxLogEntry, BlockTuple, DictBlock, DictChar, DictImageBlock, DictLine, DictSpan,
+    DictTextBlock, SearchOptions, TextDict, TextPage, TraceChar, TraceSpan, WordTuple,
 };
+
+// Standalone Core-14 font handle (PyMuPDF `fitz.Font`) — name/metrics/advances.
+pub use pdf_fonts::Font;
 
 // Table detection (M7): `find_tables`, `TableFinder`, `Table` (PRD §7). The
 // bindings depend only on `pdf-api`.
@@ -366,6 +369,83 @@ impl Document {
         Ok(pdf_edit::set_xml_metadata(&self.store, xml)?)
     }
 
+    /// Removes the catalog `/Metadata` XMP stream (PyMuPDF `del_xml_metadata`).
+    ///
+    /// # Errors
+    ///
+    /// A typed [`Error`] from the object-edit path.
+    pub fn del_xml_metadata(&self) -> Result<()> {
+        Ok(pdf_edit::del_xml_metadata(&self.store)?)
+    }
+
+    /// Subsets the document's embedded fonts (PyMuPDF `subset_fonts`).
+    ///
+    /// Font subsetting (rewriting `/FontFile*` programs to keep only used glyphs)
+    /// is not yet implemented in the pure-Rust core; this reports how many
+    /// embedded fonts *would* be candidates (those carrying a `/FontFile`,
+    /// `/FontFile2` or `/FontFile3`) without modifying them, so callers get a
+    /// truthful count and the document is never corrupted. Never raises.
+    #[must_use]
+    pub fn subset_fonts(&self) -> usize {
+        let mut count = 0usize;
+        for num in 1..self.store.xref_length() {
+            if matches!(self.store.xref_is_font(num), Ok(true)) {
+                // Walk the font's descendant for an embedded program.
+                if self.font_is_embedded(num) {
+                    count += 1;
+                }
+            }
+        }
+        count
+    }
+
+    /// Whether the font object `num` (or its CID descendant) carries an embedded
+    /// program (`/FontFile`, `/FontFile2`, `/FontFile3`).
+    fn font_is_embedded(&self, num: u32) -> bool {
+        use pdf_core::object::{Name, Object};
+        let Ok(obj) = self.store.get_object(num, 0) else {
+            return false;
+        };
+        let Some(dict) = obj.as_dict() else {
+            return false;
+        };
+        let has_program = |d: &pdf_core::object::Dict| {
+            let Ok(Some(desc)) = self.store.resolve_dict_key(d, &Name::new("FontDescriptor"))
+            else {
+                return false;
+            };
+            let Some(desc) = desc.as_dict() else {
+                return false;
+            };
+            ["FontFile", "FontFile2", "FontFile3"]
+                .iter()
+                .any(|k| desc.get(&Name::new(k)).is_some())
+        };
+        if has_program(dict) {
+            return true;
+        }
+        // Type0: check the descendant CIDFont.
+        if let Ok(Some(descendants)) = self
+            .store
+            .resolve_dict_key(dict, &Name::new("DescendantFonts"))
+        {
+            if let Some(arr) = descendants.as_array() {
+                for item in arr {
+                    if let Object::Reference(r) = item {
+                        if let Ok(d) = self.store.resolve(*r) {
+                            if let Some(d) = d.as_dict() {
+                                if has_program(d) {
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        false
+    }
+
     // --- TOC (PRD §8.9) ---------------------------------------------------
 
     /// The document outline as `(level, title, page)` rows (PyMuPDF `get_toc`).
@@ -645,6 +725,44 @@ impl Document {
     /// [`Error::Unsupported`] if not a stream; decode errors propagate.
     pub fn xref_stream(&self, num: u32) -> Result<Vec<u8>> {
         Ok(self.store.xref_stream(num)?)
+    }
+
+    /// Whether object `num` is a font dictionary (PyMuPDF `xref_is_font`).
+    ///
+    /// # Errors
+    ///
+    /// Resolution errors propagate.
+    pub fn xref_is_font(&self, num: u32) -> Result<bool> {
+        Ok(self.store.xref_is_font(num)?)
+    }
+
+    /// Whether object `num` is an image XObject (PyMuPDF `xref_is_image`).
+    ///
+    /// # Errors
+    ///
+    /// Resolution errors propagate.
+    pub fn xref_is_image(&self, num: u32) -> Result<bool> {
+        Ok(self.store.xref_is_image(num)?)
+    }
+
+    /// Sets dictionary key `key` of object `num` to the PDF value parsed from
+    /// `value` (PyMuPDF `xref_set_key`). `"null"` removes the key.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Unsupported`] if `num` is not a dict/stream or `value` does not
+    /// parse; object-edit errors propagate.
+    pub fn xref_set_key(&self, num: u32, key: &str, value: &str) -> Result<()> {
+        Ok(self.store.xref_set_key(num, key, value)?)
+    }
+
+    /// Copies object `source` onto object `target` (PyMuPDF `xref_copy`).
+    ///
+    /// # Errors
+    ///
+    /// Resolution / object-edit errors propagate.
+    pub fn xref_copy(&self, source: u32, target: u32) -> Result<()> {
+        Ok(self.store.xref_copy(source, target)?)
     }
 
     // --- forms (PRD §8.8, PyMuPDF `Document`) -----------------------------
@@ -2449,6 +2567,86 @@ pub fn page_get_contents(page: &Page) -> Vec<u32> {
             Vec::new()
         }
     }
+}
+
+/// Consolidates `page`'s `/Contents` into a single uncompressed stream (PyMuPDF
+/// `Page.clean_contents`).
+///
+/// # Errors
+///
+/// Propagates resolve/decode/object-edit errors.
+pub fn page_clean_contents(page: &Page) -> Result<()> {
+    Ok(pdf_edit::clean_contents(page.document(), page.number())?)
+}
+
+/// Wraps `page`'s content in a balanced `q … Q` (PyMuPDF `Page.wrap_contents`).
+///
+/// # Errors
+///
+/// Propagates resolve/decode/object-edit errors.
+pub fn page_wrap_contents(page: &Page) -> Result<()> {
+    Ok(pdf_edit::wrap_contents(page.document(), page.number())?)
+}
+
+/// Deletes the image XObject named (or xref'd by) `name_or_xref` from `page`,
+/// replacing it with a transparent stub (PyMuPDF `Page.delete_image`).
+///
+/// # Errors
+///
+/// [`Error`] if the image cannot be located; object-edit errors propagate.
+pub fn page_delete_image(page: &Page, name_or_xref: &str) -> Result<()> {
+    Ok(pdf_edit::delete_image(
+        page.document(),
+        page.number(),
+        name_or_xref,
+    )?)
+}
+
+/// Replaces the image XObject named (or xref'd by) `name_or_xref` with a new
+/// JPEG, keeping the existing placement (PyMuPDF `Page.replace_image`).
+///
+/// # Errors
+///
+/// [`Error`] if the target cannot be located or `jpeg` is not a JPEG.
+pub fn page_replace_image(page: &Page, name_or_xref: &str, jpeg: &[u8]) -> Result<()> {
+    Ok(pdf_edit::replace_image_jpeg(
+        page.document(),
+        page.number(),
+        name_or_xref,
+        jpeg,
+    )?)
+}
+
+/// Binds `page`'s whole content to the optional-content group xref `ocg`
+/// (PyMuPDF `Page.set_oc`); `ocg == 0` clears the binding.
+///
+/// # Errors
+///
+/// Object-edit errors propagate.
+pub fn page_set_oc(page: &Page, ocg: u32) -> Result<()> {
+    Ok(pdf_edit::page_set_oc(page.document(), page.number(), ocg)?)
+}
+
+/// The xref of the optional-content group bound to `page`, or `0` (PyMuPDF
+/// `Page.get_oc`).
+#[must_use]
+pub fn page_get_oc(page: &Page) -> u32 {
+    pdf_edit::page_get_oc(page.document(), page.number())
+}
+
+/// The page's low-level per-glyph text trace (PyMuPDF `Page.get_texttrace`),
+/// derived from the structured [`pdf_text::TextPage`].
+#[must_use]
+pub fn page_get_texttrace(page: &Page) -> Vec<pdf_text::TraceSpan> {
+    let tp = textpage(page, 0, None);
+    pdf_text::get_texttrace(&tp)
+}
+
+/// The page's bbox paint log (PyMuPDF `Page.get_bboxlog`).
+#[must_use]
+pub fn page_get_bboxlog(page: &Page) -> Vec<pdf_text::BBoxLogEntry> {
+    let tp = textpage(page, 0, None);
+    pdf_text::get_bboxlog(&tp)
 }
 
 /// The decoded, concatenated content-stream bytes of `page` (PyMuPDF

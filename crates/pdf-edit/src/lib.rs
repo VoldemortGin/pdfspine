@@ -26,6 +26,7 @@ pub mod links;
 pub mod merge;
 pub mod metadata;
 pub mod ocg;
+pub mod page_content;
 pub mod page_ops;
 pub mod pagelabel;
 pub mod redact;
@@ -57,8 +58,12 @@ pub use form::{
 pub use image::{insert_image_jpeg, insert_image_rgb};
 pub use links::{delete_link, get_links, insert_link, update_link, Link, LinkKind};
 pub use merge::{extract_pages, insert_pdf, show_pdf_page, InsertOptions};
-pub use metadata::{get_xml_metadata, set_metadata, set_xml_metadata};
+pub use metadata::{del_xml_metadata, get_xml_metadata, set_metadata, set_xml_metadata};
 pub use ocg::{add_ocg, set_layer, set_layer_state, set_oc};
+pub use page_content::{
+    clean_contents, delete_image, get_oc as page_get_oc, replace_image_jpeg, set_oc as page_set_oc,
+    wrap_contents,
+};
 pub use page_ops::PageEditor;
 pub use pagelabel::{get_label, set_labels, LabelSpec};
 pub use redact::apply_redactions;

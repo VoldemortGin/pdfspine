@@ -1283,6 +1283,103 @@ impl PyPage {
         PyBytes::new(py, &bytes)
     }
 
+    /// Consolidates `/Contents` into one stream (PyMuPDF `Page.clean_contents`).
+    #[pyo3(signature = (*_args, **_kwargs))]
+    fn clean_contents(
+        &self,
+        py: Python<'_>,
+        _args: &Bound<'_, PyTuple>,
+        _kwargs: Option<&Bound<'_, PyDict>>,
+    ) -> PyResult<()> {
+        py.detach(|| pdf_api::page_clean_contents(&self.page))
+            .map_err(map_err)
+    }
+
+    /// Wraps the content in a balanced `q … Q` (PyMuPDF `Page.wrap_contents`).
+    fn wrap_contents(&self, py: Python<'_>) -> PyResult<()> {
+        py.detach(|| pdf_api::page_wrap_contents(&self.page))
+            .map_err(map_err)
+    }
+
+    /// Deletes an image XObject by resource name or xref (PyMuPDF
+    /// `Page.delete_image`); the placement is left intact.
+    fn delete_image(&self, py: Python<'_>, name_or_xref: &str) -> PyResult<()> {
+        py.detach(|| pdf_api::page_delete_image(&self.page, name_or_xref))
+            .map_err(map_err)
+    }
+
+    /// Replaces an image XObject (by name or xref) with a new JPEG, keeping the
+    /// existing placement (PyMuPDF `Page.replace_image`).
+    #[pyo3(signature = (name_or_xref, *, stream))]
+    fn replace_image(&self, py: Python<'_>, name_or_xref: &str, stream: &[u8]) -> PyResult<()> {
+        py.detach(|| pdf_api::page_replace_image(&self.page, name_or_xref, stream))
+            .map_err(map_err)
+    }
+
+    /// Binds the page's content to an optional-content group (PyMuPDF
+    /// `Page.set_oc`); `0` clears the binding.
+    fn set_oc(&self, ocg: u32) -> PyResult<()> {
+        pdf_api::page_set_oc(&self.page, ocg).map_err(map_err)
+    }
+
+    /// The xref of the optional-content group bound to this page, or `0`
+    /// (PyMuPDF `Page.get_oc`).
+    fn get_oc(&self) -> u32 {
+        pdf_api::page_get_oc(&self.page)
+    }
+
+    /// The low-level per-glyph text trace (PyMuPDF `Page.get_texttrace`): a list
+    /// of span dicts, each with style metadata and a per-glyph `chars` list of
+    /// `(ucs, gid, origin, bbox)` tuples.
+    fn get_texttrace<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
+        let spans = py.detach(|| pdf_api::page_get_texttrace(&self.page));
+        let list = PyList::empty(py);
+        for s in spans {
+            let d = PyDict::new(py);
+            d.set_item("dir", s.dir)?;
+            d.set_item("font", s.font)?;
+            d.set_item("wmode", s.wmode)?;
+            d.set_item("flags", s.flags)?;
+            d.set_item("bidi_lvl", 0)?;
+            d.set_item("bidi_dir", 0)?;
+            d.set_item("ascender", s.ascender)?;
+            d.set_item("descender", s.descender)?;
+            d.set_item("colorspace", s.colorspace)?;
+            d.set_item("color", s.color)?;
+            d.set_item("size", s.size)?;
+            d.set_item("opacity", s.opacity)?;
+            d.set_item("type", s.r#type)?;
+            d.set_item("bbox", s.bbox)?;
+            d.set_item("seqno", s.seqno)?;
+            d.set_item("layer", "")?;
+            let chars = PyList::empty(py);
+            for c in &s.chars {
+                let tup = (c.ucs, c.gid, c.origin, c.bbox);
+                chars.append(tup)?;
+            }
+            d.set_item("chars", chars)?;
+            list.append(d)?;
+        }
+        Ok(list)
+    }
+
+    /// The page's bbox paint log (PyMuPDF `Page.get_bboxlog`): a list of
+    /// `(op, bbox)` tuples in reading order.
+    #[pyo3(signature = (*_args, **_kwargs))]
+    fn get_bboxlog<'py>(
+        &self,
+        py: Python<'py>,
+        _args: &Bound<'_, PyTuple>,
+        _kwargs: Option<&Bound<'_, PyDict>>,
+    ) -> PyResult<Bound<'py, PyList>> {
+        let entries = py.detach(|| pdf_api::page_get_bboxlog(&self.page));
+        let list = PyList::empty(py);
+        for e in entries {
+            list.append((e.op, e.bbox))?;
+        }
+        Ok(list)
+    }
+
     /// Places another PDF's page onto this page as a Form XObject (PyMuPDF
     /// `page.show_pdf_page`). `rect` is the destination `(x0, y0, x1, y1)`;
     /// `src` is the source document; `pno` is the 0-based source page index.
@@ -2412,6 +2509,42 @@ impl PyDocument {
         self.doc.set_xml_metadata(xml).map_err(map_err)
     }
 
+    /// Removes the catalog XMP metadata stream (PyMuPDF `del_xml_metadata`).
+    fn del_xml_metadata(&self) -> PyResult<()> {
+        self.doc.del_xml_metadata().map_err(map_err)
+    }
+
+    /// Whether object `xref` is a font dictionary (PyMuPDF `xref_is_font`).
+    fn xref_is_font(&self, xref: u32) -> PyResult<bool> {
+        self.doc.xref_is_font(xref).map_err(map_err)
+    }
+
+    /// Whether object `xref` is an image XObject (PyMuPDF `xref_is_image`).
+    fn xref_is_image(&self, xref: u32) -> PyResult<bool> {
+        self.doc.xref_is_image(xref).map_err(map_err)
+    }
+
+    /// Sets dictionary key `key` of object `xref` (PyMuPDF `xref_set_key`).
+    fn xref_set_key(&self, xref: u32, key: &str, value: &str) -> PyResult<()> {
+        self.doc.xref_set_key(xref, key, value).map_err(map_err)
+    }
+
+    /// Copies object `source` onto object `target` (PyMuPDF `xref_copy`).
+    fn xref_copy(&self, source: u32, target: u32) -> PyResult<()> {
+        self.doc.xref_copy(source, target).map_err(map_err)
+    }
+
+    /// Reports the number of subsettable embedded fonts (PyMuPDF
+    /// `subset_fonts`; subsetting itself is deferred, never raises).
+    #[pyo3(signature = (*_args, **_kwargs))]
+    fn subset_fonts(
+        &self,
+        _args: &Bound<'_, PyTuple>,
+        _kwargs: Option<&Bound<'_, PyDict>>,
+    ) -> usize {
+        self.doc.subset_fonts()
+    }
+
     // --- TOC (PRD §8.9) ---------------------------------------------------
 
     /// The outline as a list of `[level, title, page]` (PyMuPDF `get_toc`).
@@ -3253,6 +3386,305 @@ impl PyDisplayList {
     }
 }
 
+// === Font (PyMuPDF `fitz.Font`) ==========================================
+
+/// A standalone Core-14 font handle (PyMuPDF `fitz.Font`): name, vertical
+/// metrics, glyph advances and glyph-name ↔ Unicode helpers.
+#[pyclass(name = "Font", module = "oxide_pdf._core", frozen)]
+struct PyFont {
+    inner: pdf_api::Font,
+}
+
+#[pymethods]
+impl PyFont {
+    /// Builds a font handle for the standard font `fontname` (a canonical key
+    /// like `"Helvetica"` or a PyMuPDF alias like `"helv"`). Embedded TTFs
+    /// (`fontfile`/`fontbuffer`) are not yet supported; an unknown name falls
+    /// back to Helvetica so the handle is always usable.
+    #[new]
+    #[pyo3(signature = (fontname=None, fontfile=None, fontbuffer=None, *_args, **_kwargs))]
+    fn py_new(
+        fontname: Option<&str>,
+        fontfile: Option<&str>,
+        fontbuffer: Option<&[u8]>,
+        _args: &Bound<'_, PyTuple>,
+        _kwargs: Option<&Bound<'_, PyDict>>,
+    ) -> PyResult<Self> {
+        let _ = (fontfile, fontbuffer);
+        let name = fontname.unwrap_or("helv");
+        Ok(PyFont {
+            inner: pdf_api::Font::new(name),
+        })
+    }
+
+    /// The font's canonical name (PyMuPDF `Font.name`).
+    #[getter]
+    fn name(&self) -> &'static str {
+        self.inner.name()
+    }
+
+    /// The ascender, unit em (PyMuPDF `Font.ascender`).
+    #[getter]
+    fn ascender(&self) -> f64 {
+        self.inner.ascender()
+    }
+
+    /// The descender, unit em (PyMuPDF `Font.descender`).
+    #[getter]
+    fn descender(&self) -> f64 {
+        self.inner.descender()
+    }
+
+    /// The font bbox `(x0, y0, x1, y1)`, unit em (PyMuPDF `Font.bbox`).
+    #[getter]
+    fn bbox(&self) -> (f64, f64, f64, f64) {
+        self.inner.bbox()
+    }
+
+    /// The number of glyphs the font defines (PyMuPDF `Font.glyph_count`).
+    #[getter]
+    fn glyph_count(&self) -> u32 {
+        self.inner.glyph_count()
+    }
+
+    /// The font flag dict (PyMuPDF `Font.flags`).
+    #[getter]
+    fn flags<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        let d = PyDict::new(py);
+        d.set_item("mono", i32::from(self.inner.is_monospaced()))?;
+        d.set_item("serif", i32::from(self.inner.is_serif()))?;
+        d.set_item("bold", i32::from(self.inner.is_bold()))?;
+        d.set_item("italic", i32::from(self.inner.is_italic()))?;
+        d.set_item("substitute", 0)?;
+        d.set_item("stretch", 0)?;
+        d.set_item("fake-bold", 0)?;
+        d.set_item("fake-italic", 0)?;
+        d.set_item("opentype", 0)?;
+        d.set_item("invalid-bbox", 0)?;
+        d.set_item("cjk", 0)?;
+        d.set_item("cjk-lang", 0)?;
+        d.set_item("embed", 1)?;
+        d.set_item("never-embed", 0)?;
+        Ok(d)
+    }
+
+    /// Whether the font is bold / italic / serifed / monospaced.
+    #[getter]
+    fn is_bold(&self) -> i32 {
+        i32::from(self.inner.is_bold())
+    }
+    #[getter]
+    fn is_italic(&self) -> i32 {
+        i32::from(self.inner.is_italic())
+    }
+    #[getter]
+    fn is_serif(&self) -> i32 {
+        i32::from(self.inner.is_serif())
+    }
+    #[getter]
+    fn is_monospaced(&self) -> i32 {
+        i32::from(self.inner.is_monospaced())
+    }
+
+    /// The advance of the glyph for character code `chr`, unit em (PyMuPDF
+    /// `Font.glyph_advance`).
+    #[pyo3(signature = (chr, *_args, **_kwargs))]
+    fn glyph_advance(
+        &self,
+        chr: u32,
+        _args: &Bound<'_, PyTuple>,
+        _kwargs: Option<&Bound<'_, PyDict>>,
+    ) -> f64 {
+        self.inner.glyph_advance(chr)
+    }
+
+    /// Whether the font defines a glyph for character code `chr` (PyMuPDF
+    /// `Font.has_glyph`). Returns the codepoint when present, `-1` otherwise
+    /// (PyMuPDF returns a glyph id; we return the codepoint as a stable stand-in).
+    #[pyo3(signature = (chr, *_args, **_kwargs))]
+    fn has_glyph(
+        &self,
+        chr: u32,
+        _args: &Bound<'_, PyTuple>,
+        _kwargs: Option<&Bound<'_, PyDict>>,
+    ) -> i64 {
+        if self.inner.has_glyph(chr) {
+            i64::from(chr)
+        } else {
+            -1
+        }
+    }
+
+    /// The total advance of `text` at `fontsize` (PyMuPDF `Font.text_length`).
+    #[pyo3(signature = (text, fontsize=11.0, *_args, **_kwargs))]
+    fn text_length(
+        &self,
+        text: &str,
+        fontsize: f64,
+        _args: &Bound<'_, PyTuple>,
+        _kwargs: Option<&Bound<'_, PyDict>>,
+    ) -> f64 {
+        self.inner.text_length(text, fontsize)
+    }
+
+    /// The per-character advances of `text` at `fontsize` (PyMuPDF
+    /// `Font.char_lengths`).
+    #[pyo3(signature = (text, fontsize=11.0, *_args, **_kwargs))]
+    fn char_lengths(
+        &self,
+        text: &str,
+        fontsize: f64,
+        _args: &Bound<'_, PyTuple>,
+        _kwargs: Option<&Bound<'_, PyDict>>,
+    ) -> Vec<f64> {
+        self.inner.char_lengths(text, fontsize)
+    }
+
+    /// The Unicode codepoint of the AGL glyph name `name` (PyMuPDF
+    /// `Font.glyph_name_to_unicode`).
+    fn glyph_name_to_unicode(&self, name: &str) -> u32 {
+        self.inner.glyph_name_to_unicode(name)
+    }
+
+    /// The AGL glyph name for Unicode codepoint `ch` (PyMuPDF
+    /// `Font.unicode_to_glyph_name`).
+    fn unicode_to_glyph_name(&self, ch: u32) -> String {
+        self.inner.unicode_to_glyph_name(ch).to_string()
+    }
+
+    fn __repr__(&self) -> String {
+        format!("Font('{}')", self.inner.name())
+    }
+}
+
+// === Tools / TOOLS (PyMuPDF `fitz.Tools`) ================================
+
+/// PyMuPDF's `Tools` utility object (a singleton, also exposed as `TOOLS`).
+/// Most methods are diagnostic / cache knobs that are no-ops in the pure-Rust
+/// core (there is no global MuPDF store); they never raise so existing code that
+/// pokes them keeps working.
+#[pyclass(name = "Tools", module = "oxide_pdf._core")]
+struct PyTools {
+    /// A monotonically increasing id counter for `gen_id`.
+    counter: std::sync::atomic::AtomicI64,
+    small_glyph_heights: std::sync::atomic::AtomicBool,
+}
+
+#[pymethods]
+impl PyTools {
+    #[new]
+    fn py_new() -> Self {
+        PyTools {
+            counter: std::sync::atomic::AtomicI64::new(0),
+            small_glyph_heights: std::sync::atomic::AtomicBool::new(false),
+        }
+    }
+
+    /// A fresh, process-unique positive id (PyMuPDF `Tools.gen_id`).
+    fn gen_id(&self) -> i64 {
+        self.counter
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+            + 1
+    }
+
+    /// The accumulated MuPDF warning text (PyMuPDF `Tools.mupdf_warnings`).
+    /// The pure-Rust core surfaces parse warnings per-document, so the global
+    /// warning buffer is empty here.
+    #[pyo3(signature = (reset=true))]
+    fn mupdf_warnings(&self, reset: bool) -> String {
+        let _ = reset;
+        String::new()
+    }
+
+    /// Clears the global MuPDF warning buffer (PyMuPDF
+    /// `Tools.reset_mupdf_warnings`) — a no-op here.
+    fn reset_mupdf_warnings(&self) {}
+
+    /// The underlying MuPDF version (PyMuPDF `Tools.mupdf_version`). The
+    /// pure-Rust core reports its own crate version.
+    fn mupdf_version(&self) -> &'static str {
+        VERSION
+    }
+
+    /// Shrinks the (non-existent) MuPDF store (PyMuPDF `Tools.store_shrink`).
+    /// Returns the resulting store size, always `0`.
+    #[pyo3(signature = (percent=100))]
+    fn store_shrink(&self, percent: i64) -> i64 {
+        let _ = percent;
+        0
+    }
+
+    /// The current store size in bytes (PyMuPDF `Tools.store_size`), always `0`.
+    #[getter]
+    fn store_size(&self) -> i64 {
+        0
+    }
+
+    /// The store size cap in bytes (PyMuPDF `Tools.store_maxsize`).
+    #[getter]
+    fn store_maxsize(&self) -> i64 {
+        256 << 20
+    }
+
+    /// Whether the glyph cache is empty (PyMuPDF `Tools.glyph_cache_empty`).
+    fn glyph_cache_empty(&self) -> bool {
+        true
+    }
+
+    /// The active fitz build configuration (PyMuPDF `Tools.fitz_config`).
+    fn fitz_config<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        let d = PyDict::new(py);
+        d.set_item("plotter-g", true)?;
+        d.set_item("plotter-rgb", true)?;
+        d.set_item("plotter-cmyk", true)?;
+        d.set_item("plotter-n", true)?;
+        d.set_item("pdf", true)?;
+        d.set_item("xps", false)?;
+        d.set_item("svg", true)?;
+        d.set_item("cbz", false)?;
+        d.set_item("img", true)?;
+        d.set_item("html", false)?;
+        d.set_item("epub", false)?;
+        d.set_item("jpx", false)?;
+        d.set_item("js", false)?;
+        d.set_item("tofu", false)?;
+        d.set_item("tofu-cjk", false)?;
+        d.set_item("icc", false)?;
+        d.set_item("base14", true)?;
+        Ok(d)
+    }
+
+    /// Toggles small glyph heights for text extraction (PyMuPDF
+    /// `Tools.set_small_glyph_heights`). Recorded but advisory.
+    #[pyo3(signature = (on=None))]
+    fn set_small_glyph_heights(&self, on: Option<bool>) -> bool {
+        if let Some(v) = on {
+            self.small_glyph_heights
+                .store(v, std::sync::atomic::Ordering::SeqCst);
+        }
+        self.small_glyph_heights
+            .load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// Whether MuPDF errors are shown on stderr (PyMuPDF
+    /// `Tools.mupdf_display_errors`).
+    #[pyo3(signature = (value=None))]
+    fn mupdf_display_errors(&self, value: Option<bool>) -> bool {
+        value.unwrap_or(true)
+    }
+
+    /// Whether MuPDF warnings are shown on stderr (PyMuPDF
+    /// `Tools.mupdf_display_warnings`).
+    #[pyo3(signature = (value=None))]
+    fn mupdf_display_warnings(&self, value: Option<bool>) -> bool {
+        value.unwrap_or(false)
+    }
+
+    fn __repr__(&self) -> &'static str {
+        "Tools()"
+    }
+}
+
 /// Builds a [`RenderArgs`] from the Python `get_pixmap` kwargs (matrix tuple,
 /// dpi float, colorspace object/int/name, alpha flag, clip tuple).
 fn build_render_args(
@@ -3340,6 +3772,12 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyDisplayList>()?;
     m.add_class::<PyTableFinder>()?;
     m.add_class::<PyTable>()?;
+    m.add_class::<PyFont>()?;
+    m.add_class::<PyTools>()?;
+
+    // A process-wide `Tools` singleton, also exposed as `TOOLS` (PyMuPDF).
+    let tools = Py::new(py, PyTools::py_new())?;
+    m.add("TOOLS", tools)?;
 
     // Exception hierarchy (PRD §9.3).
     m.add("PdfError", py.get_type::<PdfError>())?;

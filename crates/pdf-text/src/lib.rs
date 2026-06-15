@@ -23,6 +23,7 @@ pub mod search;
 pub mod serialize;
 pub mod state;
 pub mod tables;
+pub mod texttrace;
 pub mod tokenizer;
 pub mod words;
 
@@ -44,6 +45,7 @@ pub use serialize::{
     to_xhtml, to_xml, BlockTuple, DictBlock, DictChar, DictImageBlock, DictLine, DictSpan,
     DictTextBlock, TextDict, WordTuple,
 };
+pub use texttrace::{get_bboxlog, get_texttrace, BBoxLogEntry, TraceChar, TraceSpan};
 pub use words::words;
 
 /// Interprets a page dictionary into positioned glyphs + an image inventory

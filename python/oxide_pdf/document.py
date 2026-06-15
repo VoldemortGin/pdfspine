@@ -9,6 +9,7 @@ PyMuPDF methods raise :class:`~oxide_pdf._core.PdfUnsupportedError` (never
 
 from __future__ import annotations
 
+import builtins
 import os
 from typing import Iterator
 
@@ -676,6 +677,16 @@ Pixmap = _core.Pixmap
 # and replay it with ``dl.get_pixmap(...)``.
 DisplayList = _core.DisplayList
 
+# ``Font`` is the Rust ``_core.Font`` directly (PyMuPDF ``fitz.Font``): a
+# standalone Core-14 font handle exposing name / metrics / advances /
+# glyph-name ↔ Unicode helpers (PRD §8.5).
+Font = _core.Font
+
+# ``Tools`` / ``TOOLS`` is PyMuPDF's utility singleton (cache knobs, ids,
+# version, warnings). Most methods are advisory no-ops in the pure-Rust core.
+Tools = _core.Tools
+TOOLS = _core.TOOLS
+
 
 class Page:
     """One page of a :class:`Document` (PyMuPDF ``fitz.Page``)."""
@@ -851,6 +862,56 @@ class Page:
         """The decoded, concatenated content-stream bytes (PyMuPDF
         ``page.read_contents``)."""
         return self._page.read_contents()
+
+    def clean_contents(self, *args, **kwargs) -> None:
+        """Consolidates ``/Contents`` into a single stream (PyMuPDF
+        ``page.clean_contents``)."""
+        self._page.clean_contents(*args, **kwargs)
+
+    def wrap_contents(self) -> None:
+        """Wraps the page content in a balanced ``q … Q`` (PyMuPDF
+        ``page.wrap_contents``)."""
+        self._page.wrap_contents()
+
+    def delete_image(self, name_or_xref, *_args, **_kwargs) -> None:
+        """Deletes an image XObject by resource name or xref, replacing it with a
+        transparent stub (PyMuPDF ``page.delete_image``)."""
+        self._page.delete_image(str(name_or_xref))
+
+    def replace_image(self, name_or_xref, *, filename=None, stream=None, pixmap=None, **_kwargs) -> None:
+        """Replaces an image XObject (by name or xref) with a new JPEG, keeping
+        the existing placement (PyMuPDF ``page.replace_image``).
+
+        Provide the new image via ``stream=`` (JPEG bytes) or ``filename=`` (a
+        path to a JPEG file).
+        """
+        if stream is None and filename is not None:
+            with builtins.open(os.fspath(filename), "rb") as fh:
+                stream = fh.read()
+        if stream is None:
+            raise ValueError("replace_image requires stream= or filename= (JPEG)")
+        self._page.replace_image(str(name_or_xref), stream=bytes(stream))
+
+    def set_oc(self, oc: int) -> None:
+        """Binds the page's content to an optional-content group (PyMuPDF
+        ``page.set_oc``); ``0`` clears the binding."""
+        self._page.set_oc(int(oc))
+
+    def get_oc(self) -> int:
+        """The xref of the optional-content group bound to this page, or ``0``
+        (PyMuPDF ``page.get_oc``)."""
+        return self._page.get_oc()
+
+    def get_texttrace(self) -> list[dict]:
+        """The low-level per-glyph text trace (PyMuPDF ``page.get_texttrace``):
+        a list of span dicts, each with style metadata and a ``chars`` list of
+        ``(ucs, gid, origin, bbox)`` tuples."""
+        return self._page.get_texttrace()
+
+    def get_bboxlog(self, *args, **kwargs) -> list[tuple]:
+        """The page's bbox paint log (PyMuPDF ``page.get_bboxlog``): a list of
+        ``(op, bbox)`` tuples in reading order."""
+        return self._page.get_bboxlog(*args, **kwargs)
 
     def show_pdf_page(self, rect, src: "Document", pno: int = 0, *_args, **_kwargs) -> str:
         """Places ``src``'s page ``pno`` onto this page as a Form XObject filling
@@ -1579,6 +1640,33 @@ class Document:
     def xref_stream(self, xref: int) -> bytes:
         return self._doc.xref_stream(xref)
 
+    def xref_is_font(self, xref: int) -> bool:
+        """Whether object ``xref`` is a font dictionary (PyMuPDF
+        ``doc.xref_is_font``)."""
+        return self._doc.xref_is_font(int(xref))
+
+    def xref_is_image(self, xref: int) -> bool:
+        """Whether object ``xref`` is an image XObject (PyMuPDF
+        ``doc.xref_is_image``)."""
+        return self._doc.xref_is_image(int(xref))
+
+    def xref_set_key(self, xref: int, key: str, value: str) -> None:
+        """Sets dictionary key ``key`` of object ``xref`` to the PDF value parsed
+        from ``value`` (PyMuPDF ``doc.xref_set_key``); ``"null"`` removes it."""
+        self._doc.xref_set_key(int(xref), str(key), str(value))
+
+    def xref_copy(self, source: int, target: int, *, keep=None) -> None:
+        """Copies object ``source`` onto object ``target`` (PyMuPDF
+        ``doc.xref_copy``)."""
+        del keep
+        self._doc.xref_copy(int(source), int(target))
+
+    def subset_fonts(self, *args, **kwargs) -> int:
+        """Reports the number of subsettable embedded fonts (PyMuPDF
+        ``doc.subset_fonts``). Actual glyph subsetting is deferred; this never
+        modifies the document and never raises."""
+        return self._doc.subset_fonts(*args, **kwargs)
+
     # --- extract_image (PRD §8.10) ---
     def extract_image(self, xref: int) -> dict:
         """The image XObject ``xref`` as a PyMuPDF-shaped dict (PyMuPDF
@@ -1716,6 +1804,11 @@ class Document:
     def set_xml_metadata(self, xml: str) -> None:
         """Sets the catalog XMP metadata stream (PyMuPDF ``doc.set_xml_metadata``)."""
         self._doc.set_xml_metadata(xml)
+
+    def del_xml_metadata(self) -> None:
+        """Removes the catalog XMP metadata stream (PyMuPDF
+        ``doc.del_xml_metadata``)."""
+        self._doc.del_xml_metadata()
 
     # --- TOC (PRD §8.9) ---
     def get_toc(self, simple: bool = True) -> list[list]:

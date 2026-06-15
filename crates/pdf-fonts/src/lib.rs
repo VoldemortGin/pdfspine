@@ -39,6 +39,7 @@
 
 pub mod cmap;
 pub mod encodings;
+pub mod font;
 pub mod glyphlist;
 pub mod mapper;
 pub mod predefined;
@@ -47,6 +48,8 @@ pub mod widths;
 
 pub use cmap::{CMap, CidUnicode, CodespaceRange};
 pub use encodings::BaseEncoding;
+pub use font::Font;
+pub use glyphlist::{glyph_name_to_unicode, unicode_to_glyph_name};
 pub use mapper::{CodeIter, FontKind, FontMapper};
 pub use predefined::{BundledCjk, PredefinedKind};
 pub use std_widths::{standard_font_widths, string_advance, StandardWidths};

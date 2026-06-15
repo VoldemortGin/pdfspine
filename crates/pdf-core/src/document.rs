@@ -656,6 +656,128 @@ impl DocumentStore {
         Ok(self.stream_raw_bytes(stream)?.to_vec())
     }
 
+    /// Whether object `num` is a font dictionary (PyMuPDF `xref_is_font`):
+    /// `/Type /Font`. A missing / non-dict object is `Ok(false)`.
+    ///
+    /// # Errors
+    ///
+    /// Resolution errors propagate.
+    pub fn xref_is_font(&self, num: u32) -> Result<bool> {
+        Ok(self.xref_type_is(num, "Font"))
+    }
+
+    /// Whether object `num` is an image XObject (PyMuPDF `xref_is_image`):
+    /// a stream with `/Type /XObject` and `/Subtype /Image`. A missing object is
+    /// `Ok(false)`.
+    ///
+    /// # Errors
+    ///
+    /// Resolution errors propagate.
+    pub fn xref_is_image(&self, num: u32) -> Result<bool> {
+        let obj = match self.get_object(num, 0) {
+            Ok(o) => o,
+            Err(Error::MissingObject { .. }) => return Ok(false),
+            Err(e) => return Err(e),
+        };
+        let Some(stream) = obj.as_stream() else {
+            return Ok(false);
+        };
+        let is_xobject = stream
+            .dict
+            .get(&Name::new("Subtype"))
+            .and_then(Object::as_name)
+            .map(|n| n.as_bytes() == b"Image")
+            .unwrap_or(false);
+        Ok(is_xobject)
+    }
+
+    /// Whether object `num` resolves to a dictionary (or stream dict) whose
+    /// `/Type` name equals `ty`. Missing / wrong-typed → `false`.
+    fn xref_type_is(&self, num: u32, ty: &str) -> bool {
+        let Ok(obj) = self.get_object(num, 0) else {
+            return false;
+        };
+        let dict = match obj.as_ref() {
+            Object::Dictionary(d) => Some(d),
+            Object::Stream(s) => Some(&s.dict),
+            _ => None,
+        };
+        dict.and_then(|d| d.get(&Name::new("Type")))
+            .and_then(Object::as_name)
+            .map(|n| n.as_bytes() == ty.as_bytes())
+            .unwrap_or(false)
+    }
+
+    /// Sets dictionary key `key` of object `num` to the PDF value parsed from
+    /// `value` (PyMuPDF `xref_set_key`). `value` is a single PDF object in
+    /// surface syntax: a name (`/DeviceRGB`), number, string (`(text)`), boolean,
+    /// array (`[1 2 3]`), dictionary (`<< … >>`) or indirect reference (`3 0 R`).
+    /// A `value` of `"null"` removes the key.
+    ///
+    /// Works on dictionaries and stream dictionaries; the stream body is
+    /// preserved.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Unsupported`] if `num` is not a dictionary/stream or `value` is
+    /// not parseable; object-edit errors propagate.
+    pub fn xref_set_key(&self, num: u32, key: &str, value: &str) -> Result<()> {
+        let parsed = crate::object::parse::Parser::new(value.as_bytes())
+            .parse_object()
+            .map_err(|_| Error::Unsupported("xref_set_key: value is not a parseable PDF object"))?;
+        let r = ObjRef::new(num, 0);
+        let obj = self.get_object(num, 0)?;
+        let name = Name::new(key);
+        match obj.as_ref() {
+            Object::Dictionary(d) => {
+                let mut d = d.clone();
+                if matches!(parsed, Object::Null) {
+                    d.remove(&name);
+                } else {
+                    d.insert(name, parsed);
+                }
+                self.update_object(r, Object::Dictionary(d))
+            }
+            Object::Stream(s) => {
+                let mut s = s.clone();
+                if matches!(parsed, Object::Null) {
+                    s.dict.remove(&name);
+                } else {
+                    s.dict.insert(name, parsed);
+                }
+                self.update_object(r, Object::Stream(s))
+            }
+            _ => Err(Error::Unsupported(
+                "xref_set_key: object is not a dictionary or stream",
+            )),
+        }
+    }
+
+    /// Copies the value of object `source` into object `target` (PyMuPDF
+    /// `xref_copy`): `target` becomes a deep clone of `source` (dictionary,
+    /// stream with body, or any value). Returns an error if `source` is missing.
+    ///
+    /// # Errors
+    ///
+    /// Resolution / object-edit errors propagate.
+    pub fn xref_copy(&self, source: u32, target: u32) -> Result<()> {
+        let obj = self.get_object(source, 0)?;
+        // For a source stream, copy the **raw** (still filter-encoded) body
+        // verbatim along with its dictionary — this keeps the copy self-contained
+        // (no lazy slice into the original file buffer) and works for any filter,
+        // including image filters (`DCTDecode`, `JPXDecode`) the core does not
+        // re-encode.
+        match obj.as_ref() {
+            Object::Stream(s) => {
+                let bytes = self.stream_raw_bytes(s)?.to_vec();
+                let mut dict = s.dict.clone();
+                dict.insert(Name::new("Length"), Object::Integer(bytes.len() as i64));
+                self.update_stream(ObjRef::new(target, 0), dict, bytes, true)
+            }
+            other => self.update_object(ObjRef::new(target, 0), other.clone()),
+        }
+    }
+
     // --- encryption (PRD §8.4) -------------------------------------------
 
     /// Whether the document is encrypted (has a usable `/Encrypt` handler).

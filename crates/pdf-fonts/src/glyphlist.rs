@@ -64,6 +64,46 @@ fn zapf() -> &'static HashMap<&'static str, SmolStr> {
     TABLE.get_or_init(|| parse_table(ZAPF_TXT))
 }
 
+/// Reverse AGL: Unicode scalar → its canonical AGL glyph name. Built once from
+/// the single-scalar AGL entries (multi-scalar / ligature entries are skipped).
+/// When several names map to one scalar, the first encountered is kept stable by
+/// preferring the shortest name (then lexically smallest) — this picks the
+/// canonical short form (`A` over `Alphatonos`-like collisions never occur, but
+/// duplicate codepoints in the AGL are resolved deterministically).
+fn reverse_agl() -> &'static HashMap<u32, &'static str> {
+    static TABLE: OnceLock<HashMap<u32, &'static str>> = OnceLock::new();
+    TABLE.get_or_init(|| {
+        let mut map: HashMap<u32, &'static str> = HashMap::new();
+        for (&name, s) in agl() {
+            let mut chars = s.chars();
+            let (Some(c), None) = (chars.next(), chars.next()) else {
+                continue; // skip multi-scalar entries
+            };
+            let cp = c as u32;
+            match map.get(&cp) {
+                Some(existing) if (existing.len(), *existing) <= (name.len(), name) => {}
+                _ => {
+                    map.insert(cp, name);
+                }
+            }
+        }
+        map
+    })
+}
+
+/// Resolves a Unicode scalar `cp` to its AGL glyph name (PyMuPDF
+/// `unicode_to_glyph_name`). Falls back to the algorithmic `uniXXXX` form for
+/// scalars with no AGL name. Returns `None` only for non-scalar inputs.
+#[must_use]
+pub fn unicode_to_glyph_name(cp: u32) -> Option<SmolStr> {
+    char::from_u32(cp)?;
+    if let Some(name) = reverse_agl().get(&cp) {
+        return Some(SmolStr::new(name));
+    }
+    // No AGL name → the canonical algorithmic form.
+    Some(SmolStr::new(format!("uni{cp:04X}")))
+}
+
 /// Resolves a glyph name to its Unicode string, applying the AGL then the
 /// algorithmic conventions. Returns `None` for names that have no defined
 /// Unicode meaning (`.notdef`, `cidNN`, `gNN`, unknown names).

@@ -720,6 +720,7 @@ dependencies = [
  "pdf-core",
  "pdf-crypto",
  "pdf-edit",
+ "pdf-fonts",
  "pdf-image",
  "pdf-ocr",
  "pdf-render",

@@ -29,10 +29,10 @@
 baseline = "1.24.x"
 baseline_detail = "PyMuPDF 1.24.14 / MuPDF 1.24.11"
 total = 769
-implemented = 398
-deferred = 304
-out_of_scope = 67
-coverage_pct = 51.8
+implemented = 441
+deferred = 262
+out_of_scope = 66
+coverage_pct = 57.3
 
 # ── Matrix ──
 [[symbol]]
@@ -1400,7 +1400,7 @@ milestone = "M3"
 [[symbol]]
 name = "Document.del_xml_metadata"
 group = "Document"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M3"
 
 [[symbol]]
@@ -1618,8 +1618,9 @@ milestone = "M5"
 [[symbol]]
 name = "Document.subset_fonts"
 group = "Document"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M5"
+note = "reports subsettable embedded-font count; glyph subsetting deferred (no-op, never raises)"
 
 [[symbol]]
 name = "Document.get_char_widths"
@@ -1710,13 +1711,13 @@ milestone = "M1"
 [[symbol]]
 name = "Document.xref_is_font"
 group = "Document"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M1"
 
 [[symbol]]
 name = "Document.xref_is_image"
 group = "Document"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M1"
 
 [[symbol]]
@@ -1770,13 +1771,13 @@ milestone = "M3"
 [[symbol]]
 name = "Document.xref_set_key"
 group = "Document"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M3"
 
 [[symbol]]
 name = "Document.xref_copy"
 group = "Document"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M3"
 
 [[symbol]]
@@ -2094,7 +2095,7 @@ milestone = "M2"
 [[symbol]]
 name = "Page.get_texttrace"
 group = "Page"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M2"
 
 [[symbol]]
@@ -2220,7 +2221,7 @@ milestone = "M2"
 [[symbol]]
 name = "Page.get_bboxlog"
 group = "Page"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
@@ -2374,13 +2375,14 @@ milestone = "M4"
 [[symbol]]
 name = "Page.replace_image"
 group = "Page"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
+note = "JPEG replacement keeping placement; non-JPEG re-encode deferred"
 
 [[symbol]]
 name = "Page.delete_image"
 group = "Page"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
@@ -2579,13 +2581,13 @@ milestone = "M3"
 [[symbol]]
 name = "Page.clean_contents"
 group = "Page"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "Page.wrap_contents"
 group = "Page"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
@@ -4016,25 +4018,25 @@ milestone = "M4"
 [[symbol]]
 name = "Font.Font"
 group = "Font"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M2"
 
 [[symbol]]
 name = "Font.text_length"
 group = "Font"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M2"
 
 [[symbol]]
 name = "Font.char_lengths"
 group = "Font"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M2"
 
 [[symbol]]
 name = "Font.glyph_advance"
 group = "Font"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M2"
 
 [[symbol]]
@@ -4046,7 +4048,7 @@ milestone = "M2"
 [[symbol]]
 name = "Font.has_glyph"
 group = "Font"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M2"
 
 [[symbol]]
@@ -4058,49 +4060,49 @@ milestone = "M2"
 [[symbol]]
 name = "Font.glyph_name_to_unicode"
 group = "Font"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M2"
 
 [[symbol]]
 name = "Font.unicode_to_glyph_name"
 group = "Font"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M2"
 
 [[symbol]]
 name = "Font.name"
 group = "Font"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M2"
 
 [[symbol]]
 name = "Font.ascender"
 group = "Font"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M2"
 
 [[symbol]]
 name = "Font.descender"
 group = "Font"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M2"
 
 [[symbol]]
 name = "Font.bbox"
 group = "Font"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M2"
 
 [[symbol]]
 name = "Font.glyph_count"
 group = "Font"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M2"
 
 [[symbol]]
 name = "Font.flags"
 group = "Font"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M2"
 
 [[symbol]]
@@ -4112,25 +4114,25 @@ milestone = "M2"
 [[symbol]]
 name = "Font.is_bold"
 group = "Font"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M2"
 
 [[symbol]]
 name = "Font.is_italic"
 group = "Font"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M2"
 
 [[symbol]]
 name = "Font.is_serif"
 group = "Font"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M2"
 
 [[symbol]]
 name = "Font.is_monospaced"
 group = "Font"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M2"
 
 [[symbol]]
@@ -4595,13 +4597,13 @@ milestone = "M1"
 [[symbol]]
 name = "Tools"
 group = "module"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M1"
 
 [[symbol]]
 name = "TOOLS"
 group = "module"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M1"
 
 [[symbol]]
@@ -4636,7 +4638,7 @@ note = "table-builder / OCR out of scope (PRD §3.2 #3/#4)"
 [[symbol]]
 name = "Tools.gen_id"
 group = "Tools"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M3"
 
 [[symbol]]
@@ -4648,55 +4650,55 @@ milestone = "M3"
 [[symbol]]
 name = "Tools.mupdf_warnings"
 group = "Tools"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M1"
 
 [[symbol]]
 name = "Tools.reset_mupdf_warnings"
 group = "Tools"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M1"
 
 [[symbol]]
 name = "Tools.mupdf_version"
 group = "Tools"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M1"
 
 [[symbol]]
 name = "Tools.store_shrink"
 group = "Tools"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M1"
 
 [[symbol]]
 name = "Tools.store_maxsize"
 group = "Tools"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M1"
 
 [[symbol]]
 name = "Tools.store_size"
 group = "Tools"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M1"
 
 [[symbol]]
 name = "Tools.mupdf_display_errors"
 group = "Tools"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M1"
 
 [[symbol]]
 name = "Tools.mupdf_display_warnings"
 group = "Tools"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M1"
 
 [[symbol]]
 name = "Tools.glyph_cache_empty"
 group = "Tools"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M1"
 
 [[symbol]]
@@ -4708,7 +4710,7 @@ milestone = "M1"
 [[symbol]]
 name = "Tools.fitz_config"
 group = "Tools"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M1"
 
 [[symbol]]
@@ -4734,9 +4736,9 @@ note = "render/cache-era tuning; no-op + warn until M6"
 [[symbol]]
 name = "Tools.set_small_glyph_heights"
 group = "Tools"
-disposition = "out-of-scope"
+disposition = "implemented"
 milestone = "M6"
-note = "render/cache-era tuning; no-op + warn until M6"
+note = "advisory toggle (records the flag); affects no current extraction path"
 
 [[symbol]]
 name = "Tools.set_graphics_min_line_width"

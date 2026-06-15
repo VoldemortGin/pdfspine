@@ -12,6 +12,7 @@ description = "Unified ergonomic facade and re-exports for oxide-pdf; the only c
 pdf-core.workspace = true
 pdf-text.workspace = true
 pdf-edit.workspace = true
+pdf-fonts.workspace = true
 pdf-image.workspace = true
 pdf-render.workspace = true
 pdf-ocr.workspace = true

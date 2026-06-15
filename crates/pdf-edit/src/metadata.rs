@@ -118,6 +118,36 @@ pub fn set_xml_metadata(doc: &DocumentStore, xml: &str) -> pdf_core::Result<()> 
     Ok(())
 }
 
+/// Removes the catalog `/Metadata` XMP stream (PyMuPDF `del_xml_metadata`):
+/// drops the `/Metadata` catalog key and frees the stream object. A no-op when
+/// the document has no XMP metadata.
+///
+/// # Errors
+///
+/// Propagates [`pdf_core::Error`] from the object-edit path, or
+/// [`pdf_core::Error::InvalidArgument`] if the document has no catalog.
+pub fn del_xml_metadata(doc: &DocumentStore) -> pdf_core::Result<()> {
+    let root = doc
+        .root()
+        .ok_or(pdf_core::Error::InvalidArgument("document has no /Root"))?;
+    let mut catalog =
+        doc.resolve(root)?
+            .as_dict()
+            .cloned()
+            .ok_or(pdf_core::Error::InvalidArgument(
+                "/Root is not a dictionary",
+            ))?;
+    let key = Name::new("Metadata");
+    if let Some(Object::Reference(r)) = catalog.get(&key) {
+        let r = *r;
+        doc.delete_object(r)?;
+    }
+    if catalog.remove(&key).is_some() {
+        doc.update_object(root, Object::Dictionary(catalog))?;
+    }
+    Ok(())
+}
+
 /// Encodes a text string for `/Info`: ASCII → literal PDFDocEncoding; otherwise
 /// UTF-16BE with the `FE FF` BOM (PRD §8.9 string encodings).
 fn encode_text_string(s: &str) -> PdfString {
