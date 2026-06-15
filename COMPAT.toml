@@ -1,0 +1,4797 @@
+# COMPAT.toml — oxipdf ↔ PyMuPDF compatibility map
+#
+# WHAT THIS IS
+#   The machine-readable disposition matrix for every public symbol in the
+#   pinned PyMuPDF baseline (PRD §7 / §9.5). Every PyMuPDF symbol not present
+#   here is out-of-scope by default and must raise PdfUnsupportedError (never
+#   AttributeError). The compat-symbol-guard fails CI if any baseline symbol
+#   (compat/compat-baseline.txt) is missing an entry below — forcing an
+#   explicit disposition for any newly-surfaced API (baseline evolution, §17.2).
+#
+#   Pinned baseline: PyMuPDF 1.24.x (1.24.14 / MuPDF 1.24.11).
+#
+# FORMAT
+#   [[symbol]]
+#   name        = "Class.member" | "Class" | "module_level_name"
+#   group       = owning class / section (for grouping)
+#   disposition = "implemented" | "deferred" | "out-of-scope"
+#   milestone   = "M0".."M6" | "post-v1" | "out-of-scope" (optional)
+#   note        = short rationale (optional)
+#
+#   disposition meanings:
+#     implemented  — present in python/ and does NOT raise PdfUnsupportedError
+#     deferred     — known, planned for a later milestone (M3–M6 / post-v1)
+#     out-of-scope — intentionally never in v1; raises PdfUnsupportedError
+#
+# Generated from scripts/_compat_catalog.py — regenerate, do not hand-edit.
+
+[meta]
+baseline = "1.24.x"
+baseline_detail = "PyMuPDF 1.24.14 / MuPDF 1.24.11"
+total = 766
+implemented = 310
+deferred = 352
+out_of_scope = 104
+coverage_pct = 40.5
+
+# ── Matrix ──
+[[symbol]]
+name = "Matrix.Matrix"
+group = "Matrix"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Matrix.concat"
+group = "Matrix"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Matrix.invert"
+group = "Matrix"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Matrix.norm"
+group = "Matrix"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Matrix.prerotate"
+group = "Matrix"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Matrix.prescale"
+group = "Matrix"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Matrix.preshear"
+group = "Matrix"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Matrix.pretranslate"
+group = "Matrix"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Matrix.is_rectilinear"
+group = "Matrix"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Matrix.a"
+group = "Matrix"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Matrix.b"
+group = "Matrix"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Matrix.c"
+group = "Matrix"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Matrix.d"
+group = "Matrix"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Matrix.e"
+group = "Matrix"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Matrix.f"
+group = "Matrix"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Matrix.__mul__"
+group = "Matrix"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Matrix.__invert__"
+group = "Matrix"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Matrix.__add__"
+group = "Matrix"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Matrix.__sub__"
+group = "Matrix"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Matrix.__eq__"
+group = "Matrix"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Matrix.__abs__"
+group = "Matrix"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Matrix.__len__"
+group = "Matrix"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Matrix.__getitem__"
+group = "Matrix"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Matrix.__repr__"
+group = "Matrix"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Matrix.__bool__"
+group = "Matrix"
+disposition = "implemented"
+milestone = "M0"
+
+# ── Point ──
+[[symbol]]
+name = "Point.Point"
+group = "Point"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Point.distance_to"
+group = "Point"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Point.transform"
+group = "Point"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Point.norm"
+group = "Point"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Point.unit"
+group = "Point"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Point.abs_unit"
+group = "Point"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Point.x"
+group = "Point"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Point.y"
+group = "Point"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Point.__add__"
+group = "Point"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Point.__sub__"
+group = "Point"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Point.__mul__"
+group = "Point"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Point.__truediv__"
+group = "Point"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Point.__invert__"
+group = "Point"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Point.__eq__"
+group = "Point"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Point.__abs__"
+group = "Point"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Point.__getitem__"
+group = "Point"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Point.__len__"
+group = "Point"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Point.__repr__"
+group = "Point"
+disposition = "implemented"
+milestone = "M0"
+
+# ── Rect ──
+[[symbol]]
+name = "Rect.Rect"
+group = "Rect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Rect.intersect"
+group = "Rect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Rect.include_rect"
+group = "Rect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Rect.include_point"
+group = "Rect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Rect.intersects"
+group = "Rect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Rect.contains"
+group = "Rect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Rect.normalize"
+group = "Rect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Rect.transform"
+group = "Rect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Rect.morph"
+group = "Rect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Rect.torect"
+group = "Rect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Rect.round"
+group = "Rect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Rect.get_area"
+group = "Rect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Rect.norm"
+group = "Rect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Rect.width"
+group = "Rect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Rect.height"
+group = "Rect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Rect.x0"
+group = "Rect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Rect.y0"
+group = "Rect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Rect.x1"
+group = "Rect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Rect.y1"
+group = "Rect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Rect.tl"
+group = "Rect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Rect.tr"
+group = "Rect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Rect.bl"
+group = "Rect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Rect.br"
+group = "Rect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Rect.top_left"
+group = "Rect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Rect.top_right"
+group = "Rect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Rect.bottom_left"
+group = "Rect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Rect.bottom_right"
+group = "Rect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Rect.is_empty"
+group = "Rect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Rect.is_infinite"
+group = "Rect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Rect.is_valid"
+group = "Rect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Rect.irect"
+group = "Rect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Rect.quad"
+group = "Rect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Rect.__and__"
+group = "Rect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Rect.__or__"
+group = "Rect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Rect.__mul__"
+group = "Rect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Rect.__add__"
+group = "Rect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Rect.__sub__"
+group = "Rect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Rect.__truediv__"
+group = "Rect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Rect.__invert__"
+group = "Rect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Rect.__eq__"
+group = "Rect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Rect.__contains__"
+group = "Rect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Rect.__getitem__"
+group = "Rect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Rect.__len__"
+group = "Rect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Rect.__repr__"
+group = "Rect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Rect.__abs__"
+group = "Rect"
+disposition = "implemented"
+milestone = "M0"
+
+# ── IRect ──
+[[symbol]]
+name = "IRect.IRect"
+group = "IRect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "IRect.get_area"
+group = "IRect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "IRect.include_point"
+group = "IRect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "IRect.include_rect"
+group = "IRect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "IRect.intersect"
+group = "IRect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "IRect.intersects"
+group = "IRect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "IRect.morph"
+group = "IRect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "IRect.norm"
+group = "IRect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "IRect.normalize"
+group = "IRect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "IRect.torect"
+group = "IRect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "IRect.transform"
+group = "IRect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "IRect.rect"
+group = "IRect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "IRect.width"
+group = "IRect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "IRect.height"
+group = "IRect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "IRect.x0"
+group = "IRect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "IRect.y0"
+group = "IRect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "IRect.x1"
+group = "IRect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "IRect.y1"
+group = "IRect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "IRect.is_empty"
+group = "IRect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "IRect.is_infinite"
+group = "IRect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "IRect.irect"
+group = "IRect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "IRect.quad"
+group = "IRect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "IRect.__getitem__"
+group = "IRect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "IRect.__len__"
+group = "IRect"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "IRect.__repr__"
+group = "IRect"
+disposition = "implemented"
+milestone = "M0"
+
+# ── Quad ──
+[[symbol]]
+name = "Quad.Quad"
+group = "Quad"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Quad.transform"
+group = "Quad"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Quad.morph"
+group = "Quad"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Quad.width"
+group = "Quad"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Quad.height"
+group = "Quad"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Quad.rect"
+group = "Quad"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Quad.ul"
+group = "Quad"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Quad.ur"
+group = "Quad"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Quad.ll"
+group = "Quad"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Quad.lr"
+group = "Quad"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Quad.is_convex"
+group = "Quad"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Quad.is_empty"
+group = "Quad"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Quad.is_infinite"
+group = "Quad"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Quad.is_rectangular"
+group = "Quad"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Quad.__mul__"
+group = "Quad"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Quad.__invert__"
+group = "Quad"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "Quad.__eq__"
+group = "Quad"
+disposition = "implemented"
+milestone = "M0"
+
+# ── constants ──
+[[symbol]]
+name = "EMPTY_RECT"
+group = "constants"
+disposition = "implemented"
+milestone = "M0"
+note = "geometry singletons / numeric constants / type aliases"
+
+[[symbol]]
+name = "EMPTY_IRECT"
+group = "constants"
+disposition = "implemented"
+milestone = "M0"
+note = "geometry singletons / numeric constants / type aliases"
+
+[[symbol]]
+name = "EMPTY_QUAD"
+group = "constants"
+disposition = "implemented"
+milestone = "M0"
+note = "geometry singletons / numeric constants / type aliases"
+
+[[symbol]]
+name = "INFINITE_RECT"
+group = "constants"
+disposition = "implemented"
+milestone = "M0"
+note = "geometry singletons / numeric constants / type aliases"
+
+[[symbol]]
+name = "INFINITE_IRECT"
+group = "constants"
+disposition = "implemented"
+milestone = "M0"
+note = "geometry singletons / numeric constants / type aliases"
+
+[[symbol]]
+name = "INFINITE_QUAD"
+group = "constants"
+disposition = "implemented"
+milestone = "M0"
+note = "geometry singletons / numeric constants / type aliases"
+
+[[symbol]]
+name = "Identity"
+group = "constants"
+disposition = "implemented"
+milestone = "M0"
+note = "geometry singletons / numeric constants / type aliases"
+
+[[symbol]]
+name = "IdentityMatrix"
+group = "constants"
+disposition = "implemented"
+milestone = "M0"
+note = "geometry singletons / numeric constants / type aliases"
+
+[[symbol]]
+name = "EPSILON"
+group = "constants"
+disposition = "implemented"
+milestone = "M0"
+note = "geometry singletons / numeric constants / type aliases"
+
+[[symbol]]
+name = "FLT_EPSILON"
+group = "constants"
+disposition = "implemented"
+milestone = "M0"
+note = "geometry singletons / numeric constants / type aliases"
+
+[[symbol]]
+name = "FZ_MIN_INF_RECT"
+group = "constants"
+disposition = "implemented"
+milestone = "M0"
+note = "geometry singletons / numeric constants / type aliases"
+
+[[symbol]]
+name = "FZ_MAX_INF_RECT"
+group = "constants"
+disposition = "implemented"
+milestone = "M0"
+note = "geometry singletons / numeric constants / type aliases"
+
+[[symbol]]
+name = "rect_like"
+group = "constants"
+disposition = "implemented"
+milestone = "M0"
+note = "geometry singletons / numeric constants / type aliases"
+
+[[symbol]]
+name = "point_like"
+group = "constants"
+disposition = "implemented"
+milestone = "M0"
+note = "geometry singletons / numeric constants / type aliases"
+
+[[symbol]]
+name = "matrix_like"
+group = "constants"
+disposition = "implemented"
+milestone = "M0"
+note = "geometry singletons / numeric constants / type aliases"
+
+[[symbol]]
+name = "quad_like"
+group = "constants"
+disposition = "implemented"
+milestone = "M0"
+note = "geometry singletons / numeric constants / type aliases"
+
+[[symbol]]
+name = "PDF_ENCRYPT_NONE"
+group = "constants"
+disposition = "implemented"
+milestone = "M1"
+note = "encryption-method constants exposed in oxipdf + fitz"
+
+[[symbol]]
+name = "PDF_ENCRYPT_RC4_128"
+group = "constants"
+disposition = "implemented"
+milestone = "M1"
+note = "encryption-method constants exposed in oxipdf + fitz"
+
+[[symbol]]
+name = "PDF_ENCRYPT_AES_128"
+group = "constants"
+disposition = "implemented"
+milestone = "M1"
+note = "encryption-method constants exposed in oxipdf + fitz"
+
+[[symbol]]
+name = "PDF_ENCRYPT_AES_256"
+group = "constants"
+disposition = "implemented"
+milestone = "M1"
+note = "encryption-method constants exposed in oxipdf + fitz"
+
+[[symbol]]
+name = "TEXT_flags"
+group = "constants"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "TEXTFLAGS_bundles"
+group = "constants"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "TEXT_FONT_flags"
+group = "constants"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "TEXT_ALIGN"
+group = "constants"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "PDF_ANNOT_types"
+group = "constants"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "PDF_ANNOT_IS_flags"
+group = "constants"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "PDF_ANNOT_LE"
+group = "constants"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "PDF_WIDGET_TYPE"
+group = "constants"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "PDF_WIDGET_TX_FORMAT"
+group = "constants"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "PDF_FIELD_IS_flags"
+group = "constants"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "PDF_BM_blendmodes"
+group = "constants"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "PDF_REDACT_options"
+group = "constants"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "STAMP_icons"
+group = "constants"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "PDF_BORDER_STYLE"
+group = "constants"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "PDF_SIGNATURE_flags"
+group = "constants"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "ENCRYPT_methods"
+group = "constants"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "PERM_flags"
+group = "constants"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "PDF_PAGE_LABEL"
+group = "constants"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "CS_colorspace"
+group = "constants"
+disposition = "deferred"
+milestone = "M5"
+
+[[symbol]]
+name = "version_info"
+group = "constants"
+disposition = "deferred"
+milestone = "M1"
+
+[[symbol]]
+name = "PDF_TOK_objects"
+group = "constants"
+disposition = "deferred"
+milestone = "M1"
+
+[[symbol]]
+name = "constants.UCDN_SCRIPT"
+group = "constants"
+disposition = "out-of-scope"
+milestone = "M6"
+note = "full shaping out of scope (PRD §3.2 #10)"
+
+[[symbol]]
+name = "constants.PdfUnsupportedError_catchall"
+group = "constants"
+disposition = "out-of-scope"
+milestone = "M1"
+note = "every unlisted PyMuPDF symbol raises PdfUnsupportedError (PRD §7 catch-all + §17.2)"
+
+# ── Document ──
+[[symbol]]
+name = "Document.open"
+group = "Document"
+disposition = "implemented"
+milestone = "M1"
+
+[[symbol]]
+name = "Document.Document"
+group = "Document"
+disposition = "implemented"
+milestone = "M1"
+
+[[symbol]]
+name = "Document.close"
+group = "Document"
+disposition = "implemented"
+milestone = "M1"
+
+[[symbol]]
+name = "Document.save"
+group = "Document"
+disposition = "implemented"
+milestone = "M3"
+
+[[symbol]]
+name = "Document.ez_save"
+group = "Document"
+disposition = "implemented"
+milestone = "M3"
+
+[[symbol]]
+name = "Document.saveIncr"
+group = "Document"
+disposition = "implemented"
+milestone = "M3"
+
+[[symbol]]
+name = "Document.save_incremental"
+group = "Document"
+disposition = "implemented"
+milestone = "M3"
+
+[[symbol]]
+name = "Document.write"
+group = "Document"
+disposition = "implemented"
+milestone = "M3"
+
+[[symbol]]
+name = "Document.tobytes"
+group = "Document"
+disposition = "implemented"
+milestone = "M3"
+
+[[symbol]]
+name = "Document.can_save_incrementally"
+group = "Document"
+disposition = "deferred"
+milestone = "M3"
+note = "incremental-safety predicate"
+
+[[symbol]]
+name = "Document.save_snapshot"
+group = "Document"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "journalling deferred (PRD §3.2 #5)"
+
+[[symbol]]
+name = "Document.load_page"
+group = "Document"
+disposition = "implemented"
+milestone = "M1"
+
+[[symbol]]
+name = "Document.__getitem__"
+group = "Document"
+disposition = "implemented"
+milestone = "M1"
+
+[[symbol]]
+name = "Document.pages"
+group = "Document"
+disposition = "implemented"
+milestone = "M1"
+
+[[symbol]]
+name = "Document.page_count"
+group = "Document"
+disposition = "implemented"
+milestone = "M1"
+
+[[symbol]]
+name = "Document.new_page"
+group = "Document"
+disposition = "implemented"
+milestone = "M3"
+
+[[symbol]]
+name = "Document.insert_pdf"
+group = "Document"
+disposition = "implemented"
+milestone = "M3"
+
+[[symbol]]
+name = "Document.delete_page"
+group = "Document"
+disposition = "implemented"
+milestone = "M3"
+
+[[symbol]]
+name = "Document.select"
+group = "Document"
+disposition = "implemented"
+milestone = "M3"
+
+[[symbol]]
+name = "Document.insert_page"
+group = "Document"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Document.copy_page"
+group = "Document"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Document.fullcopy_page"
+group = "Document"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Document.move_page"
+group = "Document"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Document.delete_pages"
+group = "Document"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Document.reload_page"
+group = "Document"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Document.page_cropbox"
+group = "Document"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Document.page_xref"
+group = "Document"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Document.insert_file"
+group = "Document"
+disposition = "deferred"
+milestone = "M5"
+note = "image inputs in scope; non-image unsupported"
+
+[[symbol]]
+name = "Document.layout"
+group = "Document"
+disposition = "out-of-scope"
+milestone = "out-of-scope"
+note = "EPUB-class reflow (PRD §3.2 #8)"
+
+[[symbol]]
+name = "Document.chapter_count"
+group = "Document"
+disposition = "out-of-scope"
+milestone = "out-of-scope"
+note = "EPUB-class reflow (PRD §3.2 #8)"
+
+[[symbol]]
+name = "Document.chapter_page_count"
+group = "Document"
+disposition = "out-of-scope"
+milestone = "out-of-scope"
+note = "EPUB-class reflow (PRD §3.2 #8)"
+
+[[symbol]]
+name = "Document.last_location"
+group = "Document"
+disposition = "out-of-scope"
+milestone = "out-of-scope"
+note = "EPUB-class reflow (PRD §3.2 #8)"
+
+[[symbol]]
+name = "Document.next_location"
+group = "Document"
+disposition = "out-of-scope"
+milestone = "out-of-scope"
+note = "EPUB-class reflow (PRD §3.2 #8)"
+
+[[symbol]]
+name = "Document.prev_location"
+group = "Document"
+disposition = "out-of-scope"
+milestone = "out-of-scope"
+note = "EPUB-class reflow (PRD §3.2 #8)"
+
+[[symbol]]
+name = "Document.location_from_page_number"
+group = "Document"
+disposition = "out-of-scope"
+milestone = "out-of-scope"
+note = "EPUB-class reflow (PRD §3.2 #8)"
+
+[[symbol]]
+name = "Document.page_number_from_location"
+group = "Document"
+disposition = "out-of-scope"
+milestone = "out-of-scope"
+note = "EPUB-class reflow (PRD §3.2 #8)"
+
+[[symbol]]
+name = "Document.make_bookmark"
+group = "Document"
+disposition = "out-of-scope"
+milestone = "out-of-scope"
+note = "EPUB-class reflow (PRD §3.2 #8)"
+
+[[symbol]]
+name = "Document.find_bookmark"
+group = "Document"
+disposition = "out-of-scope"
+milestone = "out-of-scope"
+note = "EPUB-class reflow (PRD §3.2 #8)"
+
+[[symbol]]
+name = "Document.metadata"
+group = "Document"
+disposition = "implemented"
+milestone = "M1"
+
+[[symbol]]
+name = "Document.set_metadata"
+group = "Document"
+disposition = "implemented"
+milestone = "M3"
+
+[[symbol]]
+name = "Document.get_toc"
+group = "Document"
+disposition = "implemented"
+milestone = "M3"
+
+[[symbol]]
+name = "Document.set_toc"
+group = "Document"
+disposition = "implemented"
+milestone = "M3"
+
+[[symbol]]
+name = "Document.get_xml_metadata"
+group = "Document"
+disposition = "implemented"
+milestone = "M3"
+
+[[symbol]]
+name = "Document.set_xml_metadata"
+group = "Document"
+disposition = "implemented"
+milestone = "M3"
+
+[[symbol]]
+name = "Document.set_toc_item"
+group = "Document"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Document.del_toc_item"
+group = "Document"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Document.outline"
+group = "Document"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Document.del_xml_metadata"
+group = "Document"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Document.xref_xml_metadata"
+group = "Document"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Document.needs_pass"
+group = "Document"
+disposition = "implemented"
+milestone = "M1"
+
+[[symbol]]
+name = "Document.authenticate"
+group = "Document"
+disposition = "implemented"
+milestone = "M1"
+
+[[symbol]]
+name = "Document.permissions"
+group = "Document"
+disposition = "implemented"
+milestone = "M1"
+
+[[symbol]]
+name = "Document.is_encrypted"
+group = "Document"
+disposition = "implemented"
+milestone = "M1"
+
+[[symbol]]
+name = "Document.get_sigflags"
+group = "Document"
+disposition = "deferred"
+milestone = "M4"
+note = "signature flags read-only (PRD §3.2 #6)"
+
+[[symbol]]
+name = "Document.is_pdf"
+group = "Document"
+disposition = "implemented"
+milestone = "M1"
+
+[[symbol]]
+name = "Document.is_repaired"
+group = "Document"
+disposition = "implemented"
+milestone = "M1"
+
+[[symbol]]
+name = "Document.is_form_pdf"
+group = "Document"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Document.is_dirty"
+group = "Document"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Document.is_reflowable"
+group = "Document"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Document.language"
+group = "Document"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Document.set_language"
+group = "Document"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Document.markinfo"
+group = "Document"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Document.set_markinfo"
+group = "Document"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Document.pagelayout"
+group = "Document"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Document.set_pagelayout"
+group = "Document"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Document.pagemode"
+group = "Document"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Document.set_pagemode"
+group = "Document"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Document.is_fast_webaccess"
+group = "Document"
+disposition = "deferred"
+milestone = "M1"
+
+[[symbol]]
+name = "Document.is_closed"
+group = "Document"
+disposition = "deferred"
+milestone = "M1"
+
+[[symbol]]
+name = "Document.name"
+group = "Document"
+disposition = "deferred"
+milestone = "M1"
+
+[[symbol]]
+name = "Document.version_count"
+group = "Document"
+disposition = "deferred"
+milestone = "M1"
+
+[[symbol]]
+name = "Document.need_appearances"
+group = "Document"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Document.FormFonts"
+group = "Document"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Document.convert_to_pdf"
+group = "Document"
+disposition = "deferred"
+milestone = "M5"
+note = "image inputs only; explicit PdfUnsupportedError stub today"
+
+[[symbol]]
+name = "Document.embfile_add"
+group = "Document"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Document.embfile_get"
+group = "Document"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Document.embfile_del"
+group = "Document"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Document.embfile_info"
+group = "Document"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Document.embfile_count"
+group = "Document"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Document.embfile_names"
+group = "Document"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Document.embfile_upd"
+group = "Document"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Document.extract_font"
+group = "Document"
+disposition = "deferred"
+milestone = "M5"
+
+[[symbol]]
+name = "Document.extract_image"
+group = "Document"
+disposition = "deferred"
+milestone = "M5"
+
+[[symbol]]
+name = "Document.subset_fonts"
+group = "Document"
+disposition = "deferred"
+milestone = "M5"
+
+[[symbol]]
+name = "Document.get_char_widths"
+group = "Document"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "Document.bake"
+group = "Document"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Document.scrub"
+group = "Document"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Document.subset"
+group = "Document"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Document.resolve_names"
+group = "Document"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Document.resolve_link"
+group = "Document"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Document.get_outline_xrefs"
+group = "Document"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Document.xref_length"
+group = "Document"
+disposition = "implemented"
+milestone = "M1"
+
+[[symbol]]
+name = "Document.xref_object"
+group = "Document"
+disposition = "implemented"
+milestone = "M1"
+
+[[symbol]]
+name = "Document.xref_stream"
+group = "Document"
+disposition = "implemented"
+milestone = "M1"
+
+[[symbol]]
+name = "Document.xref_get_key"
+group = "Document"
+disposition = "implemented"
+milestone = "M1"
+
+[[symbol]]
+name = "Document.xref_is_stream"
+group = "Document"
+disposition = "implemented"
+milestone = "M1"
+
+[[symbol]]
+name = "Document.xref_stream_raw"
+group = "Document"
+disposition = "deferred"
+milestone = "M1"
+
+[[symbol]]
+name = "Document.xref_get_keys"
+group = "Document"
+disposition = "deferred"
+milestone = "M1"
+
+[[symbol]]
+name = "Document.xref_is_font"
+group = "Document"
+disposition = "deferred"
+milestone = "M1"
+
+[[symbol]]
+name = "Document.xref_is_image"
+group = "Document"
+disposition = "deferred"
+milestone = "M1"
+
+[[symbol]]
+name = "Document.xref_is_xobject"
+group = "Document"
+disposition = "deferred"
+milestone = "M1"
+
+[[symbol]]
+name = "Document.pdf_catalog"
+group = "Document"
+disposition = "deferred"
+milestone = "M1"
+
+[[symbol]]
+name = "Document.pdf_trailer"
+group = "Document"
+disposition = "deferred"
+milestone = "M1"
+
+[[symbol]]
+name = "Document.is_stream"
+group = "Document"
+disposition = "deferred"
+milestone = "M1"
+
+[[symbol]]
+name = "Document.page_annot_xrefs"
+group = "Document"
+disposition = "deferred"
+milestone = "M1"
+
+[[symbol]]
+name = "Document.update_object"
+group = "Document"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Document.update_stream"
+group = "Document"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Document.get_new_xref"
+group = "Document"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Document.xref_set_key"
+group = "Document"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Document.xref_copy"
+group = "Document"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Document.add_ocg"
+group = "Document"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "OCG/layers out of scope (PRD §3.2 #5)"
+
+[[symbol]]
+name = "Document.add_layer"
+group = "Document"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "OCG/layers out of scope (PRD §3.2 #5)"
+
+[[symbol]]
+name = "Document.get_ocgs"
+group = "Document"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "OCG/layers out of scope (PRD §3.2 #5)"
+
+[[symbol]]
+name = "Document.get_layer"
+group = "Document"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "OCG/layers out of scope (PRD §3.2 #5)"
+
+[[symbol]]
+name = "Document.get_layers"
+group = "Document"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "OCG/layers out of scope (PRD §3.2 #5)"
+
+[[symbol]]
+name = "Document.set_layer"
+group = "Document"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "OCG/layers out of scope (PRD §3.2 #5)"
+
+[[symbol]]
+name = "Document.switch_layer"
+group = "Document"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "OCG/layers out of scope (PRD §3.2 #5)"
+
+[[symbol]]
+name = "Document.set_layer_ui_config"
+group = "Document"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "OCG/layers out of scope (PRD §3.2 #5)"
+
+[[symbol]]
+name = "Document.layer_ui_configs"
+group = "Document"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "OCG/layers out of scope (PRD §3.2 #5)"
+
+[[symbol]]
+name = "Document.get_oc"
+group = "Document"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "OCG/layers out of scope (PRD §3.2 #5)"
+
+[[symbol]]
+name = "Document.set_oc"
+group = "Document"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "OCG/layers out of scope (PRD §3.2 #5)"
+
+[[symbol]]
+name = "Document.get_ocmd"
+group = "Document"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "OCG/layers out of scope (PRD §3.2 #5)"
+
+[[symbol]]
+name = "Document.set_ocmd"
+group = "Document"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "OCG/layers out of scope (PRD §3.2 #5)"
+
+[[symbol]]
+name = "Document.get_page_labels"
+group = "Document"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Document.get_page_numbers"
+group = "Document"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Document.get_label"
+group = "Document"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Document.get_page_label"
+group = "Document"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Document.set_page_labels"
+group = "Document"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "page-label write deferred (PRD §3.2 #5)"
+
+[[symbol]]
+name = "Document.get_page_text"
+group = "Document"
+disposition = "implemented"
+milestone = "M2"
+
+[[symbol]]
+name = "Document.get_page_pixmap"
+group = "Document"
+disposition = "deferred"
+milestone = "M5"
+note = "image-only path in scope; vector unsupported"
+
+[[symbol]]
+name = "Document.get_page_images"
+group = "Document"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "Document.get_page_fonts"
+group = "Document"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "Document.get_page_xobjects"
+group = "Document"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "Document.search_page_for"
+group = "Document"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "Document.form_field_names"
+group = "Document"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Document.form_fill"
+group = "Document"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Document.form_flatten"
+group = "Document"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Document.journal_enable"
+group = "Document"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "journalling out of scope (PRD §3.2 #5)"
+
+[[symbol]]
+name = "Document.journal_is_enabled"
+group = "Document"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "journalling out of scope (PRD §3.2 #5)"
+
+[[symbol]]
+name = "Document.journal_start_op"
+group = "Document"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "journalling out of scope (PRD §3.2 #5)"
+
+[[symbol]]
+name = "Document.journal_stop_op"
+group = "Document"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "journalling out of scope (PRD §3.2 #5)"
+
+[[symbol]]
+name = "Document.journal_undo"
+group = "Document"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "journalling out of scope (PRD §3.2 #5)"
+
+[[symbol]]
+name = "Document.journal_redo"
+group = "Document"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "journalling out of scope (PRD §3.2 #5)"
+
+[[symbol]]
+name = "Document.journal_can_do"
+group = "Document"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "journalling out of scope (PRD §3.2 #5)"
+
+[[symbol]]
+name = "Document.journal_op_name"
+group = "Document"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "journalling out of scope (PRD §3.2 #5)"
+
+[[symbol]]
+name = "Document.journal_position"
+group = "Document"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "journalling out of scope (PRD §3.2 #5)"
+
+[[symbol]]
+name = "Document.journal_save"
+group = "Document"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "journalling out of scope (PRD §3.2 #5)"
+
+[[symbol]]
+name = "Document.journal_load"
+group = "Document"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "journalling out of scope (PRD §3.2 #5)"
+
+# ── Page ──
+[[symbol]]
+name = "Page.get_text"
+group = "Page"
+disposition = "implemented"
+milestone = "M2"
+
+[[symbol]]
+name = "Page.get_textpage"
+group = "Page"
+disposition = "implemented"
+milestone = "M2"
+
+[[symbol]]
+name = "Page.get_text_blocks"
+group = "Page"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "Page.get_text_words"
+group = "Page"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "Page.get_textbox"
+group = "Page"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "Page.get_text_selection"
+group = "Page"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "Page.extend_textpage"
+group = "Page"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "Page.get_texttrace"
+group = "Page"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "Page.get_textpage_ocr"
+group = "Page"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "OCR out of scope (PRD §3.2 #3)"
+
+[[symbol]]
+name = "Page.TEXTFLAGS"
+group = "Page"
+disposition = "implemented"
+milestone = "M2"
+note = "per-method default flag sets pinned"
+
+[[symbol]]
+name = "Page.search_for"
+group = "Page"
+disposition = "implemented"
+milestone = "M2"
+
+[[symbol]]
+name = "Page.get_links"
+group = "Page"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.insert_link"
+group = "Page"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.delete_link"
+group = "Page"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.links"
+group = "Page"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.load_links"
+group = "Page"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.first_link"
+group = "Page"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.update_link"
+group = "Page"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.get_pixmap"
+group = "Page"
+disposition = "deferred"
+milestone = "M5"
+note = "image pages M5 / vector pages M6; explicit stub today"
+
+[[symbol]]
+name = "Page.get_svg_image"
+group = "Page"
+disposition = "out-of-scope"
+milestone = "M6"
+note = "vector rendering (PRD §3.2 #1)"
+
+[[symbol]]
+name = "Page.get_displaylist"
+group = "Page"
+disposition = "out-of-scope"
+milestone = "M6"
+note = "vector rendering (PRD §3.2 #1)"
+
+[[symbol]]
+name = "Page.run"
+group = "Page"
+disposition = "out-of-scope"
+milestone = "M6"
+note = "vector rendering (PRD §3.2 #1)"
+
+[[symbol]]
+name = "Page.bound"
+group = "Page"
+disposition = "implemented"
+milestone = "M1"
+
+[[symbol]]
+name = "Page.get_drawings"
+group = "Page"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.get_cdrawings"
+group = "Page"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.get_fonts"
+group = "Page"
+disposition = "implemented"
+milestone = "M2"
+
+[[symbol]]
+name = "Page.get_images"
+group = "Page"
+disposition = "implemented"
+milestone = "M2"
+
+[[symbol]]
+name = "Page.get_bboxlog"
+group = "Page"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.cluster_drawings"
+group = "Page"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.find_tables"
+group = "Page"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "table detection out of scope (PRD §3.2 #4)"
+
+[[symbol]]
+name = "Page.get_image_info"
+group = "Page"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "Page.get_image_bbox"
+group = "Page"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "Page.get_image_rects"
+group = "Page"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "Page.get_xobjects"
+group = "Page"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "Page.draw_line"
+group = "Page"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.draw_rect"
+group = "Page"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.draw_circle"
+group = "Page"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.draw_oval"
+group = "Page"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.draw_bezier"
+group = "Page"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.draw_polyline"
+group = "Page"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.new_shape"
+group = "Page"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.draw_curve"
+group = "Page"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.draw_quad"
+group = "Page"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.draw_sector"
+group = "Page"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.draw_squiggle"
+group = "Page"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.draw_zigzag"
+group = "Page"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.insert_text"
+group = "Page"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.insert_textbox"
+group = "Page"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.insert_image"
+group = "Page"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.insert_font"
+group = "Page"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.write_text"
+group = "Page"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.show_pdf_page"
+group = "Page"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.replace_image"
+group = "Page"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.delete_image"
+group = "Page"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.insert_htmlbox"
+group = "Page"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "HTML/CSS engine out of scope (PRD §3.2 #2)"
+
+[[symbol]]
+name = "Page.annots"
+group = "Page"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.first_annot"
+group = "Page"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.annot_names"
+group = "Page"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.annot_xrefs"
+group = "Page"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.delete_annot"
+group = "Page"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.add_text_annot"
+group = "Page"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.add_freetext_annot"
+group = "Page"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.add_highlight_annot"
+group = "Page"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.add_underline_annot"
+group = "Page"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.add_strikeout_annot"
+group = "Page"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.add_squiggly_annot"
+group = "Page"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.add_rect_annot"
+group = "Page"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.add_circle_annot"
+group = "Page"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.add_line_annot"
+group = "Page"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.add_polyline_annot"
+group = "Page"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.add_polygon_annot"
+group = "Page"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.add_ink_annot"
+group = "Page"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.add_stamp_annot"
+group = "Page"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.add_file_annot"
+group = "Page"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.add_redact_annot"
+group = "Page"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.apply_redactions"
+group = "Page"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.load_annot"
+group = "Page"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.add_caret_annot"
+group = "Page"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.widgets"
+group = "Page"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.first_widget"
+group = "Page"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.add_widget"
+group = "Page"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.load_widget"
+group = "Page"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.delete_widget"
+group = "Page"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.get_contents"
+group = "Page"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Page.read_contents"
+group = "Page"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Page.set_contents"
+group = "Page"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Page.clean_contents"
+group = "Page"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.wrap_contents"
+group = "Page"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.is_wrapped"
+group = "Page"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.rect"
+group = "Page"
+disposition = "implemented"
+milestone = "M1"
+
+[[symbol]]
+name = "Page.mediabox"
+group = "Page"
+disposition = "implemented"
+milestone = "M1"
+
+[[symbol]]
+name = "Page.cropbox"
+group = "Page"
+disposition = "implemented"
+milestone = "M1"
+
+[[symbol]]
+name = "Page.rotation"
+group = "Page"
+disposition = "implemented"
+milestone = "M1"
+
+[[symbol]]
+name = "Page.number"
+group = "Page"
+disposition = "implemented"
+milestone = "M1"
+
+[[symbol]]
+name = "Page.set_rotation"
+group = "Page"
+disposition = "implemented"
+milestone = "M3"
+
+[[symbol]]
+name = "Page.get_label"
+group = "Page"
+disposition = "implemented"
+milestone = "M3"
+
+[[symbol]]
+name = "Page.mediabox_size"
+group = "Page"
+disposition = "deferred"
+milestone = "M1"
+
+[[symbol]]
+name = "Page.cropbox_position"
+group = "Page"
+disposition = "deferred"
+milestone = "M1"
+
+[[symbol]]
+name = "Page.artbox"
+group = "Page"
+disposition = "deferred"
+milestone = "M1"
+
+[[symbol]]
+name = "Page.bleedbox"
+group = "Page"
+disposition = "deferred"
+milestone = "M1"
+
+[[symbol]]
+name = "Page.trimbox"
+group = "Page"
+disposition = "deferred"
+milestone = "M1"
+
+[[symbol]]
+name = "Page.transformation_matrix"
+group = "Page"
+disposition = "deferred"
+milestone = "M1"
+
+[[symbol]]
+name = "Page.rotation_matrix"
+group = "Page"
+disposition = "deferred"
+milestone = "M1"
+
+[[symbol]]
+name = "Page.derotation_matrix"
+group = "Page"
+disposition = "deferred"
+milestone = "M1"
+
+[[symbol]]
+name = "Page.xref"
+group = "Page"
+disposition = "deferred"
+milestone = "M1"
+
+[[symbol]]
+name = "Page.parent"
+group = "Page"
+disposition = "deferred"
+milestone = "M1"
+
+[[symbol]]
+name = "Page.set_mediabox"
+group = "Page"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Page.set_cropbox"
+group = "Page"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Page.set_artbox"
+group = "Page"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Page.set_bleedbox"
+group = "Page"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Page.set_trimbox"
+group = "Page"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Page.remove_rotation"
+group = "Page"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Page.refresh"
+group = "Page"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Page.language"
+group = "Page"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Page.set_language"
+group = "Page"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Page.get_oc_items"
+group = "Page"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "OCG out of scope (PRD §3.2 #5)"
+
+# ── TextPage ──
+[[symbol]]
+name = "TextPage.extractText"
+group = "TextPage"
+disposition = "implemented"
+milestone = "M2"
+
+[[symbol]]
+name = "TextPage.extractTEXT"
+group = "TextPage"
+disposition = "implemented"
+milestone = "M2"
+
+[[symbol]]
+name = "TextPage.extractBLOCKS"
+group = "TextPage"
+disposition = "implemented"
+milestone = "M2"
+
+[[symbol]]
+name = "TextPage.extractWORDS"
+group = "TextPage"
+disposition = "implemented"
+milestone = "M2"
+
+[[symbol]]
+name = "TextPage.extractDICT"
+group = "TextPage"
+disposition = "implemented"
+milestone = "M2"
+
+[[symbol]]
+name = "TextPage.extractJSON"
+group = "TextPage"
+disposition = "implemented"
+milestone = "M2"
+
+[[symbol]]
+name = "TextPage.extractRAWDICT"
+group = "TextPage"
+disposition = "implemented"
+milestone = "M2"
+
+[[symbol]]
+name = "TextPage.rect"
+group = "TextPage"
+disposition = "implemented"
+milestone = "M2"
+
+[[symbol]]
+name = "TextPage.extractRAWJSON"
+group = "TextPage"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "TextPage.extractHTML"
+group = "TextPage"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "TextPage.extractXHTML"
+group = "TextPage"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "TextPage.extractXML"
+group = "TextPage"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "TextPage.extractIMGINFO"
+group = "TextPage"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "TextPage.extractSelection"
+group = "TextPage"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "TextPage.extractTextbox"
+group = "TextPage"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "TextPage.search"
+group = "TextPage"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "TextPage.poolsize"
+group = "TextPage"
+disposition = "deferred"
+milestone = "M2"
+
+# ── Pixmap ──
+[[symbol]]
+name = "Pixmap.Pixmap"
+group = "Pixmap"
+disposition = "deferred"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.save"
+group = "Pixmap"
+disposition = "deferred"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.tobytes"
+group = "Pixmap"
+disposition = "deferred"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.pixel"
+group = "Pixmap"
+disposition = "deferred"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.set_pixel"
+group = "Pixmap"
+disposition = "deferred"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.set_rect"
+group = "Pixmap"
+disposition = "deferred"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.set_origin"
+group = "Pixmap"
+disposition = "deferred"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.set_dpi"
+group = "Pixmap"
+disposition = "deferred"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.set_alpha"
+group = "Pixmap"
+disposition = "deferred"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.clear_with"
+group = "Pixmap"
+disposition = "deferred"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.invert_irect"
+group = "Pixmap"
+disposition = "deferred"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.tint_with"
+group = "Pixmap"
+disposition = "deferred"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.gamma_with"
+group = "Pixmap"
+disposition = "deferred"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.shrink"
+group = "Pixmap"
+disposition = "deferred"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.copy"
+group = "Pixmap"
+disposition = "deferred"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.warp"
+group = "Pixmap"
+disposition = "deferred"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.color_count"
+group = "Pixmap"
+disposition = "deferred"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.color_topusage"
+group = "Pixmap"
+disposition = "deferred"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.samples"
+group = "Pixmap"
+disposition = "deferred"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.samples_mv"
+group = "Pixmap"
+disposition = "deferred"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.samples_ptr"
+group = "Pixmap"
+disposition = "deferred"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.stride"
+group = "Pixmap"
+disposition = "deferred"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.width"
+group = "Pixmap"
+disposition = "deferred"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.height"
+group = "Pixmap"
+disposition = "deferred"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.w"
+group = "Pixmap"
+disposition = "deferred"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.h"
+group = "Pixmap"
+disposition = "deferred"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.x"
+group = "Pixmap"
+disposition = "deferred"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.y"
+group = "Pixmap"
+disposition = "deferred"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.irect"
+group = "Pixmap"
+disposition = "deferred"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.n"
+group = "Pixmap"
+disposition = "deferred"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.alpha"
+group = "Pixmap"
+disposition = "deferred"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.colorspace"
+group = "Pixmap"
+disposition = "deferred"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.digest"
+group = "Pixmap"
+disposition = "deferred"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.size"
+group = "Pixmap"
+disposition = "deferred"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.xres"
+group = "Pixmap"
+disposition = "deferred"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.yres"
+group = "Pixmap"
+disposition = "deferred"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.is_monochrome"
+group = "Pixmap"
+disposition = "deferred"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.is_unicolor"
+group = "Pixmap"
+disposition = "deferred"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.__array_interface__"
+group = "Pixmap"
+disposition = "deferred"
+milestone = "M5"
+
+[[symbol]]
+name = "Pixmap.pil_save"
+group = "Pixmap"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "Pillow bridge / OCR out of scope (PRD §3.2 #3)"
+
+[[symbol]]
+name = "Pixmap.pil_tobytes"
+group = "Pixmap"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "Pillow bridge / OCR out of scope (PRD §3.2 #3)"
+
+[[symbol]]
+name = "Pixmap.pdfocr_save"
+group = "Pixmap"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "Pillow bridge / OCR out of scope (PRD §3.2 #3)"
+
+[[symbol]]
+name = "Pixmap.pdfocr_tobytes"
+group = "Pixmap"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "Pillow bridge / OCR out of scope (PRD §3.2 #3)"
+
+# ── Annot ──
+[[symbol]]
+name = "Annot.update"
+group = "Annot"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Annot.set_rect"
+group = "Annot"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Annot.set_colors"
+group = "Annot"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Annot.colors"
+group = "Annot"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Annot.set_opacity"
+group = "Annot"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Annot.opacity"
+group = "Annot"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Annot.set_border"
+group = "Annot"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Annot.border"
+group = "Annot"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Annot.set_flags"
+group = "Annot"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Annot.flags"
+group = "Annot"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Annot.set_info"
+group = "Annot"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Annot.info"
+group = "Annot"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Annot.type"
+group = "Annot"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Annot.rect"
+group = "Annot"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Annot.xref"
+group = "Annot"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Annot.vertices"
+group = "Annot"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Annot.has_ap"
+group = "Annot"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Annot.set_rotation"
+group = "Annot"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Annot.set_line_ends"
+group = "Annot"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Annot.line_ends"
+group = "Annot"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Annot.set_blendmode"
+group = "Annot"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Annot.blendmode"
+group = "Annot"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Annot.set_name"
+group = "Annot"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Annot.set_open"
+group = "Annot"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Annot.is_open"
+group = "Annot"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Annot.set_popup"
+group = "Annot"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Annot.popup_rect"
+group = "Annot"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Annot.popup_xref"
+group = "Annot"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Annot.has_popup"
+group = "Annot"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Annot.set_apn_bbox"
+group = "Annot"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Annot.apn_bbox"
+group = "Annot"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Annot.set_apn_matrix"
+group = "Annot"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Annot.apn_matrix"
+group = "Annot"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Annot.set_irt_xref"
+group = "Annot"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Annot.irt_xref"
+group = "Annot"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Annot.delete_responses"
+group = "Annot"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Annot.get_text"
+group = "Annot"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Annot.get_textbox"
+group = "Annot"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Annot.get_textpage"
+group = "Annot"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Annot.get_file"
+group = "Annot"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Annot.update_file"
+group = "Annot"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Annot.file_info"
+group = "Annot"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Annot.clean_contents"
+group = "Annot"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Annot.set_language"
+group = "Annot"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Annot.rect_delta"
+group = "Annot"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Annot.next"
+group = "Annot"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Annot.language"
+group = "Annot"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Annot.get_pixmap"
+group = "Annot"
+disposition = "out-of-scope"
+milestone = "M6"
+note = "annot rasterization needs M6 renderer"
+
+[[symbol]]
+name = "Annot.set_oc"
+group = "Annot"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "OCG out of scope"
+
+[[symbol]]
+name = "Annot.get_oc"
+group = "Annot"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "OCG out of scope"
+
+[[symbol]]
+name = "Annot.get_sound"
+group = "Annot"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "niche; sound annots"
+
+# ── Widget ──
+[[symbol]]
+name = "Widget.field_name"
+group = "Widget"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Widget.field_label"
+group = "Widget"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Widget.field_value"
+group = "Widget"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Widget.field_type"
+group = "Widget"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Widget.field_type_string"
+group = "Widget"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Widget.field_flags"
+group = "Widget"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Widget.rect"
+group = "Widget"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Widget.xref"
+group = "Widget"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Widget.choice_values"
+group = "Widget"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Widget.button_states"
+group = "Widget"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Widget.update"
+group = "Widget"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Widget.field_display"
+group = "Widget"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Widget.border_color"
+group = "Widget"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Widget.border_style"
+group = "Widget"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Widget.border_width"
+group = "Widget"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Widget.border_dashes"
+group = "Widget"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Widget.fill_color"
+group = "Widget"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Widget.text_color"
+group = "Widget"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Widget.text_font"
+group = "Widget"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Widget.text_fontsize"
+group = "Widget"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Widget.text_maxlen"
+group = "Widget"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Widget.text_format"
+group = "Widget"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Widget.button_caption"
+group = "Widget"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Widget.is_signed"
+group = "Widget"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Widget.rb_parent"
+group = "Widget"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Widget.reset"
+group = "Widget"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Widget.on_state"
+group = "Widget"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Widget.next"
+group = "Widget"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Widget.script"
+group = "Widget"
+disposition = "out-of-scope"
+milestone = "M4"
+note = "field JavaScript stored, not executed (PRD §3.2)"
+
+[[symbol]]
+name = "Widget.script_calc"
+group = "Widget"
+disposition = "out-of-scope"
+milestone = "M4"
+note = "field JavaScript stored, not executed (PRD §3.2)"
+
+[[symbol]]
+name = "Widget.script_change"
+group = "Widget"
+disposition = "out-of-scope"
+milestone = "M4"
+note = "field JavaScript stored, not executed (PRD §3.2)"
+
+[[symbol]]
+name = "Widget.script_format"
+group = "Widget"
+disposition = "out-of-scope"
+milestone = "M4"
+note = "field JavaScript stored, not executed (PRD §3.2)"
+
+[[symbol]]
+name = "Widget.script_blur"
+group = "Widget"
+disposition = "out-of-scope"
+milestone = "M4"
+note = "field JavaScript stored, not executed (PRD §3.2)"
+
+[[symbol]]
+name = "Widget.script_focus"
+group = "Widget"
+disposition = "out-of-scope"
+milestone = "M4"
+note = "field JavaScript stored, not executed (PRD §3.2)"
+
+[[symbol]]
+name = "Widget.script_stroke"
+group = "Widget"
+disposition = "out-of-scope"
+milestone = "M4"
+note = "field JavaScript stored, not executed (PRD §3.2)"
+
+# ── Link ──
+[[symbol]]
+name = "Link.rect"
+group = "Link"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Link.dest"
+group = "Link"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Link.uri"
+group = "Link"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Link.page"
+group = "Link"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Link.is_external"
+group = "Link"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Link.border"
+group = "Link"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Link.set_border"
+group = "Link"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Link.colors"
+group = "Link"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Link.set_colors"
+group = "Link"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Link.flags"
+group = "Link"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Link.set_flags"
+group = "Link"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Link.next"
+group = "Link"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Link.xref"
+group = "Link"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Link.linkDest"
+group = "Link"
+disposition = "deferred"
+milestone = "M4"
+
+# ── Outline ──
+[[symbol]]
+name = "Outline.title"
+group = "Outline"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Outline.dest"
+group = "Outline"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Outline.page"
+group = "Outline"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Outline.uri"
+group = "Outline"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Outline.is_external"
+group = "Outline"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Outline.is_open"
+group = "Outline"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Outline.next"
+group = "Outline"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Outline.down"
+group = "Outline"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Outline.x"
+group = "Outline"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Outline.y"
+group = "Outline"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Outline.destination"
+group = "Outline"
+disposition = "deferred"
+milestone = "M3"
+
+# ── DisplayList ──
+[[symbol]]
+name = "DisplayList.DisplayList"
+group = "DisplayList"
+disposition = "out-of-scope"
+milestone = "M6"
+note = "vector rendering deferred (PRD §7 M6, post-v1)"
+
+[[symbol]]
+name = "DisplayList.get_pixmap"
+group = "DisplayList"
+disposition = "out-of-scope"
+milestone = "M6"
+note = "vector rendering deferred (PRD §7 M6, post-v1)"
+
+[[symbol]]
+name = "DisplayList.get_textpage"
+group = "DisplayList"
+disposition = "out-of-scope"
+milestone = "M6"
+note = "vector rendering deferred (PRD §7 M6, post-v1)"
+
+[[symbol]]
+name = "DisplayList.run"
+group = "DisplayList"
+disposition = "out-of-scope"
+milestone = "M6"
+note = "vector rendering deferred (PRD §7 M6, post-v1)"
+
+[[symbol]]
+name = "DisplayList.rect"
+group = "DisplayList"
+disposition = "out-of-scope"
+milestone = "M6"
+note = "vector rendering deferred (PRD §7 M6, post-v1)"
+
+# ── Shape ──
+[[symbol]]
+name = "Shape.draw_line"
+group = "Shape"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Shape.draw_rect"
+group = "Shape"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Shape.draw_circle"
+group = "Shape"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Shape.draw_oval"
+group = "Shape"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Shape.draw_bezier"
+group = "Shape"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Shape.draw_curve"
+group = "Shape"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Shape.draw_polyline"
+group = "Shape"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Shape.finish"
+group = "Shape"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Shape.commit"
+group = "Shape"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Shape.draw_quad"
+group = "Shape"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Shape.draw_sector"
+group = "Shape"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Shape.draw_squiggle"
+group = "Shape"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Shape.draw_zigzag"
+group = "Shape"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Shape.insert_text"
+group = "Shape"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Shape.insert_textbox"
+group = "Shape"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Shape.update_rect"
+group = "Shape"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Shape.horizontal_angle"
+group = "Shape"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Shape.doc"
+group = "Shape"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Shape.page"
+group = "Shape"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Shape.height"
+group = "Shape"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Shape.width"
+group = "Shape"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Shape.x"
+group = "Shape"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Shape.y"
+group = "Shape"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Shape.rect"
+group = "Shape"
+disposition = "deferred"
+milestone = "M4"
+
+# ── Font ──
+[[symbol]]
+name = "Font.Font"
+group = "Font"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "Font.text_length"
+group = "Font"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "Font.char_lengths"
+group = "Font"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "Font.glyph_advance"
+group = "Font"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "Font.glyph_bbox"
+group = "Font"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "Font.has_glyph"
+group = "Font"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "Font.valid_codepoints"
+group = "Font"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "Font.glyph_name_to_unicode"
+group = "Font"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "Font.unicode_to_glyph_name"
+group = "Font"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "Font.name"
+group = "Font"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "Font.ascender"
+group = "Font"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "Font.descender"
+group = "Font"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "Font.bbox"
+group = "Font"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "Font.glyph_count"
+group = "Font"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "Font.flags"
+group = "Font"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "Font.buffer"
+group = "Font"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "Font.is_bold"
+group = "Font"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "Font.is_italic"
+group = "Font"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "Font.is_serif"
+group = "Font"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "Font.is_monospaced"
+group = "Font"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "Font.is_writable"
+group = "Font"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "Font.Base14_fontnames"
+group = "Font"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "Font.css_for_pymupdf_font"
+group = "Font"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "Story-only; HTML engine out of scope"
+
+# ── TextWriter ──
+[[symbol]]
+name = "TextWriter.TextWriter"
+group = "TextWriter"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "TextWriter.append"
+group = "TextWriter"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "TextWriter.appendv"
+group = "TextWriter"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "TextWriter.fill_textbox"
+group = "TextWriter"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "TextWriter.write_text"
+group = "TextWriter"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "TextWriter.clean_rtl"
+group = "TextWriter"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "TextWriter.text_rect"
+group = "TextWriter"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "TextWriter.last_point"
+group = "TextWriter"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "TextWriter.color"
+group = "TextWriter"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "TextWriter.opacity"
+group = "TextWriter"
+disposition = "deferred"
+milestone = "M4"
+
+# ── Story ──
+[[symbol]]
+name = "Story.Story"
+group = "Story"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "HTML/CSS layout engine out of scope (PRD §3.2 #2)"
+
+[[symbol]]
+name = "Story.place"
+group = "Story"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "HTML/CSS layout engine out of scope (PRD §3.2 #2)"
+
+[[symbol]]
+name = "Story.draw"
+group = "Story"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "HTML/CSS layout engine out of scope (PRD §3.2 #2)"
+
+[[symbol]]
+name = "Story.write"
+group = "Story"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "HTML/CSS layout engine out of scope (PRD §3.2 #2)"
+
+[[symbol]]
+name = "Story.write_with_links"
+group = "Story"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "HTML/CSS layout engine out of scope (PRD §3.2 #2)"
+
+[[symbol]]
+name = "Story.write_stabilized"
+group = "Story"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "HTML/CSS layout engine out of scope (PRD §3.2 #2)"
+
+[[symbol]]
+name = "Story.write_stabilized_with_links"
+group = "Story"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "HTML/CSS layout engine out of scope (PRD §3.2 #2)"
+
+[[symbol]]
+name = "Story.fit"
+group = "Story"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "HTML/CSS layout engine out of scope (PRD §3.2 #2)"
+
+[[symbol]]
+name = "Story.fit_height"
+group = "Story"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "HTML/CSS layout engine out of scope (PRD §3.2 #2)"
+
+[[symbol]]
+name = "Story.fit_width"
+group = "Story"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "HTML/CSS layout engine out of scope (PRD §3.2 #2)"
+
+[[symbol]]
+name = "Story.fit_scale"
+group = "Story"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "HTML/CSS layout engine out of scope (PRD §3.2 #2)"
+
+[[symbol]]
+name = "Story.element_positions"
+group = "Story"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "HTML/CSS layout engine out of scope (PRD §3.2 #2)"
+
+[[symbol]]
+name = "Story.reset"
+group = "Story"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "HTML/CSS layout engine out of scope (PRD §3.2 #2)"
+
+[[symbol]]
+name = "Story.add_pdf_links"
+group = "Story"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "HTML/CSS layout engine out of scope (PRD §3.2 #2)"
+
+[[symbol]]
+name = "Story.add_header_ids"
+group = "Story"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "HTML/CSS layout engine out of scope (PRD §3.2 #2)"
+
+[[symbol]]
+name = "Story.document"
+group = "Story"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "HTML/CSS layout engine out of scope (PRD §3.2 #2)"
+
+[[symbol]]
+name = "Story.body"
+group = "Story"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "HTML/CSS layout engine out of scope (PRD §3.2 #2)"
+
+# ── Xml ──
+[[symbol]]
+name = "Xml.builder_api"
+group = "Xml"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "HTML/CSS layout engine out of scope (PRD §3.2 #2); grouped families"
+
+[[symbol]]
+name = "Xml.tree_ops"
+group = "Xml"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "HTML/CSS layout engine out of scope (PRD §3.2 #2); grouped families"
+
+[[symbol]]
+name = "Xml.styling"
+group = "Xml"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "HTML/CSS layout engine out of scope (PRD §3.2 #2); grouped families"
+
+[[symbol]]
+name = "Xml.navigation_props"
+group = "Xml"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "HTML/CSS layout engine out of scope (PRD §3.2 #2); grouped families"
+
+# ── Archive ──
+[[symbol]]
+name = "Archive.Archive"
+group = "Archive"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "HTML/CSS layout engine out of scope (PRD §3.2 #2)"
+
+[[symbol]]
+name = "Archive.add"
+group = "Archive"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "HTML/CSS layout engine out of scope (PRD §3.2 #2)"
+
+[[symbol]]
+name = "Archive.has_entry"
+group = "Archive"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "HTML/CSS layout engine out of scope (PRD §3.2 #2)"
+
+[[symbol]]
+name = "Archive.read_entry"
+group = "Archive"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "HTML/CSS layout engine out of scope (PRD §3.2 #2)"
+
+[[symbol]]
+name = "Archive.entry_list"
+group = "Archive"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "HTML/CSS layout engine out of scope (PRD §3.2 #2)"
+
+# ── Colorspace ──
+[[symbol]]
+name = "Colorspace.Colorspace"
+group = "Colorspace"
+disposition = "deferred"
+milestone = "M5"
+
+[[symbol]]
+name = "Colorspace.n"
+group = "Colorspace"
+disposition = "deferred"
+milestone = "M5"
+
+[[symbol]]
+name = "Colorspace.name"
+group = "Colorspace"
+disposition = "deferred"
+milestone = "M5"
+
+[[symbol]]
+name = "Colorspace.csGRAY"
+group = "Colorspace"
+disposition = "deferred"
+milestone = "M5"
+
+[[symbol]]
+name = "Colorspace.csRGB"
+group = "Colorspace"
+disposition = "deferred"
+milestone = "M5"
+
+[[symbol]]
+name = "Colorspace.csCMYK"
+group = "Colorspace"
+disposition = "deferred"
+milestone = "M5"
+
+# ── module ──
+[[symbol]]
+name = "open"
+group = "module"
+disposition = "implemented"
+milestone = "M1"
+
+[[symbol]]
+name = "version"
+group = "module"
+disposition = "implemented"
+milestone = "M1"
+
+[[symbol]]
+name = "identity_matrix"
+group = "module"
+disposition = "implemented"
+milestone = "M1"
+
+[[symbol]]
+name = "paper_size"
+group = "module"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "paper_rect"
+group = "module"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "paper_sizes"
+group = "module"
+disposition = "implemented"
+milestone = "M0"
+
+[[symbol]]
+name = "get_text_length"
+group = "module"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "sRGB_to_rgb"
+group = "module"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "sRGB_to_pdf"
+group = "module"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "glyph_name_to_unicode"
+group = "module"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "unicode_to_glyph_name"
+group = "module"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "recover_quad"
+group = "module"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "recover_char_quad"
+group = "module"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "recover_line_quad"
+group = "module"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "recover_span_quad"
+group = "module"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "recover_bbox_quad"
+group = "module"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "planish_line"
+group = "module"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "ConversionHeader"
+group = "module"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "ConversionTrailer"
+group = "module"
+disposition = "deferred"
+milestone = "M2"
+
+[[symbol]]
+name = "get_pdf_now"
+group = "module"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "get_pdf_str"
+group = "module"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "image_profile"
+group = "module"
+disposition = "deferred"
+milestone = "M5"
+
+[[symbol]]
+name = "set_messages"
+group = "module"
+disposition = "deferred"
+milestone = "M1"
+
+[[symbol]]
+name = "message"
+group = "module"
+disposition = "deferred"
+milestone = "M1"
+
+[[symbol]]
+name = "set_log"
+group = "module"
+disposition = "deferred"
+milestone = "M1"
+
+[[symbol]]
+name = "log"
+group = "module"
+disposition = "deferred"
+milestone = "M1"
+
+[[symbol]]
+name = "Tools"
+group = "module"
+disposition = "deferred"
+milestone = "M1"
+
+[[symbol]]
+name = "TOOLS"
+group = "module"
+disposition = "deferred"
+milestone = "M1"
+
+[[symbol]]
+name = "module.css_for_pymupdf_font"
+group = "module"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "Story-only"
+
+[[symbol]]
+name = "find_tables"
+group = "module"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "table detection / OCR out of scope (PRD §3.2 #3/#4)"
+
+[[symbol]]
+name = "make_table"
+group = "module"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "table detection / OCR out of scope (PRD §3.2 #3/#4)"
+
+[[symbol]]
+name = "get_tessdata"
+group = "module"
+disposition = "out-of-scope"
+milestone = "post-v1"
+note = "table detection / OCR out of scope (PRD §3.2 #3/#4)"
+
+# ── Tools ──
+[[symbol]]
+name = "Tools.gen_id"
+group = "Tools"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Tools.set_annot_stem"
+group = "Tools"
+disposition = "deferred"
+milestone = "M3"
+
+[[symbol]]
+name = "Tools.mupdf_warnings"
+group = "Tools"
+disposition = "deferred"
+milestone = "M1"
+
+[[symbol]]
+name = "Tools.reset_mupdf_warnings"
+group = "Tools"
+disposition = "deferred"
+milestone = "M1"
+
+[[symbol]]
+name = "Tools.mupdf_version"
+group = "Tools"
+disposition = "deferred"
+milestone = "M1"
+
+[[symbol]]
+name = "Tools.store_shrink"
+group = "Tools"
+disposition = "deferred"
+milestone = "M1"
+
+[[symbol]]
+name = "Tools.store_maxsize"
+group = "Tools"
+disposition = "deferred"
+milestone = "M1"
+
+[[symbol]]
+name = "Tools.store_size"
+group = "Tools"
+disposition = "deferred"
+milestone = "M1"
+
+[[symbol]]
+name = "Tools.mupdf_display_errors"
+group = "Tools"
+disposition = "deferred"
+milestone = "M1"
+
+[[symbol]]
+name = "Tools.mupdf_display_warnings"
+group = "Tools"
+disposition = "deferred"
+milestone = "M1"
+
+[[symbol]]
+name = "Tools.glyph_cache_empty"
+group = "Tools"
+disposition = "deferred"
+milestone = "M1"
+
+[[symbol]]
+name = "Tools.image_profile"
+group = "Tools"
+disposition = "deferred"
+milestone = "M1"
+
+[[symbol]]
+name = "Tools.fitz_config"
+group = "Tools"
+disposition = "deferred"
+milestone = "M1"
+
+[[symbol]]
+name = "Tools.set_subset_fontnames"
+group = "Tools"
+disposition = "deferred"
+milestone = "M4"
+
+[[symbol]]
+name = "Tools.set_aa_level"
+group = "Tools"
+disposition = "out-of-scope"
+milestone = "M6"
+note = "render/cache-era tuning; no-op + warn until M6"
+
+[[symbol]]
+name = "Tools.show_aa_level"
+group = "Tools"
+disposition = "out-of-scope"
+milestone = "M6"
+note = "render/cache-era tuning; no-op + warn until M6"
+
+[[symbol]]
+name = "Tools.set_small_glyph_heights"
+group = "Tools"
+disposition = "out-of-scope"
+milestone = "M6"
+note = "render/cache-era tuning; no-op + warn until M6"
+
+[[symbol]]
+name = "Tools.set_graphics_min_line_width"
+group = "Tools"
+disposition = "out-of-scope"
+milestone = "M6"
+note = "render/cache-era tuning; no-op + warn until M6"
+
+[[symbol]]
+name = "Tools.set_font_width"
+group = "Tools"
+disposition = "out-of-scope"
+milestone = "M6"
+note = "render/cache-era tuning; no-op + warn until M6"
+
+[[symbol]]
+name = "Tools.set_icc"
+group = "Tools"
+disposition = "out-of-scope"
+milestone = "M6"
+note = "render/cache-era tuning; no-op + warn until M6"
+
+[[symbol]]
+name = "Tools.set_low_memory"
+group = "Tools"
+disposition = "out-of-scope"
+milestone = "M6"
+note = "render/cache-era tuning; no-op + warn until M6"
+
+[[symbol]]
+name = "Tools.mupdf_raw_access"
+group = "Tools"
+disposition = "out-of-scope"
+milestone = "out-of-scope"
+note = "raw mupdf.* access raises PdfUnsupportedError (PRD §3.6)"
+
+# ── exceptions ──
+[[symbol]]
+name = "exceptions.PdfUnsupportedError"
+group = "exceptions"
+disposition = "implemented"
+milestone = "M1"
+note = "oxipdf-typed hierarchy + PyMuPDF exception-name aliases"
+
+[[symbol]]
+name = "exceptions.PdfDecodeError"
+group = "exceptions"
+disposition = "implemented"
+milestone = "M1"
+note = "oxipdf-typed hierarchy + PyMuPDF exception-name aliases"
+
+[[symbol]]
+name = "exceptions.PdfRedactionError"
+group = "exceptions"
+disposition = "implemented"
+milestone = "M1"
+note = "oxipdf-typed hierarchy + PyMuPDF exception-name aliases"
+
+[[symbol]]
+name = "exceptions.PdfError"
+group = "exceptions"
+disposition = "implemented"
+milestone = "M1"
+note = "oxipdf-typed hierarchy + PyMuPDF exception-name aliases"
+
+[[symbol]]
+name = "exceptions.PdfSyntaxError"
+group = "exceptions"
+disposition = "implemented"
+milestone = "M1"
+note = "oxipdf-typed hierarchy + PyMuPDF exception-name aliases"
+
+[[symbol]]
+name = "exceptions.PdfPasswordError"
+group = "exceptions"
+disposition = "implemented"
+milestone = "M1"
+note = "oxipdf-typed hierarchy + PyMuPDF exception-name aliases"
+
+[[symbol]]
+name = "exceptions.PdfLimitError"
+group = "exceptions"
+disposition = "implemented"
+milestone = "M1"
+note = "oxipdf-typed hierarchy + PyMuPDF exception-name aliases"
+
+[[symbol]]
+name = "exceptions.FileDataError"
+group = "exceptions"
+disposition = "implemented"
+milestone = "M1"
+note = "oxipdf-typed hierarchy + PyMuPDF exception-name aliases"
+
+[[symbol]]
+name = "exceptions.EmptyFileError"
+group = "exceptions"
+disposition = "implemented"
+milestone = "M1"
+note = "oxipdf-typed hierarchy + PyMuPDF exception-name aliases"
+
+[[symbol]]
+name = "exceptions.FileNotFoundError"
+group = "exceptions"
+disposition = "implemented"
+milestone = "M1"
+note = "oxipdf-typed hierarchy + PyMuPDF exception-name aliases"
