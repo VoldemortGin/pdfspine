@@ -935,7 +935,10 @@ mod tests {
             gid,
             &font,
             Paint::from_rgb(0x00_00_FF_00),
-            &StrokeStyle { width: 4.0 },
+            &StrokeStyle {
+                width: 4.0,
+                ..StrokeStyle::default()
+            },
             Matrix::IDENTITY,
         )
         .unwrap();
@@ -994,7 +997,10 @@ mod tests {
             gid,
             &font,
             Paint::from_rgb(0x00_00_00_FF),
-            &StrokeStyle { width: 3.0 },
+            &StrokeStyle {
+                width: 3.0,
+                ..StrokeStyle::default()
+            },
             Matrix::IDENTITY,
         )
         .unwrap();
@@ -1054,7 +1060,7 @@ mod tests {
             let g = glyph_at(Point::new(ox, oy), size, 0x0012_3456, mode);
             let r = draw_glyph_with_font(
                 &mut cv, &g, gid, &font,
-                Paint::from_rgb(0x00_AB_CD_EF), &StrokeStyle { width: 2.0 },
+                Paint::from_rgb(0x00_AB_CD_EF), &StrokeStyle { width: 2.0, ..StrokeStyle::default() },
                 Matrix::IDENTITY,
             );
             prop_assert!(r.is_ok());
