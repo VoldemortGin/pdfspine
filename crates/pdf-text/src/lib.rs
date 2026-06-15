@@ -18,6 +18,7 @@
 pub mod interp;
 pub mod layout;
 pub mod model;
+pub mod renderops;
 pub mod search;
 pub mod serialize;
 pub mod state;
@@ -33,6 +34,7 @@ pub use model::{
     flags, Block, BlockKind, Char, DrawPath, ImageBlock, ImageRef, InterpretResult, Line,
     PaintKind, PathItem, PositionedGlyph, Span, TextPage, Word, WritingDir,
 };
+pub use renderops::{ImageOp, RenderOp, RenderSink, ShadingOp, TextRun};
 pub use search::{search, SearchOptions};
 pub use serialize::{
     defaults, get_textbox, textflags, to_blocks, to_dict, to_html, to_json, to_text, to_words,
@@ -46,6 +48,15 @@ pub use words::words;
 #[must_use]
 pub fn interpret_page(doc: &DocumentStore, page: &Dict) -> InterpretResult {
     ContentInterpreter::new(doc).run_page(page)
+}
+
+/// Interprets a page dictionary into the **ordered** [`RenderOp`] stream (the M6
+/// render driver / `DisplayList` source). Document order is preserved so later
+/// drawcalls paint over earlier ones (z-order). Convenience wrapper over
+/// [`ContentInterpreter::run_page_render`].
+#[must_use]
+pub fn interpret_page_render(doc: &DocumentStore, page: &Dict) -> Vec<RenderOp> {
+    ContentInterpreter::new_recording(doc).run_page_render(page)
 }
 
 /// Interprets an explicit content buffer + resource dict under `base_ctm`.

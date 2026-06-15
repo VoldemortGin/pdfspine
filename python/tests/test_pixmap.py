@@ -167,18 +167,26 @@ def test_pixmap_buf_lifetime():
     mv2.release()
 
 
-# --- PYPIXMAP-VECTOR: vector page get_pixmap → PdfUnsupportedError ---------
+# --- PYPIXMAP-VECTOR: a vector page now RENDERS (M6d) ----------------------
 
 
-def test_pypixmap_vector_page_raises():
+def test_pypixmap_vector_page_renders():
     w, h = 4, 4
     samples = _rgb_samples(w, h)
-    # Content paints a path (re/f) → vector page (deferred to M6).
-    doc = oxide_pdf.open(stream=image_only_pdf(w, h, samples, "0 0 10 10 re f"))
+    # Content paints a red path (re/f) → a vector page. In M6d this renders
+    # full-page (no PdfUnsupportedError); the page MediaBox is 200x200.
+    doc = oxide_pdf.open(stream=image_only_pdf(w, h, samples, "1 0 0 rg 0 0 20 20 re f"))
     page = doc[0]
     assert not page.is_image_only
-    with pytest.raises(oxide_pdf.PdfUnsupportedError):
-        page.get_pixmap()
+    pix = page.get_pixmap()
+    assert (pix.width, pix.height) == (200, 200)
+    assert pix.colorspace == "DeviceRGB"
+    # The bottom-left 20x20 user-space square is red; device y is flipped, so it
+    # lands at the bottom of the raster. Sample inside it.
+    red = pix.pixel(5, 195)
+    assert red[0] > 200 and red[1] < 60 and red[2] < 60
+    # A non-empty raster.
+    assert any(b != 255 for b in pix.samples)
 
 
 # --- PYPIXMAP-UNDECODABLE: bad image but get_text still works --------------
@@ -223,9 +231,12 @@ def test_pypixmap_undecodable_image_text_independent():
     page = doc[0]
     # get_text works regardless of the broken image.
     assert "hello" in page.get_text("text")
-    # get_pixmap raises a typed error (text page here → unsupported).
-    with pytest.raises(oxide_pdf.PdfUnsupportedError):
-        page.get_pixmap()
+    # get_pixmap now RENDERS the page (M6d): the undecodable image is skipped
+    # (the §8.4.1 degradation contract — a broken image never aborts the render),
+    # and the rest of the page (here a text layer) still rasterizes.
+    pix = page.get_pixmap()
+    assert (pix.width, pix.height) == (200, 200)
+    assert pix.colorspace == "DeviceRGB"
 
 
 # --- PYEXTRACT-IMAGE-001: doc.extract_image → dict shape ------------------
@@ -296,3 +307,110 @@ def test_pypixmap_blank_and_pixel():
     assert pix.pixel(0, 0) == (0, 0, 0)
     pix.set_pixel(1, 1, [9, 8, 7])
     assert pix.pixel(1, 1) == (9, 8, 7)
+
+
+# ===========================================================================
+# M6d — full-page render + DisplayList from Python (PYRENDER-*).
+# ===========================================================================
+
+
+def _vector_page_pdf(content: str, media: str = "[0 0 200 200]") -> bytes:
+    """A 1-page PDF with no resources, drawing `content` (a self-built page)."""
+    body = content.encode()
+    return _build_pdf(
+        [
+            (1, b"<< /Type /Catalog /Pages 2 0 R >>"),
+            (2, b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>"),
+            (
+                3,
+                b"<< /Type /Page /Parent 2 0 R /MediaBox "
+                + media.encode()
+                + b" /Resources << >> /Contents 4 0 R >>",
+            ),
+            (
+                4,
+                f"<< /Length {len(body)} >>\nstream\n".encode() + body + b"\nendstream",
+            ),
+        ],
+        root=1,
+    )
+
+
+# --- PYRENDER-001: a self-built page renders to a non-blank sized Pixmap ----
+
+
+def test_pyrender_001_page_renders_non_blank():
+    # A green rect over most of the page: a self-built page → non-blank raster.
+    doc = oxide_pdf.open(stream=_vector_page_pdf("0 1 0 rg 20 20 160 160 re f"))
+    page = doc[0]
+    pix = page.get_pixmap()
+    assert (pix.width, pix.height, pix.n) == (200, 200, 3)
+    assert pix.colorspace == "DeviceRGB"
+    # The rect center is green (device center maps inside the rect).
+    cx = pix.pixel(100, 100)
+    assert cx[1] > 200 and cx[0] < 60 and cx[2] < 60
+    assert any(b != 255 for b in pix.samples)
+
+
+# --- PYRENDER-002: a vector page renders (no raise) + pix.save(png) works ---
+
+
+def test_pyrender_002_vector_page_save(tmp_path):
+    doc = oxide_pdf.open(stream=_vector_page_pdf("0 0 1 rg 0 0 200 200 re f"))
+    pix = doc[0].get_pixmap()  # no PdfUnsupportedError
+    out = tmp_path / "page.png"
+    pix.save(str(out))
+    data = out.read_bytes()
+    assert data[:8] == b"\x89PNG\r\n\x1a\n"
+    assert data[12:16] == b"IHDR"
+    pw, ph = struct.unpack(">II", data[16:24])
+    assert (pw, ph) == (200, 200)
+
+
+# --- PYRENDER-003: dpi scales the rendered dimensions ----------------------
+
+
+def test_pyrender_003_dpi_scales():
+    doc = oxide_pdf.open(stream=_vector_page_pdf("1 0 0 rg 0 0 200 200 re f"))
+    page = doc[0]
+    base = page.get_pixmap()
+    assert (base.width, base.height) == (200, 200)
+    hi = page.get_pixmap(dpi=144)
+    assert (hi.width, hi.height) == (400, 400)
+    m2 = page.get_pixmap(matrix=(2, 0, 0, 2, 0, 0))
+    assert (m2.width, m2.height) == (400, 400)
+
+
+# --- PYRENDER-004: DisplayList replay matches get_pixmap -------------------
+
+
+def test_pyrender_004_displaylist_replay_matches():
+    doc = oxide_pdf.open(stream=_vector_page_pdf("0 0 1 rg 30 30 140 140 re f"))
+    page = doc[0]
+    direct = page.get_pixmap()
+    dl = page.get_displaylist()
+    assert dl.rect == (0.0, 0.0, 200.0, 200.0)
+    replay = dl.get_pixmap()
+    assert (replay.width, replay.height) == (direct.width, direct.height)
+    assert bytes(replay.samples) == bytes(direct.samples)
+    # DisplayList is exported on the package + fitz shim.
+    assert isinstance(dl, oxide_pdf.DisplayList)
+
+
+# --- PYRENDER-005: fitz shim parity on a rendered page --------------------
+
+
+def test_pyrender_005_fitz_parity():
+    import fitz
+
+    pdf = _vector_page_pdf("1 0 0 rg 10 10 180 180 re f")
+    doc = fitz.open(stream=pdf)
+    page = doc.load_page(0)
+    pix = page.get_pixmap()
+    assert (pix.width, pix.height) == (200, 200)
+    # camelCase alias + DisplayList exported on fitz.
+    pix2 = page.getPixmap()
+    assert (pix2.width, pix2.height) == (200, 200)
+    assert fitz.DisplayList is oxide_pdf.DisplayList
+    dl = page.get_displaylist()
+    assert bytes(dl.get_pixmap().samples) == bytes(pix.samples)

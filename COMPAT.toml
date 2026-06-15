@@ -29,9 +29,9 @@
 baseline = "1.24.x"
 baseline_detail = "PyMuPDF 1.24.14 / MuPDF 1.24.11"
 total = 766
-implemented = 310
-deferred = 352
-out_of_scope = 104
+implemented = 315
+deferred = 353
+out_of_scope = 98
 coverage_pct = 40.5
 
 # ── Matrix ──
@@ -2144,23 +2144,23 @@ milestone = "M4"
 [[symbol]]
 name = "Page.get_pixmap"
 group = "Page"
-disposition = "deferred"
-milestone = "M5"
-note = "image pages M5 / vector pages M6; explicit stub today"
+disposition = "implemented"
+milestone = "M6"
+note = "full-page render (text/vector/image) + image-only fast path (M6d)"
 
 [[symbol]]
 name = "Page.get_svg_image"
 group = "Page"
 disposition = "out-of-scope"
 milestone = "M6"
-note = "vector rendering (PRD §3.2 #1)"
+note = "SVG vector export deferred past v1 (PRD §3.2 #1)"
 
 [[symbol]]
 name = "Page.get_displaylist"
 group = "Page"
-disposition = "out-of-scope"
+disposition = "implemented"
 milestone = "M6"
-note = "vector rendering (PRD §3.2 #1)"
+note = "records the ordered render-op stream; replay via get_pixmap (M6d)"
 
 [[symbol]]
 name = "Page.run"
@@ -3787,37 +3787,37 @@ milestone = "M3"
 [[symbol]]
 name = "DisplayList.DisplayList"
 group = "DisplayList"
-disposition = "out-of-scope"
+disposition = "implemented"
 milestone = "M6"
-note = "vector rendering deferred (PRD §7 M6, post-v1)"
+note = "Page.get_displaylist records the ordered render-op stream (M6d)"
 
 [[symbol]]
 name = "DisplayList.get_pixmap"
 group = "DisplayList"
-disposition = "out-of-scope"
+disposition = "implemented"
 milestone = "M6"
-note = "vector rendering deferred (PRD §7 M6, post-v1)"
+note = "replays the recorded drawcalls onto a fresh canvas (M6d)"
 
 [[symbol]]
 name = "DisplayList.get_textpage"
 group = "DisplayList"
-disposition = "out-of-scope"
+disposition = "deferred"
 milestone = "M6"
-note = "vector rendering deferred (PRD §7 M6, post-v1)"
+note = "TextPage-from-displaylist deferred; use Page.get_textpage (M2)"
 
 [[symbol]]
 name = "DisplayList.run"
 group = "DisplayList"
-disposition = "out-of-scope"
+disposition = "deferred"
 milestone = "M6"
-note = "vector rendering deferred (PRD §7 M6, post-v1)"
+note = "device-callback replay deferred; get_pixmap covers the raster path"
 
 [[symbol]]
 name = "DisplayList.rect"
 group = "DisplayList"
-disposition = "out-of-scope"
+disposition = "implemented"
 milestone = "M6"
-note = "vector rendering deferred (PRD §7 M6, post-v1)"
+note = "the recorded page CropBox (M6d)"
 
 # ── Shape ──
 [[symbol]]

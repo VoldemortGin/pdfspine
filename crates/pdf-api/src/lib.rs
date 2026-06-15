@@ -51,8 +51,9 @@ pub use text::{
 // (PRD §3.3 / §8.10). The bindings depend only on `pdf-api`.
 pub use image::{
     document_extract_image, image_document_page_pixmap, image_to_pdf, open_image_document,
-    page_get_pixmap, page_is_image_only, pixmap_blank, pixmap_set_pixel, pixmap_tobytes,
-    Colorspace, ExtractedImage, ImageDocument, ImageFormat, Pixmap,
+    page_get_displaylist, page_get_pixmap, page_is_image_only, page_render, pixmap_blank,
+    pixmap_set_pixel, pixmap_tobytes, Colorspace, DisplayList, ExtractedImage, ImageDocument,
+    ImageFormat, Pixmap, RenderArgs,
 };
 
 // `pdf-text` types the bindings need so they only depend on `pdf-api` (PRD §9.1).

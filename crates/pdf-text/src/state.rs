@@ -57,6 +57,11 @@ pub struct GraphicsState {
     pub line_width: f64,
     /// The current dash-pattern string (`"[…] phase"`), empty when solid.
     pub dashes: String,
+    /// The current constant **fill** alpha `ca` (0.0–1.0; default 1.0). Set by an
+    /// ExtGState (`gs`) `/ca`. Used by the render sink (M6); ignored by M2.
+    pub fill_alpha: f64,
+    /// The current constant **stroke** alpha `CA` (0.0–1.0; default 1.0).
+    pub stroke_alpha: f64,
     /// The text-state parameters.
     pub text: TextState,
 }
@@ -72,7 +77,21 @@ impl GraphicsState {
             stroke_color: 0x00_00_00_00,
             line_width: 1.0,
             dashes: String::new(),
+            fill_alpha: 1.0,
+            stroke_alpha: 1.0,
             text: TextState::default(),
         }
+    }
+
+    /// The fill alpha quantized to 0–255 (for the render sink).
+    #[must_use]
+    pub fn fill_alpha_u8(&self) -> u8 {
+        (self.fill_alpha.clamp(0.0, 1.0) * 255.0).round() as u8
+    }
+
+    /// The stroke alpha quantized to 0–255 (for the render sink).
+    #[must_use]
+    pub fn stroke_alpha_u8(&self) -> u8 {
+        (self.stroke_alpha.clamp(0.0, 1.0) * 255.0).round() as u8
     }
 }

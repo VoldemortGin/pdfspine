@@ -34,6 +34,7 @@ use smol_str::SmolStr;
 use crate::model::{
     DrawPath, ImageRef, InterpretResult, PaintKind, PathItem, PositionedGlyph, WritingDir,
 };
+use crate::renderops::{ImageOp, RenderOp, ShadingOp, TextRun};
 use crate::state::GraphicsState;
 use crate::tokenizer::{tokenize, Event};
 
@@ -52,6 +53,9 @@ struct CachedFont {
     ascent: f64,
     /// Descent in 1000-unit glyph space (bottom of the cell; usually negative).
     descent: f64,
+    /// The resolved font dictionary (only needed by the render sink to find the
+    /// embedded `/FontFile*` program; cheap `Dict` clone, built once per font).
+    dict: Dict,
 }
 
 /// Accumulates path-construction operators (`m l c v y re h`) into device-space
@@ -68,6 +72,9 @@ struct CurrentPath {
     subpath_start: Option<Point>,
     /// Whether any sub-path was closed with `h` since the last paint.
     closed: bool,
+    /// Set by `W`/`W*`: the next paint op also intersects the clip with this
+    /// path (`Some(even_odd)`). Consumed (and emitted) at the next paint op.
+    clip_pending: Option<bool>,
 }
 
 impl CurrentPath {
@@ -113,6 +120,7 @@ impl CurrentPath {
         self.current = None;
         self.subpath_start = None;
         self.closed = false;
+        self.clip_pending = None;
     }
 
     /// The axis-aligned envelope of all item points (user space).
@@ -154,16 +162,68 @@ impl CurrentPath {
 pub struct ContentInterpreter<'a> {
     doc: &'a DocumentStore,
     out: InterpretResult,
+    /// When `Some`, the interpreter additionally records an **ordered**
+    /// [`RenderOp`] stream (document order, for M6 rendering / `DisplayList`).
+    /// `None` for the M2 text-extraction path (zero overhead, identical output).
+    render_ops: Option<Vec<RenderOp>>,
 }
 
 impl<'a> ContentInterpreter<'a> {
-    /// Creates an interpreter bound to a document store.
+    /// Creates an interpreter bound to a document store (text-extraction mode —
+    /// no ordered render-op recording).
     #[must_use]
     pub fn new(doc: &'a DocumentStore) -> Self {
         ContentInterpreter {
             doc,
             out: InterpretResult::default(),
+            render_ops: None,
         }
+    }
+
+    /// Creates an interpreter that **also** records the ordered [`RenderOp`]
+    /// stream (M6 rendering / `DisplayList`). The flat [`InterpretResult`] is
+    /// still produced; [`ContentInterpreter::run_page_render`] returns both.
+    #[must_use]
+    pub fn new_recording(doc: &'a DocumentStore) -> Self {
+        ContentInterpreter {
+            doc,
+            out: InterpretResult::default(),
+            render_ops: Some(Vec::new()),
+        }
+    }
+
+    /// Whether the ordered render-op sink is active.
+    fn recording(&self) -> bool {
+        self.render_ops.is_some()
+    }
+
+    /// Pushes one ordered render op (no-op when not recording).
+    fn emit(&mut self, op: RenderOp) {
+        if let Some(ops) = self.render_ops.as_mut() {
+            ops.push(op);
+        }
+    }
+
+    /// Runs a page dictionary in **recording** mode, returning the ordered
+    /// [`RenderOp`] stream (the M6 render driver / `DisplayList` source).
+    #[must_use]
+    pub fn run_page_render(mut self, page: &Dict) -> Vec<RenderOp> {
+        let content = self.page_content(page);
+        let resources = self
+            .doc
+            .resolve_dict_key(page, &Name::new("Resources"))
+            .ok()
+            .flatten()
+            .and_then(|o| o.as_dict().cloned())
+            .unwrap_or_default();
+        self.run(
+            &content,
+            &resources,
+            Matrix::IDENTITY,
+            0,
+            &mut HashSet::new(),
+        );
+        self.render_ops.take().unwrap_or_default()
     }
 
     /// Interprets a page dictionary: concatenates its `/Contents` stream(s),
@@ -285,8 +345,8 @@ impl<'a> ContentInterpreter<'a> {
         for ev in events {
             match ev {
                 Event::Operand(o) => ops.push(o),
-                Event::InlineImage { params, data: _ } => {
-                    self.record_inline_image(&params, gs.ctm);
+                Event::InlineImage { params, data } => {
+                    self.record_inline_image(&params, data, &gs);
                     ops.clear();
                 }
                 Event::Operator(name) => {
@@ -329,10 +389,24 @@ impl<'a> ContentInterpreter<'a> {
     ) {
         match name {
             // --- graphics state ------------------------------------------
-            b"q" => stack.push(gs.clone()),
+            b"q" => {
+                stack.push(gs.clone());
+                if self.recording() {
+                    self.emit(RenderOp::Save);
+                }
+            }
             b"Q" => {
                 if let Some(prev) = stack.pop() {
                     *gs = prev;
+                }
+                if self.recording() {
+                    self.emit(RenderOp::Restore);
+                }
+            }
+            b"gs" => {
+                // ExtGState: pull constant alpha `ca`/`CA` for the render sink.
+                if self.recording() {
+                    self.apply_extgstate(ops, gs, resources);
                 }
             }
             b"cm" => {
@@ -428,7 +502,24 @@ impl<'a> ContentInterpreter<'a> {
                 }
                 self.paint_path(path, gs, PaintKind::FillStroke, true);
             }
-            b"n" => path.reset(),
+            b"n" => {
+                // `n` may follow `W`/`W*` to apply a clip with no paint.
+                if self.recording() {
+                    if let Some(eo) = path.clip_pending.take() {
+                        if !path.items.is_empty() {
+                            self.emit(RenderOp::Clip {
+                                items: path.items.clone(),
+                                even_odd: eo,
+                            });
+                        }
+                    }
+                }
+                path.reset();
+            }
+
+            // --- clip path (the next paint op also intersects the clip) ---
+            b"W" => path.clip_pending = Some(false),
+            b"W*" => path.clip_pending = Some(true),
 
             // --- text object ---------------------------------------------
             b"BT" => {
@@ -614,6 +705,13 @@ impl<'a> ContentInterpreter<'a> {
                 }
             }
 
+            // --- shading (sh) --------------------------------------------
+            b"sh" if self.recording() => {
+                if let Some(sname) = ops.iter().find_map(|o| o.as_name().and_then(Name::as_str)) {
+                    self.do_shading(sname, gs, resources);
+                }
+            }
+
             // Everything else: unknown / unhandled operator → skip (tolerant).
             _ => {}
         }
@@ -641,8 +739,40 @@ impl<'a> ContentInterpreter<'a> {
         };
         // Collect codes up front (the borrow on `cached` ends before mutation).
         let codes: Vec<(u32, u8)> = cached.mapper.iter_codes(bytes).collect();
+
+        // Render-op recording: capture this show op as one ordered TextRun. The
+        // glyphs' `origin`/`bbox` already carry the full CTM (Trm = params·Tm·CTM),
+        // so the renderer paints them with an identity CTM.
+        let start = self.out.glyphs.len();
+        let (gids, font_dict): (Vec<u32>, Option<Dict>) = if self.recording() {
+            let gids = codes
+                .iter()
+                .map(|&(code, _)| cached.mapper.gid(code))
+                .collect();
+            (gids, Some(cached.dict.clone()))
+        } else {
+            (Vec::new(), None)
+        };
+
         for (code, n_bytes) in codes {
             self.emit_glyph(code, n_bytes, &font_name, gs, tm, font_cache);
+        }
+
+        if let Some(font_dict) = font_dict {
+            let glyphs: Vec<PositionedGlyph> = self.out.glyphs[start..].to_vec();
+            if !glyphs.is_empty() {
+                self.emit(RenderOp::Text(TextRun {
+                    glyphs,
+                    gids,
+                    font_dict,
+                    fill_color: gs.fill_color,
+                    stroke_color: gs.stroke_color,
+                    fill_alpha: gs.fill_alpha_u8(),
+                    render_mode: gs.text.render_mode,
+                    stroke_width: gs.line_width,
+                    ctm: Matrix::IDENTITY,
+                }));
+            }
         }
     }
 
@@ -771,6 +901,7 @@ impl<'a> ContentInterpreter<'a> {
             mapper,
             ascent,
             descent,
+            dict: font_dict.clone(),
         })
     }
 
@@ -887,7 +1018,7 @@ impl<'a> ContentInterpreter<'a> {
 
         match subtype {
             Some("Image") => {
-                self.record_image_xobject(xname, &stream.dict, gs.ctm);
+                self.record_image_xobject(xname, stream, obj_num, gs);
             }
             Some("Form") | None => {
                 // Depth + cycle guards.
@@ -933,8 +1064,16 @@ impl<'a> ContentInterpreter<'a> {
         }
     }
 
-    /// Records an Image XObject `Do` into the inventory.
-    fn record_image_xobject(&mut self, name: &str, dict: &Dict, ctm: Matrix) {
+    /// Records an Image XObject `Do` into the inventory (and, when recording, the
+    /// ordered render-op stream with the raw image bytes for decode at replay).
+    fn record_image_xobject(
+        &mut self,
+        name: &str,
+        stream: &pdf_core::StreamObj,
+        obj_num: Option<u32>,
+        gs: &GraphicsState,
+    ) {
+        let dict = &stream.dict;
         let width = dict
             .get(&Name::new("Width"))
             .and_then(Object::as_i64)
@@ -946,10 +1085,23 @@ impl<'a> ContentInterpreter<'a> {
         self.out.images.push(ImageRef {
             name: Some(SmolStr::new(name)),
             inline: false,
-            ctm,
+            ctm: gs.ctm,
             width,
             height,
         });
+
+        if self.recording() {
+            if let Ok(raw) = self.doc.stream_raw_bytes(stream) {
+                self.emit(RenderOp::Image(ImageOp {
+                    dict: dict.clone(),
+                    raw: raw.to_vec(),
+                    obj_num,
+                    ctm: gs.ctm,
+                    fill_color: gs.fill_color,
+                    alpha: gs.fill_alpha_u8(),
+                }));
+            }
+        }
     }
 
     /// Emits a [`DrawPath`] for the current path under paint kind `kind`, then
@@ -979,12 +1131,45 @@ impl<'a> ContentInterpreter<'a> {
                 even_odd: eo,
                 items: path.items.clone(),
             });
+
+            // Ordered render-op stream (M6): emit fill then stroke in z-order,
+            // then any pending clip (W/W* applies *after* the paint).
+            if self.recording() {
+                let do_fill = matches!(kind, PaintKind::Fill | PaintKind::FillStroke);
+                let do_stroke = matches!(kind, PaintKind::Stroke | PaintKind::FillStroke);
+                if do_fill {
+                    self.emit(RenderOp::Fill {
+                        items: path.items.clone(),
+                        close: path.closed,
+                        color: gs.fill_color,
+                        alpha: gs.fill_alpha_u8(),
+                        even_odd: eo,
+                    });
+                }
+                if do_stroke {
+                    self.emit(RenderOp::Stroke {
+                        items: path.items.clone(),
+                        close: path.closed,
+                        color: gs.stroke_color,
+                        alpha: gs.stroke_alpha_u8(),
+                        width: gs.line_width,
+                        ctm: gs.ctm,
+                        dashes: gs.dashes.clone(),
+                    });
+                }
+                if let Some(clip_eo) = path.clip_pending.take() {
+                    self.emit(RenderOp::Clip {
+                        items: path.items.clone(),
+                        even_odd: clip_eo,
+                    });
+                }
+            }
         }
         path.reset();
     }
 
     /// Records an inline image (`BI…ID…EI`) into the inventory.
-    fn record_inline_image(&mut self, params: &Object, ctm: Matrix) {
+    fn record_inline_image(&mut self, params: &Object, data: Vec<u8>, gs: &GraphicsState) {
         let d = params.as_dict();
         let getint = |keys: &[&str]| -> Option<u32> {
             let d = d?;
@@ -1000,10 +1185,95 @@ impl<'a> ContentInterpreter<'a> {
         self.out.images.push(ImageRef {
             name: None,
             inline: true,
-            ctm,
+            ctm: gs.ctm,
             width,
             height,
         });
+
+        if self.recording() {
+            if let Some(dict) = params.as_dict() {
+                self.emit(RenderOp::Image(ImageOp {
+                    dict: dict.clone(),
+                    raw: data,
+                    obj_num: None,
+                    ctm: gs.ctm,
+                    fill_color: gs.fill_color,
+                    alpha: gs.fill_alpha_u8(),
+                }));
+            }
+        }
+    }
+
+    // --- ExtGState + shading (render-op recording only) -------------------
+
+    /// Applies a `/gs` ExtGState dict's constant alpha (`/ca`, `/CA`) to the
+    /// graphics state for the render sink. Other ExtGState keys (blend mode,
+    /// soft masks, …) are a documented deferral.
+    fn apply_extgstate(&mut self, ops: &[Object], gs: &mut GraphicsState, resources: &Dict) {
+        let Some(gname) = ops.iter().find_map(|o| o.as_name().and_then(Name::as_str)) else {
+            return;
+        };
+        let Some(egs) = self
+            .doc
+            .resolve_dict_key(resources, &Name::new("ExtGState"))
+            .ok()
+            .flatten()
+        else {
+            return;
+        };
+        let Some(egs) = egs.as_dict() else {
+            return;
+        };
+        let Some(dict) = self
+            .doc
+            .resolve_dict_key(egs, &Name::new(gname))
+            .ok()
+            .flatten()
+            .and_then(|o| o.as_dict().cloned())
+        else {
+            return;
+        };
+        if let Some(ca) = dict.get(&Name::new("ca")).and_then(Object::as_f64) {
+            gs.fill_alpha = ca.clamp(0.0, 1.0);
+        }
+        if let Some(ca) = dict.get(&Name::new("CA")).and_then(Object::as_f64) {
+            gs.stroke_alpha = ca.clamp(0.0, 1.0);
+        }
+    }
+
+    /// Handles `sh`: resolves `/Resources /Shading /<name>` and emits a
+    /// [`RenderOp::Shading`] carrying the shading dict for the renderer to parse.
+    fn do_shading(&mut self, sname: &str, gs: &GraphicsState, resources: &Dict) {
+        let Some(shadings) = self
+            .doc
+            .resolve_dict_key(resources, &Name::new("Shading"))
+            .ok()
+            .flatten()
+        else {
+            return;
+        };
+        let Some(shadings) = shadings.as_dict() else {
+            return;
+        };
+        // A shading entry may be a dict or a stream (type 4–7). Resolve either.
+        let Some(obj) = self
+            .doc
+            .resolve_dict_key(shadings, &Name::new(sname))
+            .ok()
+            .flatten()
+        else {
+            return;
+        };
+        let dict = match obj.as_ref() {
+            Object::Dictionary(d) => d.clone(),
+            Object::Stream(s) => s.dict.clone(),
+            _ => return,
+        };
+        self.emit(RenderOp::Shading(ShadingOp {
+            dict,
+            ctm: gs.ctm,
+            alpha: gs.fill_alpha_u8(),
+        }));
     }
 }
 

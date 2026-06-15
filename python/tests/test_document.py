@@ -138,10 +138,12 @@ def test_pydoc_003_metadata_keys(two_page_path):
 
 def test_pydoc_004_unimplemented_raises(two_page_path):
     # PYDOC-004: a known-but-unimplemented method raises PdfUnsupportedError.
+    # `get_pixmap` is implemented in M6d (it renders the page), so the
+    # unimplemented example here is `convert_to_pdf`.
     doc = oxide_pdf.open(two_page_path)
     page = doc[0]
-    with pytest.raises(oxide_pdf.PdfUnsupportedError):
-        page.get_pixmap()
+    pix = page.get_pixmap()
+    assert pix.width > 0 and pix.height > 0
     with pytest.raises(oxide_pdf.PdfUnsupportedError):
         doc.convert_to_pdf()
     # get_toc is now implemented (M3d): a doc with no /Outlines returns [].

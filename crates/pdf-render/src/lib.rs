@@ -19,13 +19,14 @@
 //! - [`vector`] — fill/stroke/clip of geometry paths (M6a).
 //! - [`text`]   — glyph + text-run rendering (M6b).
 //! - [`image`]  — composite a decoded image under a CTM (M6c).
-//! - [`render`] — the `render_page` entry point that drives the others (M6d).
+//! - [`render`] — the `render_page` entry point + [`DisplayList`] that drive the
+//!   others by replaying the interpreter's ordered render-op stream (M6d).
 //! - [`error`]  — the crate [`Error`]/[`Result`] types (shared).
 //!
-//! Every public item in this crate is currently a **compiling stub**: it returns
-//! a typed [`Error::Unsupported`] or an empty/blank result. There is no
-//! `todo!()`/`unimplemented!()`/`panic!` anywhere — arbitrary input never panics
-//! (PRD §8.1). The M6 implementers replace the stub bodies on disjoint files.
+//! There is no `todo!()`/`unimplemented!()`/`panic!` anywhere — arbitrary input
+//! never panics and is honored under `Limits` (PRD §8.1 / §9.6.2). Unsupported
+//! constructs (Type1/Type3 glyphs, mesh shadings, tiling patterns) degrade to a
+//! safe no-op rather than an error, so a page always renders what it can.
 
 pub mod canvas;
 pub mod error;
@@ -36,4 +37,4 @@ pub mod vector;
 
 pub use canvas::Canvas;
 pub use error::{Error, Result};
-pub use render::{render_page, RenderOptions};
+pub use render::{render_page, DisplayList, RenderOptions};

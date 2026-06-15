@@ -529,6 +529,11 @@ class TextPage:
 # ``memoryview(pix)`` is the zero-copy path.
 Pixmap = _core.Pixmap
 
+# ``DisplayList`` is the Rust ``_core.DisplayList`` directly (PyMuPDF
+# ``fitz.DisplayList``, PRD §8.11). Obtain one from :meth:`Page.get_displaylist`
+# and replay it with ``dl.get_pixmap(...)``.
+DisplayList = _core.DisplayList
+
 
 class Page:
     """One page of a :class:`Document` (PyMuPDF ``fitz.Page``)."""
@@ -643,13 +648,13 @@ class Page:
     ) -> Pixmap:
         """Renders the page to a :class:`Pixmap` (PyMuPDF ``page.get_pixmap``).
 
-        In scope (PRD §3.3) for image documents and **image-only PDF pages**
-        (the scanned-document case). A vector / text page raises
-        :class:`~oxide_pdf.PdfUnsupportedError` (real rasterization is M6).
+        Renders **any** page (PRD §8.11): image-only pages take a fast
+        native-raster path; vector / text / mixed pages are rasterized full-page
+        (text, fills, strokes, images, clips, axial/radial shadings).
 
         ``matrix`` (a :class:`~oxide_pdf.Matrix` / 6-sequence) or ``dpi`` set the
-        output resolution; ``alpha`` adds an alpha channel. ``colorspace`` /
-        ``clip`` are accepted for parity (full conversion / clip is partial).
+        output resolution; ``colorspace`` selects Gray/RGB/CMYK; ``alpha`` adds
+        an alpha channel; ``clip`` is a device-space sub-rectangle.
         """
         mtx = None
         if matrix is not None:
@@ -665,6 +670,11 @@ class Page:
             alpha=alpha,
             clip=_as_clip(clip),
         )
+
+    def get_displaylist(self) -> "DisplayList":
+        """Records the page's drawcalls into a :class:`DisplayList` (PyMuPDF
+        ``page.get_displaylist``). Replay with ``dl.get_pixmap(...)``."""
+        return self._page.get_displaylist()
 
     @property
     def is_image_only(self) -> bool:
@@ -1024,6 +1034,9 @@ class Page:
     # PyMuPDF deprecated camelCase aliases.
     def getPixmap(self, *args, **kw) -> Pixmap:  # noqa: N802
         return self.get_pixmap(*args, **kw)
+
+    def getDisplayList(self) -> "DisplayList":  # noqa: N802
+        return self.get_displaylist()
 
     def getImages(self, full: bool = False) -> list[tuple]:  # noqa: N802
         return self.get_images(full)

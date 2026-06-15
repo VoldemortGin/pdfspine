@@ -4,11 +4,13 @@
 
 use std::sync::Arc;
 
+use pdf_core::geom::{IRect, Matrix};
 use pdf_core::page::Page;
 use pdf_core::{DocumentStore, Limits};
 
 use pdf_image::getpixmap;
 use pdf_image::imagedoc;
+use pdf_render::{render_page, DisplayList as RenderDisplayList, RenderOptions};
 
 use crate::error::{Error, Result};
 
@@ -16,6 +18,62 @@ use crate::error::{Error, Result};
 pub use pdf_image::getpixmap::ExtractedImage;
 pub use pdf_image::imagedoc::{ImageDocument, ImageFormat};
 pub use pdf_image::pixmap::{Colorspace, Pixmap};
+
+/// The `Page.get_pixmap` request parameters (PyMuPDF, PRD §8.11). `matrix` and
+/// `dpi` are alternative scales (dpi wins); `colorspace`/`alpha`/`clip` mirror
+/// PyMuPDF. The bindings build this from the Python kwargs.
+#[derive(Clone, Debug)]
+pub struct RenderArgs {
+    /// The render matrix (scale/rotate). Ignored when `dpi` is set.
+    pub matrix: Matrix,
+    /// Optional DPI → uniform `dpi/72` scale (overrides `matrix`).
+    pub dpi: Option<u32>,
+    /// The output colorspace (Gray / RGB / CMYK).
+    pub colorspace: Colorspace,
+    /// Whether the output carries an alpha channel.
+    pub alpha: bool,
+    /// Optional device-space clip rect `(x0, y0, x1, y1)`.
+    pub clip: Option<IRect>,
+}
+
+impl Default for RenderArgs {
+    fn default() -> Self {
+        RenderArgs {
+            matrix: Matrix::IDENTITY,
+            dpi: None,
+            colorspace: Colorspace::Rgb,
+            alpha: false,
+            clip: None,
+        }
+    }
+}
+
+impl RenderArgs {
+    /// The uniform scale this request implies (for the image-only fast path,
+    /// which scales the native raster). DPI wins; else the matrix's average
+    /// linear magnitude.
+    fn scale(&self) -> f64 {
+        match self.dpi {
+            Some(d) => f64::from(d) / 72.0,
+            None => {
+                let m = &self.matrix;
+                let sx = (m.a * m.a + m.b * m.b).sqrt();
+                let sy = (m.c * m.c + m.d * m.d).sqrt();
+                ((sx + sy) / 2.0).max(f64::MIN_POSITIVE)
+            }
+        }
+    }
+
+    fn to_options(&self) -> RenderOptions {
+        RenderOptions {
+            matrix: self.matrix,
+            dpi: self.dpi,
+            colorspace: self.colorspace,
+            alpha: self.alpha,
+            clip: self.clip,
+        }
+    }
+}
 
 /// Renders `page` to a [`Pixmap`] for the in-scope image path (PRD §3.3).
 ///
@@ -34,6 +92,77 @@ pub fn page_get_pixmap(page: &Page, scale: f64, alpha: bool) -> Result<Pixmap> {
         .dict()
         .ok_or_else(|| Error::Syntax("page has no dictionary".to_string()))?;
     Ok(getpixmap::page_pixmap(doc, &dict, scale, alpha)?)
+}
+
+/// Renders `page` to a [`Pixmap`] under `args` — the full PyMuPDF `get_pixmap`
+/// (PRD §8.11). Any page type renders: an image-only page takes the fast image
+/// decode path (native raster × scale); every other page (vector / text / mixed)
+/// is rasterized via [`pdf_render::render_page`] onto a CropBox-sized canvas.
+///
+/// # Errors
+///
+/// [`Error::Limit`] for an over-large target; propagated decode / parse errors.
+pub fn page_render(page: &Page, args: &RenderArgs) -> Result<Pixmap> {
+    let doc = page.document();
+    // Image-only fast path: decode the page's image at native resolution × scale
+    // (the scanned-document optimization). Only used when no clip / Gray-CMYK
+    // conversion is requested, so the fast path's RGB raster matches the request.
+    if args.clip.is_none() && args.colorspace == Colorspace::Rgb && page_is_image_only(page) {
+        if let Some(dict) = page.dict() {
+            if let Ok(pix) = getpixmap::page_pixmap(doc, &dict, args.scale(), args.alpha) {
+                return Ok(pix);
+            }
+        }
+        // Fall through to the full renderer on any image-only decode failure.
+    }
+    Ok(render_page(doc, page, &args.to_options())?)
+}
+
+/// A recorded, replayable page render — the PyMuPDF `DisplayList` (PRD §8.11).
+/// Wraps [`pdf_render::DisplayList`] so the bindings depend only on `pdf-api`.
+pub struct DisplayList {
+    inner: RenderDisplayList,
+    doc: Arc<DocumentStore>,
+}
+
+impl DisplayList {
+    /// The number of recorded drawcalls (diagnostic).
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.inner.len()
+    }
+
+    /// Whether the list recorded no drawcalls.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
+    }
+
+    /// The display list's source rect (the page CropBox), `(x0, y0, x1, y1)`.
+    #[must_use]
+    pub fn rect(&self) -> (f64, f64, f64, f64) {
+        let r = self.inner.rect();
+        (r.x0, r.y0, r.x1, r.y1)
+    }
+
+    /// Replays the recorded drawcalls into a [`Pixmap`] under `args` (PyMuPDF
+    /// `DisplayList.get_pixmap`).
+    ///
+    /// # Errors
+    ///
+    /// Propagates render / decode errors.
+    pub fn get_pixmap(&self, args: &RenderArgs) -> Result<Pixmap> {
+        Ok(self.inner.get_pixmap(&self.doc, &args.to_options())?)
+    }
+}
+
+/// Records `page`'s ordered drawcall stream into a [`DisplayList`] (PyMuPDF
+/// `Page.get_displaylist`).
+#[must_use]
+pub fn page_get_displaylist(page: &Page) -> DisplayList {
+    let doc = page.document().clone();
+    let inner = RenderDisplayList::from_page(&doc, page);
+    DisplayList { inner, doc }
 }
 
 /// Whether `page` is an image-only page (in scope for `get_pixmap`, PRD §3.3).

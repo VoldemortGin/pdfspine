@@ -109,5 +109,23 @@ impl From<pdf_image::Error> for Error {
     }
 }
 
+impl From<pdf_render::Error> for Error {
+    fn from(e: pdf_render::Error) -> Self {
+        use pdf_render::Error as R;
+        let msg = e.to_string();
+        match e {
+            R::Unsupported(_) => Error::Unsupported(msg),
+            // A degenerate render geometry / bad arg is an unsupported request,
+            // not a syntax fault (matches the image path's policy above).
+            R::InvalidArgument(_) => Error::Unsupported(msg),
+            R::LimitExceeded(_) => Error::Limit(msg),
+            R::Core(c) => Error::from(c),
+            R::Image(i) => Error::from(i),
+            // `pdf_render::Error` is `#[non_exhaustive]`; conservative default.
+            _ => Error::Unsupported(msg),
+        }
+    }
+}
+
 /// Convenience alias used throughout `pdf-api`.
 pub type Result<T> = std::result::Result<T, Error>;

@@ -16,11 +16,11 @@ use std::ptr;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
-use pdf_api::geom::{Matrix, Point, Quad, Rect};
+use pdf_api::geom::{IRect, Matrix, Point, Quad, Rect};
 use pdf_api::{
-    Align, AnnotHandle, Colorspace, Document as ApiDocument, DrawItem, Drawing, Error as ApiError,
-    FinishParams, ParseMode, Pixmap as ApiPixmap, ScrubOptions, SearchOptions, ShapeHandle,
-    TextOutput, WidgetHandle,
+    Align, AnnotHandle, Colorspace, DisplayList as ApiDisplayList, Document as ApiDocument,
+    DrawItem, Drawing, Error as ApiError, FinishParams, ParseMode, Pixmap as ApiPixmap, RenderArgs,
+    ScrubOptions, SearchOptions, ShapeHandle, TextOutput, WidgetHandle,
 };
 use pyo3::create_exception;
 use pyo3::exceptions::{PyFileNotFoundError, PyIndexError, PyOSError, PyValueError};
@@ -973,14 +973,13 @@ impl PyPage {
 
     // --- get_pixmap (PRD §3.3 / §8.10) -----------------------------------
 
-    /// Renders the page to a [`PyPixmap`] for the in-scope image path (PRD §3.3):
-    /// image documents and **image-only PDF pages**. A vector/text page raises
-    /// `PdfUnsupportedError` (real rasterization is M6).
+    /// Renders the page to a [`PyPixmap`] (PyMuPDF `Page.get_pixmap`, PRD §8.11).
     ///
-    /// `matrix` is a `(a, b, c, d, e, f)` tuple whose average scale sets the
-    /// output resolution; `dpi` sets it to `dpi/72`. `alpha` adds an alpha
-    /// channel. `colorspace` / `clip` are accepted for API parity (full
-    /// colorspace conversion / clipping is the documented partial).
+    /// Any page renders: an image-only page takes the fast native-raster path;
+    /// vector / text / mixed pages are rasterized full-page via `pdf_render`.
+    /// `matrix` is a `(a, b, c, d, e, f)` tuple (scale/rotate); `dpi` overrides it
+    /// with `dpi/72`. `colorspace` selects Gray/RGB/CMYK output; `alpha` adds an
+    /// alpha channel; `clip` is a device-space `(x0, y0, x1, y1)` sub-rectangle.
     #[pyo3(signature = (*, matrix=None, dpi=None, colorspace=None, alpha=false, clip=None))]
     fn get_pixmap(
         &self,
@@ -991,21 +990,20 @@ impl PyPage {
         alpha: bool,
         clip: Option<(f64, f64, f64, f64)>,
     ) -> PyResult<PyPixmap> {
-        let _ = (colorspace, clip);
-        let scale = match (dpi, matrix) {
-            (Some(d), _) => d / 72.0,
-            (None, Some((a, b, c, d, _, _))) => {
-                // Average of the x/y scale magnitudes (PyMuPDF Matrix scale).
-                let sx = (a * a + b * b).sqrt();
-                let sy = (c * c + d * d).sqrt();
-                ((sx + sy) / 2.0).max(f64::MIN_POSITIVE)
-            }
-            (None, None) => 1.0,
-        };
+        let args = build_render_args(matrix, dpi, colorspace, alpha, clip)?;
         let pix = py
-            .detach(|| pdf_api::page_get_pixmap(&self.page, scale, alpha))
+            .detach(|| pdf_api::page_render(&self.page, &args))
             .map_err(map_err)?;
         Ok(PyPixmap::new(pix))
+    }
+
+    /// Records the page's ordered drawcall stream into a [`PyDisplayList`]
+    /// (PyMuPDF `Page.get_displaylist`). Replay it with `dl.get_pixmap(...)`.
+    fn get_displaylist(&self, py: Python<'_>) -> PyResult<PyDisplayList> {
+        let inner = py.detach(|| pdf_api::page_get_displaylist(&self.page));
+        Ok(PyDisplayList {
+            inner: Arc::new(inner),
+        })
     }
 
     /// Whether this page is an image-only page (in scope for `get_pixmap`).
@@ -2416,6 +2414,88 @@ impl PyPixmap {
     }
 }
 
+/// A recorded, replayable page render (PyMuPDF `DisplayList`). Built by
+/// `page.get_displaylist()`; replay with `dl.get_pixmap(...)`.
+#[pyclass(name = "DisplayList", module = "oxide_pdf")]
+struct PyDisplayList {
+    inner: Arc<ApiDisplayList>,
+}
+
+#[pymethods]
+impl PyDisplayList {
+    /// The source rect (the page CropBox), as a `(x0, y0, x1, y1)` tuple
+    /// (PyMuPDF `DisplayList.rect`).
+    #[getter]
+    fn rect(&self) -> (f64, f64, f64, f64) {
+        self.inner.rect()
+    }
+
+    /// The number of recorded drawcalls.
+    fn __len__(&self) -> usize {
+        self.inner.len()
+    }
+
+    /// Replays the recorded drawcalls into a [`PyPixmap`] (PyMuPDF
+    /// `DisplayList.get_pixmap`). Same kwargs as `Page.get_pixmap`.
+    #[pyo3(signature = (*, matrix=None, dpi=None, colorspace=None, alpha=false, clip=None))]
+    fn get_pixmap(
+        &self,
+        py: Python<'_>,
+        matrix: Option<(f64, f64, f64, f64, f64, f64)>,
+        dpi: Option<f64>,
+        colorspace: Option<Bound<'_, PyAny>>,
+        alpha: bool,
+        clip: Option<(f64, f64, f64, f64)>,
+    ) -> PyResult<PyPixmap> {
+        let args = build_render_args(matrix, dpi, colorspace, alpha, clip)?;
+        let inner = self.inner.clone();
+        let pix = py.detach(|| inner.get_pixmap(&args)).map_err(map_err)?;
+        Ok(PyPixmap::new(pix))
+    }
+
+    fn __repr__(&self) -> String {
+        let (x0, y0, x1, y1) = self.inner.rect();
+        format!(
+            "DisplayList(rect=({x0}, {y0}, {x1}, {y1}), ops={})",
+            self.inner.len()
+        )
+    }
+}
+
+/// Builds a [`RenderArgs`] from the Python `get_pixmap` kwargs (matrix tuple,
+/// dpi float, colorspace object/int/name, alpha flag, clip tuple).
+fn build_render_args(
+    matrix: Option<(f64, f64, f64, f64, f64, f64)>,
+    dpi: Option<f64>,
+    colorspace: Option<Bound<'_, PyAny>>,
+    alpha: bool,
+    clip: Option<(f64, f64, f64, f64)>,
+) -> PyResult<RenderArgs> {
+    let m = matrix
+        .map(|(a, b, c, d, e, f)| Matrix::new(a, b, c, d, e, f))
+        .unwrap_or(Matrix::IDENTITY);
+    let cs = match colorspace {
+        Some(obj) => parse_colorspace(&obj)?,
+        None => Colorspace::Rgb,
+    };
+    let dpi_u = dpi.map(|d| d.max(1.0).round() as u32);
+    let clip_r = clip.map(|(x0, y0, x1, y1)| {
+        IRect::new(
+            x0.floor() as i32,
+            y0.floor() as i32,
+            x1.ceil() as i32,
+            y1.ceil() as i32,
+        )
+    });
+    Ok(RenderArgs {
+        matrix: m,
+        dpi: dpi_u,
+        colorspace: cs,
+        alpha,
+        clip: clip_r,
+    })
+}
+
 /// Parses a Python colorspace argument (a component count int, or a name string
 /// like `"rgb"`/`"DeviceRGB"`) into a [`Colorspace`].
 fn parse_colorspace(obj: &Bound<'_, PyAny>) -> PyResult<Colorspace> {
@@ -2466,6 +2546,7 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyWidget>()?;
     m.add_class::<PyShape>()?;
     m.add_class::<PyPixmap>()?;
+    m.add_class::<PyDisplayList>()?;
 
     // Exception hierarchy (PRD §9.3).
     m.add("PdfError", py.get_type::<PdfError>())?;

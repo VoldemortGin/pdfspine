@@ -2187,9 +2187,48 @@ and `python/tests/test_pixmap.py`.
 | `PYPIXMAP-002` | `pix.save()` writes a PNG whose IHDR geometry round-trips | PRD §9.4 | green |
 | `PYPIXMAP-003` | `memoryview(pix)` is readonly `B`; `samples_mv` is the same zero-copy view | PRD §9.4 | green |
 | `PIXMAP-BUF-LIFETIME` | live view survives dropping the Pixmap; in-place mutate copies-on-write | PRD §9.4 | green |
-| `PYPIXMAP-VECTOR` | vector page `get_pixmap` → `PdfUnsupportedError` | PRD §8.10 | green |
-| `PYPIXMAP-UNDECODABLE` | broken image: `get_text` still works; `get_pixmap` raises typed error | PRD §8.10 | green |
+| `PYPIXMAP-VECTOR` | vector page `get_pixmap` now RENDERS full-page (M6d); fill color present | PRD §8.11 | green |
+| `PYPIXMAP-UNDECODABLE` | broken image skipped (degradation contract); `get_text` + `get_pixmap` both work | PRD §8.4.1 | green |
 | `PYPIXMAP-SCALE` | `dpi=144` and `matrix=2` both double the output dims; `alpha=True` opaque | PRD §9.4 | green |
 | `PYPIXMAP-BLANK` | `Pixmap` constructor + `pixel`/`set_pixel` | PRD §9.4 | green |
 | `PYEXTRACT-IMAGE-001` | `doc.extract_image(xref)` → dict (ext/width/height/bpc/colorspace/n/image) | PRD §9.4 | green |
 | `PYFITZ-PIXMAP` | `fitz.Pixmap is oxide_pdf.Pixmap`; `get_pixmap`/`getPixmap` + `extract_image`/`extractImage` parity | PRD §9.5 | green |
+
+### M6d — full-page render (`render_page` / `DisplayList`) — `RENDER-PAGE-*` / `DISPLAYLIST-*`
+
+The M6d integration: the `pdf-text` content interpreter, run with its opt-in
+ordered render-op sink ([`interpret_page_render`]), emits a document-order
+[`RenderOp`] stream; `render_page` replays it onto a `Canvas` in z-order,
+dispatching to the M6a/b/c primitives, and `into_pixmap`s the result. The
+`DisplayList` is the recorded stream (record once → replay). Tests live in
+`crates/pdf-render/tests/render_page.rs`.
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `RENDER-PAGE-001` | a self-built text page renders → non-blank Pixmap of the scaled CropBox size | PRD §8.11 | green |
+| `RENDER-PAGE-002` | a filled rect paints the fill color at its interior; white elsewhere | PRD §8.11 | green |
+| `RENDER-PAGE-003` | z-order: a later fill paints over an earlier one at the overlap | PRD §8.11 | green |
+| `RENDER-PAGE-004` | embedded-TTF text paints glyph pixels where the text sits | PRD §8.11 | green |
+| `RENDER-PAGE-005` | text + vector + image composed in one page; each region present | PRD §8.11 | green |
+| `RENDER-PAGE-006` | `dpi`/matrix scale changes the output pixel dimensions | PRD §8.11 | green |
+| `RENDER-PAGE-007` | `/Rotate 90` swaps the output width/height | PRD §8.11 | green |
+| `RENDER-PAGE-008` | a `W n` clip restricts a following fill to the clip region | PRD §8.11 | green |
+| `RENDER-PAGE-009` | an embedded image XObject paints its colors at its placement | PRD §8.11 | green |
+| `RENDER-PAGE-010` | a vector page renders (no `Unsupported`); output is non-blank | PRD §8.11 | green |
+| `RENDER-PAGE-011` | `alpha=true` output carries a 4-channel transparent background | PRD §8.11 | green |
+| `RENDER-PAGE-012` | non-embedded font → no glyph pixels, but the page still renders | PRD §8.11 | green |
+| `RENDER-PAGE-PROP-001` | arbitrary page content never panics; always returns a Pixmap | PRD §8.1 | green |
+| `DISPLAYLIST-001` | `DisplayList::from_page` records the ordered op stream (non-empty) | PRD §8.11 | green |
+| `DISPLAYLIST-002` | `dl.get_pixmap()` == `render_page()` (pixel-equal replay) | PRD §8.11 | green |
+| `DISPLAYLIST-003` | replay at two scales yields the two correct dimensions | PRD §8.11 | green |
+| `DISPLAYLIST-004` | `dl.rect()` is the page CropBox | PRD §8.11 | green |
+
+### M6d — Python `get_pixmap` on rendered pages + `get_displaylist` — `PYRENDER-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `PYRENDER-001` | `page.get_pixmap()` on a self-built text page → non-blank Pixmap of expected size | PRD §9.4 | green |
+| `PYRENDER-002` | a vector page renders (no `PdfUnsupportedError`); `pix.save(png)` works | PRD §9.4 | green |
+| `PYRENDER-003` | `dpi=144` doubles the rendered dimensions of a vector page | PRD §9.4 | green |
+| `PYRENDER-004` | `page.get_displaylist().get_pixmap()` matches `page.get_pixmap()` | PRD §9.4 | green |
+| `PYRENDER-005` | `fitz.open(...).load_page(0).get_pixmap()` parity on a rendered page | PRD §9.5 | green |
