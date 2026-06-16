@@ -1,6 +1,6 @@
 # oxide-pdf — Objective Ground-Truth Accuracy Report
 
-_Generated: 2026-06-16T14:06:04.097373+00:00 • oracle (PyMuPDF/pdfminer) available: True_
+_Generated: 2026-06-16T15:36:03.365186+00:00 • oracle (PyMuPDF/pdfminer) available: True_
 
 Each extractor — **oxide_pdf**, **pymupdf** (fitz), and **pdfminer** — is scored against the SAME objective ground truth (`gt_text` or JATS `nxml` fulltext), not against another extractor. Cells show **mean / median**. Metrics: `lev` (edit similarity), `f1` (token F1), `jaccard` (word-set overlap), `order` (reading-order similarity). No PyMuPDF output is committed — only scores.
 
@@ -10,7 +10,7 @@ Corpus: **58** documents (58 with at least one extractor scored, 0 skipped).
 
 | extractor | docs | lev | f1 | jaccard | order |
 |---|---|---|---|---|---|
-| **oxide_pdf** | 58 | 0.825 / 0.922 | 0.858 / 0.950 | 0.814 / 0.940 | 0.975 / 0.982 |
+| **oxide_pdf** | 58 | 0.834 / 0.930 | 0.868 / 0.972 | 0.834 / 0.953 | 0.975 / 0.982 |
 | pymupdf | 58 | 0.848 / 0.944 | 0.879 / 0.977 | 0.836 / 0.955 | 0.983 / 0.990 |
 | pdfminer | 58 | 0.784 / 0.856 | 0.869 / 0.973 | 0.834 / 0.946 | 0.918 / 0.951 |
 
@@ -53,11 +53,11 @@ Over **58** documents scored by both oxide_pdf and fitz against ground truth, on
 | doc | subset | gt chars | o lev | f lev | p lev | o ord | f ord | p ord | notes |
 |---|---|---|---|---|---|---|---|---|---|
 | `1col.pdf` | manifest | 5120 | 0.919 | 0.925 | 0.918 | 0.993 | 0.999 | 0.992 |  |
-| `2col.pdf` | manifest | 5120 | 0.918 | 0.991 | 0.654 | 0.995 | 1.000 | 0.660 |  |
-| `2col-justified.pdf` | manifest | 5120 | 0.920 | 0.991 | 0.654 | 0.997 | 1.000 | 0.660 |  |
-| `3col.pdf` | manifest | 5120 | 0.763 | 0.991 | 0.962 | 0.993 | 1.000 | 0.970 |  |
-| `2col-with-header.pdf` | manifest | 5165 | 0.918 | 0.991 | 0.656 | 0.996 | 1.000 | 0.662 |  |
-| `2col-narrow-gutter.pdf` | manifest | 5120 | 0.887 | 0.992 | 0.735 | 0.994 | 1.000 | 0.741 |  |
+| `2col.pdf` | manifest | 5120 | 0.987 | 0.991 | 0.654 | 0.997 | 1.000 | 0.660 |  |
+| `2col-justified.pdf` | manifest | 5120 | 0.988 | 0.991 | 0.654 | 0.997 | 1.000 | 0.660 |  |
+| `3col.pdf` | manifest | 5120 | 0.987 | 0.991 | 0.962 | 0.996 | 1.000 | 0.970 |  |
+| `2col-with-header.pdf` | manifest | 5165 | 0.988 | 0.991 | 0.656 | 0.997 | 1.000 | 0.662 |  |
+| `2col-narrow-gutter.pdf` | manifest | 5120 | 0.987 | 0.992 | 0.735 | 0.995 | 1.000 | 0.741 |  |
 | `PMC176545.pdf` | manifest | 62501 | 0.788 | 0.791 | 0.767 | 0.995 | 0.996 | 0.966 |  |
 | `PMC176546.pdf` | manifest | 19968 | 0.699 | 0.705 | 0.607 | 0.995 | 0.995 | 0.856 |  |
 | `PMC176547.pdf` | manifest | 1908 | 0.120 | 0.120 | 0.118 | 1.000 | 1.000 | 1.000 |  |

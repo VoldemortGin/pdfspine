@@ -18,13 +18,13 @@ Mean over all 58 docs.
 
 | extractor | lev | f1 | jaccard | order |
 |---|---:|---:|---:|---:|
-| **oxide_pdf** | **0.825** | **0.858** | **0.814** | **0.975** |
+| **oxide_pdf** | **0.834** | **0.868** | **0.834** | **0.975** |
 | PyMuPDF (fitz) | 0.848 | 0.879 | 0.836 | 0.983 |
 | pdfminer.six | 0.784 | 0.869 | 0.834 | 0.918 |
 
-**oxide-pdf is within ~2–3% of fitz on every metric, and beats pdfminer on edit-similarity and
-reading order.** On reading order specifically, oxide matches or exceeds fitz on **13/58** documents
-(strictly beats on 4).
+**oxide-pdf is within ~1–2% of fitz on every metric (word-set Jaccard is dead-even: 0.834 vs 0.836),
+and beats pdfminer on edit-similarity and reading order.** On reading order specifically, oxide
+matches or exceeds fitz on **13/58** documents.
 
 ### Per-corpus breakdown
 
@@ -33,13 +33,12 @@ known ground-truth reading order.
 
 | extractor | lev | f1 | jaccard | order |
 |---|---:|---:|---:|---:|
-| oxide_pdf | 0.888 | 0.892 | 0.773 | 0.995 |
+| oxide_pdf | 0.976 | 0.980 | 0.965 | 0.996 |
 | PyMuPDF | 0.980 | 0.980 | 0.965 | 1.000 |
 | pdfminer | 0.763 | 0.980 | 0.965 | 0.781 |
 
-*(Known residual: a few tight baseline-aligned column lines still character-interleave, depressing
-oxide jaccard here; tracked as a follow-up. oxide's order 0.995 already matches fitz; pdfminer
-reads these row-major, hence its 0.78 order.)*
+oxide-pdf is at parity with fitz here (jaccard and f1 identical); pdfminer reads these row-major
+(order 0.78), which oxide's column reconstruction avoids.
 
 **PMC scientific papers (n=12)** — real CC-BY articles; ground truth = publisher JATS-XML body text.
 (Absolute scores are low for ALL extractors because XML ≠ PDF exactly — running heads/refs/tables
@@ -75,7 +74,18 @@ USGS, NIST), scored as text similarity vs PyMuPDF. This shows the impact of the 
 
 Open rate 30/30 (100%), no panics/aborts/timeouts, qpdf structural check 12/12 on re-saved output.
 
-## 3. What changed (2026-06-16)
+## 3. Robustness — never-panic on diverse real-world PDFs
+
+GovDocs1 sample (23 heterogeneous US-government PDFs, producers spanning PDF 1.2–1.6), opened +
+text-extracted in isolated subprocesses so a panic cannot be hidden:
+
+- **Open rate: 23/23 (100%)**, 0 repaired, 0 failed.
+- **Robustness: 0 aborts, 0 timeouts** — no panics on any input.
+- Text similarity vs fitz: Levenshtein mean 0.827 (**median 0.959**), Jaccard 0.883.
+
+(Scales to the full GovDocs1 / SafeDocs corpora via `conformance/gt/fetch_robustness.py`.)
+
+## 4. What changed (2026-06-16)
 
 Three text-extraction fixes closed most of the gap to fitz:
 1. **Column-major reading order** — occupancy-valley gutter detection (was row-major interleaving on
@@ -85,7 +95,7 @@ Three text-extraction fixes closed most of the gap to fitz:
 3. **Device-space gap threshold** — scale the word-gap threshold by the rendered glyph size, not the
    raw `Tf` operand (fixes word-shatter on PDFs that bake scale into the CTM).
 
-## 4. Reproduce
+## 5. Reproduce
 
 ```
 # objective ground-truth (build corpora first, then score):
