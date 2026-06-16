@@ -66,11 +66,11 @@ oxide-pdf handles accented Latin, Greek, and Cyrillic at near-parity with fitz.
 The original 30-doc corpus (public-domain US federal: IRS forms/pubs, GovInfo bills, CDC MMWR, NASA,
 USGS, NIST), scored as text similarity vs PyMuPDF. This shows the impact of the 2026-06-16 fixes:
 
-| metric (vs fitz) | before (2026-06-15) | **after** |
+| metric (vs fitz) | before (2026-06-15) | **after (4 fixes)** |
 |---|---:|---:|
-| Levenshtein mean | 0.823 | **0.895** |
-| Levenshtein median | 0.884 | **0.923** |
-| Jaccard mean | 0.909 | **0.971** |
+| Levenshtein mean | 0.823 | **0.919** |
+| Levenshtein median | 0.884 | **0.938** |
+| Jaccard mean | 0.909 | **0.984** |
 
 Open rate 30/30 (100%), no panics/aborts/timeouts, qpdf structural check 12/12 on re-saved output.
 
