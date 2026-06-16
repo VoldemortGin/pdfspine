@@ -45,10 +45,8 @@ conformance/fetch-summary.json
 conformance/bench-results.json
 # Objective ground-truth eval (gt/): scripts + GT-REPORT*.md committed; corpora/cache/json not.
 conformance/gt/cache/
-conformance/gt/corpus-born/
-conformance/gt/corpus-pmc/
-conformance/gt/gt-born.json
-conformance/gt/gt-pmc.json
+conformance/gt/corpus-*/
+conformance/gt/gt-*.json
 conformance/gt/__pycache__/
 
 # Editor / OS
