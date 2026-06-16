@@ -60,6 +60,25 @@ _LINEBREAK_HYPHEN = re.compile(r"(\w)[-‐]\s*\n\s*(\w)")
 # Token splitter operates on already-normalized (single-spaced) text.
 _TOKEN_CAP = 50_000
 
+# CJK / Japanese-kana ranges whose characters are written WITHOUT spaces, so a
+# whitespace split would lump a whole run into one token and make the metrics
+# meaningless. We treat each such character as its own token (the natural unit
+# for CJK accuracy). Latin/space-delimited text is unaffected because none of
+# these ranges overlap ASCII or Latin scripts.
+#
+#   U+3000–U+303F  CJK symbols & punctuation (、。「」 etc; incl. ideographic space)
+#   U+3040–U+309F  Hiragana
+#   U+30A0–U+30FF  Katakana
+#   U+4E00–U+9FFF  CJK Unified Ideographs
+def _is_cjk_char(ch: str) -> bool:
+    cp = ord(ch)
+    return (
+        0x3000 <= cp <= 0x303F  # CJK symbols & punctuation
+        or 0x3040 <= cp <= 0x309F  # Hiragana
+        or 0x30A0 <= cp <= 0x30FF  # Katakana
+        or 0x4E00 <= cp <= 0x9FFF  # CJK Unified Ideographs
+    )
+
 
 def normalize_text(s: str, *, lowercase: bool = False) -> str:
     """Canonicalize text for scoring.
@@ -91,11 +110,40 @@ def normalize_text(s: str, *, lowercase: bool = False) -> str:
 
 
 def tokenize(s: str, *, lowercase: bool = False) -> list[str]:
-    """Whitespace-split tokens AFTER :func:`normalize_text` (normalize internally)."""
+    """Tokenize AFTER :func:`normalize_text` (normalize internally).
+
+    Latin / space-delimited text is whitespace-split, byte-for-byte identical to
+    the historical behaviour. CJK characters (Unified Ideographs, CJK
+    punctuation, Hiragana/Katakana — see :func:`_is_cjk_char`) are each emitted
+    as their own one-character token, because CJK is written without spaces and a
+    plain whitespace split would collapse an entire run into a single token. The
+    two are interleaved correctly: a Latin word run between CJK chars stays one
+    token, each CJK char becomes its own.
+    """
     norm = normalize_text(s, lowercase=lowercase)
     if not norm:
         return []
-    return norm.split(" ")
+    # Fast path: no CJK -> identical to the original ``norm.split(" ")``.
+    if not any(_is_cjk_char(ch) for ch in norm):
+        return norm.split(" ")
+    # Mixed/CJK path: split on whitespace, then break out CJK chars from each
+    # whitespace token into individual tokens, preserving order.
+    tokens: list[str] = []
+    for chunk in norm.split(" "):
+        if not chunk:
+            continue
+        buf: list[str] = []
+        for ch in chunk:
+            if _is_cjk_char(ch):
+                if buf:
+                    tokens.append("".join(buf))
+                    buf = []
+                tokens.append(ch)
+            else:
+                buf.append(ch)
+        if buf:
+            tokens.append("".join(buf))
+    return tokens
 
 
 # --------------------------------------------------------------------------- #
@@ -300,6 +348,26 @@ def _selftest() -> None:
     # 5. tokenize normalizes internally.
     assert tokenize("ﬁle  test\n") == ["file", "test"]
     assert tokenize("") == []
+
+    # 5b. CJK tokenization: each ideograph / CJK punctuation is its own token,
+    # while interleaved Latin runs stay whole; Latin-only input is unaffected.
+    assert tokenize("春天来了") == ["春", "天", "来", "了"], tokenize("春天来了")
+    # Ideographic full stop 。(U+3002) is in the CJK-punctuation range NFKC does
+    # NOT fold, so it splits as its own token.
+    assert tokenize("鸟儿歌唱。绿色") == ["鸟", "儿", "歌", "唱", "。", "绿", "色"], \
+        tokenize("鸟儿歌唱。绿色")
+    # The fullwidth comma ，(U+FF0C) NFKC-folds to ASCII ',', so it is not a CJK
+    # char; bracketed by ideographs it still becomes its own one-char token.
+    assert tokenize("春天，鸟儿") == ["春", "天", ",", "鸟", "儿"], tokenize("春天，鸟儿")
+    # Mixed CJK + Latin: "abc春x" -> latin run "abc", char "春", latin run "x".
+    assert tokenize("abc春x def") == ["abc", "春", "x", "def"], tokenize("abc春x def")
+    # Latin-only MUST be byte-identical to the historical whitespace split.
+    latin = "The quick brown fox jumps over the lazy dog"
+    assert tokenize(latin) == normalize_text(latin).split(" "), tokenize(latin)
+    # CJK scoring sanity: one wrong char of four -> high but <1 lev/f1.
+    rc = score_all("春天来了", "春天来啦")
+    assert 0.0 < rc["f1"] < 1.0 and 0.0 < rc["lev"] < 1.0, rc
+    assert rc["n_ref"] == 4 and rc["n_hyp"] == 4, rc
 
     # 6. Disjoint vocab -> content zero but order not double-penalized.
     r = score_all("x y z", "a b c")
