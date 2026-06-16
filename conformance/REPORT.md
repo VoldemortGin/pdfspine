@@ -1,6 +1,6 @@
 # oxide-pdf — Real-Corpus Validation Report
 
-_Generated: 2026-06-15T11:15:56.233017+00:00 • qpdf: qpdf version 12.3.2 • oracle (PyMuPDF/pdfminer) available: True_
+_Generated: 2026-06-16T09:59:31.421445+00:00 • qpdf: qpdf version 12.3.2 • oracle (PyMuPDF/pdfminer) available: True_
 
 This is the project's first accuracy/robustness measurement on **real-world** PDFs (prior numbers used self-generated fixtures only). Oracles run locally as diff references only; **no PyMuPDF/oracle output is committed** — only similarity scores and content-free structural diff reasons.
 
@@ -45,42 +45,41 @@ Per-document similarity of `oxide_pdf` `get_text("text")` vs each oracle, on whi
 
 | oracle | docs | Levenshtein mean | Lev. median | Jaccard mean | Jacc. median | ≥0.95 | ≥0.80 | <0.50 |
 |---|---|---|---|---|---|---|---|---|
-| **pymupdf** | 30 | **0.8228** | 0.884 | 0.9093 | 0.9567 | 5 | 19 | 1 |
-| **pdfminer** | 30 | **0.6783** | 0.7996 | 0.9009 | 0.9309 | 4 | 15 | 6 |
+| **pymupdf** | 30 | **0.8946** | 0.9226 | 0.9705 | 0.9894 | 13 | 26 | 1 |
+| **pdfminer** | 30 | **0.7132** | 0.7738 | 0.9643 | 0.995 | 4 | 13 | 5 |
 
-**Headline (vs PyMuPDF / fitz):** mean Levenshtein **0.823**, median **0.884**, mean Jaccard **0.909** over 30 documents.
+**Headline (vs PyMuPDF / fitz):** mean Levenshtein **0.895**, median **0.923**, mean Jaccard **0.971** over 30 documents.
 
 ### Worst-case divergences vs pymupdf
 
 | file | Lev | Jacc | our chars | their chars | why they differ |
 |---|---|---|---|---|---|
-| `irs-p501.pdf` | 0.387 | 0.882 | 197872 | 200596 | similar vocabulary but different ordering/spacing (reading-order or word-break difference) |
-| `irs-p502.pdf` | 0.537 | 0.886 | 114676 | 116058 | similar vocabulary but different ordering/spacing (reading-order or word-break difference) |
-| `irs-p15.pdf` | 0.544 | 0.937 | 301206 | 303270 | similar vocabulary but different ordering/spacing (reading-order or word-break difference) |
-| `irs-f1120.pdf` | 0.658 | 0.911 | 23392 | 25922 | similar vocabulary but different ordering/spacing (reading-order or word-break difference) |
-| `irs-f1065.pdf` | 0.676 | 0.917 | 22820 | 24813 | similar vocabulary but different ordering/spacing (reading-order or word-break difference) |
-| `irs-f1040sc.pdf` | 0.677 | 0.971 | 6350 | 6848 | similar vocabulary but different ordering/spacing (reading-order or word-break difference) |
-| `govinfo-hjres1.pdf` | 0.710 | 0.574 | 1493 | 1466 | moderate divergence (lev 0.71, jaccard 0.57) |
-| `irs-f1040.pdf` | 0.738 | 0.905 | 9514 | 10156 | similar vocabulary but different ordering/spacing (reading-order or word-break difference) |
+| `nasa-ntrs-19950009349.pdf` | 0.490 | 0.736 | 54229 | 46619 | similar vocabulary but different ordering/spacing (reading-order or word-break difference) |
+| `cdc-mmwr-7251a1.pdf` | 0.774 | 0.946 | 38779 | 37586 | similar vocabulary but different ordering/spacing (reading-order or word-break difference) |
+| `irs-f1099msc.pdf` | 0.778 | 0.957 | 14548 | 14480 | similar vocabulary but different ordering/spacing (reading-order or word-break difference) |
+| `usgs-fs20183024.pdf` | 0.799 | 0.964 | 23161 | 22729 | similar vocabulary but different ordering/spacing (reading-order or word-break difference) |
+| `govinfo-s1.pdf` | 0.804 | 0.999 | 802706 | 785714 | similar vocabulary but different ordering/spacing (reading-order or word-break difference) |
+| `govinfo-hjres1.pdf` | 0.828 | 0.859 | 1521 | 1466 | moderate divergence (lev 0.83, jaccard 0.86) |
+| `cdc-mmwr-7301a1.pdf` | 0.836 | 0.943 | 26205 | 25605 | moderate divergence (lev 0.84, jaccard 0.94) |
+| `govinfo-hr2.pdf` | 0.844 | 0.997 | 271904 | 265732 | similar vocabulary but different ordering/spacing (reading-order or word-break difference) |
 
 ### Worst-case divergences vs pdfminer
 
 | file | Lev | Jacc | our chars | their chars | why they differ |
 |---|---|---|---|---|---|
-| `govinfo-hr1.pdf` | 0.105 | 0.700 | 227066 | 229815 | similar vocabulary but different ordering/spacing (reading-order or word-break difference) |
-| `govinfo-s1.pdf` | 0.112 | 0.603 | 791947 | 802103 | 3196/9211 oxide tokens absent from oracle (spurious/mis-decoded); similar vocabulary but different ordering/spacing (reading-order or word-break difference) |
-| `govinfo-hr3056.pdf` | 0.169 | 0.869 | 17695 | 17816 | similar vocabulary but different ordering/spacing (reading-order or word-break difference) |
-| `govinfo-hr2.pdf` | 0.173 | 0.703 | 268593 | 271696 | similar vocabulary but different ordering/spacing (reading-order or word-break difference) |
-| `irs-p501.pdf` | 0.387 | 0.875 | 197872 | 206746 | similar vocabulary but different ordering/spacing (reading-order or word-break difference) |
-| `irs-f1040.pdf` | 0.475 | 0.904 | 9514 | 10158 | similar vocabulary but different ordering/spacing (reading-order or word-break difference) |
-| `irs-p15.pdf` | 0.531 | 0.932 | 301206 | 315342 | similar vocabulary but different ordering/spacing (reading-order or word-break difference) |
-| `irs-p502.pdf` | 0.532 | 0.878 | 114676 | 121105 | similar vocabulary but different ordering/spacing (reading-order or word-break difference) |
+| `govinfo-hr3056.pdf` | 0.185 | 0.997 | 17831 | 17816 | similar vocabulary but different ordering/spacing (reading-order or word-break difference) |
+| `govinfo-hr1.pdf` | 0.194 | 0.999 | 230026 | 229815 | similar vocabulary but different ordering/spacing (reading-order or word-break difference) |
+| `govinfo-s1.pdf` | 0.197 | 0.999 | 802706 | 802103 | similar vocabulary but different ordering/spacing (reading-order or word-break difference) |
+| `govinfo-hr2.pdf` | 0.261 | 0.999 | 271904 | 271696 | similar vocabulary but different ordering/spacing (reading-order or word-break difference) |
+| `nasa-ntrs-19950009349.pdf` | 0.424 | 0.722 | 54229 | 47121 | similar vocabulary but different ordering/spacing (reading-order or word-break difference) |
+| `irs-f1065.pdf` | 0.562 | 0.988 | 24946 | 24954 | similar vocabulary but different ordering/spacing (reading-order or word-break difference) |
+| `irs-f1040.pdf` | 0.588 | 0.994 | 10157 | 10158 | similar vocabulary but different ordering/spacing (reading-order or word-break difference) |
+| `irs-f1040sb.pdf` | 0.614 | 1.000 | 3126 | 3126 | similar vocabulary but different ordering/spacing (reading-order or word-break difference) |
 
 ## 6. Prioritized divergence causes (future diff-oracle fix tasks)
 
-1. **Moderate divergence (mixed spacing/encoding)** — 15 doc(s). e.g. `cdc-mmwr-7251a1.pdf`, `govinfo-cdoc110-50.pdf`, `govinfo-hjres1.pdf`
-2. **Reading-order / word-spacing differences (column/line segmentation vs fitz)** — 7 doc(s). e.g. `irs-f1040.pdf`, `irs-f1040sc.pdf`, `irs-f1065.pdf`
-3. **Extra/spurious content — oxide emits text fitz does not (mis-decoded glyphs or duplicated content)** — 1 doc(s). e.g. `govinfo-s1.pdf`
+1. **Moderate divergence (mixed spacing/encoding)** — 9 doc(s). e.g. `cdc-mmwr-7301a1.pdf`, `cdc-mmwr-7302a1.pdf`, `govinfo-hjres1.pdf`
+2. **Reading-order / word-spacing differences (column/line segmentation vs fitz)** — 6 doc(s). e.g. `cdc-mmwr-7251a1.pdf`, `govinfo-hr2.pdf`, `govinfo-s1.pdf`
 
 ---
 
