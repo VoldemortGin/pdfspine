@@ -131,6 +131,82 @@ fn link_get_002_goto() {
     assert_eq!(links[0].kind, LinkKind::Goto(1));
 }
 
+/// `LINK-GET-004`: a link carries border widths, border color, and flags.
+#[test]
+fn link_get_004_border_color_flags() {
+    let annot = Object::Dictionary(dict([
+        ("Type", name_obj("Annot")),
+        ("Subtype", name_obj("Link")),
+        ("F", Object::Integer(4)),
+        (
+            "Rect",
+            Object::Array(vec![
+                Object::Integer(0),
+                Object::Integer(0),
+                Object::Integer(50),
+                Object::Integer(50),
+            ]),
+        ),
+        (
+            "Border",
+            Object::Array(vec![
+                Object::Integer(0),
+                Object::Integer(0),
+                Object::Integer(2),
+            ]),
+        ),
+        (
+            "C",
+            Object::Array(vec![
+                Object::Real(1.0),
+                Object::Real(0.0),
+                Object::Real(0.0),
+            ]),
+        ),
+        (
+            "A",
+            Object::Dictionary(dict([
+                ("S", name_obj("URI")),
+                (
+                    "URI",
+                    Object::String(PdfString::literal(b"https://b.test".to_vec())),
+                ),
+            ])),
+        ),
+    ]));
+    let doc = open(&doc_with_annots(vec![(20, annot)], vec![20]));
+    let links = get_links(&doc, 0);
+    assert_eq!(links.len(), 1);
+    assert_eq!(links[0].border, [0.0, 0.0, 2.0]);
+    assert_eq!(links[0].color, Some((1.0, 0.0, 0.0)));
+    assert_eq!(links[0].flags, 4);
+}
+
+/// `LINK-GET-005`: a named-dest GoTo link surfaces the dest name string.
+#[test]
+fn link_get_005_named_dest() {
+    let annot = Object::Dictionary(dict([
+        ("Type", name_obj("Annot")),
+        ("Subtype", name_obj("Link")),
+        (
+            "Rect",
+            Object::Array(vec![
+                Object::Integer(0),
+                Object::Integer(0),
+                Object::Integer(50),
+                Object::Integer(50),
+            ]),
+        ),
+        (
+            "Dest",
+            Object::String(PdfString::literal(b"sectionA".to_vec())),
+        ),
+    ]));
+    let doc = open(&doc_with_annots(vec![(20, annot)], vec![20]));
+    let links = get_links(&doc, 0);
+    assert_eq!(links[0].dest.as_deref(), Some("sectionA"));
+}
+
 /// `LINK-GET-003`: a page with no `/Annots` → empty.
 #[test]
 fn link_get_003_no_annots() {

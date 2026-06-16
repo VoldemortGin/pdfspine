@@ -69,4 +69,4 @@ pub use pagelabel::{get_label, set_labels, LabelSpec};
 pub use redact::apply_redactions;
 pub use scrub::{bake, scrub, ScrubOptions};
 pub use text::{insert_text, insert_textbox, Align, TextOptions};
-pub use toc::{get_toc, set_toc, TocEntry};
+pub use toc::{get_outline, get_toc, set_toc, OutlineNode, TocEntry};

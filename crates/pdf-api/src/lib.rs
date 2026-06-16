@@ -29,7 +29,7 @@ pub use pdf_core::repair::ParseMode;
 pub use pdf_core::{OnRepaired, SaveOptions, XrefStyle};
 
 // Editing types surfaced to the bindings (PRD §8.9).
-pub use pdf_edit::{Link, LinkKind, TocEntry};
+pub use pdf_edit::{Link, LinkKind, OutlineNode, TocEntry};
 
 // M4e value/enum types surfaced so `py-bindings` depends only on `pdf-api`
 // (PRD §9.1). `Color` is constructed via [`Color::new`] at the tuple-color
@@ -455,6 +455,13 @@ impl Document {
             .into_iter()
             .map(|e| (e.level, e.title, e.page))
             .collect()
+    }
+
+    /// The document outline as a tree (PyMuPDF `Document.outline`). Returns the
+    /// first top-level [`OutlineNode`] with its `next`/`down` chains, or `None`.
+    #[must_use]
+    pub fn outline(&self) -> Option<OutlineNode> {
+        pdf_edit::get_outline(&self.store)
     }
 
     /// Builds the `/Outlines` tree from a flat level list (PyMuPDF `set_toc`).

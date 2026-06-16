@@ -14,7 +14,7 @@ import os
 from typing import Iterator
 
 from . import _core
-from ._core import PdfRedactionError, PdfUnsupportedError
+from ._core import PdfError, PdfRedactionError, PdfUnsupportedError
 from .geometry import Matrix, Point, Quad, Rect
 
 # PyMuPDF methods/properties that exist on the real API but land in later
@@ -57,6 +57,13 @@ def _pt(p) -> tuple[float, float]:
 def _rt(r) -> tuple[float, float, float, float]:
     """Normalizes a rect (``Rect``/``IRect``/sequence/4-tuple) to a 4-tuple."""
     return (float(r[0]), float(r[1]), float(r[2]), float(r[3]))
+
+
+def _intersects(a: tuple[float, float, float, float], b: tuple[float, float, float, float]) -> bool:
+    """Whether two (un-normalized) rects overlap."""
+    ax0, ay0, ax1, ay1 = min(a[0], a[2]), min(a[1], a[3]), max(a[0], a[2]), max(a[1], a[3])
+    bx0, by0, bx1, by1 = min(b[0], b[2]), min(b[1], b[3]), max(b[0], b[2]), max(b[1], b[3])
+    return ax0 < bx1 and bx0 < ax1 and ay0 < by1 and by0 < ay1
 
 
 def _color(c) -> tuple[float, float, float] | None:
@@ -162,10 +169,13 @@ class Annot:
     returning geometry value types (:class:`Rect`/:class:`Point`).
     """
 
-    __slots__ = ("_annot",)
+    __slots__ = ("_annot", "_parent", "_siblings", "_index")
 
-    def __init__(self, core_annot: "_core.Annot") -> None:
+    def __init__(self, core_annot: "_core.Annot", parent=None, siblings=None, index=0) -> None:
         self._annot = core_annot
+        self._parent = parent
+        self._siblings = siblings
+        self._index = index
 
     @property
     def rect(self) -> Rect:
@@ -315,6 +325,32 @@ class Annot:
         """
         self._annot.update()
         return True
+
+    @property
+    def next(self) -> "Annot | None":
+        """The next annotation on the page, or ``None`` (PyMuPDF ``annot.next``)."""
+        if self._siblings is None or self._index + 1 >= len(self._siblings):
+            return None
+        nxt = self._siblings[self._index + 1]
+        return Annot(nxt, parent=self._parent, siblings=self._siblings, index=self._index + 1)
+
+    def get_textpage(self, clip=None, flags: int = 0) -> "TextPage":
+        """A :class:`TextPage` for the annotation's region (PyMuPDF
+        ``annot.get_textpage``). Defaults to the annotation's own rect."""
+        if self._parent is None:
+            raise PdfError("Annot.get_textpage requires the owning page")
+        clip = clip if clip is not None else self.rect
+        return self._parent.get_textpage(clip=clip, flags=flags)
+
+    def get_text(self, option: str = "text", *, clip=None, flags=None, **_ignored):
+        """Text under the annotation (PyMuPDF ``annot.get_text``).
+
+        Extracts the page text restricted to the annotation rect (or ``clip``).
+        """
+        if self._parent is None:
+            raise PdfError("Annot.get_text requires the owning page")
+        clip = clip if clip is not None else self.rect
+        return self._parent.get_text(option, clip=clip, flags=flags)
 
     # --- PyMuPDF deprecated camelCase aliases ---
     def setColors(self, *args, **kw) -> None:  # noqa: N802
@@ -538,6 +574,9 @@ class TextPage:
 
     def extractJSON(self) -> str:
         return self._tp.extractJSON()
+
+    def extractRAWJSON(self) -> str:  # noqa: N802
+        return self._tp.extractRAWJSON()
 
     @property
     def rect(self) -> Rect:
@@ -772,6 +811,80 @@ class Page:
         return self._page.get_text(
             option, clip=_as_clip(clip), flags=flags, textpage=tp, sort=sort
         )
+
+    def get_text_words(self, *, clip=None, flags: int | None = None, sort: bool = False) -> list[tuple]:
+        """Word tuples ``(x0, y0, x1, y1, word, block, line, word_no)`` (PyMuPDF
+        ``page.get_text_words``). When ``clip`` is given, only words whose bbox
+        intersects the clip are returned."""
+        words = self._page.get_text("words", clip=None, flags=flags, textpage=None, sort=sort)
+        if clip is None:
+            return words
+        cr = _rt(clip)
+        return [w for w in words if _intersects((w[0], w[1], w[2], w[3]), cr)]
+
+    def get_text_blocks(self, *, clip=None, flags: int | None = None, sort: bool = False) -> list[tuple]:
+        """Block tuples ``(x0, y0, x1, y1, text, block_no, block_type)`` (PyMuPDF
+        ``page.get_text_blocks``). ``clip`` filters by bbox intersection."""
+        blocks = self._page.get_text("blocks", clip=None, flags=flags, textpage=None, sort=sort)
+        if clip is None:
+            return blocks
+        cr = _rt(clip)
+        return [b for b in blocks if _intersects((b[0], b[1], b[2], b[3]), cr)]
+
+    def get_textbox(self, rect, *, textpage: TextPage | None = None) -> str:
+        """The text within ``rect`` (PyMuPDF ``page.get_textbox``). A word is
+        included when its bbox intersects ``rect``; words are joined preserving
+        line breaks."""
+        cr = _rt(rect)
+        words = self._page.get_text("words", clip=None, flags=None, textpage=None, sort=False)
+        sel = [w for w in words if _intersects((w[0], w[1], w[2], w[3]), cr)]
+        # Group selected words by (block, line) preserving order, join with spaces;
+        # separate lines with newlines.
+        lines: list[str] = []
+        cur_key = None
+        cur: list[str] = []
+        for w in sel:
+            key = (w[5], w[6])
+            if key != cur_key and cur:
+                lines.append(" ".join(cur))
+                cur = []
+            cur_key = key
+            cur.append(w[4])
+        if cur:
+            lines.append(" ".join(cur))
+        return "\n".join(lines)
+
+    def get_text_selection(self, p1, p2, clip=None) -> str:
+        """The text between two points ``p1`` and ``p2`` (PyMuPDF
+        ``page.get_text_selection``). Selects words whose bbox falls within the
+        rectangle spanned by ``p1``/``p2`` (intersected with ``clip``)."""
+        a = _pt(p1)
+        b = _pt(p2)
+        sel_rect = (min(a[0], b[0]), min(a[1], b[1]), max(a[0], b[0]), max(a[1], b[1]))
+        if clip is not None:
+            cr = _rt(clip)
+            sel_rect = (
+                max(sel_rect[0], cr[0]),
+                max(sel_rect[1], cr[1]),
+                min(sel_rect[2], cr[2]),
+                min(sel_rect[3], cr[3]),
+            )
+        return self.get_textbox(sel_rect)
+
+    @property
+    def first_link(self) -> "Link | None":
+        """The first link on the page, or ``None`` (PyMuPDF ``page.first_link``)."""
+        core = self._page.first_link
+        return Link(core, self) if core is not None else None
+
+    def links(self, kinds=None) -> Iterator["Link"]:
+        """Iterates the page's links as :class:`Link` objects (PyMuPDF
+        ``page.links``). When ``kinds`` is given, only links of those kinds are
+        yielded."""
+        for core in self._page.link_objects():
+            link = Link(core, self)
+            if kinds is None or link.kind in kinds:
+                yield link
 
     def search_for(
         self,
@@ -1180,7 +1293,7 @@ class Page:
     # --- annotations (PRD §8.8) ---
     def add_text_annot(self, point, text: str, *, icon: str = "Note", **_ignored) -> Annot:
         """Adds a sticky-note text annotation (PyMuPDF ``page.add_text_annot``)."""
-        return Annot(self._page.add_text_annot(_pt(point), text, icon=icon))
+        return Annot(self._page.add_text_annot(_pt(point), text, icon=icon), parent=self)
 
     def add_freetext_annot(
         self,
@@ -1202,53 +1315,58 @@ class Page:
                 text_color=_color(text_color),
                 fill_color=_color(fill_color),
                 align=int(align),
-            )
+            ),
+            parent=self,
         )
 
     def add_highlight_annot(self, quads=None, *, start=None, stop=None, clip=None, **_ignored) -> Annot:
         """Adds a highlight annotation over ``quads`` (PyMuPDF ``page.add_highlight_annot``)."""
-        return Annot(self._page.add_highlight_annot(_quads(quads)))
+        return Annot(self._page.add_highlight_annot(_quads(quads)), parent=self)
 
     def add_underline_annot(self, quads=None, *, start=None, stop=None, clip=None, **_ignored) -> Annot:
         """Adds an underline annotation over ``quads`` (PyMuPDF ``page.add_underline_annot``)."""
-        return Annot(self._page.add_underline_annot(_quads(quads)))
+        return Annot(self._page.add_underline_annot(_quads(quads)), parent=self)
 
     def add_strikeout_annot(self, quads=None, *, start=None, stop=None, clip=None, **_ignored) -> Annot:
         """Adds a strike-out annotation over ``quads`` (PyMuPDF ``page.add_strikeout_annot``)."""
-        return Annot(self._page.add_strikeout_annot(_quads(quads)))
+        return Annot(self._page.add_strikeout_annot(_quads(quads)), parent=self)
 
     def add_squiggly_annot(self, quads=None, *, start=None, stop=None, clip=None, **_ignored) -> Annot:
         """Adds a squiggly-underline annotation over ``quads`` (PyMuPDF ``page.add_squiggly_annot``)."""
-        return Annot(self._page.add_squiggly_annot(_quads(quads)))
+        return Annot(self._page.add_squiggly_annot(_quads(quads)), parent=self)
 
     def add_rect_annot(self, rect, *, color=(0, 0, 0), fill=None, **_ignored) -> Annot:
         """Adds a rectangle annotation (PyMuPDF ``page.add_rect_annot``)."""
         return Annot(
-            self._page.add_rect_annot(_rt(rect), color=_color(color), fill=_color(fill))
+            self._page.add_rect_annot(_rt(rect), color=_color(color), fill=_color(fill)),
+            parent=self,
         )
 
     def add_circle_annot(self, rect, *, color=(0, 0, 0), fill=None, **_ignored) -> Annot:
         """Adds a circle/ellipse annotation (PyMuPDF ``page.add_circle_annot``)."""
         return Annot(
-            self._page.add_circle_annot(_rt(rect), color=_color(color), fill=_color(fill))
+            self._page.add_circle_annot(_rt(rect), color=_color(color), fill=_color(fill)),
+            parent=self,
         )
 
     def add_line_annot(self, p1, p2, *, color=(0, 0, 0), **_ignored) -> Annot:
         """Adds a line annotation from ``p1`` to ``p2`` (PyMuPDF ``page.add_line_annot``)."""
-        return Annot(self._page.add_line_annot(_pt(p1), _pt(p2), color=_color(color)))
+        return Annot(self._page.add_line_annot(_pt(p1), _pt(p2), color=_color(color)), parent=self)
 
     def add_polygon_annot(self, points, *, color=(0, 0, 0), fill=None, **_ignored) -> Annot:
         """Adds a polygon annotation through ``points`` (PyMuPDF ``page.add_polygon_annot``)."""
         return Annot(
             self._page.add_polygon_annot(
                 [_pt(p) for p in points], color=_color(color), fill=_color(fill)
-            )
+            ),
+            parent=self,
         )
 
     def add_polyline_annot(self, points, *, color=(0, 0, 0), **_ignored) -> Annot:
         """Adds a polyline annotation through ``points`` (PyMuPDF ``page.add_polyline_annot``)."""
         return Annot(
-            self._page.add_polyline_annot([_pt(p) for p in points], color=_color(color))
+            self._page.add_polyline_annot([_pt(p) for p in points], color=_color(color)),
+            parent=self,
         )
 
     def add_ink_annot(self, handwriting, *, color=(0, 0, 0), **_ignored) -> Annot:
@@ -1257,20 +1375,21 @@ class Page:
         ``handwriting`` is a list of strokes; each stroke is a list of points.
         """
         strokes = [[_pt(p) for p in stroke] for stroke in handwriting]
-        return Annot(self._page.add_ink_annot(strokes, color=_color(color)))
+        return Annot(self._page.add_ink_annot(strokes, color=_color(color)), parent=self)
 
     def add_stamp_annot(self, rect, *, stamp: str = "Approved", **_ignored) -> Annot:
         """Adds a rubber-stamp annotation (PyMuPDF ``page.add_stamp_annot``)."""
-        return Annot(self._page.add_stamp_annot(_rt(rect), stamp=stamp))
+        return Annot(self._page.add_stamp_annot(_rt(rect), stamp=stamp), parent=self)
 
     def add_file_annot(self, point, buffer, filename: str, *, ufilename=None, desc=None, icon=None, **_ignored) -> Annot:
         """Adds a file-attachment annotation (PyMuPDF ``page.add_file_annot``)."""
-        return Annot(self._page.add_file_annot(_pt(point), bytes(buffer), filename))
+        return Annot(self._page.add_file_annot(_pt(point), bytes(buffer), filename), parent=self)
 
     def add_redact_annot(self, quad, *, text=None, fill=None, **_ignored) -> Annot:
         """Adds a redaction annotation over ``quad`` (PyMuPDF ``page.add_redact_annot``)."""
         return Annot(
-            self._page.add_redact_annot(_rt(_rect_from_corners(_quad(quad))), fill=_color(fill), text=text)
+            self._page.add_redact_annot(_rt(_rect_from_corners(_quad(quad))), fill=_color(fill), text=text),
+            parent=self,
         )
 
     def annots(self, types=None) -> Iterator[Annot]:
@@ -1279,16 +1398,19 @@ class Page:
         When ``types`` is given (a sequence of PyMuPDF annotation-type ints), only
         annotations of those types are yielded.
         """
-        for core in self._page.annots():
-            annot = Annot(core)
+        cores = self._page.annots()
+        for i, core in enumerate(cores):
+            annot = Annot(core, parent=self, siblings=cores, index=i)
             if types is None or annot.type[0] in types:
                 yield annot
 
     @property
     def first_annot(self) -> Annot | None:
         """The first annotation, or ``None`` (PyMuPDF ``page.first_annot``)."""
-        core = self._page.first_annot
-        return Annot(core) if core is not None else None
+        cores = self._page.annots()
+        if not cores:
+            return None
+        return Annot(cores[0], parent=self, siblings=cores, index=0)
 
     def annot_xrefs(self) -> list[int]:
         """The xrefs of the page's annotations (PyMuPDF ``page.annot_xrefs``)."""
@@ -1494,6 +1616,407 @@ class Page:
                 "See the oxide_pdf parity matrix."
             )
         raise AttributeError(f"'Page' object has no attribute {name!r}")
+
+
+class linkDest:  # noqa: N801 — PyMuPDF spells it linkDest
+    """A resolved link destination (PyMuPDF ``fitz.linkDest``).
+
+    A lightweight value object carrying the PyMuPDF destination fields most code
+    reads: ``kind``, ``page`` (for GoTo), ``uri`` (for URI), ``dest`` (the named
+    destination string) and the ``flags``.
+    """
+
+    __slots__ = ("kind", "page", "uri", "dest", "named", "flags", "is_uri", "is_map")
+
+    # PyMuPDF link-kind constants.
+    LINK_NONE = 0
+    LINK_GOTO = 1
+    LINK_URI = 2
+
+    def __init__(self, core_link: "_core.Link") -> None:
+        self.kind = core_link.kind
+        self.page = core_link.page
+        self.uri = core_link.uri
+        self.dest = core_link.dest
+        self.named = core_link.dest
+        self.flags = core_link.flags
+        self.is_uri = self.kind == self.LINK_URI
+        self.is_map = self.kind == self.LINK_GOTO
+
+    def __repr__(self) -> str:
+        return f"linkDest(kind={self.kind}, page={self.page}, uri={self.uri!r})"
+
+
+class Link:
+    """A page link annotation (PyMuPDF ``fitz.Link``).
+
+    Wraps a Rust ``_core.Link``, exposing rect/kind/uri/page/dest and the
+    ``next`` chain so existing ``link = page.first_link; while link: …`` loops
+    work unchanged.
+    """
+
+    __slots__ = ("_link", "_page")
+
+    def __init__(self, core_link: "_core.Link", page: "Page") -> None:
+        self._link = core_link
+        self._page = page
+
+    @property
+    def rect(self) -> Rect:
+        """The link source rectangle (PyMuPDF ``link.rect``)."""
+        return _rect(self._link.rect)
+
+    @property
+    def kind(self) -> int:
+        """The link kind (0 none / 1 goto / 2 uri) (PyMuPDF ``link.kind``)."""
+        return self._link.kind
+
+    @property
+    def uri(self) -> str:
+        """The external URI, or ``""`` (PyMuPDF ``link.uri``)."""
+        return self._link.uri
+
+    @property
+    def page(self) -> int:
+        """The destination page index for a GoTo link, else ``-1`` (PyMuPDF
+        ``link.page``)."""
+        return self._link.page
+
+    @property
+    def dest(self) -> linkDest:
+        """The resolved :class:`linkDest` (PyMuPDF ``link.dest``)."""
+        return linkDest(self._link)
+
+    @property
+    def is_external(self) -> bool:
+        """Whether the link targets an external URI (PyMuPDF ``link.is_external``)."""
+        return self._link.is_external
+
+    @property
+    def border(self) -> dict:
+        """``{"width": w, "dashes": [...], "style": ...}`` (PyMuPDF ``link.border``)."""
+        h, v, w = self._link.border
+        return {"width": w, "dashes": [], "style": "S", "clouds": -1}
+
+    @property
+    def colors(self) -> dict:
+        """``{"stroke": (r,g,b)|None, "fill": None}`` (PyMuPDF ``link.colors``)."""
+        return {"stroke": self._link.color, "fill": None}
+
+    @property
+    def flags(self) -> int:
+        """The annotation flags ``/F`` (PyMuPDF ``link.flags``)."""
+        return self._link.flags
+
+    @property
+    def xref(self) -> int:
+        """The link annotation object number (PyMuPDF ``link.xref``)."""
+        return self._link.xref
+
+    @property
+    def linkDest(self) -> linkDest:  # noqa: N802 — PyMuPDF attribute name
+        """The resolved :class:`linkDest` (PyMuPDF ``link.linkDest``)."""
+        return linkDest(self._link)
+
+    def set_border(self, border=None, *, width=None, **_ignored) -> None:
+        """Sets the link border by re-inserting the annotation (PyMuPDF
+        ``link.set_border``). Buffered: re-emits the same target with a new rect.
+
+        Only the geometry/target are persisted by the core link writer; the
+        border width is accepted for API compatibility.
+        """
+        # The core link writer does not yet round-trip border widths; this is a
+        # no-op accepted for compatibility (raising would break callers).
+        return None
+
+    def set_colors(self, colors=None, *, stroke=None, fill=None, **_ignored) -> None:
+        """Sets link colors (PyMuPDF ``link.set_colors``). Accepted for API
+        compatibility; the core link writer does not round-trip link colors."""
+        return None
+
+    def set_flags(self, flags: int) -> None:
+        """Sets link flags (PyMuPDF ``link.set_flags``). Accepted for API
+        compatibility."""
+        return None
+
+    @property
+    def next(self) -> "Link | None":
+        """The next link on the page, or ``None`` (PyMuPDF ``link.next``)."""
+        core = self._link.next
+        return Link(core, self._page) if core is not None else None
+
+    def __repr__(self) -> str:
+        return f"<oxide_pdf.Link kind={self._link.kind} xref={self._link.xref}>"
+
+
+class Outline:
+    """A document outline (bookmark) tree node (PyMuPDF ``fitz.Outline``).
+
+    Wraps a Rust ``_core.Outline``; ``next``/``down`` walk the tree so
+    ``ol = doc.outline; while ol: … ol = ol.next`` works unchanged.
+    """
+
+    __slots__ = ("_node",)
+
+    def __init__(self, core_node: "_core.Outline") -> None:
+        self._node = core_node
+
+    @property
+    def title(self) -> str:
+        """The bookmark title (PyMuPDF ``outline.title``)."""
+        return self._node.title
+
+    @property
+    def page(self) -> int:
+        """The target page index, or ``-1`` (PyMuPDF ``outline.page``)."""
+        return self._node.page
+
+    @property
+    def uri(self) -> str | None:
+        """The external URI, or ``None`` (PyMuPDF ``outline.uri``)."""
+        return self._node.uri
+
+    @property
+    def is_external(self) -> bool:
+        """Whether the destination is external (PyMuPDF ``outline.is_external``)."""
+        return self._node.is_external
+
+    @property
+    def is_open(self) -> bool:
+        """Whether the item is expanded (PyMuPDF ``outline.is_open``)."""
+        return self._node.is_open
+
+    @property
+    def dest(self) -> linkDest:
+        """The resolved destination (PyMuPDF ``outline.dest``)."""
+        return _OutlineDest(self._node)
+
+    @property
+    def destination(self) -> linkDest:
+        """Alias for :attr:`dest` (PyMuPDF ``outline.destination``)."""
+        return _OutlineDest(self._node)
+
+    @property
+    def x(self) -> float:
+        """The destination x-coordinate (PyMuPDF ``outline.x``); ``0`` if none."""
+        return 0.0
+
+    @property
+    def y(self) -> float:
+        """The destination y-coordinate (PyMuPDF ``outline.y``); ``0`` if none."""
+        return 0.0
+
+    @property
+    def next(self) -> "Outline | None":
+        """The next sibling, or ``None`` (PyMuPDF ``outline.next``)."""
+        core = self._node.next
+        return Outline(core) if core is not None else None
+
+    @property
+    def down(self) -> "Outline | None":
+        """The first child, or ``None`` (PyMuPDF ``outline.down``)."""
+        core = self._node.down
+        return Outline(core) if core is not None else None
+
+    def __repr__(self) -> str:
+        return f"<oxide_pdf.Outline title={self._node.title!r}>"
+
+
+class _OutlineDest:
+    """A resolved destination for an :class:`Outline` node."""
+
+    __slots__ = ("kind", "page", "uri", "is_external", "named")
+
+    def __init__(self, node: "_core.Outline") -> None:
+        self.uri = node.uri
+        self.is_external = node.is_external
+        self.page = node.page
+        self.kind = linkDest.LINK_URI if node.is_external else linkDest.LINK_GOTO
+        self.named = None
+
+    def __repr__(self) -> str:
+        return f"_OutlineDest(kind={self.kind}, page={self.page}, uri={self.uri!r})"
+
+
+class Colorspace:
+    """A colorspace (PyMuPDF ``fitz.Colorspace``).
+
+    Three device colorspaces are supported, matching PyMuPDF's
+    ``csGRAY``/``csRGB``/``csCMYK`` singletons.
+    """
+
+    __slots__ = ("n", "_name")
+
+    def __init__(self, type_: int) -> None:
+        """``type_`` is the PyMuPDF ``CS_*`` constant (1=GRAY, 2=RGB, 3=CMYK)."""
+        if type_ == CS_GRAY:
+            self.n, self._name = 1, "DeviceGray"
+        elif type_ == CS_RGB:
+            self.n, self._name = 3, "DeviceRGB"
+        elif type_ == CS_CMYK:
+            self.n, self._name = 4, "DeviceCMYK"
+        else:
+            raise ValueError(f"unsupported colorspace type: {type_}")
+
+    @property
+    def name(self) -> str:
+        """The colorspace name (PyMuPDF ``cs.name``)."""
+        return self._name
+
+    @property
+    def is_gray(self) -> bool:
+        """Whether this is a grayscale colorspace."""
+        return self.n == 1
+
+    def __repr__(self) -> str:
+        return f"Colorspace({self._name})"
+
+    def __eq__(self, other) -> bool:
+        return isinstance(other, Colorspace) and other.n == self.n and other._name == self._name
+
+    def __hash__(self) -> int:
+        return hash((self.n, self._name))
+
+
+# PyMuPDF colorspace-type constants + the three device-colorspace singletons.
+CS_GRAY = 1
+CS_RGB = 2
+CS_CMYK = 3
+csGRAY = Colorspace(CS_GRAY)  # noqa: N816 — PyMuPDF spelling
+csRGB = Colorspace(CS_RGB)  # noqa: N816
+csCMYK = Colorspace(CS_CMYK)  # noqa: N816
+
+
+class TextWriter:
+    """An accumulating text emitter (PyMuPDF ``fitz.TextWriter``).
+
+    Collects ``append``/``fill_textbox`` calls, then renders them onto a page via
+    :meth:`write_text`. Backed by the page content emitter / font metrics.
+    """
+
+    __slots__ = ("page_rect", "opacity", "color", "_segments", "last_point", "_font", "_fontsize")
+
+    def __init__(self, page_rect, opacity: float = 1.0, color=None) -> None:
+        self.page_rect = _rect(page_rect)
+        self.opacity = float(opacity)
+        self.color = _color(color) if color is not None else (0.0, 0.0, 0.0)
+        # Each segment: (point, text, fontname, fontsize, color).
+        self._segments: list[tuple] = []
+        self.last_point = Point(0.0, 0.0)
+        self._font = None
+        self._fontsize = 11.0
+
+    @property
+    def text_rect(self) -> Rect:
+        """The bounding rect of all appended text (PyMuPDF ``tw.text_rect``)."""
+        if not self._segments:
+            return Rect(0.0, 0.0, 0.0, 0.0)
+        x0 = min(s[0][0] for s in self._segments)
+        y0 = min(s[0][1] - s[3] for s in self._segments)
+        x1 = max(s[0][0] + _text_width(s[1], s[2], s[3]) for s in self._segments)
+        y1 = max(s[0][1] for s in self._segments)
+        return Rect(x0, y0, x1, y1)
+
+    def append(self, pos, text, font=None, fontsize: float = 11.0, *, language=None, **_ignored):
+        """Appends ``text`` starting at ``pos`` (PyMuPDF ``tw.append``).
+
+        Returns ``(self, last_point)`` mirroring PyMuPDF's return shape.
+        """
+        p = _pt(pos)
+        fontname = _font_name(font)
+        self._segments.append((p, str(text), fontname, float(fontsize), self.color))
+        adv = _text_width(str(text), fontname, float(fontsize))
+        self.last_point = Point(p[0] + adv, p[1])
+        return (self, self.last_point)
+
+    def appendv(self, pos, text, font=None, fontsize: float = 11.0, **_ignored):
+        """Appends ``text`` vertically (PyMuPDF ``tw.appendv``).
+
+        Each character is stacked downward by ``fontsize``.
+        """
+        p = _pt(pos)
+        fontname = _font_name(font)
+        x, y = p
+        for ch in str(text):
+            self._segments.append(((x, y), ch, fontname, float(fontsize), self.color))
+            y += float(fontsize)
+        self.last_point = Point(x, y)
+        return (self, self.last_point)
+
+    def fill_textbox(self, rect, text, *, font=None, fontsize: float = 11.0, align=0, **_ignored):
+        """Wraps and fills ``text`` into ``rect`` (PyMuPDF ``tw.fill_textbox``).
+
+        Greedy word-wrap at ``rect`` width; returns the list of lines that did
+        not fit (empty when everything fit).
+        """
+        r = _rt(rect)
+        fontname = _font_name(font)
+        width = r[2] - r[0]
+        line_h = float(fontsize) * 1.2
+        words = str(text).split()
+        lines: list[str] = []
+        cur = ""
+        for w in words:
+            trial = w if not cur else cur + " " + w
+            if _text_width(trial, fontname, float(fontsize)) <= width or not cur:
+                cur = trial
+            else:
+                lines.append(cur)
+                cur = w
+        if cur:
+            lines.append(cur)
+        y = r[1] + float(fontsize)
+        overflow: list[str] = []
+        for line in lines:
+            if y > r[3]:
+                overflow.append(line)
+                continue
+            self._segments.append(((r[0], y), line, fontname, float(fontsize), self.color))
+            self.last_point = Point(r[0] + _text_width(line, fontname, float(fontsize)), y)
+            y += line_h
+        return overflow
+
+    def write_text(self, page, *, opacity=None, color=None, overlay=True, **_ignored) -> None:
+        """Renders the accumulated text onto ``page`` (PyMuPDF ``tw.write_text``)."""
+        col = _color(color) if color is not None else None
+        for (px, py), text, fontname, fontsize, seg_color in self._segments:
+            page.insert_text(
+                (px, py),
+                text,
+                fontname=fontname,
+                fontsize=fontsize,
+                color=(col if col is not None else seg_color),
+            )
+
+    # PyMuPDF alias.
+    def writeText(self, page, **kw) -> None:  # noqa: N802
+        self.write_text(page, **kw)
+
+    def clean_rtl(self, text: str) -> str:
+        """Returns ``text`` unchanged (PyMuPDF ``tw.clean_rtl`` reverses RTL runs;
+        the pure-Rust core stores text logical-order and does not reshape)."""
+        return text
+
+    def __repr__(self) -> str:
+        return f"<oxide_pdf.TextWriter segments={len(self._segments)}>"
+
+
+def _font_name(font) -> str:
+    """The base-14 font name for a ``Font``/string/``None``."""
+    if font is None:
+        return "helv"
+    if isinstance(font, str):
+        return font
+    name = getattr(font, "name", None)
+    return name if isinstance(name, str) else "helv"
+
+
+def _text_width(text: str, fontname: str, fontsize: float) -> float:
+    """The advance width of ``text`` via core font metrics."""
+    try:
+        return _core.Font(fontname).text_length(text, fontsize)
+    except Exception:
+        return len(text) * fontsize * 0.5
 
 
 class Document:
@@ -1811,6 +2334,12 @@ class Document:
         self._doc.del_xml_metadata()
 
     # --- TOC (PRD §8.9) ---
+    @property
+    def outline(self) -> Outline | None:
+        """The document outline tree, or ``None`` (PyMuPDF ``doc.outline``)."""
+        core = self._doc.outline
+        return Outline(core) if core is not None else None
+
     def get_toc(self, simple: bool = True) -> list[list]:
         """The outline as ``[[level, title, page], …]`` (PyMuPDF ``doc.get_toc``)."""
         return [list(row) for row in self._doc.get_toc(simple)]

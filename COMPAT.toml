@@ -29,10 +29,10 @@
 baseline = "1.24.x"
 baseline_detail = "PyMuPDF 1.24.14 / MuPDF 1.24.11"
 total = 769
-implemented = 441
-deferred = 262
+implemented = 490
+deferred = 213
 out_of_scope = 66
-coverage_pct = 57.3
+coverage_pct = 63.7
 
 # ── Matrix ──
 [[symbol]]
@@ -2065,25 +2065,25 @@ milestone = "M2"
 [[symbol]]
 name = "Page.get_text_blocks"
 group = "Page"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M2"
 
 [[symbol]]
 name = "Page.get_text_words"
 group = "Page"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M2"
 
 [[symbol]]
 name = "Page.get_textbox"
 group = "Page"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M2"
 
 [[symbol]]
 name = "Page.get_text_selection"
 group = "Page"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M2"
 
 [[symbol]]
@@ -2818,7 +2818,7 @@ milestone = "M2"
 [[symbol]]
 name = "TextPage.extractRAWJSON"
 group = "TextPage"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M2"
 
 [[symbol]]
@@ -3372,7 +3372,7 @@ milestone = "M4"
 [[symbol]]
 name = "Annot.get_text"
 group = "Annot"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
@@ -3384,7 +3384,7 @@ milestone = "M4"
 [[symbol]]
 name = "Annot.get_textpage"
 group = "Annot"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
@@ -3426,7 +3426,7 @@ milestone = "M4"
 [[symbol]]
 name = "Annot.next"
 group = "Annot"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
@@ -3685,152 +3685,152 @@ note = "field JavaScript stored, not executed (PRD §3.2)"
 [[symbol]]
 name = "Link.rect"
 group = "Link"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "Link.dest"
 group = "Link"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "Link.uri"
 group = "Link"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "Link.page"
 group = "Link"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "Link.is_external"
 group = "Link"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "Link.border"
 group = "Link"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "Link.set_border"
 group = "Link"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "Link.colors"
 group = "Link"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "Link.set_colors"
 group = "Link"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "Link.flags"
 group = "Link"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "Link.set_flags"
 group = "Link"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "Link.next"
 group = "Link"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "Link.xref"
 group = "Link"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "Link.linkDest"
 group = "Link"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 # ── Outline ──
 [[symbol]]
 name = "Outline.title"
 group = "Outline"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M3"
 
 [[symbol]]
 name = "Outline.dest"
 group = "Outline"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M3"
 
 [[symbol]]
 name = "Outline.page"
 group = "Outline"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M3"
 
 [[symbol]]
 name = "Outline.uri"
 group = "Outline"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M3"
 
 [[symbol]]
 name = "Outline.is_external"
 group = "Outline"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M3"
 
 [[symbol]]
 name = "Outline.is_open"
 group = "Outline"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M3"
 
 [[symbol]]
 name = "Outline.next"
 group = "Outline"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M3"
 
 [[symbol]]
 name = "Outline.down"
 group = "Outline"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M3"
 
 [[symbol]]
 name = "Outline.x"
 group = "Outline"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M3"
 
 [[symbol]]
 name = "Outline.y"
 group = "Outline"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M3"
 
 [[symbol]]
 name = "Outline.destination"
 group = "Outline"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M3"
 
 # ── DisplayList ──
@@ -4158,61 +4158,61 @@ note = "Story-only; HTML engine out of scope"
 [[symbol]]
 name = "TextWriter.TextWriter"
 group = "TextWriter"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "TextWriter.append"
 group = "TextWriter"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "TextWriter.appendv"
 group = "TextWriter"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "TextWriter.fill_textbox"
 group = "TextWriter"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "TextWriter.write_text"
 group = "TextWriter"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "TextWriter.clean_rtl"
 group = "TextWriter"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "TextWriter.text_rect"
 group = "TextWriter"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "TextWriter.last_point"
 group = "TextWriter"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "TextWriter.color"
 group = "TextWriter"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "TextWriter.opacity"
 group = "TextWriter"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 # ── Story ──
@@ -4404,37 +4404,37 @@ note = "HTML/CSS layout engine out of scope (PRD §3.2 #2)"
 [[symbol]]
 name = "Colorspace.Colorspace"
 group = "Colorspace"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M5"
 
 [[symbol]]
 name = "Colorspace.n"
 group = "Colorspace"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M5"
 
 [[symbol]]
 name = "Colorspace.name"
 group = "Colorspace"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M5"
 
 [[symbol]]
 name = "Colorspace.csGRAY"
 group = "Colorspace"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M5"
 
 [[symbol]]
 name = "Colorspace.csRGB"
 group = "Colorspace"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M5"
 
 [[symbol]]
 name = "Colorspace.csCMYK"
 group = "Colorspace"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M5"
 
 # ── module ──

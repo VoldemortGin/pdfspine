@@ -6,7 +6,7 @@ use common::{assemble_classic, dict, name_obj, open, rref, save_reopen, MultiPag
 
 use pdf_core::object::Name;
 use pdf_core::{ObjRef, Object};
-use pdf_edit::toc::{get_toc, set_toc, TocEntry};
+use pdf_edit::toc::{get_outline, get_toc, set_toc, TocEntry};
 
 fn entry(level: i32, title: &str, page: i32) -> TocEntry {
     TocEntry {
@@ -171,6 +171,34 @@ fn toc_get_001_levels_and_pages() {
 fn toc_get_004_empty() {
     let doc = open(&MultiPage::new(&["AAA"]).build());
     assert!(get_toc(&doc).is_empty());
+}
+
+/// `OUTLINE-001`: the outline tree exposes title/page/next/down with the right
+/// shape (Chapter 1 → down Section 1.1; Chapter 1 → next Chapter 2).
+#[test]
+fn outline_001_tree_shape() {
+    let doc = open(&doc_with_outlines());
+    let root = get_outline(&doc).expect("has outline");
+    assert_eq!(root.title, "Chapter 1");
+    assert_eq!(root.page, 0);
+    assert!(root.is_open);
+
+    let down = root.down.as_ref().expect("Chapter 1 has a child");
+    assert_eq!(down.title, "Section 1.1");
+    assert_eq!(down.page, 1);
+    assert!(down.next.is_none());
+
+    let next = root.next.as_ref().expect("Chapter 1 has a sibling");
+    assert_eq!(next.title, "Chapter 2");
+    assert_eq!(next.page, 2);
+    assert!(next.down.is_none());
+}
+
+/// `OUTLINE-002`: no `/Outlines` → `None`.
+#[test]
+fn outline_002_none() {
+    let doc = open(&MultiPage::new(&["AAA"]).build());
+    assert!(get_outline(&doc).is_none());
 }
 
 /// `TOC-SET-001`: flat 1-level list round-trips.

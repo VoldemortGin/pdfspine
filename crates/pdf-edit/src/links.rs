@@ -32,6 +32,14 @@ pub struct Link {
     pub kind: LinkKind,
     /// The annotation's object number (for update/delete).
     pub xref: u32,
+    /// The raw destination string (named dest, or the `/A /D` name), if any.
+    pub dest: Option<String>,
+    /// The `/Border` `[h v w]` widths (or `[0 0 0]` default).
+    pub border: [f64; 3],
+    /// The `/C` border color `(r, g, b)`, if present.
+    pub color: Option<(f64, f64, f64)>,
+    /// The annotation flags `/F`.
+    pub flags: i64,
 }
 
 /// Reads the `/Link` annotations of page `index` (PRD §8.9). Empty when the page
@@ -79,10 +87,21 @@ pub fn get_links(doc: &DocumentStore, index: usize) -> Vec<Link> {
         }
         let from = rect_from(&adict);
         let kind = link_kind(doc, &adict, &pages);
+        let dest = link_dest_name(doc, &adict);
+        let border = border_widths(&adict);
+        let color = border_color(&adict);
+        let flags = adict
+            .get(&Name::new("F"))
+            .and_then(Object::as_i64)
+            .unwrap_or(0);
         out.push(Link {
             from,
             kind,
             xref: anum,
+            dest,
+            border,
+            color,
+            flags,
         });
     }
     out
@@ -241,6 +260,74 @@ fn link_kind(doc: &DocumentStore, d: &Dict, pages: &HashMap<u32, usize>) -> Link
     match resolve_link(doc, d, pages) {
         Some(p) => LinkKind::Goto(p as i32),
         None => LinkKind::None,
+    }
+}
+
+/// The raw destination *string* (the named-dest string or the `/A /D` name) of a
+/// link, for PyMuPDF `Link.dest`-style display. `None` for URI / unresolved.
+fn link_dest_name(doc: &DocumentStore, d: &Dict) -> Option<String> {
+    // A `/Dest` may be a name/string (named dest) — surface it as-is.
+    if let Some(dest) = d.get(&Name::new("Dest")) {
+        let dest = deref(doc, dest);
+        match dest {
+            Object::Name(n) => return Some(String::from_utf8_lossy(n.as_bytes()).into_owned()),
+            Object::String(s) => return Some(String::from_utf8_lossy(s.as_bytes()).into_owned()),
+            _ => {}
+        }
+    }
+    // A `/A /GoTo` action's `/D` may also be a named dest.
+    if let Some(a) = d.get(&Name::new("A")) {
+        let a = deref(doc, a);
+        if let Some(ad) = a.as_dict() {
+            if let Some(dd) = ad.get(&Name::new("D")) {
+                let dd = deref(doc, dd);
+                match dd {
+                    Object::Name(n) => {
+                        return Some(String::from_utf8_lossy(n.as_bytes()).into_owned())
+                    }
+                    Object::String(s) => {
+                        return Some(String::from_utf8_lossy(s.as_bytes()).into_owned())
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+    None
+}
+
+/// The `/Border` `[h v w]` widths, defaulting to `[0, 0, 1]` when absent (PDF
+/// default border width is 1, but link annots usually carry `[0 0 0]`).
+fn border_widths(d: &Dict) -> [f64; 3] {
+    if let Some(arr) = d.get(&Name::new("Border")).and_then(Object::as_array) {
+        if arr.len() >= 3 {
+            return [
+                arr[0].as_f64().unwrap_or(0.0),
+                arr[1].as_f64().unwrap_or(0.0),
+                arr[2].as_f64().unwrap_or(0.0),
+            ];
+        }
+    }
+    // `/BS /W` width form.
+    if let Some(bs) = d.get(&Name::new("BS")).and_then(Object::as_dict) {
+        if let Some(w) = bs.get(&Name::new("W")).and_then(Object::as_f64) {
+            return [0.0, 0.0, w];
+        }
+    }
+    [0.0, 0.0, 0.0]
+}
+
+/// The `/C` border color `(r, g, b)`, if a 3-component RGB array is present.
+fn border_color(d: &Dict) -> Option<(f64, f64, f64)> {
+    let arr = d.get(&Name::new("C")).and_then(Object::as_array)?;
+    if arr.len() == 3 {
+        Some((
+            arr[0].as_f64().unwrap_or(0.0),
+            arr[1].as_f64().unwrap_or(0.0),
+            arr[2].as_f64().unwrap_or(0.0),
+        ))
+    } else {
+        None
     }
 }
 

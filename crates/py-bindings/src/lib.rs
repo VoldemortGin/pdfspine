@@ -223,6 +223,12 @@ impl PyTextPage {
         text_output_to_py(py, &self.page, "json", None, Some(&self.tp), false)
     }
 
+    /// Raw JSON string with per-character detail (PyMuPDF
+    /// `TextPage.extractRAWJSON`).
+    fn extractRAWJSON(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        text_output_to_py(py, &self.page, "rawjson", None, Some(&self.tp), false)
+    }
+
     fn __repr__(&self) -> String {
         format!(
             "<oxide_pdf._core.TextPage blocks={} {:.0}x{:.0}>",
@@ -1512,6 +1518,34 @@ impl PyPage {
         Ok(out)
     }
 
+    /// The page's links as [`PyLink`] objects (PyMuPDF `Page` link iteration).
+    /// Mirrors `get_links` but returns rich objects with `next` chaining.
+    fn link_objects(&self) -> Vec<PyLink> {
+        let links = Arc::new(pdf_api::page_get_links(&self.page));
+        (0..links.len())
+            .map(|idx| PyLink {
+                page: self.page.clone(),
+                links: Arc::clone(&links),
+                idx,
+            })
+            .collect()
+    }
+
+    /// The first link on the page, or `None` (PyMuPDF `Page.first_link`).
+    #[getter]
+    fn first_link(&self) -> Option<PyLink> {
+        let links = Arc::new(pdf_api::page_get_links(&self.page));
+        if links.is_empty() {
+            None
+        } else {
+            Some(PyLink {
+                page: self.page.clone(),
+                links,
+                idx: 0,
+            })
+        }
+    }
+
     /// Inserts a link. `link` is a dict with `kind` (1=goto, 2=uri), `from`
     /// (4-tuple rect), and `uri` or `page` (PyMuPDF `Page.insert_link`).
     fn insert_link(&self, link: &Bound<'_, PyDict>) -> PyResult<()> {
@@ -2574,6 +2608,12 @@ impl PyDocument {
         self.get_toc(py, simple)
     }
 
+    /// The document outline tree, or `None` (PyMuPDF `Document.outline`).
+    #[getter]
+    fn outline(&self) -> Option<PyOutline> {
+        self.doc.outline().map(|node| PyOutline { node })
+    }
+
     /// Builds the outline from a list of `[level, title, page]` (PyMuPDF
     /// `set_toc`). Raises on a level jump.
     fn set_toc(&self, toc: &Bound<'_, PyList>) -> PyResult<()> {
@@ -3557,6 +3597,189 @@ impl PyFont {
     }
 }
 
+// === Outline (PyMuPDF `fitz.Outline`) ====================================
+
+/// A node of the document outline tree (PyMuPDF `Outline`). Holds an owned
+/// [`pdf_api::OutlineNode`]; `next`/`down` clone the relevant subtree.
+#[pyclass(name = "Outline", module = "oxide_pdf._core", frozen)]
+struct PyOutline {
+    node: pdf_api::OutlineNode,
+}
+
+#[pymethods]
+impl PyOutline {
+    /// The entry title (PyMuPDF `Outline.title`).
+    #[getter]
+    fn title(&self) -> String {
+        self.node.title.clone()
+    }
+
+    /// The target page index, 0-based, or `-1` if unresolved (PyMuPDF
+    /// `Outline.page`).
+    #[getter]
+    fn page(&self) -> i32 {
+        self.node.page
+    }
+
+    /// The external URI for a `/URI` action item, else empty (PyMuPDF
+    /// `Outline.uri`).
+    #[getter]
+    fn uri(&self) -> Option<String> {
+        self.node.uri.clone()
+    }
+
+    /// Whether the destination is external (a URI) (PyMuPDF
+    /// `Outline.is_external`).
+    #[getter]
+    fn is_external(&self) -> bool {
+        self.node.uri.is_some()
+    }
+
+    /// Whether the item is expanded (PyMuPDF `Outline.is_open`).
+    #[getter]
+    fn is_open(&self) -> bool {
+        self.node.is_open
+    }
+
+    /// The next sibling outline node, or `None` (PyMuPDF `Outline.next`).
+    #[getter]
+    fn next(&self) -> Option<PyOutline> {
+        self.node.next.as_ref().map(|n| PyOutline {
+            node: (**n).clone(),
+        })
+    }
+
+    /// The first child outline node, or `None` (PyMuPDF `Outline.down`).
+    #[getter]
+    fn down(&self) -> Option<PyOutline> {
+        self.node.down.as_ref().map(|n| PyOutline {
+            node: (**n).clone(),
+        })
+    }
+
+    fn __repr__(&self) -> String {
+        format!("<oxide_pdf._core.Outline title={:?}>", self.node.title)
+    }
+}
+
+// === Link (PyMuPDF `fitz.Link`) ==========================================
+
+/// A page link annotation (PyMuPDF `Link`). Holds an owned snapshot of the
+/// page's links plus this link's index, so `next` can walk the chain without
+/// re-reading the page; carries the owning [`pdf_api::Page`] for `set_*`.
+#[pyclass(name = "Link", module = "oxide_pdf._core", frozen)]
+struct PyLink {
+    page: pdf_api::Page,
+    links: Arc<Vec<pdf_api::Link>>,
+    idx: usize,
+}
+
+impl PyLink {
+    fn cur(&self) -> &pdf_api::Link {
+        &self.links[self.idx]
+    }
+}
+
+#[pymethods]
+#[allow(non_snake_case)]
+impl PyLink {
+    /// The link source rect `(x0, y0, x1, y1)` (PyMuPDF `Link.rect`).
+    #[getter]
+    fn rect(&self) -> (f64, f64, f64, f64) {
+        rect_tuple(self.cur().from)
+    }
+
+    /// The PyMuPDF link-kind integer (0=none, 1=goto, 2=uri) (PyMuPDF
+    /// `Link.kind` is exposed via the wrapper; here we surface the int).
+    #[getter]
+    fn kind(&self) -> i32 {
+        match &self.cur().kind {
+            pdf_api::LinkKind::Uri(_) => 2,
+            pdf_api::LinkKind::Goto(_) => 1,
+            pdf_api::LinkKind::None => 0,
+        }
+    }
+
+    /// The external URI, or empty string (PyMuPDF `Link.uri`).
+    #[getter]
+    fn uri(&self) -> String {
+        match &self.cur().kind {
+            pdf_api::LinkKind::Uri(u) => u.clone(),
+            _ => String::new(),
+        }
+    }
+
+    /// The destination page index for a GoTo link, else `-1` (PyMuPDF
+    /// `Link.page`).
+    #[getter]
+    fn page(&self) -> i32 {
+        match &self.cur().kind {
+            pdf_api::LinkKind::Goto(p) => *p,
+            _ => -1,
+        }
+    }
+
+    /// The raw destination string (named dest), or empty (PyMuPDF `Link.dest`
+    /// surfaces the linkDest; the Python layer builds the object).
+    #[getter]
+    fn dest(&self) -> String {
+        self.cur().dest.clone().unwrap_or_default()
+    }
+
+    /// Whether the link is external (a URI) (PyMuPDF `Link.is_external`).
+    #[getter]
+    fn is_external(&self) -> bool {
+        matches!(self.cur().kind, pdf_api::LinkKind::Uri(_))
+    }
+
+    /// The `/Border` `[h, v, w]` widths (PyMuPDF `Link.border`).
+    #[getter]
+    fn border(&self) -> (f64, f64, f64) {
+        let b = self.cur().border;
+        (b[0], b[1], b[2])
+    }
+
+    /// The border color `(r, g, b)`, or `None` (PyMuPDF `Link.colors` stroke).
+    #[getter]
+    fn color(&self) -> Option<(f64, f64, f64)> {
+        self.cur().color
+    }
+
+    /// The annotation flags `/F` (PyMuPDF `Link.flags`).
+    #[getter]
+    fn flags(&self) -> i64 {
+        self.cur().flags
+    }
+
+    /// The link annotation object number (PyMuPDF `Link.xref`).
+    #[getter]
+    fn xref(&self) -> u32 {
+        self.cur().xref
+    }
+
+    /// The next link in the page's link chain, or `None` (PyMuPDF `Link.next`).
+    #[getter]
+    fn next(&self) -> Option<PyLink> {
+        if self.idx + 1 < self.links.len() {
+            Some(PyLink {
+                page: self.page.clone(),
+                links: Arc::clone(&self.links),
+                idx: self.idx + 1,
+            })
+        } else {
+            None
+        }
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "<oxide_pdf._core.Link kind={} xref={}>",
+            self.kind(),
+            self.cur().xref
+        )
+    }
+}
+
 // === Tools / TOOLS (PyMuPDF `fitz.Tools`) ================================
 
 /// PyMuPDF's `Tools` utility object (a singleton, also exposed as `TOOLS`).
@@ -3774,6 +3997,8 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyTable>()?;
     m.add_class::<PyFont>()?;
     m.add_class::<PyTools>()?;
+    m.add_class::<PyOutline>()?;
+    m.add_class::<PyLink>()?;
 
     // A process-wide `Tools` singleton, also exposed as `TOOLS` (PyMuPDF).
     let tools = Py::new(py, PyTools::py_new())?;

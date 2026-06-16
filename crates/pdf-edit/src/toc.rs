@@ -25,6 +25,100 @@ pub struct TocEntry {
     pub page: i32,
 }
 
+/// One node of the document outline tree (PyMuPDF `Outline`). Mirrors an
+/// `/Outlines` item: `title`, the resolved 0-based `page` (or `-1`), an external
+/// `uri` (when the action is `/URI`), the open flag, and the `next` sibling /
+/// `down` first-child subtrees.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OutlineNode {
+    /// The entry `/Title`.
+    pub title: String,
+    /// Target physical page (0-based), or `-1` if unresolved / external.
+    pub page: i32,
+    /// External URI for a `/URI` action link, else `None`.
+    pub uri: Option<String>,
+    /// Whether the item is open (`/Count >= 0`).
+    pub is_open: bool,
+    /// The next sibling subtree, if any.
+    pub next: Option<Box<OutlineNode>>,
+    /// The first child subtree, if any.
+    pub down: Option<Box<OutlineNode>>,
+}
+
+/// Reads the document outline as a tree (PyMuPDF `Document.outline`). Returns the
+/// first top-level item (with its `next`/`down` chains), or `None` when there is
+/// no `/Outlines`.
+#[must_use]
+pub fn get_outline(doc: &DocumentStore) -> Option<OutlineNode> {
+    let catalog = catalog_dict(doc)?;
+    let outlines = deref(doc, catalog.get(&Name::new("Outlines"))?);
+    let od = outlines.as_dict()?;
+    let first = od.get(&Name::new("First")).and_then(Object::as_reference)?;
+    let pages = page_index_map(doc);
+    build_outline(doc, first, &pages, 0).map(|b| *b)
+}
+
+/// Builds the [`OutlineNode`] at `r`, following `/Next` and recursing `/First`.
+fn build_outline(
+    doc: &DocumentStore,
+    r: ObjRef,
+    pages: &HashMap<u32, usize>,
+    depth: usize,
+) -> Option<Box<OutlineNode>> {
+    if depth > 200 {
+        return None;
+    }
+    let item = doc.resolve(r).ok()?;
+    let d = item.as_dict()?;
+
+    let title = d
+        .get(&Name::new("Title"))
+        .and_then(Object::as_string)
+        .map(|s| decode_text(s.as_bytes()))
+        .unwrap_or_default();
+    let page = resolve_link(doc, d, pages).map_or(-1, |p| p as i32);
+    let uri = outline_uri(doc, d);
+    // `/Count` >= 0 (or absent) means open; a negative count means collapsed.
+    let is_open = d
+        .get(&Name::new("Count"))
+        .and_then(Object::as_i64)
+        .is_none_or(|c| c >= 0);
+
+    let down = d
+        .get(&Name::new("First"))
+        .and_then(Object::as_reference)
+        .and_then(|c| build_outline(doc, c, pages, depth + 1));
+    let next = d
+        .get(&Name::new("Next"))
+        .and_then(Object::as_reference)
+        .and_then(|n| build_outline(doc, n, pages, depth + 1));
+
+    Some(Box::new(OutlineNode {
+        title,
+        page,
+        uri,
+        is_open,
+        next,
+        down,
+    }))
+}
+
+/// The external URI of an outline item whose `/A` action is `/URI`, if any.
+fn outline_uri(doc: &DocumentStore, d: &Dict) -> Option<String> {
+    let a = deref(doc, d.get(&Name::new("A"))?);
+    let ad = a.as_dict()?;
+    if ad
+        .get(&Name::new("S"))
+        .and_then(Object::as_name)?
+        .as_bytes()
+        != b"URI"
+    {
+        return None;
+    }
+    let uri = ad.get(&Name::new("URI")).and_then(Object::as_string)?;
+    Some(String::from_utf8_lossy(uri.as_bytes()).into_owned())
+}
+
 /// Reads the document outline as a flat ordered list (PRD §8.9). Empty when there
 /// is no `/Outlines`.
 #[must_use]
