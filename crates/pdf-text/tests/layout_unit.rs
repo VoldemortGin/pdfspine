@@ -172,6 +172,9 @@ fn layout_line_004_large_gap_new_line() {
 #[test]
 fn layout_line_005_sorted_by_advance() {
     // Provide glyphs out of advance order; expect text in left-to-right order.
+    // The cells are 6pt wide at 10pt pitch, so each ~4pt gap exceeds the word-gap
+    // threshold (0.2·12 = 2.4) and the layout synthesizes an inter-word space —
+    // hence "A B C" (the contract is the left-to-right ordering, not adjacency).
     let gs = vec![
         glyph("C", 120.0, 700.0, 12.0),
         glyph("A", 100.0, 700.0, 12.0),
@@ -180,7 +183,9 @@ fn layout_line_005_sorted_by_advance() {
     let tp = textpage_from_glyphs(&gs, &[], letter(), 0);
     let line = &tp.blocks[0].lines[0];
     let text: String = line.spans.iter().flat_map(|s| s.text.chars()).collect();
-    assert_eq!(text, "ABC");
+    assert_eq!(text, "A B C");
+    // Order is preserved regardless of spacing.
+    assert_eq!(text.replace(' ', ""), "ABC");
 }
 
 // === span splitting ======================================================

@@ -15,7 +15,11 @@ use crate::model::{Char, Line, TextPage, Word};
 /// WORD_GAP_FRAC` starts a new word even without a literal space (PRD §8.6.2;
 /// PyMuPDF uses ≈ 0.2–0.3× space width — we key off the font size, which is a
 /// stable proxy across fonts).
-const WORD_GAP_FRAC: f64 = 0.2;
+///
+/// Shared with [`crate::layout`], whose line assembly synthesizes an inter-word
+/// space at the very same threshold — so text/dict/blocks word boundaries agree
+/// with `get_text("words")`.
+pub(crate) const WORD_GAP_FRAC: f64 = 0.2;
 
 /// Extracts every word of a [`TextPage`] in reading order (PRD §10.7).
 #[must_use]

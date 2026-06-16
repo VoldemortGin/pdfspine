@@ -299,6 +299,30 @@ impl DevGlyph {
         // Cross axis is `dir` rotated +90°: (-sin, cos).
         -self.dir.1 * self.origin.x + self.dir.0 * self.origin.y
     }
+
+    /// The glyph cell's `[start, end]` projection onto the reading axis — the
+    /// leading and trailing edges in advance order. Projecting the device bbox
+    /// (not just the origin) keeps the inter-glyph gap correct for any writing
+    /// direction / page rotation, mirroring the device-x gap `words.rs` uses for
+    /// horizontal text.
+    fn along_span(&self) -> (f64, f64) {
+        let b = self.bbox.normalize();
+        let (dx, dy) = self.dir;
+        // Project all four corners; the extremes are the leading/trailing edges.
+        let p = [
+            dx * b.x0 + dy * b.y0,
+            dx * b.x1 + dy * b.y0,
+            dx * b.x0 + dy * b.y1,
+            dx * b.x1 + dy * b.y1,
+        ];
+        let mut lo = p[0];
+        let mut hi = p[0];
+        for &v in &p[1..] {
+            lo = lo.min(v);
+            hi = hi.max(v);
+        }
+        (lo, hi)
+    }
 }
 
 /// The device-space writing-direction unit vector for a writing mode. We
@@ -723,6 +747,12 @@ fn build_line(glyphs: &[&DevGlyph], seq: usize) -> Line {
 
     let mut spans: Vec<Span> = Vec::new();
     let mut line_bbox = Rect::default();
+    // Trailing reading-axis edge of the previously emitted glyph + the last char
+    // we emitted, so we can synthesize one inter-word space whenever a spatial
+    // gap exceeds the word-gap threshold — the layout-stage word-space synthesis
+    // that `serialize`/`words` rely on (mirrors [`crate::words`]).
+    let mut prev_end: Option<f64> = None;
+    let mut prev_char: Option<char> = None;
 
     for g in glyphs {
         let mut gflags = g.flags;
@@ -757,6 +787,32 @@ fn build_line(glyphs: &[&DevGlyph], seq: usize) -> Line {
             });
             spans.last_mut().unwrap()
         };
+
+        // Synthesize an inter-word space from a spatial gap wider than the
+        // word-gap threshold (same rule as `words.rs`), so text/dict/blocks word
+        // boundaries match `get_text("words")` on `TJ`-kerned PDFs that emit no
+        // literal space glyph. Skip it when either side is already whitespace, so
+        // PDFs that *do* emit real space glyphs are never double-spaced. The
+        // space joins this glyph's (new or merged) span so it falls between the
+        // two words in document order regardless of a coinciding style change.
+        let (lead, end) = g.along_span();
+        let first_char = g.text.chars().next();
+        if let (Some(pe), Some(pc), Some(fc)) = (prev_end, prev_char, first_char) {
+            let gap = lead - pe;
+            let thresh = g.size.abs() * crate::words::WORD_GAP_FRAC;
+            if gap > thresh && !is_synth_ws(pc) && !is_synth_ws(fc) {
+                target.text.push(' ');
+                target.chars.push(Char {
+                    // A thin zero-width cell at the new word's origin keeps the
+                    // rawdict char array consistent without inflating any bbox.
+                    origin: g.origin,
+                    bbox: Rect::new(g.origin.x, g.bbox.y0, g.origin.x, g.bbox.y1),
+                    c: ' ',
+                });
+                prev_char = Some(' ');
+            }
+        }
+
         target.bbox = target.bbox.union(&g.bbox);
         for c in g.text.chars() {
             target.text.push(c);
@@ -765,7 +821,9 @@ fn build_line(glyphs: &[&DevGlyph], seq: usize) -> Line {
                 bbox: g.bbox,
                 c,
             });
+            prev_char = Some(c);
         }
+        prev_end = Some(end);
         line_bbox = line_bbox.union(&g.bbox);
     }
 
@@ -776,6 +834,13 @@ fn build_line(glyphs: &[&DevGlyph], seq: usize) -> Line {
         spans,
         seq,
     }
+}
+
+/// Whether a char already counts as whitespace for space synthesis — ASCII
+/// whitespace or NBSP. Mirrors `words::is_word_separator` so the layout and the
+/// word segmenter agree on what already separates two words (no double space).
+fn is_synth_ws(c: char) -> bool {
+    c.is_whitespace() || c == '\u{00A0}'
 }
 
 // === block grouping =======================================================
@@ -1558,6 +1623,126 @@ mod tests {
         assert!(
             idx.windows(2).all(|p| p[0] <= p[1]),
             "single column reading order disturbed: {idx:?} in {texts:?}"
+        );
+    }
+
+    /// One glyph cell at user-x `ox`, baseline `oy`, advance/ink width `w`. The
+    /// ink box is the full cell, so the inter-glyph gap is `next.ox - (ox + w)`.
+    fn cell(c: &str, ox: f64, oy: f64, w: f64, size: f64) -> PositionedGlyph {
+        g(c, ox, oy, w, size)
+    }
+
+    /// The plain `get_text("text")` of a single-line page (no trailing `\n`),
+    /// for asserting synthesized word spaces.
+    fn line_text_of(tp: &TextPage) -> String {
+        tp.blocks
+            .iter()
+            .filter(|b| b.kind == BlockKind::Text)
+            .flat_map(|b| b.lines.iter())
+            .flat_map(|l| l.spans.iter())
+            .map(|s| s.text.as_str())
+            .collect()
+    }
+
+    /// LAYOUT-WORDGAP-001: two words placed with a word-sized along-axis gap and
+    /// NO space glyph between them must serialize WITH a synthesized space — the
+    /// `TJ`-kerned case that previously ran the words together.
+    #[test]
+    fn layout_wordgap_001_synthesizes_space_on_kern_gap() {
+        let size = 10.0;
+        let cw = 6.0;
+        let mut glyphs = Vec::new();
+        // "Hi" then a 4pt gap (> 0.2*10 = 2.0 threshold) then "there", no space.
+        let mut x = 100.0;
+        for ch in "Hi".chars() {
+            glyphs.push(cell(&ch.to_string(), x, 700.0, cw, size));
+            x += cw;
+        }
+        x += 4.0; // word-sized gap, no space glyph emitted
+        for ch in "there".chars() {
+            glyphs.push(cell(&ch.to_string(), x, 700.0, cw, size));
+            x += cw;
+        }
+        let tp = textpage_from_glyphs(&glyphs, &[], letter(), 0);
+        let txt = line_text_of(&tp);
+        assert_eq!(txt, "Hi there", "expected a synthesized space; got {txt:?}");
+    }
+
+    /// LAYOUT-WORDGAP-002: a small intra-word kern (below the threshold) must NOT
+    /// get a space — tight kerning inside a word stays one token.
+    #[test]
+    fn layout_wordgap_002_small_kern_no_space() {
+        let size = 10.0;
+        let cw = 6.0;
+        let mut glyphs = Vec::new();
+        // "AVA" with a tiny 1pt extra gap (< 0.2*10 = 2.0) before each later char.
+        let mut x = 100.0;
+        for ch in "AVA".chars() {
+            glyphs.push(cell(&ch.to_string(), x, 700.0, cw, size));
+            x += cw + 1.0; // sub-threshold kern
+        }
+        let tp = textpage_from_glyphs(&glyphs, &[], letter(), 0);
+        let txt = line_text_of(&tp);
+        assert_eq!(txt, "AVA", "sub-threshold kern must not split; got {txt:?}");
+    }
+
+    /// LAYOUT-WORDGAP-003: a real space glyph between two words must NOT be
+    /// doubled — a born-digital PDF that emits literal spaces stays single-spaced.
+    #[test]
+    fn layout_wordgap_003_real_space_not_doubled() {
+        let size = 10.0;
+        let cw = 6.0;
+        let mut glyphs = Vec::new();
+        let mut x = 100.0;
+        for ch in "Hi".chars() {
+            glyphs.push(cell(&ch.to_string(), x, 700.0, cw, size));
+            x += cw;
+        }
+        // A literal space glyph (~3pt), then the next word abutting it. The gap on
+        // each side of the space is ~0 so no synthesis fires; even if a side gap
+        // were wide, the whitespace neighbor suppresses doubling.
+        glyphs.push(cell(" ", x, 700.0, 3.0, size));
+        x += 3.0;
+        for ch in "there".chars() {
+            glyphs.push(cell(&ch.to_string(), x, 700.0, cw, size));
+            x += cw;
+        }
+        let tp = textpage_from_glyphs(&glyphs, &[], letter(), 0);
+        let txt = line_text_of(&tp);
+        assert_eq!(
+            txt, "Hi there",
+            "real space must not be doubled; got {txt:?}"
+        );
+    }
+
+    /// LAYOUT-WORDGAP-004: a word gap that coincides with a style change (a new
+    /// span) must still place the space between the two words in `line_text`
+    /// order — the span-boundary case.
+    #[test]
+    fn layout_wordgap_004_space_across_style_change() {
+        let size = 10.0;
+        let cw = 6.0;
+        let mut glyphs = Vec::new();
+        let mut x = 100.0;
+        // "Hi" in Helvetica.
+        for ch in "Hi".chars() {
+            glyphs.push(cell(&ch.to_string(), x, 700.0, cw, size));
+            x += cw;
+        }
+        x += 4.0; // word-sized gap
+                  // "there" in a different font (forces a new span at the boundary).
+        for ch in "there".chars() {
+            let mut gl = cell(&ch.to_string(), x, 700.0, cw, size);
+            gl.font_name = SmolStr::new("Times-Bold");
+            glyphs.push(gl);
+            x += cw;
+        }
+        let tp = textpage_from_glyphs(&glyphs, &[], letter(), 0);
+        // Two spans, and the joined line text carries the space between words.
+        let txt = line_text_of(&tp);
+        assert_eq!(
+            txt, "Hi there",
+            "space missing across style change; got {txt:?}"
         );
     }
 }
