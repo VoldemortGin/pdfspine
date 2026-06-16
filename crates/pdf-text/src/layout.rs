@@ -401,7 +401,9 @@ fn group_lines(dev: &[DevGlyph]) -> Vec<Line> {
     let mut order: Vec<usize> = (0..clusters.len()).collect();
     order.sort_by(|&a, &b| cluster_cross[a].total_cmp(&cluster_cross[b]));
 
-    let mut lines = Vec::new();
+    // Advance-order every cluster's glyphs first, so the gutter detector and the
+    // splitter both see runs in reading order.
+    let mut runs: Vec<Vec<usize>> = Vec::with_capacity(order.len());
     for ci in order {
         // Move the cluster's index list out (no clone — `clusters` is consumed).
         let mut idxs = std::mem::take(&mut clusters[ci]);
@@ -415,10 +417,24 @@ fn group_lines(dev: &[DevGlyph]) -> Vec<Line> {
                 *slot = i;
             }
         }
+        runs.push(idxs);
+    }
+
+    // Detect the page's vertical column gutters from a glyph-segment occupancy
+    // profile (robust to baselines that *merge* across the gutter; see
+    // [`detect_page_gutters`]). These let us split a merged full-width baseline
+    // (col-1-line + col-2-line clustered on one baseline) at the exact column
+    // boundary even when the inter-column gap is only ~2–3× a word space — too
+    // small for the local 4×font-size fallback to catch.
+    let body_h = median_glyph_height(dev);
+    let gutters = detect_page_gutters(&runs, dev);
+
+    let mut lines = Vec::new();
+    for idxs in runs {
         // A single baseline cluster may straddle a column gutter; split it into
-        // separate lines wherever a large along-axis gap appears so a line never
-        // crosses a column boundary.
-        for run in split_on_gutter(&idxs, dev) {
+        // separate lines at each detected gutter it crosses (the principled cut),
+        // or — as a fallback when no gutter applies — at a large along-axis gap.
+        for run in split_on_gutter(&idxs, dev, &gutters, body_h) {
             let mut run = run;
             if is_rtl_run(&run, dev) {
                 run.reverse();
@@ -433,31 +449,227 @@ fn group_lines(dev: &[DevGlyph]) -> Vec<Line> {
     lines
 }
 
-/// Splits an advance-ordered baseline run into sub-runs wherever the along-axis
-/// gap between consecutive glyphs exceeds a generous multiple of the font size
-/// (a column gutter). Normal inter-word spaces never trigger this.
-fn split_on_gutter(idxs: &[usize], dev: &[DevGlyph]) -> Vec<Vec<usize>> {
+/// Detects the page's vertical **column gutters** (x-midpoints, left→right) from
+/// a glyph-occupancy profile, returning an empty vector when the page is not
+/// multi-column.
+///
+/// The robustness comes from a property of PDF text: word spaces are emitted as
+/// real space glyphs that fill the inter-word gaps, so *within* a column the
+/// glyph occupancy stays high all the way across. Only a genuine inter-column
+/// gutter is free of glyphs — even the space glyphs stop at the column edge. So
+/// the gutter shows up as a clean near-zero valley in the per-x occupancy
+/// histogram, even when many baselines *merge* across the gutter into one cluster
+/// (the merged cluster's glyphs still stop at the left column edge and resume at
+/// the right column edge, leaving the band empty).
+///
+/// A gutter is an interior near-empty band, at least `min_gap` wide, with a
+/// populated column on each side (so a ragged right margin — empty on its right —
+/// is not mistaken for a gutter). A genuinely continuous full-width line (a
+/// centered title, a running header) fills its would-be gutter with glyphs and so
+/// raises the occupancy there, correctly suppressing a false column; a small
+/// tolerance lets a handful of such crossings through without hiding a real
+/// gutter. Generalizes to 2, 3, or N columns.
+fn detect_page_gutters(runs: &[Vec<usize>], dev: &[DevGlyph]) -> Vec<f64> {
+    // Horizontal-writing region bounds + a representative glyph size.
+    let mut rx0 = f64::INFINITY;
+    let mut rx1 = f64::NEG_INFINITY;
+    let mut size_sum = 0.0;
+    let mut n_glyphs = 0usize;
+    let mut n_lines = 0usize;
+    for idxs in runs {
+        if idxs.is_empty() || dev[idxs[0]].wmode == 1 {
+            continue;
+        }
+        n_lines += 1;
+        for &i in idxs {
+            let b = dev[i].bbox.normalize();
+            if b.x1 <= b.x0 {
+                continue;
+            }
+            rx0 = rx0.min(b.x0);
+            rx1 = rx1.max(b.x1);
+            size_sum += dev[i].size.abs();
+            n_glyphs += 1;
+        }
+    }
+    if n_lines < 4 || n_glyphs < 16 || rx1 <= rx0 {
+        return Vec::new();
+    }
+    let typ_size = (size_sum / n_glyphs as f64).max(1.0);
+    let region_w = (rx1 - rx0).max(1.0);
+
+    // Per-x glyph-occupancy histogram (1pt bins): how many lines have a glyph over
+    // each x. Space glyphs count, so a column stays high across its whole width.
+    let bin_w = 1.0_f64;
+    let nbins = ((region_w / bin_w).ceil() as usize).max(1);
+    let bin_of = |x: f64| -> usize {
+        (((x - rx0) / bin_w).floor() as isize).clamp(0, nbins as isize - 1) as usize
+    };
+    let mut occ = vec![0u32; nbins];
+    for idxs in runs {
+        if idxs.is_empty() || dev[idxs[0]].wmode == 1 {
+            continue;
+        }
+        for &i in idxs {
+            let b = dev[i].bbox.normalize();
+            if b.x1 <= b.x0 {
+                continue;
+            }
+            let (lo, hi) = (bin_of(b.x0), bin_of(b.x1));
+            for c in occ.iter_mut().take(hi + 1).skip(lo) {
+                *c += 1;
+            }
+        }
+    }
+
+    // Typical column occupancy = median of the populated bins (robust to gutters
+    // and ragged margins).
+    let mut nonzero: Vec<u32> = occ.iter().copied().filter(|&v| v > 0).collect();
+    if nonzero.is_empty() {
+        return Vec::new();
+    }
+    nonzero.sort_unstable();
+    let typical = nonzero[nonzero.len() / 2].max(1);
+    // A gutter band is near-empty: ≤ a small fraction of the typical column
+    // density (so a few full-width crossings — a title, a footer — are tolerated)
+    // but never more than a couple of lines absolutely (a sparse page must not
+    // turn every low bin into a gutter).
+    let low = (((typical as f64) * 0.15).round() as u32).min(2);
+    let side_floor = ((typical as f64) * 0.40).ceil().max(1.0) as u32;
+    // A gutter is comfortably wider than inter-letter spacing (~0.4× font size),
+    // but narrow letter-size gutters (a few points) still count.
+    let min_gap = (typ_size * 0.4).max(2.0);
+
+    // Maximal interior runs of near-empty bins are gutter candidates.
+    let mut candidates: Vec<(usize, usize)> = Vec::new();
+    let mut run_start: Option<usize> = None;
+    for (i, &v) in occ.iter().enumerate() {
+        match (v <= low, run_start) {
+            (true, None) => run_start = Some(i),
+            (false, Some(s)) => {
+                candidates.push((s, i));
+                run_start = None;
+            }
+            _ => {}
+        }
+    }
+    if let Some(s) = run_start {
+        candidates.push((s, nbins));
+    }
+
+    let median_occ = |a: usize, b: usize| -> u32 {
+        if a >= b {
+            return 0;
+        }
+        let mut v: Vec<u32> = occ[a..b].to_vec();
+        v.sort_unstable();
+        v[v.len() / 2]
+    };
+
+    let mut gutters: Vec<f64> = Vec::new();
+    for (lo_bin, hi_bin) in candidates {
+        let lo = (rx0 + lo_bin as f64 * bin_w).max(rx0);
+        let hi = (rx0 + hi_bin as f64 * bin_w).min(rx1);
+        // Strictly interior + wide enough.
+        if lo <= rx0 + 1e-6 || hi >= rx1 - 1e-6 || hi - lo < min_gap {
+            continue;
+        }
+        // A populated column on each side (rejects a ragged right margin).
+        if median_occ(0, lo_bin) >= side_floor && median_occ(hi_bin.min(nbins), nbins) >= side_floor
+        {
+            gutters.push((lo + hi) / 2.0);
+        }
+    }
+    gutters.sort_by(f64::total_cmp);
+    gutters
+}
+
+/// Splits an advance-ordered baseline run into per-column sub-runs. A break is
+/// taken wherever the run crosses a detected page column `gutter` (the principled
+/// cut), or — as a fallback when no gutter applies — wherever the along-axis gap
+/// between consecutive glyphs exceeds a generous multiple of the font size.
+/// Normal inter-word spaces never trigger either rule.
+///
+/// A large-type heading/title legitimately spans the body's column gutters (e.g.
+/// a centered title over a multi-column page); when this cluster's glyphs are
+/// clearly taller than the body text it is kept whole and only split on a
+/// genuinely huge gap.
+fn split_on_gutter(
+    idxs: &[usize],
+    dev: &[DevGlyph],
+    gutters: &[f64],
+    body_h: f64,
+) -> Vec<Vec<usize>> {
+    let cluster_h = run_glyph_height(idxs, dev);
+    let is_heading = body_h > 0.0 && cluster_h > body_h * 1.6;
+    let gutters: &[f64] = if is_heading { &[] } else { gutters };
+
     let mut runs: Vec<Vec<usize>> = Vec::new();
     let mut cur: Vec<usize> = Vec::new();
     let mut prev_end: Option<f64> = None;
+    // The device-x left edge of the previous glyph, so a gutter crossing fires
+    // even when a wide glyph's bbox straddles the gutter line. Gutters are
+    // device-x midpoints (from [`detect_page_gutters`], over horizontal glyphs),
+    // so the crossing test uses device x; the huge-gap fallback uses the reading
+    // axis so it still works for rotated text.
+    let mut prev_x0: Option<f64> = None;
     for &i in idxs {
         let g = &dev[i];
         // Project the glyph's leading/trailing edges onto the reading axis.
         let start = g.along();
         let extent = (g.bbox.width().hypot(g.bbox.height())).max(g.size.abs());
-        let gutter = g.size.abs().max(1.0) * 4.0; // ≫ a normal space
+        let x0 = g.bbox.normalize().x0;
         if let Some(pe) = prev_end {
-            if start - pe > gutter {
+            let px = prev_x0.unwrap_or(x0);
+            // Cut where a detected gutter separates this glyph from the previous
+            // one: the previous glyph starts left of the gutter and this glyph
+            // starts at/right of it.
+            let crosses_gutter = gutters.iter().any(|&gx| px < gx - 0.5 && x0 >= gx - 0.5);
+            // Fallback: no gutter in play but a gap far wider than a word space.
+            let huge_gap = start - pe > g.size.abs().max(1.0) * 4.0;
+            if crosses_gutter || huge_gap {
                 runs.push(std::mem::take(&mut cur));
             }
         }
         cur.push(i);
         prev_end = Some(start + extent);
+        prev_x0 = Some(x0);
     }
     if !cur.is_empty() {
         runs.push(cur);
     }
     runs
+}
+
+/// The median glyph cell height over all horizontal-writing glyphs — a robust
+/// estimate of the page's body text size. Vertical-writing glyphs are excluded.
+fn median_glyph_height(dev: &[DevGlyph]) -> f64 {
+    let mut hs: Vec<f64> = dev
+        .iter()
+        .filter(|g| g.wmode != 1)
+        .map(|g| g.bbox.height())
+        .filter(|h| *h > 0.0)
+        .collect();
+    if hs.is_empty() {
+        return 0.0;
+    }
+    hs.sort_by(f64::total_cmp);
+    hs[hs.len() / 2]
+}
+
+/// The median glyph cell height within one baseline cluster (used to spot a
+/// large-type heading that must not be split at a body column gutter).
+fn run_glyph_height(idxs: &[usize], dev: &[DevGlyph]) -> f64 {
+    let mut hs: Vec<f64> = idxs
+        .iter()
+        .map(|&i| dev[i].bbox.height())
+        .filter(|h| *h > 0.0)
+        .collect();
+    if hs.is_empty() {
+        return 0.0;
+    }
+    hs.sort_by(f64::total_cmp);
+    hs[hs.len() / 2]
 }
 
 /// Two writing directions match if their unit vectors are within ~5°.
@@ -1125,4 +1337,227 @@ fn strip_subset_tag(name: &str) -> SmolStr {
         }
     }
     SmolStr::new(name)
+}
+
+// === tests ================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::WritingDir;
+
+    /// Builds one horizontal-writing glyph cell in PDF user space (origin
+    /// bottom-left). `w` is the cell advance width; the ink box is the full cell.
+    /// Word spaces are emitted as their own glyphs — exactly as real PDF content
+    /// streams do — so the gutter detector sees a glyph-free band only at a true
+    /// inter-column gutter (the property the detector relies on).
+    fn g(c: &str, ox: f64, oy: f64, w: f64, size: f64) -> PositionedGlyph {
+        PositionedGlyph {
+            unicode: SmolStr::new(c),
+            code: c.chars().next().map_or(0, |ch| ch as u32),
+            origin: Point::new(ox, oy),
+            bbox: Rect::new(ox, oy - 0.2 * size, ox + w, oy + 0.7 * size),
+            font_name: SmolStr::new("Helvetica"),
+            size,
+            color: 0,
+            render_mode: 0,
+            writing_dir: WritingDir::Horizontal,
+            ascender: 0.7,
+            descender: -0.2,
+        }
+    }
+
+    /// Lays a word (then a trailing space glyph) starting at user-x `x`, baseline
+    /// `y`. Returns the x-cursor after the word + space. Each char is ~6pt wide.
+    fn word(out: &mut Vec<PositionedGlyph>, text: &str, x: f64, y: f64, size: f64) -> f64 {
+        let cw = 6.0;
+        let mut cx = x;
+        for ch in text.chars() {
+            out.push(g(&ch.to_string(), cx, y, cw, size));
+            cx += cw;
+        }
+        // Trailing inter-word space glyph (~3pt), as real PDFs emit.
+        out.push(g(" ", cx, y, 3.0, size));
+        cx + 3.0
+    }
+
+    /// Fills a column line: a keyword word then enough `filler` words (with word
+    /// spaces) to cover `[x_start, x_end]`, so the column is a realistic-width
+    /// run of glyphs (not a single short word). Returns nothing.
+    fn col_line(
+        out: &mut Vec<PositionedGlyph>,
+        keyword: &str,
+        x_start: f64,
+        x_end: f64,
+        y: f64,
+        size: f64,
+    ) {
+        let mut x = word(out, keyword, x_start, y, size);
+        while x < x_end - 20.0 {
+            x = word(out, "filler", x, y, size);
+        }
+    }
+
+    /// The page's emitted block text in reading order (one string per block).
+    fn block_texts(tp: &TextPage) -> Vec<String> {
+        tp.blocks
+            .iter()
+            .filter(|b| b.kind == BlockKind::Text)
+            .map(|b| {
+                b.lines
+                    .iter()
+                    .flat_map(|l| l.spans.iter())
+                    .map(|s| s.text.as_str())
+                    .collect::<String>()
+                    .replace(' ', "")
+            })
+            .collect()
+    }
+
+    /// The index of the first block whose joined text contains `needle`.
+    fn find(texts: &[String], needle: &str) -> Option<usize> {
+        texts.iter().position(|t| t.contains(needle))
+    }
+
+    // A US-Letter page.
+    fn letter() -> Rect {
+        Rect::new(0.0, 0.0, 612.0, 792.0)
+    }
+
+    /// LAYOUT-COLUMN-REGRESSION-001: a two-column body must read column-major
+    /// (all of the left column top→bottom, then the right column), NOT row-major
+    /// (left-line-1, right-line-1, left-line-2, …). The left column lives in
+    /// x∈[40,280], the right in x∈[320,560], with a ~40pt glyph-free gutter. To
+    /// make the bug observable even with the bbox-XY-cut, the *first* baseline is
+    /// laid as a single full-width cluster (left + right words share one
+    /// baseline) — the merged-baseline case that bridges the gutter and used to
+    /// defeat column detection.
+    #[test]
+    fn layout_column_regression_001_two_column_reads_column_major() {
+        let size = 10.0;
+        let mut glyphs = Vec::new();
+        // Six baselines; user y decreases down the page (origin bottom-left).
+        let ys = [740.0, 720.0, 700.0, 680.0, 660.0, 640.0];
+        let left_words = ["Lone", "Ltwo", "Lthree", "Lfour", "Lfive", "Lsix"];
+        let right_words = ["Rone", "Rtwo", "Rthree", "Rfour", "Rfive", "Rsix"];
+        for (i, &y) in ys.iter().enumerate() {
+            // Left column spans x∈[40,280], right column x∈[320,560], on the SAME
+            // baseline — so each row is one merged full-width cluster bridging the
+            // gutter (the case that used to defeat column detection).
+            col_line(&mut glyphs, left_words[i], 40.0, 280.0, y, size);
+            col_line(&mut glyphs, right_words[i], 320.0, 560.0, y, size);
+        }
+
+        let tp = textpage_from_glyphs(&glyphs, &[], letter(), 0);
+        let texts = block_texts(&tp);
+
+        // Every left word must appear before every right word in the block order.
+        let last_left = left_words
+            .iter()
+            .map(|w| find(&texts, w).unwrap_or(usize::MAX))
+            .max()
+            .unwrap();
+        let first_right = right_words
+            .iter()
+            .map(|w| find(&texts, w).unwrap_or(0))
+            .min()
+            .unwrap();
+        assert!(
+            last_left < first_right,
+            "expected column-major (all L before all R); got block order {texts:?}"
+        );
+
+        // And within each column, the words read top→bottom.
+        let l_idx: Vec<usize> = left_words
+            .iter()
+            .map(|w| find(&texts, w).unwrap())
+            .collect();
+        assert!(
+            l_idx.windows(2).all(|p| p[0] <= p[1]),
+            "left column not top→bottom: {l_idx:?} in {texts:?}"
+        );
+    }
+
+    /// LAYOUT-COLUMN-REGRESSION-002: a full-width header spanning both columns
+    /// must read FIRST (in document order at its y), then the two columns
+    /// column-major. The header is large continuous type with no gutter gap, so
+    /// it must not be split at the body gutter nor merged into a column.
+    #[test]
+    fn layout_column_regression_002_header_over_two_columns() {
+        let body = 10.0;
+        let head = 18.0; // clearly larger than body → a heading
+        let mut glyphs = Vec::new();
+        // Full-width centered header near the top, continuous across the gutter.
+        word(
+            &mut glyphs,
+            "HeaderTitleSpanningWholeWidthAcrossColumns",
+            80.0,
+            760.0,
+            head,
+        );
+        // Two-column body below.
+        let ys = [730.0, 712.0, 694.0, 676.0];
+        let left_words = ["Aone", "Atwo", "Athree", "Afour"];
+        let right_words = ["Bone", "Btwo", "Bthree", "Bfour"];
+        for (i, &y) in ys.iter().enumerate() {
+            col_line(&mut glyphs, left_words[i], 40.0, 280.0, y, body);
+            col_line(&mut glyphs, right_words[i], 320.0, 560.0, y, body);
+        }
+
+        let tp = textpage_from_glyphs(&glyphs, &[], letter(), 0);
+        let texts = block_texts(&tp);
+
+        let header = find(&texts, "HeaderTitle").expect("header block present");
+        let last_a = left_words
+            .iter()
+            .map(|w| find(&texts, w).unwrap())
+            .max()
+            .unwrap();
+        let first_b = right_words
+            .iter()
+            .map(|w| find(&texts, w).unwrap())
+            .min()
+            .unwrap();
+        // Header first, then left column, then right column.
+        assert!(
+            header < last_a && last_a < first_b,
+            "expected header → left col → right col; got {texts:?}"
+        );
+        // The header block must contain text from BOTH halves (not be split at the
+        // gutter, and not be merged into one column).
+        assert!(
+            texts[header].contains("Header") && texts[header].contains("Columns"),
+            "header was shredded at the gutter: {:?}",
+            texts[header]
+        );
+    }
+
+    /// LAYOUT-COLUMN-REGRESSION-003: an ordinary single-column page must NOT be
+    /// split into columns by a chance vertical alignment of word breaks (no
+    /// glyph-free interior band spans every line), and reads top→bottom.
+    #[test]
+    fn layout_column_regression_003_single_column_not_split() {
+        let size = 10.0;
+        let mut glyphs = Vec::new();
+        let ys = [740.0, 722.0, 704.0, 686.0, 668.0, 650.0];
+        let words = ["Wone", "Wtwo", "Wthree", "Wfour", "Wfive", "Wsix"];
+        for (i, &y) in ys.iter().enumerate() {
+            // A full-width single-column line: several words across the page with
+            // ordinary word spaces (no glyph-free gutter band).
+            let mut x = 40.0;
+            x = word(&mut glyphs, words[i], x, y, size);
+            x = word(&mut glyphs, "filler", x, y, size);
+            x = word(&mut glyphs, "filler", x, y, size);
+            let _ = word(&mut glyphs, "tail", x, y, size);
+        }
+
+        let tp = textpage_from_glyphs(&glyphs, &[], letter(), 0);
+        let texts = block_texts(&tp);
+        let idx: Vec<usize> = words.iter().map(|w| find(&texts, w).unwrap()).collect();
+        // Lines stay in top→bottom document order (no column reshuffle).
+        assert!(
+            idx.windows(2).all(|p| p[0] <= p[1]),
+            "single column reading order disturbed: {idx:?} in {texts:?}"
+        );
+    }
 }
