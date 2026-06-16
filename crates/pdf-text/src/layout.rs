@@ -745,6 +745,24 @@ fn build_line(glyphs: &[&DevGlyph], seq: usize) -> Line {
     crosses.sort_by(f64::total_cmp);
     let baseline = crosses.get(crosses.len() / 2).copied().unwrap_or(0.0);
 
+    // A stable per-line device-space size for the word-gap threshold: the median
+    // glyph-cell height (device space), invariant to whether the text scale
+    // lives in the `Tf` operand or the CTM. The raw operand `g.size` is in *text*
+    // space, so comparing `g.size * WORD_GAP_FRAC` against device-space gaps
+    // collapses the threshold on PMC/LaTeX PDFs that emit `Tf 1` and bake the
+    // scale into the matrix — shattering words and URLs. Mirrors `words.rs` so
+    // synthesized inter-word spaces agree with `get_text("words")`. Falls back to
+    // the raw size only for degenerate lines with no positive cell height.
+    let eff_size = {
+        let h = crate::words::effective_size_from_heights(glyphs.iter().map(|g| g.bbox.height()));
+        if h > 0.0 {
+            h
+        } else {
+            glyphs.first().map_or(0.0, |g| g.size.abs())
+        }
+    };
+    let gap_thresh = eff_size * crate::words::WORD_GAP_FRAC;
+
     let mut spans: Vec<Span> = Vec::new();
     let mut line_bbox = Rect::default();
     // Trailing reading-axis edge of the previously emitted glyph + the last char
@@ -799,8 +817,7 @@ fn build_line(glyphs: &[&DevGlyph], seq: usize) -> Line {
         let first_char = g.text.chars().next();
         if let (Some(pe), Some(pc), Some(fc)) = (prev_end, prev_char, first_char) {
             let gap = lead - pe;
-            let thresh = g.size.abs() * crate::words::WORD_GAP_FRAC;
-            if gap > thresh && !is_synth_ws(pc) && !is_synth_ws(fc) {
+            if gap > gap_thresh && !is_synth_ws(pc) && !is_synth_ws(fc) {
                 target.text.push(' ');
                 target.chars.push(Char {
                     // A thin zero-width cell at the new word's origin keeps the
@@ -1743,6 +1760,80 @@ mod tests {
         assert_eq!(
             txt, "Hi there",
             "space missing across style change; got {txt:?}"
+        );
+    }
+
+    /// One glyph cell whose `Tf` operand is 1.0 but whose geometry is `scale`×
+    /// larger — the PMC/LaTeX case where the text scale lives in the text/CTM
+    /// matrix, not the font operand. `ox`/`oy`/`w` are pre-scaled device-ish
+    /// user-space coordinates; `size` stays 1.0, mimicking `Tf 1`.
+    fn scaled_cell(c: &str, ox: f64, oy: f64, w: f64, scale: f64) -> PositionedGlyph {
+        PositionedGlyph {
+            unicode: SmolStr::new(c),
+            code: c.chars().next().map_or(0, |ch| ch as u32),
+            origin: Point::new(ox, oy),
+            // Cell height ≈ 0.9*scale (matches `g()`'s 0.7+0.2 cell), so the
+            // device-effective size recovers ~`scale` while `size` stays 1.0.
+            bbox: Rect::new(ox, oy - 0.2 * scale, ox + w, oy + 0.7 * scale),
+            font_name: SmolStr::new("Helvetica"),
+            size: 1.0,
+            color: 0,
+            render_mode: 0,
+            writing_dir: WritingDir::Horizontal,
+            ascender: 0.7,
+            descender: -0.2,
+        }
+    }
+
+    /// LAYOUT-WORDGAP-005: the scale lives in the CTM, not `Tf`. Every glyph
+    /// reports `size = 1.0` (the raw `Tf` operand) while its geometry is rendered
+    /// at ~8pt — exactly how PMC/LaTeX PDFs lay out body text. The word-gap
+    /// threshold must derive from the *device* glyph size (≈8), not the raw
+    /// operand (1.0): with the old `size * 0.2 = 0.2` threshold the tiny ~0.8pt
+    /// intra-word kerns here tripped a false split. A whole word with normal
+    /// kerns must stay one token; a real ≥1.6pt word gap must still split.
+    #[test]
+    fn layout_wordgap_005_threshold_uses_device_size_not_tf_operand() {
+        let scale = 8.0;
+        let cw = scale * 0.6; // ~4.8pt advance per glyph at 8pt
+        let intra_kern = scale * 0.1; // ~0.8pt: normal intra-word kern
+        let word_gap = scale * 0.5; // ~4.0pt: a real inter-word gap
+
+        let mut glyphs = Vec::new();
+        let y = 700.0;
+        let mut x = 100.0;
+        // "important" with a small intra-word kern between every glyph. Under the
+        // old text-space threshold (0.2) each 0.8pt kern would split the word; the
+        // device-space threshold (~0.2*8 = 1.6) leaves it intact.
+        for ch in "important".chars() {
+            glyphs.push(scaled_cell(&ch.to_string(), x, y, cw, scale));
+            x += cw + intra_kern;
+        }
+        // A genuine inter-word gap (no space glyph), then "word".
+        x += word_gap;
+        for ch in "word".chars() {
+            glyphs.push(scaled_cell(&ch.to_string(), x, y, cw, scale));
+            x += cw + intra_kern;
+        }
+
+        let tp = textpage_from_glyphs(&glyphs, &[], letter(), 0);
+        let txt = line_text_of(&tp);
+        // No mid-word space inside "important"; exactly one synthesized space at
+        // the real word boundary.
+        assert_eq!(
+            txt, "important word",
+            "CTM-scaled threshold mis-fired (should be device-size relative); got {txt:?}"
+        );
+
+        // The word segmenter must agree with the layout-stage synthesis.
+        let words: Vec<String> = crate::words::words(&tp)
+            .into_iter()
+            .map(|w| w.text)
+            .collect();
+        assert_eq!(
+            words,
+            vec!["important".to_string(), "word".to_string()],
+            "get_text(\"words\") disagreed with layout split; got {words:?}"
         );
     }
 }
