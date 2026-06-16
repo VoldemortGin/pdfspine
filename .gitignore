@@ -47,6 +47,7 @@ conformance/bench-results.json
 conformance/gt/cache/
 conformance/gt/corpus-*/
 conformance/gt/gt-*.json
+conformance/gt/render-results.json
 conformance/gt/__pycache__/
 
 # Editor / OS
