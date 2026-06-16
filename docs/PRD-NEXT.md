@@ -9,42 +9,31 @@
 
 Baseline before session: 1325 Rust + 374 pytest green; COMPAT coverage 63.7% (490/769).
 
-**Done & committed this session:**
-- `05e90a3` — Objective ground-truth accuracy harness `conformance/gt/` (see §2).
-- `15d02a9` — **Multi-column reading-order fix** (occupancy-valley gutter detection in
-  `crates/pdf-text/src/layout.rs`). Born-digital `order` 0.41–0.60 → **0.995–0.999**
-  (now matching fitz 1.0); no PMC regression; 3 committed regression tests.
-  Verified: fmt clean, clippy clean, cargo test **1325 passed**, pytest **374 passed**.
+**TEXT EXTRACTION IS NOW AT PARITY WITH FITZ.** Committed this session: objective GT harness
+(`05e90a3`) + 4 text fixes — `15d02a9` column-major reading order, `fa31931` inter-word space
+synthesis, `8c80f61` device-space gap threshold (not raw Tf), `c88e807` baseline-merged column
+split. Corpora added: born-digital, PMC, EUR-Lex (8 langs), GovDocs1 robustness, CJK.
+Benchmark (`bcfa980`/`904097f`, see `docs/BENCHMARKS.md`): 58-doc objective GT oxide
+**lev 0.834 / f1 0.868 / jaccard 0.834 / order 0.975** vs fitz 0.848/0.879/0.836/0.983 — within
+1–2%, jaccard dead-even. CJK tied; 8-language at near-parity; robustness 23/23 open / 0 panics;
+real-corpus vs fitz Lev 0.823→0.895, Jaccard 0.909→0.971. **1331 Rust + 374 pytest green.**
 
-- `fa31931` — **Inter-word space synthesis** for TJ-kerned PDFs (#2 accuracy, §1.1).
-  `build_line` synthesizes a space when along-axis glyph gap > shared `WORD_GAP_FRAC`
-  (0.2×font). **PMC oxide f1 0.219→0.513, jaccard 0.181→0.403, order 0.650→0.965** — now
-  matching fitz (0.530/0.976); born not regressed; 4 regression tests; cargo test + pytest
-  374 green. (Done this session — was in-flight, now committed.)
+## 1. Track B — Extraction accuracy
 
-## 1. Track B — Extraction accuracy (PRIORITY)
+Headline text-extraction parity ACHIEVED (above). Remaining B items (lower priority now):
 
-The headline goal "match or exceed fitz" is now **measured objectively** (§2), not via a
-pseudo-oracle. Two problems were empirically separated:
+### 1.1 Missing inter-word spaces — DONE (`fa31931` + `8c80f61` Tf-scale). PMC f1 0.219→0.528.
+### 1.2 Residual content gap — DONE. After the space + Tf-scale + baseline-split fixes, oxide
+content matches fitz on real corpora (PMC jaccard 0.415 vs 0.419; EUR-Lex 0.939 vs 0.941; born
+0.965 = fitz). No systematic content deficit remains.
 
-- **Reading order** — FIXED this session (born-digital isolated it: order 0.55→0.998).
-- **Content (word spacing + decoding)** — partially in-flight.
-
-### 1.1 Missing inter-word spaces (IN-FLIGHT — highest remaining B value)
-On TJ-kerned/LaTeX PDFs (e.g. PLoS papers) words are positioned without literal space
-glyphs. `get_text("words")` recovers boundaries (gap-based, `words.rs WORD_GAP_FRAC=0.2`)
-but `get_text("text"/"dict"/"blocks")` did NOT — `build_line()` concatenated glyphs with no
-gap→space synthesis. Symptom: PMC212687 → `'AFunctionalAnalysisoftheSpacer'`.
-Fix = synthesize spaces in `build_line` using the shared 0.2×font threshold (don't double
-real spaces; compute gap along the reading axis; share the constant with words.rs; add
-regression tests). **Objective:** PMC oxide f1 0.219→~0.5, order 0.650→~0.95; born must not
-regress (lev ~0.92, order ~0.998).
-
-### 1.2 Remaining content gap after spaces (diagnose next)
-After 1.1, re-measure PMC. If oxide f1 still trails fitz (fitz ~0.53 vs GT), diagnose the
-residual: candidate causes = glyph/CMap decoding on scientific Type1/CFF fonts, dropped
-columns/pages, spurious tokens. Use the per-extractor token precision/recall in
-`conformance/gt/run_gt.py` output (fitz-vs-GT vs oxide-vs-GT diff) to localize.
+### 1.2b Minor follow-ups (polish):
+- **Kangxi-radical fold** — oxide raw CJK output uses radical codepoints (U+2F09 ⼉) where fitz
+  folds to canonical ideographs (U+513F 儿). NFKC-equivalent/cosmetic (scorer neutralizes it).
+  Small `pdf-fonts`/CID→Unicode fix for exact raw-output parity. Low priority.
+- Scale the GovDocs1 robustness corpus (fetcher got 23 due to a throttled link; rerun for 250+).
+- Wire a born-digital `order ≥ 0.95` regression gate into CI.
+- Extend differential to RENDERING (pixmap SSIM vs fitz) and TABLES (find_tables vs JATS/fitz).
 
 ### 1.3 Refresh the fitz-oracle corpus report on current HEAD
 `conformance/REPORT.md` (text vs fitz: Lev 0.823) is from 2026-06-15, BEFORE the
