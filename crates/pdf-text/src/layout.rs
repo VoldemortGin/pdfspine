@@ -458,19 +458,98 @@ fn group_lines(dev: &[DevGlyph]) -> Vec<Line> {
         // A single baseline cluster may straddle a column gutter; split it into
         // separate lines at each detected gutter it crosses (the principled cut),
         // or — as a fallback when no gutter applies — at a large along-axis gap.
-        for run in split_on_gutter(&idxs, dev, &gutters, body_h) {
-            let mut run = run;
-            if is_rtl_run(&run, dev) {
-                run.reverse();
+        for col_run in split_on_gutter(&idxs, dev, &gutters, body_h) {
+            // A per-column run can still hold two *distinct* baselines that the
+            // content-order baseline sweep over-merged: when one column's line
+            // baseline sits between two adjacent lines of the other column (tight
+            // CSS line-height), the bridging line pulls both neighbours into one
+            // cluster, and the gutter split leaves the two real lines interleaved
+            // within a single column piece. Separate any such piece into its
+            // distinct baselines so each emitted line is a single physical line —
+            // otherwise `build_line`'s advance sort would weave the two baselines
+            // character-by-character.
+            for run in split_on_baseline(&col_run, dev) {
+                let mut run = run;
+                if is_rtl_run(&run, dev) {
+                    run.reverse();
+                }
+                // Content-order key: the smallest source-glyph index in this run,
+                // i.e. the earliest-painted glyph of the line (document order).
+                let seq = run.iter().copied().min().unwrap_or(0);
+                let line_glyphs: Vec<&DevGlyph> = run.iter().map(|&i| &dev[i]).collect();
+                lines.push(build_line(&line_glyphs, seq));
             }
-            // Content-order key: the smallest source-glyph index in this run,
-            // i.e. the earliest-painted glyph of the line (document order).
-            let seq = run.iter().copied().min().unwrap_or(0);
-            let line_glyphs: Vec<&DevGlyph> = run.iter().map(|&i| &dev[i]).collect();
-            lines.push(build_line(&line_glyphs, seq));
         }
     }
     lines
+}
+
+/// Separates a column run into its **distinct baselines**, returning each as its
+/// own advance-ordered sub-run (top baseline first).
+///
+/// The content-order baseline sweep ([`group_lines`]) keys each cluster on its
+/// seed glyph's cross value and admits any glyph within `LINE_TOL_FRAC × size`.
+/// On a tight multi-column layout one column's line baseline can fall *between*
+/// two adjacent lines of the neighbouring column; that bridging line is then
+/// within tolerance of both, so all three baselines collapse into one cluster.
+/// After the gutter split the column piece still carries two real baselines whose
+/// glyphs interleave in content-stream order — and a plain advance sort would
+/// weave them character-by-character (`is`+`of` → `iosf`).
+///
+/// We re-cluster the piece purely on the cross axis with single-link gaps: sort
+/// by cross, break wherever consecutive cross values jump by more than the line
+/// tolerance. Legitimate intra-line variation (super/subscripts, baseline jitter)
+/// stays under the tolerance and is never split; genuinely distinct lines (a full
+/// line height apart) separate cleanly. Returns the input unchanged when it holds
+/// a single baseline (the overwhelmingly common case), so single-column and
+/// already-correct lines are untouched.
+fn split_on_baseline(idxs: &[usize], dev: &[DevGlyph]) -> Vec<Vec<usize>> {
+    if idxs.len() < 2 {
+        return vec![idxs.to_vec()];
+    }
+    // Order by cross (baseline), carrying each glyph's representative size so the
+    // gap tolerance keys on the larger of the two adjacent baselines' sizes (same
+    // rule as the line sweep). Device y-down, so smaller cross = higher on page.
+    let mut keyed: Vec<(f64, f64, usize)> = idxs
+        .iter()
+        .map(|&i| (dev[i].cross(), dev[i].size.abs(), i))
+        .collect();
+    keyed.sort_by(|a, b| a.0.total_cmp(&b.0));
+
+    // Find the baseline breakpoints: a jump larger than the line tolerance,
+    // keyed (like the line sweep) on the larger of the two adjacent baselines'
+    // representative sizes.
+    let mut groups: Vec<Vec<usize>> = Vec::new();
+    let mut cur: Vec<usize> = vec![keyed[0].2];
+    let mut prev_cross = keyed[0].0;
+    let mut prev_size = keyed[0].1;
+    for &(cross, size, i) in &keyed[1..] {
+        let tol = size.max(prev_size).max(1.0) * LINE_TOL_FRAC;
+        if cross - prev_cross > tol {
+            groups.push(std::mem::take(&mut cur));
+        }
+        cur.push(i);
+        prev_cross = cross;
+        prev_size = size;
+    }
+    if !cur.is_empty() {
+        groups.push(cur);
+    }
+    if groups.len() == 1 {
+        // Single baseline: return the original advance-ordered run unchanged.
+        return vec![idxs.to_vec()];
+    }
+    // Re-sort each distinct baseline by advance so it reads as a whole line.
+    for g in &mut groups {
+        if g.len() > 1 {
+            let mut k: Vec<(f64, usize)> = g.iter().map(|&i| (dev[i].along(), i)).collect();
+            k.sort_by(|a, b| a.0.total_cmp(&b.0));
+            for (slot, (_, i)) in g.iter_mut().zip(k) {
+                *slot = i;
+            }
+        }
+    }
+    groups
 }
 
 /// Detects the page's vertical **column gutters** (x-midpoints, left→right) from
@@ -1641,6 +1720,80 @@ mod tests {
             idx.windows(2).all(|p| p[0] <= p[1]),
             "single column reading order disturbed: {idx:?} in {texts:?}"
         );
+    }
+
+    /// LAYOUT-COLUMN-REGRESSION-004: two adjacent lines of ONE column whose
+    /// baselines bracket a single line of the *other* column (tight CSS
+    /// line-height) must each emit as a whole-word line — NOT character-interleaved
+    /// (`is`+`of` → `iosf`).
+    ///
+    /// The content-order baseline sweep keys a cluster on its seed glyph's cross
+    /// and admits anything within `LINE_TOL_FRAC × size`. Here the left column's
+    /// line baseline sits exactly between the right column's two line baselines, so
+    /// the left line bridges them: all three collapse into one cluster. The gutter
+    /// split peels the left line off, but the right piece still holds two distinct
+    /// baselines whose glyphs arrive row-major (rightLineA-char, rightLineB-char,
+    /// …); a plain advance sort would weave them character-by-character. The
+    /// baseline-refinement split must separate the right piece into its two real
+    /// lines so each reads as whole words.
+    #[test]
+    fn layout_column_regression_004_bracketing_baselines_no_char_interleave() {
+        let size = 12.0;
+        let mut glyphs = Vec::new();
+        // A realistic two-column page (left x∈[40,280], right x∈[320,560], ~40pt
+        // glyph-free gutter) so the page-gutter detector fires (it needs ≥4 lines).
+        // Each row's left + right lines share a baseline (the tight-baseline case),
+        // EXCEPT the focus row, where the left line's baseline sits exactly between
+        // the right column's two lines and bridges them into one content cluster.
+        let normal_ys = [560.0, 544.0, 528.0, 512.0];
+        for (k, &y) in normal_ys.iter().enumerate() {
+            col_line(&mut glyphs, &format!("L{k}word"), 40.0, 280.0, y, size);
+            col_line(&mut glyphs, &format!("R{k}word"), 320.0, 560.0, y, size);
+        }
+        // Focus row: the left line at y=494 brackets the right column's upper
+        // (y=500) and lower (y=488) lines — a full line-height (12pt) apart, so once
+        // the gutter peels the bridging left line off, the right piece still holds
+        // two distinct baselines that arrived row-major and must be un-woven.
+        col_line(&mut glyphs, "Leftbridge", 40.0, 280.0, 494.0, size);
+        // Right column upper/lower lines, pushed word-alternately so the source
+        // order genuinely interleaves the two baselines.
+        let upper = ["is", "make", "Twenty", "develope"];
+        let lower = ["of", "capric", "character", "years"];
+        let mut xu = 320.0;
+        let mut xl = 320.0;
+        for k in 0..upper.len() {
+            xu = word(&mut glyphs, upper[k], xu, 500.0, size);
+            xl = word(&mut glyphs, lower[k], xl, 488.0, size);
+        }
+
+        let tp = textpage_from_glyphs(&glyphs, &[], letter(), 0);
+        // Join every line's plain text; the bug shows up as fused tokens like
+        // "iosf" / "makecapric". A correct split yields each word intact.
+        let line_texts: Vec<String> = tp
+            .blocks
+            .iter()
+            .filter(|b| b.kind == BlockKind::Text)
+            .flat_map(|b| b.lines.iter())
+            .map(|l| l.spans.iter().map(|s| s.text.as_str()).collect::<String>())
+            .collect();
+        let all = line_texts.join("\u{1}");
+        // No character interleaving: the upper line's first two words and the lower
+        // line's first two words must each survive as whole tokens.
+        for w in upper.iter().chain(lower.iter()) {
+            assert!(
+                all.contains(w),
+                "word {w:?} was character-interleaved away; got lines {line_texts:?}"
+            );
+        }
+        // And the canonical fused token must NOT appear on any single line.
+        for fused in ["iosf", "makecapric", "ofmake"] {
+            assert!(
+                !line_texts
+                    .iter()
+                    .any(|t| t.replace(' ', "").contains(fused)),
+                "found char-interleaved token {fused:?} in lines {line_texts:?}"
+            );
+        }
     }
 
     /// One glyph cell at user-x `ox`, baseline `oy`, advance/ink width `w`. The
