@@ -35,7 +35,8 @@ fn encode_g4(bits: &[u8], width: u32, rows: u32) -> Vec<u8> {
     enc.finish().expect("finish").finish()
 }
 
-/// Builds a packed bitmap from a closure mapping (x,y) → is_black.
+/// Builds a packed bitmap from a closure mapping (x,y) → is_black, in the
+/// `1 = black` convention used by [`encode_g4`].
 fn make_bitmap(width: u32, rows: u32, f: impl Fn(u32, u32) -> bool) -> Vec<u8> {
     let row_bytes = (width as usize).div_ceil(8);
     let mut out = vec![0u8; row_bytes * rows as usize];
@@ -47,6 +48,13 @@ fn make_bitmap(width: u32, rows: u32, f: impl Fn(u32, u32) -> bool) -> Vec<u8> {
         }
     }
     out
+}
+
+/// The decoder emits the standard 1-bpc DeviceGray polarity (`1 = white`), the
+/// bitwise inverse of the `1 = black` reference from [`make_bitmap`]. All test
+/// widths are multiples of 8, so there are no padding bits to differ.
+fn to_devicegray(black_packed: &[u8]) -> Vec<u8> {
+    black_packed.iter().map(|b| !b).collect()
 }
 
 // --- CCITT-G4-001: round-trip a known bitmap ------------------------------
@@ -78,7 +86,7 @@ fn ccitt_g4_001_roundtrip() {
     assert_eq!(img.components, 1);
     assert_eq!(img.bits, 1);
     assert_eq!(img.colorspace, ColorSpaceHint::Gray);
-    assert_eq!(img.data, original, "G4 round trip mismatch");
+    assert_eq!(img.data, to_devicegray(&original), "G4 round trip mismatch");
 }
 
 // --- CCITT-G4-002: a more complex pattern ---------------------------------
@@ -107,7 +115,11 @@ fn ccitt_g4_002_roundtrip_pattern() {
     ]);
 
     let img = ccitt::decode(&doc, &encoded, &params).expect("decode g4 pattern");
-    assert_eq!(img.data, original, "G4 pattern round trip mismatch");
+    assert_eq!(
+        img.data,
+        to_devicegray(&original),
+        "G4 pattern round trip mismatch"
+    );
 }
 
 // --- CCITT-BLACKIS1-001: /BlackIs1 inverts the bitmap ---------------------
@@ -163,7 +175,7 @@ fn ccitt_default_columns_001() {
     ]);
     let img = ccitt::decode(&doc, &encoded, &params).expect("decode default columns");
     assert_eq!(img.width, 1728);
-    assert_eq!(img.data, original);
+    assert_eq!(img.data, to_devicegray(&original));
 }
 
 // --- CCITT-ERR-001: garbage fails closed (no panic) -----------------------

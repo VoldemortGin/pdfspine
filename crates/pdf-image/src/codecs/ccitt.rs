@@ -14,8 +14,12 @@
 //!
 //! Output is **1 bpc, 1 component**: a packed bitmap, 1 bit/pixel, MSB-first,
 //! each row padded to a byte boundary (no extra row padding beyond that — the
-//! PDF/`DecodedImage` convention). Per PDF semantics, a CCITT 0-bit is **white**
-//! and a 1-bit is **black** *after* `/BlackIs1` is taken into account.
+//! PDF/`DecodedImage` convention). Bits follow the **standard 1-bpc DeviceGray**
+//! convention — a **0-bit is black**, a **1-bit is white** (`/BlackIs1` taken
+//! into account) — so the shared upsample (`bit 0 → 0`, `bit 1 → 255`) and the
+//! stencil-mask path (`bit 0 → paint`) both render correctly without a per-codec
+//! inversion. (Emitting the opposite, fax-native "ink = 1" polarity rendered
+//! every CCITT image inverted — over-dark scans.)
 
 use crate::codecs::{guard_dimensions, param_bool, param_i64, ColorSpaceHint, DecodedImage};
 use crate::error::{Error, Result};
@@ -27,8 +31,10 @@ use hayro_ccitt::{decode as ccitt_decode, DecodeSettings, Decoder, DecoderContex
 const CODEC: &str = "CCITTFaxDecode";
 
 /// Accumulates decoded fax pixels into a packed 1-bpp, MSB-first, byte-aligned
-/// raster. `white == true` is a 0 bit; `white == false` (black) is a 1 bit.
-/// Each `next_line` pads the current row to a byte boundary.
+/// raster in the standard 1-bpc DeviceGray polarity: a white pixel is a **1**
+/// bit, a black pixel is a **0** bit. Each `next_line` pads the current row to a
+/// byte boundary (padding bits are 0 and lie past the declared width, so they are
+/// never sampled).
 struct PackedBitmap {
     width: u32,
     out: Vec<u8>,
@@ -50,13 +56,13 @@ impl PackedBitmap {
     }
 
     #[inline]
-    fn push_bit(&mut self, black: bool) {
+    fn push_bit(&mut self, bit: bool) {
         // Stop accepting pixels past the declared width (defensive against a
         // decoder that over-runs a row).
         if self.col >= self.width {
             return;
         }
-        self.cur_byte = (self.cur_byte << 1) | u8::from(black);
+        self.cur_byte = (self.cur_byte << 1) | u8::from(bit);
         self.cur_bits += 1;
         self.col += 1;
         if self.cur_bits == 8 {
@@ -79,12 +85,14 @@ impl PackedBitmap {
 
 impl Decoder for PackedBitmap {
     fn push_pixel(&mut self, white: bool) {
-        self.push_bit(!white);
+        // DeviceGray polarity: white pixel → 1 bit, black pixel → 0 bit
+        // (`white` already folds in `/BlackIs1` via the decoder's `invert_black`).
+        self.push_bit(white);
     }
 
     fn push_pixel_chunk(&mut self, white: bool, chunk_count: u32) {
         for _ in 0..(chunk_count as u64 * 8) {
-            self.push_bit(!white);
+            self.push_bit(white);
         }
     }
 

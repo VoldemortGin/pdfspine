@@ -3,9 +3,12 @@
 //! Decoder: `hayro-jbig2`, driven through the PDF **embedded** organization
 //! (`Image::new_embedded(page, globals)`) so the `/DecodeParms /JBIG2Globals`
 //! stream is honored. Output is **1 bpc, 1 component**, packed MSB-first,
-//! byte-aligned rows. A JBIG2 foreground (set) pixel is **black**; per the PDF
-//! imaging model the decoded image is treated as DeviceGray where a 1-bit is
-//! black, so we emit `1` for foreground and `0` for background.
+//! byte-aligned rows. A JBIG2 foreground (set) pixel is **black**; the decoded
+//! image is treated as standard 1-bpc DeviceGray (`0-bit = black`, `1-bit =
+//! white`), so we emit `0` for foreground (black) and `1` for background (white).
+//! This matches the shared upsample (`bit 0 → 0`, `bit 1 → 255`) and the
+//! stencil-mask path (`bit 0 → paint`); emitting the opposite "set = 1" polarity
+//! rendered JBIG2 images inverted.
 //!
 //! ## Documented subset (§8.4.1) & fail-closed
 //!
@@ -29,8 +32,9 @@ use hayro_jbig2::{Decoder, Image};
 
 const CODEC: &str = "JBIG2Decode";
 
-/// Packs JBIG2 callbacks into a 1-bpp MSB-first byte-aligned raster.
-/// `black == true` ⇒ a set (foreground) bit.
+/// Packs JBIG2 callbacks into a 1-bpp MSB-first byte-aligned raster in the
+/// standard 1-bpc DeviceGray polarity: a foreground (set/black) pixel is a **0**
+/// bit, a background (white) pixel is a **1** bit.
 struct PackedBitmap {
     width: u32,
     out: Vec<u8>,
@@ -52,11 +56,11 @@ impl PackedBitmap {
     }
 
     #[inline]
-    fn push_bit(&mut self, black: bool) {
+    fn push_bit(&mut self, bit: bool) {
         if self.col >= self.width {
             return;
         }
-        self.cur_byte = (self.cur_byte << 1) | u8::from(black);
+        self.cur_byte = (self.cur_byte << 1) | u8::from(bit);
         self.cur_bits += 1;
         self.col += 1;
         if self.cur_bits == 8 {
@@ -69,12 +73,13 @@ impl PackedBitmap {
 
 impl Decoder for PackedBitmap {
     fn push_pixel(&mut self, black: bool) {
-        self.push_bit(black);
+        // DeviceGray polarity: foreground (black) → 0 bit, background → 1 bit.
+        self.push_bit(!black);
     }
 
     fn push_pixel_chunk(&mut self, black: bool, chunk_count: u32) {
         for _ in 0..(chunk_count as u64 * 8) {
-            self.push_bit(black);
+            self.push_bit(!black);
         }
     }
 

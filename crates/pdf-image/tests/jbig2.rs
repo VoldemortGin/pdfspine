@@ -35,6 +35,13 @@ fn make_bitmap(width: u32, rows: u32, f: impl Fn(u32, u32) -> bool) -> Vec<u8> {
     out
 }
 
+/// The decoder emits the standard 1-bpc DeviceGray polarity (`1 = white`), the
+/// bitwise inverse of the `1 = black` reference from [`make_bitmap`]. The test
+/// widths are multiples of 8, so there are no padding bits to differ.
+fn to_devicegray(black_packed: &[u8]) -> Vec<u8> {
+    black_packed.iter().map(|b| !b).collect()
+}
+
 /// Encodes a packed bitmap to CCITT G4 (== JBIG2 generic-region MMR data).
 fn encode_g4(bits: &[u8], width: u32, rows: u32) -> Vec<u8> {
     let row_bytes = (width as usize).div_ceil(8);
@@ -128,8 +135,13 @@ fn jbig2_generic_001_mmr_roundtrip() {
     assert_eq!(img.components, 1);
     assert_eq!(img.bits, 1);
     assert_eq!(img.colorspace, ColorSpaceHint::Gray);
-    // 1 = black = set bit, matching our `original` packing.
-    assert_eq!(img.data, original, "JBIG2 generic MMR round trip mismatch");
+    // DeviceGray polarity: foreground (black) → 0 bit, so the decoded raster is
+    // the bitwise inverse of the `1 = black` reference.
+    assert_eq!(
+        img.data,
+        to_devicegray(&original),
+        "JBIG2 generic MMR round trip mismatch"
+    );
 }
 
 // --- JBIG2-GENERIC-002: a richer pattern ----------------------------------
@@ -143,7 +155,7 @@ fn jbig2_generic_002_pattern() {
     let stream = build_jbig2_embedded(w, h, &mmr);
     let params = dict([("Width", int(w as i64)), ("Height", int(h as i64))]);
     let img = jbig2::decode(&doc, &stream, &params).expect("decode jbig2 pattern");
-    assert_eq!(img.data, original);
+    assert_eq!(img.data, to_devicegray(&original));
 }
 
 // --- JBIG2-ERR-001: garbage fails closed (no panic) -----------------------
