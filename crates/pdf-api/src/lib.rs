@@ -1371,6 +1371,62 @@ pub fn page_set_rotation(page: &Page, degrees: i64) -> Result<()> {
     Ok(())
 }
 
+/// Sets the `/MediaBox` of `page` (PyMuPDF `Page.set_mediabox`).
+///
+/// # Errors
+///
+/// A typed [`Error`] from the page-op path.
+pub fn page_set_mediabox(page: &Page, rect: crate::geom::Rect) -> Result<()> {
+    let mut ed = pdf_edit::PageEditor::new(page.document())?;
+    ed.set_mediabox(page.number(), &rect)?;
+    Ok(())
+}
+
+/// Sets the `/CropBox` of `page`, clipped to the media box (PyMuPDF
+/// `Page.set_cropbox`).
+///
+/// # Errors
+///
+/// A typed [`Error`] from the page-op path.
+pub fn page_set_cropbox(page: &Page, rect: crate::geom::Rect) -> Result<()> {
+    let mut ed = pdf_edit::PageEditor::new(page.document())?;
+    ed.set_cropbox(page.number(), &rect)?;
+    Ok(())
+}
+
+/// Sets the `/ArtBox` of `page` (PyMuPDF `Page.set_artbox`). Not clipped.
+///
+/// # Errors
+///
+/// A typed [`Error`] from the page-op path.
+pub fn page_set_artbox(page: &Page, rect: crate::geom::Rect) -> Result<()> {
+    let mut ed = pdf_edit::PageEditor::new(page.document())?;
+    ed.set_artbox(page.number(), &rect)?;
+    Ok(())
+}
+
+/// Sets the `/BleedBox` of `page` (PyMuPDF `Page.set_bleedbox`). Not clipped.
+///
+/// # Errors
+///
+/// A typed [`Error`] from the page-op path.
+pub fn page_set_bleedbox(page: &Page, rect: crate::geom::Rect) -> Result<()> {
+    let mut ed = pdf_edit::PageEditor::new(page.document())?;
+    ed.set_bleedbox(page.number(), &rect)?;
+    Ok(())
+}
+
+/// Sets the `/TrimBox` of `page` (PyMuPDF `Page.set_trimbox`). Not clipped.
+///
+/// # Errors
+///
+/// A typed [`Error`] from the page-op path.
+pub fn page_set_trimbox(page: &Page, rect: crate::geom::Rect) -> Result<()> {
+    let mut ed = pdf_edit::PageEditor::new(page.document())?;
+    ed.set_trimbox(page.number(), &rect)?;
+    Ok(())
+}
+
 // === M4e owned handle types (PRD §9.1 / §9.4) =============================
 //
 // `pdf_edit::{Annot, Widget, Shape}` all BORROW `&DocumentStore`, so they cannot

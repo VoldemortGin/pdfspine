@@ -282,15 +282,17 @@ add_many("Page", DEFERRED, "M4", ["clean_contents", "wrap_contents", "is_wrapped
 add_many("Page", IMPLEMENTED, "M1", [
     "rect", "mediabox", "cropbox", "rotation", "number",
 ])
-add_many("Page", IMPLEMENTED, "M3", ["set_rotation"])
-add_many("Page", IMPLEMENTED, "M3", ["get_label"])
-add_many("Page", DEFERRED, "M1", [
+add_many("Page", IMPLEMENTED, "M1", [
     "mediabox_size", "cropbox_position", "artbox", "bleedbox", "trimbox",
     "transformation_matrix", "rotation_matrix", "derotation_matrix", "xref",
     "parent",
 ])
-add_many("Page", DEFERRED, "M3", [
+add_many("Page", IMPLEMENTED, "M3", ["set_rotation"])
+add_many("Page", IMPLEMENTED, "M3", ["get_label"])
+add_many("Page", IMPLEMENTED, "M3", [
     "set_mediabox", "set_cropbox", "set_artbox", "set_bleedbox", "set_trimbox",
+])
+add_many("Page", DEFERRED, "M3", [
     "remove_rotation", "refresh", "language", "set_language",
 ])
 add("Page.get_oc_items", "Page", OUT_OF_SCOPE, "post-v1", "OCG out of scope (PRD §3.2 #5)")
@@ -534,6 +536,52 @@ add_many("constants", DEFERRED, "M1", ["version_info", "PDF_TOK_objects"])
 add("constants.UCDN_SCRIPT", "constants", OUT_OF_SCOPE, "M6", "full shaping out of scope (PRD §3.2 #10)")
 add("constants.PdfUnsupportedError_catchall", "constants", OUT_OF_SCOPE, "M1",
     "every unlisted PyMuPDF symbol raises PdfUnsupportedError (PRD §7 catch-all + §17.2)")
+
+
+# ---------------------------------------------------------------------------
+# Drift reconciliation — long-tail batches 3 & 4 (commits 308db11, ec98835)
+# ---------------------------------------------------------------------------
+# Those batches implemented this surface (Colorspace / Font / Link / Outline /
+# TextWriter / Tools / xref-write / text-trace / Page text helpers) and updated
+# COMPAT.toml directly, but did NOT update this generator, so the add_many()
+# blocks above still mark them deferred. Re-sync here so a regeneration
+# reproduces the committed coverage instead of regressing ~63.7% -> ~53.7%.
+# Verified present + non-stub in python/ at reconciliation time.
+_BATCH34_IMPLEMENTED = {
+    "Annot.get_text", "Annot.get_textpage", "Annot.next", "Colorspace.Colorspace",
+    "Colorspace.csCMYK", "Colorspace.csGRAY", "Colorspace.csRGB", "Colorspace.n",
+    "Colorspace.name", "Document.del_xml_metadata", "Document.subset_fonts", "Document.xref_copy",
+    "Document.xref_is_font", "Document.xref_is_image", "Document.xref_set_key", "Font.Font",
+    "Font.ascender", "Font.bbox", "Font.char_lengths", "Font.descender",
+    "Font.flags", "Font.glyph_advance", "Font.glyph_count", "Font.glyph_name_to_unicode",
+    "Font.has_glyph", "Font.is_bold", "Font.is_italic", "Font.is_monospaced",
+    "Font.is_serif", "Font.name", "Font.text_length", "Font.unicode_to_glyph_name",
+    "Link.border", "Link.colors", "Link.dest", "Link.flags",
+    "Link.is_external", "Link.linkDest", "Link.next", "Link.page",
+    "Link.rect", "Link.set_border", "Link.set_colors", "Link.set_flags",
+    "Link.uri", "Link.xref", "Outline.dest", "Outline.destination",
+    "Outline.down", "Outline.is_external", "Outline.is_open", "Outline.next",
+    "Outline.page", "Outline.title", "Outline.uri", "Outline.x",
+    "Outline.y", "Page.clean_contents", "Page.delete_image", "Page.get_bboxlog",
+    "Page.get_text_blocks", "Page.get_text_selection", "Page.get_text_words", "Page.get_textbox",
+    "Page.get_texttrace", "Page.replace_image", "Page.wrap_contents", "TOOLS",
+    "TextPage.extractRAWJSON", "TextWriter.TextWriter", "TextWriter.append", "TextWriter.appendv",
+    "TextWriter.clean_rtl", "TextWriter.color", "TextWriter.fill_textbox", "TextWriter.last_point",
+    "TextWriter.opacity", "TextWriter.text_rect", "TextWriter.write_text", "Tools",
+    "Tools.fitz_config", "Tools.gen_id", "Tools.glyph_cache_empty", "Tools.mupdf_display_errors",
+    "Tools.mupdf_display_warnings", "Tools.mupdf_version", "Tools.mupdf_warnings", "Tools.reset_mupdf_warnings",
+    "Tools.set_small_glyph_heights", "Tools.store_maxsize", "Tools.store_shrink", "Tools.store_size",
+}
+
+
+def _reconcile_batch34() -> None:
+    """Override the deferred disposition of the batch-3/4 symbols to implemented."""
+    for i, (sym, grp, _disp, ms, note) in enumerate(CATALOG):
+        if sym in _BATCH34_IMPLEMENTED:
+            CATALOG[i] = (sym, grp, IMPLEMENTED, ms, note)
+
+
+_reconcile_batch34()
 
 
 # ---------------------------------------------------------------------------

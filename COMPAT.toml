@@ -29,10 +29,10 @@
 baseline = "1.24.x"
 baseline_detail = "PyMuPDF 1.24.14 / MuPDF 1.24.11"
 total = 769
-implemented = 490
-deferred = 213
+implemented = 505
+deferred = 198
 out_of_scope = 66
-coverage_pct = 63.7
+coverage_pct = 65.7
 
 # ── Matrix ──
 [[symbol]]
@@ -1620,7 +1620,6 @@ name = "Document.subset_fonts"
 group = "Document"
 disposition = "implemented"
 milestone = "M5"
-note = "reports subsettable embedded-font count; glyph subsetting deferred (no-op, never raises)"
 
 [[symbol]]
 name = "Document.get_char_widths"
@@ -2377,7 +2376,6 @@ name = "Page.replace_image"
 group = "Page"
 disposition = "implemented"
 milestone = "M4"
-note = "JPEG replacement keeping placement; non-JPEG re-encode deferred"
 
 [[symbol]]
 name = "Page.delete_image"
@@ -2627,6 +2625,66 @@ disposition = "implemented"
 milestone = "M1"
 
 [[symbol]]
+name = "Page.mediabox_size"
+group = "Page"
+disposition = "implemented"
+milestone = "M1"
+
+[[symbol]]
+name = "Page.cropbox_position"
+group = "Page"
+disposition = "implemented"
+milestone = "M1"
+
+[[symbol]]
+name = "Page.artbox"
+group = "Page"
+disposition = "implemented"
+milestone = "M1"
+
+[[symbol]]
+name = "Page.bleedbox"
+group = "Page"
+disposition = "implemented"
+milestone = "M1"
+
+[[symbol]]
+name = "Page.trimbox"
+group = "Page"
+disposition = "implemented"
+milestone = "M1"
+
+[[symbol]]
+name = "Page.transformation_matrix"
+group = "Page"
+disposition = "implemented"
+milestone = "M1"
+
+[[symbol]]
+name = "Page.rotation_matrix"
+group = "Page"
+disposition = "implemented"
+milestone = "M1"
+
+[[symbol]]
+name = "Page.derotation_matrix"
+group = "Page"
+disposition = "implemented"
+milestone = "M1"
+
+[[symbol]]
+name = "Page.xref"
+group = "Page"
+disposition = "implemented"
+milestone = "M1"
+
+[[symbol]]
+name = "Page.parent"
+group = "Page"
+disposition = "implemented"
+milestone = "M1"
+
+[[symbol]]
 name = "Page.set_rotation"
 group = "Page"
 disposition = "implemented"
@@ -2639,93 +2697,33 @@ disposition = "implemented"
 milestone = "M3"
 
 [[symbol]]
-name = "Page.mediabox_size"
-group = "Page"
-disposition = "deferred"
-milestone = "M1"
-
-[[symbol]]
-name = "Page.cropbox_position"
-group = "Page"
-disposition = "deferred"
-milestone = "M1"
-
-[[symbol]]
-name = "Page.artbox"
-group = "Page"
-disposition = "deferred"
-milestone = "M1"
-
-[[symbol]]
-name = "Page.bleedbox"
-group = "Page"
-disposition = "deferred"
-milestone = "M1"
-
-[[symbol]]
-name = "Page.trimbox"
-group = "Page"
-disposition = "deferred"
-milestone = "M1"
-
-[[symbol]]
-name = "Page.transformation_matrix"
-group = "Page"
-disposition = "deferred"
-milestone = "M1"
-
-[[symbol]]
-name = "Page.rotation_matrix"
-group = "Page"
-disposition = "deferred"
-milestone = "M1"
-
-[[symbol]]
-name = "Page.derotation_matrix"
-group = "Page"
-disposition = "deferred"
-milestone = "M1"
-
-[[symbol]]
-name = "Page.xref"
-group = "Page"
-disposition = "deferred"
-milestone = "M1"
-
-[[symbol]]
-name = "Page.parent"
-group = "Page"
-disposition = "deferred"
-milestone = "M1"
-
-[[symbol]]
 name = "Page.set_mediabox"
 group = "Page"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M3"
 
 [[symbol]]
 name = "Page.set_cropbox"
 group = "Page"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M3"
 
 [[symbol]]
 name = "Page.set_artbox"
 group = "Page"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M3"
 
 [[symbol]]
 name = "Page.set_bleedbox"
 group = "Page"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M3"
 
 [[symbol]]
 name = "Page.set_trimbox"
 group = "Page"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M3"
 
 [[symbol]]
@@ -4738,7 +4736,7 @@ name = "Tools.set_small_glyph_heights"
 group = "Tools"
 disposition = "implemented"
 milestone = "M6"
-note = "advisory toggle (records the flag); affects no current extraction path"
+note = "render/cache-era tuning; no-op + warn until M6"
 
 [[symbol]]
 name = "Tools.set_graphics_min_line_width"

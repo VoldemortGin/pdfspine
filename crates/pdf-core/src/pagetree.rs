@@ -22,7 +22,7 @@
 use std::collections::HashSet;
 
 use crate::document::DocumentStore;
-use crate::geom::{paper_rect, Rect};
+use crate::geom::{paper_rect, Matrix, Rect};
 use crate::object::{Dict, Name, ObjRef, Object};
 
 /// The four inheritable page attributes (ISO 32000-1 §7.7.3.4).
@@ -239,6 +239,37 @@ pub fn bound(doc: &DocumentStore, page_ref: ObjRef) -> Rect {
     cropbox(doc, page_ref)
 }
 
+/// The page's effective `/ArtBox`, walking inheritance. Per the PDF spec and
+/// PyMuPDF, when absent the art box defaults to the **crop box** (ISO 32000-1
+/// §14.11.2). The rectangle is normalized; it is *not* clipped to the media box.
+#[must_use]
+pub fn artbox(doc: &DocumentStore, page_ref: ObjRef) -> Rect {
+    box_or_cropbox(doc, page_ref, "ArtBox")
+}
+
+/// The page's effective `/BleedBox`, walking inheritance. Defaults to the crop
+/// box when absent (ISO 32000-1 §14.11.2). Normalized; not clipped.
+#[must_use]
+pub fn bleedbox(doc: &DocumentStore, page_ref: ObjRef) -> Rect {
+    box_or_cropbox(doc, page_ref, "BleedBox")
+}
+
+/// The page's effective `/TrimBox`, walking inheritance. Defaults to the crop
+/// box when absent (ISO 32000-1 §14.11.2). Normalized; not clipped.
+#[must_use]
+pub fn trimbox(doc: &DocumentStore, page_ref: ObjRef) -> Rect {
+    box_or_cropbox(doc, page_ref, "TrimBox")
+}
+
+/// The inherited page box named `key` (`ArtBox`/`BleedBox`/`TrimBox`), or the
+/// crop box when absent (ISO 32000-1 §14.11.2 default). Normalized, unclipped.
+fn box_or_cropbox(doc: &DocumentStore, page_ref: ObjRef, key: &str) -> Rect {
+    match inherited(doc, page_ref, key).and_then(|o| rect_from_object(doc, &o)) {
+        Some(r) => r.normalize(),
+        None => cropbox(doc, page_ref),
+    }
+}
+
 /// The page's normalized `/Rotate` ∈ {0, 90, 180, 270}, walking inheritance.
 /// Negative and `>360` multiples of 90 are normalized into range (PRD §8.6.1);
 /// a non-multiple-of-90 or absent value yields 0.
@@ -258,6 +289,52 @@ pub fn normalize_rotation(raw: i64) -> i32 {
         return 0;
     }
     raw.rem_euclid(360) as i32
+}
+
+/// PyMuPDF `page.transformation_matrix` — maps PDF coordinate space → fitz page
+/// space (a y-flip relative to the crop box). Derived to be bit-identical to
+/// PyMuPDF for `/Rotate` ∈ {0, 90, 180, 270} (verified against fitz 1.24.x).
+///
+/// With the (raw, mediabox-clipped) crop box `cb = (x0, y0, x1, y1)` and
+/// `ch = y1 - y0`: at rotation 0 the matrix is `[1, 0, 0, -1, -x0, y1]`; at any
+/// non-zero rotation the crop-box offset is carried by the rotation matrix, so
+/// the transformation matrix is `[1, 0, 0, -1, 0, ch]`.
+#[must_use]
+pub fn transformation_matrix(doc: &DocumentStore, page_ref: ObjRef) -> Matrix {
+    let cb = cropbox(doc, page_ref);
+    if rotation(doc, page_ref) == 0 {
+        Matrix::new(1.0, 0.0, 0.0, -1.0, -cb.x0, cb.y1)
+    } else {
+        Matrix::new(1.0, 0.0, 0.0, -1.0, 0.0, cb.y1 - cb.y0)
+    }
+}
+
+/// PyMuPDF `page.rotation_matrix` — the `/Rotate` component about the crop box.
+/// Derived to be bit-identical to PyMuPDF for `/Rotate` ∈ {0, 90, 180, 270}.
+///
+/// With crop-box width `cw = x1 - x0` and height `ch = y1 - y0`:
+/// rot 0 → `[1, 0, 0, 1, 0, 0]`; rot 90 → `[0, 1, -1, 0, ch, 0]`;
+/// rot 180 → `[-1, 0, 0, -1, cw, ch]`; rot 270 → `[0, -1, 1, 0, 0, cw]`.
+#[must_use]
+pub fn rotation_matrix(doc: &DocumentStore, page_ref: ObjRef) -> Matrix {
+    let cb = cropbox(doc, page_ref);
+    let cw = cb.x1 - cb.x0;
+    let ch = cb.y1 - cb.y0;
+    match rotation(doc, page_ref) {
+        90 => Matrix::new(0.0, 1.0, -1.0, 0.0, ch, 0.0),
+        180 => Matrix::new(-1.0, 0.0, 0.0, -1.0, cw, ch),
+        270 => Matrix::new(0.0, -1.0, 1.0, 0.0, 0.0, cw),
+        _ => Matrix::IDENTITY,
+    }
+}
+
+/// PyMuPDF `page.derotation_matrix` — the inverse of [`rotation_matrix`].
+/// Falls back to the identity for the (impossible here) singular case.
+#[must_use]
+pub fn derotation_matrix(doc: &DocumentStore, page_ref: ObjRef) -> Matrix {
+    rotation_matrix(doc, page_ref)
+        .invert()
+        .unwrap_or(Matrix::IDENTITY)
 }
 
 /// US Letter, the PyMuPDF default page size when `/MediaBox` is absent.

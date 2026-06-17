@@ -15,8 +15,8 @@ gating. Tables, multilingual, CJK, and domain breadth all measured at near-parit
 **Rendering (`get_pixmap`) is now near-parity for embedded-font text**: SSIM ~0.58 → **0.945 mean /
 0.986 median** vs fitz after four root-cause fixes (full per-glyph `Trm` into the render path;
 bare-CFF `FontFile3` parsing; CCITT/JBIG2 1-bpc polarity; CID-keyed CFF charset CID→GID). See §2.A
-for what landed and the remaining long tail. **1338+ Rust + 374 pytest green.** API coverage 63.7%
-(490/769 in `COMPAT.toml`).
+for what landed and the remaining long tail. **1338+ Rust + 391 pytest green.** API coverage **65.7%**
+(505/769 in `COMPAT.toml`) after batch-1 Page geometry/boxes.
 
 ## 1. Tools available (reuse, don't rebuild)
 
@@ -88,17 +88,24 @@ Renderer code: `crates/pdf-render`; glyph data plumbing in `crates/pdf-text` (`i
   `pdf-fonts` CID→Unicode fix.
 - **CI gate** — wire a born-digital `order ≥ 0.95` (and tables count-agreement) regression gate into CI.
 
-### C. API parity coverage (track A) — 63.7% → higher
+### C. API parity coverage (track A) — 65.7% → higher
+> **NB (drift fixed 2026-06-17):** batches 3 & 4 hand-edited `COMPAT.toml` (Font/Colorspace/Link/
+> Outline/TextWriter/Tools/xref-write/text-trace → 63.7%) but did NOT update the generator
+> `scripts/_compat_catalog.py`, so regenerating regressed coverage to 53.7%. A reconciliation pass at
+> the end of `_compat_catalog.py` (`_BATCH34_IMPLEMENTED`, 92 symbols) re-syncs the generator to the
+> committed truth. **Always run `python3 scripts/_compat_catalog.py` after dispositioning and confirm
+> coverage rises (it is the source of truth) — never hand-edit `COMPAT.toml`.**
+
 Full per-symbol spec exists (workflow `wf_f5e56138-2f9`; 146 symbols: 68 pure-python, 66 needs-rust,
 9 already-exist → just update COMPAT, 3 reclassify-oos). Two groups need re-spec (socket-failed):
 Shape-members, TextPage-extract. The monoliths `python/oxide_pdf/document.py` + `crates/py-bindings/
 src/lib.rs` mean batches that both touch them run SEQUENTIALLY; new pytest goes in
-`python/tests/test_longtail5.py`. Suggested batch order (cheap pure-python first):
-1. **Page geometry/boxes** — `set_mediabox`/`set_cropbox` (PageEditor methods already exist in
-   pdf-edit; need pdf-api facade + PyPage binding + stub), `set_artbox`/`bleedbox`/`trimbox`
-   (pure-python via `xref_set_key` once Page carries a Document parent ref — shared prerequisite),
-   `transformation_matrix`/`rotation_matrix`/`derotation_matrix`, `xref`/`parent`, `mediabox_size`/
-   `cropbox_position`, `remove_rotation`.
+`python/tests/test_longtail6.py` (test_longtail5.py = batch-1). Batch order (cheap pure-python first):
+1. ~~**Page geometry/boxes**~~ **DONE (batch-1, 2026-06-17, +15 → 65.7%):** `set_mediabox`/
+   `set_cropbox`/`set_artbox`/`set_bleedbox`/`set_trimbox`, `artbox`/`bleedbox`/`trimbox`,
+   `transformation_matrix`/`rotation_matrix`/`derotation_matrix` (fitz-matched at rot 0/90/180/270),
+   `xref`, `parent` (python-level owning-Document ref), `mediabox_size`/`cropbox_position`. Only
+   `remove_rotation` left deferred (needs content-stream rewriting). Tests in `test_longtail5.py`.
 2. **Document page-helpers** — `get_page_images`/`get_page_fonts`/`search_page_for`/`get_page_pixmap`
    (one-line delegations), `get_page_labels`/`get_page_numbers`/`get_label`, page-ops
    `insert_page`/`copy_page`/`move_page`/`delete_pages`.

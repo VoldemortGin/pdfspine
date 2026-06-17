@@ -220,6 +220,36 @@ impl<'a> PageEditor<'a> {
         self.update_leaf_key(index, "CropBox", rect_array(&clipped))
     }
 
+    /// Sets the page's `/ArtBox` to `rect` (PyMuPDF `page.set_artbox`). Unlike
+    /// the crop box, the art box is *not* clipped to the media box.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Unsupported`] if `index` is out of range.
+    pub fn set_artbox(&mut self, index: usize, rect: &Rect) -> Result<()> {
+        self.update_leaf_key(index, "ArtBox", rect_array(&rect.normalize()))
+    }
+
+    /// Sets the page's `/BleedBox` to `rect` (PyMuPDF `page.set_bleedbox`). Not
+    /// clipped to the media box.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Unsupported`] if `index` is out of range.
+    pub fn set_bleedbox(&mut self, index: usize, rect: &Rect) -> Result<()> {
+        self.update_leaf_key(index, "BleedBox", rect_array(&rect.normalize()))
+    }
+
+    /// Sets the page's `/TrimBox` to `rect` (PyMuPDF `page.set_trimbox`). Not
+    /// clipped to the media box.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Unsupported`] if `index` is out of range.
+    pub fn set_trimbox(&mut self, index: usize, rect: &Rect) -> Result<()> {
+        self.update_leaf_key(index, "TrimBox", rect_array(&rect.normalize()))
+    }
+
     /// Sets the page's `/Rotate`, normalized to {0, 90, 180, 270} (PRD §8.6.1).
     ///
     /// # Errors

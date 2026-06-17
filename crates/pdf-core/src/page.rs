@@ -9,7 +9,7 @@
 use std::sync::Arc;
 
 use crate::document::DocumentStore;
-use crate::geom::Rect;
+use crate::geom::{Matrix, Rect};
 use crate::object::{Dict, ObjRef};
 use crate::pagetree;
 
@@ -82,5 +82,51 @@ impl Page {
     #[must_use]
     pub fn rotation(&self) -> i32 {
         pagetree::rotation(&self.doc, self.page)
+    }
+
+    /// The effective `/ArtBox` (defaults to the crop box when absent; PyMuPDF
+    /// `page.artbox`). Normalized; not clipped to the media box.
+    #[must_use]
+    pub fn artbox(&self) -> Rect {
+        pagetree::artbox(&self.doc, self.page)
+    }
+
+    /// The effective `/BleedBox` (defaults to the crop box; PyMuPDF
+    /// `page.bleedbox`). Normalized; not clipped.
+    #[must_use]
+    pub fn bleedbox(&self) -> Rect {
+        pagetree::bleedbox(&self.doc, self.page)
+    }
+
+    /// The effective `/TrimBox` (defaults to the crop box; PyMuPDF
+    /// `page.trimbox`). Normalized; not clipped.
+    #[must_use]
+    pub fn trimbox(&self) -> Rect {
+        pagetree::trimbox(&self.doc, self.page)
+    }
+
+    /// The page-to-fitz transformation matrix (PyMuPDF
+    /// `page.transformation_matrix`).
+    #[must_use]
+    pub fn transformation_matrix(&self) -> Matrix {
+        pagetree::transformation_matrix(&self.doc, self.page)
+    }
+
+    /// The page rotation matrix (PyMuPDF `page.rotation_matrix`).
+    #[must_use]
+    pub fn rotation_matrix(&self) -> Matrix {
+        pagetree::rotation_matrix(&self.doc, self.page)
+    }
+
+    /// The inverse rotation matrix (PyMuPDF `page.derotation_matrix`).
+    #[must_use]
+    pub fn derotation_matrix(&self) -> Matrix {
+        pagetree::derotation_matrix(&self.doc, self.page)
+    }
+
+    /// The page-leaf object number (PyMuPDF `page.xref`).
+    #[must_use]
+    pub fn xref(&self) -> u32 {
+        self.page.num
     }
 }

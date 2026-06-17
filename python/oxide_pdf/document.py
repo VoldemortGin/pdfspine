@@ -730,10 +730,11 @@ TOOLS = _core.TOOLS
 class Page:
     """One page of a :class:`Document` (PyMuPDF ``fitz.Page``)."""
 
-    __slots__ = ("_page",)
+    __slots__ = ("_page", "_parent")
 
-    def __init__(self, core_page: "_core.Page") -> None:
+    def __init__(self, core_page: "_core.Page", parent: "Document | None" = None) -> None:
         self._page = core_page
+        self._parent = parent
 
     @property
     def number(self) -> int:
@@ -763,6 +764,58 @@ class Page:
     def rotation(self) -> int:
         """The normalized rotation ∈ {0, 90, 180, 270} (PyMuPDF ``page.rotation``)."""
         return self._page.rotation()
+
+    @property
+    def artbox(self) -> Rect:
+        """The effective ``/ArtBox`` (defaults to the crop box; PyMuPDF ``page.artbox``)."""
+        return _rect(self._page.artbox())
+
+    @property
+    def bleedbox(self) -> Rect:
+        """The effective ``/BleedBox`` (defaults to the crop box; PyMuPDF ``page.bleedbox``)."""
+        return _rect(self._page.bleedbox())
+
+    @property
+    def trimbox(self) -> Rect:
+        """The effective ``/TrimBox`` (defaults to the crop box; PyMuPDF ``page.trimbox``)."""
+        return _rect(self._page.trimbox())
+
+    @property
+    def mediabox_size(self) -> Point:
+        """The media-box ``(width, height)`` as a :class:`Point` (PyMuPDF ``page.mediabox_size``)."""
+        mb = self._page.mediabox()
+        return Point(mb[2] - mb[0], mb[3] - mb[1])
+
+    @property
+    def cropbox_position(self) -> Point:
+        """The crop-box origin ``(x0, y0)`` as a :class:`Point` (PyMuPDF ``page.cropbox_position``)."""
+        cb = self._page.cropbox()
+        return Point(cb[0], cb[1])
+
+    @property
+    def transformation_matrix(self) -> Matrix:
+        """The page-to-fitz transformation matrix (PyMuPDF ``page.transformation_matrix``)."""
+        return Matrix(*self._page.transformation_matrix())
+
+    @property
+    def rotation_matrix(self) -> Matrix:
+        """The page rotation matrix (PyMuPDF ``page.rotation_matrix``)."""
+        return Matrix(*self._page.rotation_matrix())
+
+    @property
+    def derotation_matrix(self) -> Matrix:
+        """The inverse rotation matrix (PyMuPDF ``page.derotation_matrix``)."""
+        return Matrix(*self._page.derotation_matrix())
+
+    @property
+    def xref(self) -> int:
+        """The page object's xref number (PyMuPDF ``page.xref``)."""
+        return self._page.xref
+
+    @property
+    def parent(self) -> "Document | None":
+        """The owning :class:`Document` (PyMuPDF ``page.parent``); ``page.parent is doc``."""
+        return self._parent
 
     # --- text extraction (PRD §8.6 / §9.4) ---
     def get_textpage(self, flags: int | None = None, clip=None) -> TextPage:
@@ -1164,6 +1217,26 @@ class Page:
     def set_rotation(self, rotation: int) -> None:
         """Sets the page rotation (PyMuPDF ``page.set_rotation``)."""
         self._page.set_rotation(int(rotation))
+
+    def set_mediabox(self, rect) -> None:
+        """Sets the ``/MediaBox`` (PyMuPDF ``page.set_mediabox``)."""
+        self._page.set_mediabox(_rt(rect))
+
+    def set_cropbox(self, rect) -> None:
+        """Sets the ``/CropBox``, clipped to the media box (PyMuPDF ``page.set_cropbox``)."""
+        self._page.set_cropbox(_rt(rect))
+
+    def set_artbox(self, rect) -> None:
+        """Sets the ``/ArtBox`` (PyMuPDF ``page.set_artbox``)."""
+        self._page.set_artbox(_rt(rect))
+
+    def set_bleedbox(self, rect) -> None:
+        """Sets the ``/BleedBox`` (PyMuPDF ``page.set_bleedbox``)."""
+        self._page.set_bleedbox(_rt(rect))
+
+    def set_trimbox(self, rect) -> None:
+        """Sets the ``/TrimBox`` (PyMuPDF ``page.set_trimbox``)."""
+        self._page.set_trimbox(_rt(rect))
 
     # --- content insertion (PRD §8.8) ---
     def insert_text(
@@ -2040,19 +2113,19 @@ class Document:
         """Loads the page at zero-based ``index`` (PyMuPDF ``load_page``)."""
         if index < 0:
             index += self._doc.page_count
-        return Page(self._doc.load_page(index))
+        return Page(self._doc.load_page(index), self)
 
     def __getitem__(self, index: int) -> Page:
-        return Page(self._doc[index])
+        return Page(self._doc[index], self)
 
     def __iter__(self) -> Iterator[Page]:
         for i in range(self._doc.page_count):
-            yield Page(self._doc.load_page(i))
+            yield Page(self._doc.load_page(i), self)
 
     def pages(self, *_args, **_kwargs) -> Iterator[Page]:
         """Yields every page in order (PyMuPDF ``doc.pages``)."""
         for i in range(self._doc.page_count):
-            yield Page(self._doc.load_page(i))
+            yield Page(self._doc.load_page(i), self)
 
     def reload_page(self, page) -> Page:
         """Re-fetches a page from the live store (PyMuPDF ``doc.reload_page``).
@@ -2060,7 +2133,7 @@ class Document:
         Accepts a :class:`Page` (its ``number`` is used) or an int index.
         """
         index = page.number if isinstance(page, Page) else int(page)
-        return Page(self._doc.reload_page(index))
+        return Page(self._doc.reload_page(index), self)
 
     def page_xref(self, pno: int) -> int:
         """The object number of page ``pno`` (PyMuPDF ``doc.page_xref``)."""
@@ -2374,7 +2447,7 @@ class Document:
 
     def new_page(self, pno: int = -1, width: float = 595.0, height: float = 842.0) -> Page:
         """Inserts a blank page, returning it (PyMuPDF ``doc.new_page``)."""
-        return Page(self._doc.new_page(pno, width, height))
+        return Page(self._doc.new_page(pno, width, height), self)
 
     def newPage(self, pno: int = -1, width: float = 595.0, height: float = 842.0) -> Page:  # noqa: N802
         return self.new_page(pno, width, height)

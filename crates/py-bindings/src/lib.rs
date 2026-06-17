@@ -141,6 +141,12 @@ fn point_tuple(p: Point) -> (f64, f64) {
     (p.x, p.y)
 }
 
+/// Converts a `Matrix` to the `(a, b, c, d, e, f)` 6-tuple the Python layer
+/// wraps into a `Matrix`.
+fn matrix_tuple(m: Matrix) -> (f64, f64, f64, f64, f64, f64) {
+    (m.a, m.b, m.c, m.d, m.e, m.f)
+}
+
 /// The corner-coord 8-tuple `(ul.x, ul.y, ur.x, ur.y, ll.x, ll.y, lr.x, lr.y)`
 /// the Python layer sends for a [`Quad`].
 type QuadTuple = (f64, f64, f64, f64, f64, f64, f64, f64);
@@ -1036,6 +1042,42 @@ impl PyPage {
         self.page.rotation()
     }
 
+    /// The effective `/ArtBox` as `(x0, y0, x1, y1)` (defaults to crop box).
+    fn artbox(&self) -> (f64, f64, f64, f64) {
+        rect_tuple(self.page.artbox())
+    }
+
+    /// The effective `/BleedBox` as `(x0, y0, x1, y1)` (defaults to crop box).
+    fn bleedbox(&self) -> (f64, f64, f64, f64) {
+        rect_tuple(self.page.bleedbox())
+    }
+
+    /// The effective `/TrimBox` as `(x0, y0, x1, y1)` (defaults to crop box).
+    fn trimbox(&self) -> (f64, f64, f64, f64) {
+        rect_tuple(self.page.trimbox())
+    }
+
+    /// The page-to-fitz transformation matrix as `(a, b, c, d, e, f)`.
+    fn transformation_matrix(&self) -> (f64, f64, f64, f64, f64, f64) {
+        matrix_tuple(self.page.transformation_matrix())
+    }
+
+    /// The page rotation matrix as `(a, b, c, d, e, f)`.
+    fn rotation_matrix(&self) -> (f64, f64, f64, f64, f64, f64) {
+        matrix_tuple(self.page.rotation_matrix())
+    }
+
+    /// The page derotation (inverse-rotation) matrix as `(a, b, c, d, e, f)`.
+    fn derotation_matrix(&self) -> (f64, f64, f64, f64, f64, f64) {
+        matrix_tuple(self.page.derotation_matrix())
+    }
+
+    /// The page-leaf object number (PyMuPDF `page.xref`).
+    #[getter]
+    fn xref(&self) -> u32 {
+        self.page.xref()
+    }
+
     // --- text extraction (PRD §8.6 / §9.4) -------------------------------
 
     /// Builds a reusable [`PyTextPage`] for this page (PyMuPDF
@@ -1593,6 +1635,31 @@ impl PyPage {
     /// Sets the page rotation (PyMuPDF `Page.set_rotation`).
     fn set_rotation(&self, rotation: i64) -> PyResult<()> {
         pdf_api::page_set_rotation(&self.page, rotation).map_err(map_err)
+    }
+
+    /// Sets the `/MediaBox` (PyMuPDF `Page.set_mediabox`).
+    fn set_mediabox(&self, rect: (f64, f64, f64, f64)) -> PyResult<()> {
+        pdf_api::page_set_mediabox(&self.page, rect_of(rect)).map_err(map_err)
+    }
+
+    /// Sets the `/CropBox`, clipped to the media box (PyMuPDF `Page.set_cropbox`).
+    fn set_cropbox(&self, rect: (f64, f64, f64, f64)) -> PyResult<()> {
+        pdf_api::page_set_cropbox(&self.page, rect_of(rect)).map_err(map_err)
+    }
+
+    /// Sets the `/ArtBox` (PyMuPDF `Page.set_artbox`).
+    fn set_artbox(&self, rect: (f64, f64, f64, f64)) -> PyResult<()> {
+        pdf_api::page_set_artbox(&self.page, rect_of(rect)).map_err(map_err)
+    }
+
+    /// Sets the `/BleedBox` (PyMuPDF `Page.set_bleedbox`).
+    fn set_bleedbox(&self, rect: (f64, f64, f64, f64)) -> PyResult<()> {
+        pdf_api::page_set_bleedbox(&self.page, rect_of(rect)).map_err(map_err)
+    }
+
+    /// Sets the `/TrimBox` (PyMuPDF `Page.set_trimbox`).
+    fn set_trimbox(&self, rect: (f64, f64, f64, f64)) -> PyResult<()> {
+        pdf_api::page_set_trimbox(&self.page, rect_of(rect)).map_err(map_err)
     }
 
     // --- content insertion (PRD §8.8 / §9.4) -----------------------------
