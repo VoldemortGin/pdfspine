@@ -29,10 +29,10 @@
 baseline = "1.24.x"
 baseline_detail = "PyMuPDF 1.24.14 / MuPDF 1.24.11"
 total = 769
-implemented = 516
-deferred = 187
+implemented = 531
+deferred = 172
 out_of_scope = 66
-coverage_pct = 67.1
+coverage_pct = 69.1
 
 # ── Matrix ──
 [[symbol]]
@@ -3925,91 +3925,91 @@ milestone = "M4"
 [[symbol]]
 name = "Shape.draw_quad"
 group = "Shape"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "Shape.draw_sector"
 group = "Shape"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "Shape.draw_squiggle"
 group = "Shape"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "Shape.draw_zigzag"
 group = "Shape"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "Shape.insert_text"
 group = "Shape"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "Shape.insert_textbox"
 group = "Shape"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "Shape.update_rect"
 group = "Shape"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "Shape.horizontal_angle"
 group = "Shape"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "Shape.doc"
 group = "Shape"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "Shape.page"
 group = "Shape"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "Shape.height"
 group = "Shape"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "Shape.width"
 group = "Shape"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "Shape.x"
 group = "Shape"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "Shape.y"
 group = "Shape"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "Shape.rect"
 group = "Shape"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 # ── Font ──

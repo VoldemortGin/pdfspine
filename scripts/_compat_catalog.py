@@ -417,7 +417,10 @@ add_many("Shape", IMPLEMENTED, "M4", [
     "draw_line", "draw_rect", "draw_circle", "draw_oval", "draw_bezier",
     "draw_curve", "draw_polyline", "finish", "commit",
 ])
-add_many("Shape", DEFERRED, "M4", [
+# Batch 3 (Track C): shape drawing primitives, text, and parent/geometry props.
+# The four drawing primitives match real PyMuPDF (1.27) content streams
+# operator-for-operator; the properties mirror Shape.__init__ semantics.
+add_many("Shape", IMPLEMENTED, "M4", [
     "draw_quad", "draw_sector", "draw_squiggle", "draw_zigzag", "insert_text",
     "insert_textbox", "update_rect", "horizontal_angle", "doc", "page",
     "height", "width", "x", "y", "rect",

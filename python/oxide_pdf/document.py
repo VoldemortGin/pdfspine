@@ -10,6 +10,7 @@ PyMuPDF methods raise :class:`~oxide_pdf._core.PdfUnsupportedError` (never
 from __future__ import annotations
 
 import builtins
+import math
 import os
 from typing import Iterator
 
@@ -64,6 +65,16 @@ def _intersects(a: tuple[float, float, float, float], b: tuple[float, float, flo
     ax0, ay0, ax1, ay1 = min(a[0], a[2]), min(a[1], a[3]), max(a[0], a[2]), max(a[1], a[3])
     bx0, by0, bx1, by1 = min(b[0], b[2]), min(b[1], b[3]), max(b[0], b[2]), max(b[1], b[3])
     return ax0 < bx1 and bx0 < ax1 and ay0 < by1 and by0 < ay1
+
+
+def _hor_matrix(c: Point, p: Point) -> Matrix:
+    """The matrix mapping ``c`` -> origin and ``p`` onto the +x axis (PyMuPDF
+    ``util_hor_matrix``): translate by ``-c`` then rotate by the normalized
+    ``p - c`` vector. Used by :meth:`Shape.draw_squiggle` / ``draw_zigzag``."""
+    s = (p - c).unit
+    m1 = Matrix(1, 0, 0, 1, -c.x, -c.y)
+    m2 = Matrix(s.x, -s.y, s.y, s.x, 0, 0)
+    return m1 * m2
 
 
 def _color(c) -> tuple[float, float, float] | None:
@@ -474,19 +485,35 @@ class Shape:
     then write it to the page with :meth:`commit`.
     """
 
-    __slots__ = ("_shape",)
+    # PyMuPDF's draw_curve (3-point) control constant.
+    _CURVE_KAPPA = 0.55228474983
 
-    def __init__(self, core_shape: "_core.Shape") -> None:
+    __slots__ = ("_shape", "_page", "_doc", "_rect")
+
+    def __init__(
+        self,
+        core_shape: "_core.Shape",
+        page: "Page | None" = None,
+        doc: "Document | None" = None,
+    ) -> None:
         self._shape = core_shape
+        self._page = page
+        self._doc = doc
+        # The accumulated drawing bounding box (PyMuPDF ``Shape.rect``); ``None``
+        # until the first geometry is added.
+        self._rect: Rect | None = None
 
     def draw_line(self, p1, p2) -> Point:
         """Draws a line segment (PyMuPDF ``shape.draw_line``)."""
         self._shape.draw_line(_pt(p1), _pt(p2))
+        self.update_rect(p1)
+        self.update_rect(p2)
         return Point(*_pt(p2))
 
     def draw_rect(self, rect) -> Rect:
         """Draws a rectangle (PyMuPDF ``shape.draw_rect``)."""
         self._shape.draw_rect(_rt(rect))
+        self.update_rect(rect)
         return _rect(_rt(rect))
 
     def draw_circle(self, center, radius) -> Point:
@@ -497,24 +524,172 @@ class Shape:
     def draw_oval(self, rect) -> Rect:
         """Draws an ellipse inscribed in ``rect`` (PyMuPDF ``shape.draw_oval``)."""
         self._shape.draw_oval(_rt(rect))
+        self.update_rect(rect)
         return _rect(_rt(rect))
 
     def draw_bezier(self, p1, p2, p3, p4) -> Point:
         """Draws a cubic Bézier curve (PyMuPDF ``shape.draw_bezier``)."""
         self._shape.draw_bezier(_pt(p1), _pt(p2), _pt(p3), _pt(p4))
+        for p in (p1, p2, p3, p4):
+            self.update_rect(p)
         return Point(*_pt(p4))
 
     def draw_polyline(self, points) -> Point:
         """Draws a connected polyline (PyMuPDF ``shape.draw_polyline``)."""
         pts = [_pt(p) for p in points]
         self._shape.draw_polyline(pts)
+        for p in pts:
+            self.update_rect(p)
         return Point(*pts[-1]) if pts else Point()
 
     def draw_curve(self, points) -> Point:
         """Draws a smooth curve through ``points`` (PyMuPDF ``shape.draw_curve``)."""
         pts = [_pt(p) for p in points]
         self._shape.draw_curve(pts)
+        for p in pts:
+            self.update_rect(p)
         return Point(*pts[-1]) if pts else Point()
+
+    def draw_quad(self, quad) -> Point:
+        """Draws a (closed) quadrilateral (PyMuPDF ``shape.draw_quad``).
+
+        Mirrors PyMuPDF exactly: emits ``draw_polyline([ul, ll, lr, ur, ul])``.
+        Accepts an :class:`~oxide_pdf.geometry.Quad` (uses its named corners) or
+        a 4-sequence of points in PyMuPDF ``(ul, ur, lr, ll)`` order.
+        """
+        if all(hasattr(quad, c) for c in ("ul", "ur", "ll", "lr")):
+            ul, ur, ll, lr = quad.ul, quad.ur, quad.ll, quad.lr
+        else:
+            ul, ur, ll, lr = (quad[0], quad[1], quad[2], quad[3])
+        return self.draw_polyline([ul, ll, lr, ur, ul])
+
+    def draw_curve3(self, p1, p2, p3) -> Point:
+        """PyMuPDF's 3-point ``draw_curve``: a cubic through ``p1`` and ``p3``
+        with single control point ``p2``. (oxide's public ``draw_curve`` takes a
+        point list, so this private helper preserves the exact PyMuPDF math used
+        by :meth:`draw_squiggle`.)"""
+        a = Point(*_pt(p1))
+        b = Point(*_pt(p2))
+        c = Point(*_pt(p3))
+        k = self._CURVE_KAPPA
+        k1 = a + (b - a) * k
+        k2 = c + (b - c) * k
+        return self.draw_bezier(a, k1, k2, c)
+
+    def draw_sector(self, center, point, angle, fullSector: bool = True) -> Point:  # noqa: N803
+        """Draws a circular sector / pie wedge (PyMuPDF ``shape.draw_sector``).
+
+        Sweeps ``angle`` degrees from ``point`` around ``center``. Replicates
+        PyMuPDF's 90°-arc decomposition (cubic Béziers) exactly. With
+        ``fullSector`` the arc is closed back through ``center``.
+        """
+        center = Point(*_pt(center))
+        point = Point(*_pt(point))
+        betar = math.radians(-float(angle))
+        w360 = math.radians(math.copysign(360, betar)) * (-1)
+        w90 = math.radians(math.copysign(90, betar))
+        w45 = w90 / 2
+        while abs(betar) > 2 * math.pi:
+            betar += w360
+        C = center
+        P = point
+        S = P - C
+        rad = abs(S)
+        if not rad > 1e-5:
+            raise ValueError("radius must be positive")
+        alfa = self.horizontal_angle(center, point)
+        Q = Point(0, 0)
+        # 'm' to the start point so the arc chains from there.
+        last = point
+        while abs(betar) > abs(w90):  # full 90° arcs
+            q1 = C.x + math.cos(alfa + w90) * rad
+            q2 = C.y + math.sin(alfa + w90) * rad
+            Q = Point(q1, q2)
+            r1 = C.x + math.cos(alfa + w45) * rad / math.cos(w45)
+            r2 = C.y + math.sin(alfa + w45) * rad / math.cos(w45)
+            R = Point(r1, r2)
+            kappah = (1 - math.cos(w45)) * 4 / 3 / abs(R - Q)
+            kappa = kappah * abs(P - Q)
+            cp1 = P + (R - P) * kappa
+            cp2 = Q + (R - Q) * kappa
+            self.draw_bezier(last, cp1, cp2, Q)
+            last = Q
+            betar -= w90
+            alfa += w90
+            P = Q
+        if abs(betar) > 1e-3:  # remaining partial arc
+            beta2 = betar / 2
+            q1 = C.x + math.cos(alfa + betar) * rad
+            q2 = C.y + math.sin(alfa + betar) * rad
+            Q = Point(q1, q2)
+            r1 = C.x + math.cos(alfa + beta2) * rad / math.cos(beta2)
+            r2 = C.y + math.sin(alfa + beta2) * rad / math.cos(beta2)
+            R = Point(r1, r2)
+            kappah = (1 - math.cos(beta2)) * 4 / 3 / abs(R - Q)
+            kappa = kappah * abs(P - Q) / (1 - math.cos(betar))
+            cp1 = P + (R - P) * kappa
+            cp2 = Q + (R - Q) * kappa
+            self.draw_bezier(last, cp1, cp2, Q)
+            last = Q
+        if fullSector:
+            # Close the wedge as a fresh subpath: arc-start (``point``) ->
+            # ``center`` -> arc-end ``Q``, then closepath (`h`) back to ``point``
+            # — exactly as PyMuPDF does (the `h` is emitted, not an explicit line).
+            self.draw_polyline([point, center, Q])
+            self._shape.draw_close()
+        return Point(Q.x, Q.y)
+
+    def draw_squiggle(self, p1, p2, breadth: float = 2) -> Point:
+        """Draws a wavy / squiggly line from ``p1`` to ``p2`` (PyMuPDF
+        ``shape.draw_squiggle``). Replicates PyMuPDF's phase math exactly."""
+        a = Point(*_pt(p1))
+        b = Point(*_pt(p2))
+        rad = abs(b - a)
+        cnt = 4 * int(round(rad / (4 * breadth)))
+        if cnt < 4:
+            raise ValueError("points too close")
+        mb = rad / cnt
+        i_mat = ~Matrix(_hor_matrix(a, b))
+        k = 2.4142135623765633
+        points = []
+        for i in range(1, cnt):
+            if i % 4 == 1:
+                p = Point(i, -k) * mb
+            elif i % 4 == 3:
+                p = Point(i, k) * mb
+            else:
+                p = Point(i, 0) * mb
+            points.append(p * i_mat)
+        points = [a] + points + [b]
+        n = len(points)
+        i = 0
+        while i + 2 < n:
+            self.draw_curve3(points[i], points[i + 1], points[i + 2])
+            i += 2
+        return Point(b.x, b.y)
+
+    def draw_zigzag(self, p1, p2, breadth: float = 2) -> Point:
+        """Draws a zig-zagged line from ``p1`` to ``p2`` (PyMuPDF
+        ``shape.draw_zigzag``). Replicates PyMuPDF's phase math exactly."""
+        a = Point(*_pt(p1))
+        b = Point(*_pt(p2))
+        rad = abs(b - a)
+        cnt = 4 * int(round(rad / (4 * breadth)))
+        if cnt < 4:
+            raise ValueError("points too close")
+        mb = rad / cnt
+        i_mat = ~Matrix(_hor_matrix(a, b))
+        points = []
+        for i in range(1, cnt):
+            if i % 4 == 1:
+                p = Point(i, -1) * mb
+            elif i % 4 == 3:
+                p = Point(i, 1) * mb
+            else:
+                continue
+            points.append(p * i_mat)
+        self.draw_polyline([a] + points + [b])
+        return Point(b.x, b.y)
 
     def finish(
         self,
@@ -539,6 +714,152 @@ class Shape:
     def commit(self, overlay: bool = True) -> None:
         """Writes the accumulated drawing to the page (PyMuPDF ``shape.commit``)."""
         self._shape.commit(overlay=bool(overlay))
+
+    # --- text (PyMuPDF Shape.insert_text / insert_textbox) ---
+    #
+    # PyMuPDF buffers Shape text until ``commit``; oxide writes it onto the
+    # owning page immediately. The page is the same object, so the on-page
+    # result and the return values (line count / leftover height) are identical.
+    def insert_text(
+        self,
+        point,
+        text,
+        *,
+        fontname: str = "helv",
+        fontsize: float = 11.0,
+        color=(0, 0, 0),
+        fontfile=None,
+        **_ignored,
+    ) -> int:
+        """Writes ``text`` at ``point`` (PyMuPDF ``shape.insert_text``).
+
+        Returns the number of lines written. ``text`` may be a string or a
+        list/tuple of lines.
+        """
+        if self._page is None:
+            raise PdfUnsupportedError("Shape.insert_text() needs an owning Page")
+        if isinstance(text, (list, tuple)):
+            text = "\n".join(str(t) for t in text)
+        return self._page.insert_text(
+            point, str(text), fontname=fontname, fontsize=float(fontsize),
+            color=color, fontfile=fontfile,
+        )
+
+    def insert_textbox(
+        self,
+        rect,
+        buffer,
+        *,
+        fontname: str = "helv",
+        fontsize: float = 11.0,
+        color=(0, 0, 0),
+        align: int = 0,
+        fontfile=None,
+        **_ignored,
+    ) -> float:
+        """Fills ``rect`` with wrapped ``buffer`` (PyMuPDF ``shape.insert_textbox``).
+
+        Returns the unused (or, if negative, deficit) vertical space, like
+        PyMuPDF. Also extends the shape's accumulated :attr:`rect`.
+        """
+        if self._page is None:
+            raise PdfUnsupportedError("Shape.insert_textbox() needs an owning Page")
+        if isinstance(buffer, (list, tuple)):
+            buffer = "\n".join(str(t) for t in buffer)
+        more = self._page.insert_textbox(
+            rect, str(buffer), fontname=fontname, fontsize=float(fontsize),
+            color=color, align=int(align), fontfile=fontfile,
+        )
+        self.update_rect(rect)
+        return more
+
+    # --- geometry / parent properties (PyMuPDF Shape.*) ---
+    @property
+    def doc(self) -> "Document | None":
+        """The owning :class:`Document` (PyMuPDF ``Shape.doc``)."""
+        return self._doc
+
+    @property
+    def page(self) -> "Page | None":
+        """The owning :class:`Page` (PyMuPDF ``Shape.page``)."""
+        return self._page
+
+    @property
+    def width(self) -> float:
+        """The page's media-box width (PyMuPDF ``Shape.width``)."""
+        return self._page.mediabox_size.x if self._page is not None else 0.0
+
+    @property
+    def height(self) -> float:
+        """The page's media-box height (PyMuPDF ``Shape.height``)."""
+        return self._page.mediabox_size.y if self._page is not None else 0.0
+
+    @property
+    def x(self) -> float:
+        """The page crop-box ``x0`` origin (PyMuPDF ``Shape.x``)."""
+        return self._page.cropbox_position.x if self._page is not None else 0.0
+
+    @property
+    def y(self) -> float:
+        """The page crop-box ``y0`` origin (PyMuPDF ``Shape.y``)."""
+        return self._page.cropbox_position.y if self._page is not None else 0.0
+
+    @property
+    def rect(self) -> Rect | None:
+        """The bounding box of all drawn geometry, or ``None`` (PyMuPDF
+        ``Shape.rect``)."""
+        return self._rect
+
+    @staticmethod
+    def horizontal_angle(c, p) -> float:
+        """The angle (radians) of the vector ``c`` -> ``p`` relative to the
+        horizontal, quadrant-aware (PyMuPDF ``Shape.horizontal_angle``)."""
+        c = Point(*_pt(c))
+        p = Point(*_pt(p))
+        s = (p - c).unit
+        alfa = math.asin(abs(s.y))
+        if s.x < 0:
+            if s.y <= 0:
+                alfa = -(math.pi - alfa)
+            else:
+                alfa = math.pi - alfa
+        else:
+            if s.y >= 0:
+                pass
+            else:
+                alfa = -alfa
+        return alfa
+
+    def update_rect(self, x) -> None:
+        """Extends the accumulated :attr:`rect` to include point/rect ``x``
+        (PyMuPDF ``Shape.updateRect``)."""
+        is_rect = hasattr(x, "__len__") and len(x) == 4
+        if self._rect is None:
+            if is_rect:
+                r = _rect(_rt(x))
+                self._rect = r.normalize()
+            else:
+                px, py = _pt(x)
+                self._rect = Rect(px, py, px, py)
+            return
+        if is_rect:
+            rx0, ry0, rx1, ry1 = _rt(x)
+            x0, x1 = min(rx0, rx1), max(rx0, rx1)
+            y0, y1 = min(ry0, ry1), max(ry0, ry1)
+        else:
+            px, py = _pt(x)
+            x0 = x1 = px
+            y0 = y1 = py
+        self._rect = Rect(
+            min(self._rect.x0, x0),
+            min(self._rect.y0, y0),
+            max(self._rect.x1, x1),
+            max(self._rect.y1, y1),
+        )
+
+    # PyMuPDF deprecated camelCase alias.
+    def updateRect(self, x) -> None:  # noqa: N802
+        self.update_rect(x)
 
     def __repr__(self) -> str:
         return "<oxide_pdf.Shape>"
@@ -1361,7 +1682,7 @@ class Page:
 
     def new_shape(self) -> Shape:
         """Builds a reusable :class:`Shape` for this page (PyMuPDF ``page.new_shape``)."""
-        return Shape(self._page.new_shape())
+        return Shape(self._page.new_shape(), page=self, doc=self._parent)
 
     # --- annotations (PRD §8.8) ---
     def add_text_annot(self, point, text: str, *, icon: str = "Note", **_ignored) -> Annot:

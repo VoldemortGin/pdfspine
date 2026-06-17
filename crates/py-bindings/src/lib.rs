@@ -786,6 +786,12 @@ impl PyShape {
         Ok(())
     }
 
+    /// Closes the current subpath with `h` (used by `Shape.draw_sector`).
+    fn draw_close(&mut self) -> PyResult<()> {
+        self.handle()?.close_path();
+        Ok(())
+    }
+
     /// Finishes the current styled block (PyMuPDF `Shape.finish`).
     #[pyo3(signature = (color=None, fill=None, width=1.0, dashes=None, even_odd=false, close_path=false))]
     fn finish(

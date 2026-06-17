@@ -1849,6 +1849,8 @@ pub enum ShapeOp {
     Polyline(Vec<Point>),
     /// `draw_curve(points)`.
     Curve(Vec<Point>),
+    /// `close_path()` — closes the current subpath with `h`.
+    Close,
 }
 
 /// The paint parameters for one finished `Shape` block (PyMuPDF
@@ -1921,6 +1923,12 @@ impl ShapeHandle {
         self.current.push(ShapeOp::Curve(points));
     }
 
+    /// Closes the current subpath with `h` (PyMuPDF `Shape.draw_sector` closes
+    /// its wedge this way).
+    pub fn close_path(&mut self) {
+        self.current.push(ShapeOp::Close);
+    }
+
     /// Finishes the current styled block with the given paint parameters
     /// (PyMuPDF `Shape.finish`). Subsequent draws begin a new block.
     pub fn finish(&mut self, params: FinishParams) {
@@ -1968,6 +1976,7 @@ impl ShapeHandle {
                     ShapeOp::Bezier(p1, p2, p3, p4) => shape.draw_bezier(*p1, *p2, *p3, *p4),
                     ShapeOp::Polyline(pts) => shape.draw_polyline(pts),
                     ShapeOp::Curve(pts) => shape.draw_curve(pts),
+                    ShapeOp::Close => shape.close_path(),
                 }
             }
             shape.finish(

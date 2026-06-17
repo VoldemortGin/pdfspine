@@ -33,6 +33,12 @@ pub struct Shape<'a> {
     /// Finished paint groups (each a balanced `q … Q`), accumulated across
     /// multiple `finish` calls before a single `commit`.
     committed: Vec<u8>,
+    /// The last path point emitted (in user space), or `None` after a
+    /// `finish`/start. Used to suppress a redundant `m` when a new segment
+    /// begins exactly where the previous one ended (PyMuPDF's `last_point`),
+    /// so chained primitives (e.g. squiggle's beziers) match fitz operator-for-
+    /// operator.
+    last: Option<Point>,
 }
 
 impl<'a> Shape<'a> {
@@ -47,6 +53,7 @@ impl<'a> Shape<'a> {
             pc: PageContent::new(doc, index)?,
             buf: Vec::new(),
             committed: Vec::new(),
+            last: None,
         })
     }
 
@@ -61,13 +68,27 @@ impl<'a> Shape<'a> {
         self.buf.push(b'\n');
     }
 
+    /// Emits a `m` to user-space point `a` unless the path is already there
+    /// (PyMuPDF's `last_point` optimization), then records it as the last point.
+    fn move_to(&mut self, a: Point) {
+        let here = self
+            .last
+            .map(|l| (l.x - a.x).abs() < 1e-9 && (l.y - a.y).abs() < 1e-9)
+            .unwrap_or(false);
+        if !here {
+            self.op(&format!("{} {} m", fmt_num(a.x), fmt_num(a.y)));
+        }
+        self.last = Some(a);
+    }
+
     /// A straight segment from `p1` to `p2` (`m … l`). Returns `p2` (PyMuPDF
     /// returns the last point so segments chain).
     pub fn draw_line(&mut self, p1: Point, p2: Point) -> Point {
         let a = self.u(p1);
         let b = self.u(p2);
-        self.op(&format!("{} {} m", fmt_num(a.x), fmt_num(a.y)));
+        self.move_to(a);
         self.op(&format!("{} {} l", fmt_num(b.x), fmt_num(b.y)));
+        self.last = Some(b);
         p2
     }
 
@@ -75,12 +96,20 @@ impl<'a> Shape<'a> {
     pub fn draw_polyline(&mut self, points: &[Point]) {
         if let Some((first, rest)) = points.split_first() {
             let a = self.u(*first);
-            self.op(&format!("{} {} m", fmt_num(a.x), fmt_num(a.y)));
+            self.move_to(a);
             for p in rest {
                 let q = self.u(*p);
                 self.op(&format!("{} {} l", fmt_num(q.x), fmt_num(q.y)));
+                self.last = Some(q);
             }
         }
+    }
+
+    /// Closes the current subpath with `h` (PyMuPDF closes the sector/pie wedge
+    /// this way). Resets `last` so the next primitive starts a fresh `m`.
+    pub fn close_path(&mut self) {
+        self.op("h");
+        self.last = None;
     }
 
     /// An axis-aligned rectangle (`re`). The rect is given in top-left space; in
@@ -104,7 +133,7 @@ impl<'a> Shape<'a> {
         let b = self.u(p2);
         let c = self.u(p3);
         let d = self.u(p4);
-        self.op(&format!("{} {} m", fmt_num(a.x), fmt_num(a.y)));
+        self.move_to(a);
         self.op(&format!(
             "{} {} {} {} {} {} c",
             fmt_num(b.x),
@@ -114,6 +143,7 @@ impl<'a> Shape<'a> {
             fmt_num(d.x),
             fmt_num(d.y)
         ));
+        self.last = Some(d);
     }
 
     /// A smooth curve through `points` (a Catmull-Rom-style chain emitted as
@@ -214,6 +244,8 @@ impl<'a> Shape<'a> {
             fmt_num(cy)
         ));
         self.op("h");
+        // The closed subpath ends the current pen position.
+        self.last = None;
     }
 
     /// Finishes the **current** sub-path group: prepends the graphics-state
@@ -237,8 +269,10 @@ impl<'a> Shape<'a> {
         even_odd: bool,
         close_path: bool,
     ) {
-        // Pull out the path constructed since the previous finish/start.
+        // Pull out the path constructed since the previous finish/start. A
+        // finished group starts a fresh subpath (PyMuPDF resets last_point).
         let path = std::mem::take(&mut self.buf);
+        self.last = None;
         let mut block = Vec::new();
         block.extend_from_slice(b"q\n");
         block.extend_from_slice(format!("{} w\n", fmt_num(width)).as_bytes());

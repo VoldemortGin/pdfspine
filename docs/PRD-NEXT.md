@@ -15,8 +15,8 @@ gating. Tables, multilingual, CJK, and domain breadth all measured at near-parit
 **Rendering (`get_pixmap`) is now near-parity for embedded-font text**: SSIM ~0.58 → **0.945 mean /
 0.986 median** vs fitz after four root-cause fixes (full per-glyph `Trm` into the render path;
 bare-CFF `FontFile3` parsing; CCITT/JBIG2 1-bpc polarity; CID-keyed CFF charset CID→GID). See §2.A
-for what landed and the remaining long tail. **1338+ Rust + 419 pytest green.** API coverage **67.1%**
-(516/769 in `COMPAT.toml`) after batch-1 Page geometry + batch-2 Document page-helpers.
+for what landed and the remaining long tail. **1338+ Rust + 445 pytest green.** API coverage **69.1%**
+(531/769 in `COMPAT.toml`) after batch-1 Page geometry + batch-2 Document page-helpers + batch-3 Shape.
 
 ## 1. Tools available (reuse, don't rebuild)
 
@@ -88,7 +88,7 @@ Renderer code: `crates/pdf-render`; glyph data plumbing in `crates/pdf-text` (`i
   `pdf-fonts` CID→Unicode fix.
 - **CI gate** — wire a born-digital `order ≥ 0.95` (and tables count-agreement) regression gate into CI.
 
-### C. API parity coverage (track A) — 67.1% → higher
+### C. API parity coverage (track A) — 69.1% → higher
 > **NB (drift fixed 2026-06-17):** batches 3 & 4 hand-edited `COMPAT.toml` (Font/Colorspace/Link/
 > Outline/TextWriter/Tools/xref-write/text-trace → 63.7%) but did NOT update the generator
 > `scripts/_compat_catalog.py`, so regenerating regressed coverage to 53.7%. A reconciliation pass at
@@ -112,8 +112,12 @@ src/lib.rs` mean batches that both touch them run SEQUENTIALLY; new pytest goes 
    labels + page-numbers exact-match real fitz on roman/decimal/prefix rules), page-ops
    `insert_page`/`copy_page`/`move_page`/`delete_pages` (page count + order exact-match real fitz).
    Tests in `test_longtail6.py`.
-3. **Annot members** + **Widget appearance** (colors/border/text-style) + **Shape** draw_quad/sector/
-   squiggle/zigzag + insert_text/insert_textbox + props.
+3. **Shape** ~~draw_quad/sector/squiggle/zigzag + insert_text/insert_textbox + props~~ **DONE
+   (batch-3, 2026-06-17, +15 → 69.1%):** draw_quad/sector/squiggle/zigzag (path operators
+   exact-match real fitz incl. sector closepath `h` via a new `close_path` shape op), insert_text/
+   insert_textbox, props (doc/page/width/height/x/y/rect/horizontal_angle/update_rect). Tests in
+   `test_longtail7.py`. **Still TODO:** **Annot members** (set_rotation/popup*/apn_*/file-attach/…)
+   + **Widget appearance** (border/fill/text colors+style, on_state, reset, …).
 4. **TextPage** extractHTML/XHTML/XML/extractSelection/Textbox/search; **Font** glyph_bbox/
    valid_codepoints/buffer.
 5. Document low-level COS (`update_object`/`update_stream`/`get_new_xref`/…), state/meta, OCG/layers.
