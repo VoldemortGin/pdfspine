@@ -57,8 +57,8 @@ fn tables_none_002_prose_no_table() {
     let content = b"BT /F1 12 Tf 1 0 0 1 72 700 Tm \
         (The quick brown fox jumps over the lazy dog) Tj ET";
     let (tp, ws, dev) = build(content);
-    // Lines strategy: no rulings, falls back to text; prose is a single row so
-    // it should not form a >= 2-row grid.
+    // Lines strategy: no rulings → no table (it detects from ruling evidence only
+    // and never clusters prose).
     let finder = find_tables(
         &tp,
         &ws,

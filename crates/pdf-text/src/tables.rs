@@ -3,12 +3,16 @@
 //!
 //! Two detection strategies, mirroring PyMuPDF:
 //!
-//! - **`Lines`** — reconstruct the cell grid from the page's vector ruling
-//!   lines. Thin/long fills and strokes from the interpreter's drawings are
-//!   reduced to horizontal + vertical segments, snapped to a tolerance grid, and
-//!   the grid's edge graph is walked to recover cell rectangles.
-//! - **`Text`** — when there are no usable rulings, cluster the page [`Word`]s
-//!   into columns (x-gaps) and rows (y-gaps) to infer an implicit grid.
+//! - **`Lines`** (and `LinesStrict`) — reconstruct the cell grid from the page's
+//!   vector ruling lines only. Thin/long fills and strokes from the interpreter's
+//!   drawings are reduced to horizontal + vertical segments, snapped & merged
+//!   into edges, the edge graph is walked to recover the smallest ruled
+//!   rectangles, and contiguous (corner-touching) rectangles are grouped into
+//!   distinct tables. Detection requires real ruling evidence — a page with no
+//!   rulings (e.g. borderless multi-column prose) yields **no** tables; there is
+//!   no fallback to text clustering. This matches PyMuPDF's default.
+//! - **`Text`** — an opt-in strategy that ignores rulings and clusters the page
+//!   [`Word`]s into columns (x-gaps) and rows (y-gaps) to infer an implicit grid.
 //!
 //! Everything here works in **PyMuPDF device space** (origin top-left, y down):
 //! [`Table`] bboxes/cells and the input [`Word`]s share that frame. Callers that
@@ -42,11 +46,14 @@ use crate::model::{DrawPath, PathItem, TextPage, Word};
 /// The cell-grid extraction strategy (PyMuPDF `find_tables(strategy=...)`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum Strategy {
-    /// Build the grid from vector ruling lines only (PyMuPDF `"lines"`).
+    /// Build the grid from vector ruling lines only (PyMuPDF `"lines"`, the
+    /// default). Detection requires real ruling evidence; a page with no rulings
+    /// (e.g. borderless multi-column prose) yields no tables — this never falls
+    /// back to text/whitespace clustering, matching PyMuPDF's default.
     #[default]
     Lines,
-    /// Like [`Strategy::Lines`] but never falls back to text clustering
-    /// (PyMuPDF `"lines_strict"`). Rulings must form the grid on their own.
+    /// Like [`Strategy::Lines`] — the grid is built from vector rulings only
+    /// (PyMuPDF `"lines_strict"`). Kept as a distinct strategy for API parity.
     LinesStrict,
     /// Infer the grid purely from word alignment (PyMuPDF `"text"`).
     Text,
@@ -344,15 +351,13 @@ pub fn find_tables(
     options: &TableOptions,
 ) -> TableFinder {
     let _ = textpage; // reserved (page size / blocks) — words drive extraction.
+                      // Both `Lines` and `LinesStrict` detect from vector ruling evidence only and
+                      // never fall back to text/whitespace clustering — that is exactly PyMuPDF's
+                      // default behavior, and it is what keeps borderless prose (multi-column body
+                      // text with no rulings) from being mistaken for a table. Only the explicit
+                      // `Text` strategy infers a grid from word alignment.
     let mut tables = match options.strategy {
-        Strategy::Lines => {
-            let mut t = detect_lines(drawings, options);
-            if t.is_empty() {
-                t = detect_text(words, options);
-            }
-            t
-        }
-        Strategy::LinesStrict => detect_lines(drawings, options),
+        Strategy::Lines | Strategy::LinesStrict => detect_lines(drawings, options),
         Strategy::Text => detect_text(words, options),
     };
     // Populate each table's header from its first row's cell text (PyMuPDF
@@ -420,67 +425,310 @@ impl Segment {
     }
 }
 
-/// Detects tables from ruling lines.
+/// Detects tables from ruling lines, mirroring PyMuPDF's lattice algorithm.
+///
+/// Rather than taking the Cartesian product of every snapped row/column line
+/// (which lumps the whole page into one over-segmented grid and invents grid
+/// lines from stray ruling fragments), this:
+///
+/// 1. snaps the ruling segments into merged horizontal/vertical **edges**;
+/// 2. finds the points where a vertical edge crosses a horizontal edge
+///    (intersections);
+/// 3. recovers the **smallest** rectangle ("unit cell") anchored at each
+///    intersection whose four sides are all actually ruled;
+/// 4. groups unit cells that touch (share a corner) into separate tables —
+///    disconnected ruled regions become distinct tables, exactly like fitz;
+/// 5. drops degenerate groups (effectively single-row/-column) so a lone
+///    cross of rules is not reported as a table.
+///
+/// Each surviving table's row/column grid lines are taken from *its own* cells'
+/// coordinates, so the grid shape tracks the real ruled structure instead of
+/// the page-wide line product.
 fn detect_lines(drawings: &[DrawPath], opt: &TableOptions) -> Vec<Table> {
     let (h_segs, v_segs) = collect_segments(drawings, opt);
-    if h_segs.len() < 2 || v_segs.len() < 2 {
+    if h_segs.is_empty() || v_segs.is_empty() {
         return Vec::new();
     }
 
-    // Snap the constant coordinates to grid lines.
-    let rows = snap_positions(h_segs.iter().map(|s| s.pos), opt.snap_tolerance);
-    let cols = snap_positions(v_segs.iter().map(|s| s.pos), opt.snap_tolerance);
+    // Merge the raw segments into snapped edges: near-coincident lines snap to
+    // one grid line and touching/overlapping collinear fragments join, but
+    // fragments separated by a real gap stay distinct (no gap-bridging).
+    let h_edges = merge_edges(&h_segs, opt.snap_tolerance);
+    let v_edges = merge_edges(&v_segs, opt.snap_tolerance);
+    if h_edges.len() < 2 || v_edges.len() < 2 {
+        return Vec::new();
+    }
+
+    // The unit cells (smallest ruled rectangles) recovered from the edge graph.
+    let unit_cells = lattice_cells(&h_edges, &v_edges, opt.snap_tolerance);
+    if unit_cells.is_empty() {
+        return Vec::new();
+    }
+
+    // Group touching unit cells into separate, contiguous tables.
+    let groups = group_cells(&unit_cells);
+
+    let mut tables = Vec::new();
+    for group in groups {
+        if let Some(table) = assemble_table(&group, &h_edges, &v_edges, opt) {
+            tables.push(table);
+        }
+    }
+    // Top-to-bottom, then left-to-right (PyMuPDF table order).
+    tables.sort_by(|a, b| {
+        a.bbox
+            .y0
+            .partial_cmp(&b.bbox.y0)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then(
+                a.bbox
+                    .x0
+                    .partial_cmp(&b.bbox.x0)
+                    .unwrap_or(std::cmp::Ordering::Equal),
+            )
+    });
+    tables
+}
+
+/// A snapped axis-aligned ruling edge (device space): `pos` is the constant
+/// coordinate, `[lo, hi]` the spanned extent on the varying axis.
+#[derive(Clone, Copy, Debug)]
+struct Edge {
+    pos: f64,
+    lo: f64,
+    hi: f64,
+}
+
+/// Snaps a set of same-orientation [`Segment`]s into merged [`Edge`]s.
+///
+/// Mirrors PyMuPDF's `merge_edges`: segments whose constant coordinate falls
+/// within `tol` of one another snap to the same grid line (the cluster mean), and
+/// within a snapped line **only collinear fragments that touch or overlap**
+/// (gap ≤ `tol`) are joined into one edge spanning their union. Fragments at the
+/// same position but separated by a real gap stay **separate** edges — this is
+/// what stops a long rule from being synthesized across a blank region and
+/// bridging two otherwise-disconnected ruled blocks into one giant grid.
+fn merge_edges(segs: &[Segment], tol: f64) -> Vec<Edge> {
+    if segs.is_empty() {
+        return Vec::new();
+    }
+    let mut sorted: Vec<&Segment> = segs.iter().collect();
+    sorted.sort_by(|a, b| {
+        a.pos
+            .partial_cmp(&b.pos)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    let mut edges = Vec::new();
+    // First pass: cluster by constant coordinate (snap near-coincident lines).
+    let mut cluster: Vec<&Segment> = vec![sorted[0]];
+    let mut last = sorted[0].pos;
+    let flush = |cluster: &[&Segment], edges: &mut Vec<Edge>| {
+        let pos = cluster.iter().map(|s| s.pos).sum::<f64>() / cluster.len() as f64;
+        // Second pass: join only overlapping / near-touching fragments.
+        let mut frags: Vec<(f64, f64)> = cluster.iter().map(|s| (s.lo, s.hi)).collect();
+        frags.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+        let mut lo = frags[0].0;
+        let mut hi = frags[0].1;
+        for &(flo, fhi) in &frags[1..] {
+            if flo <= hi + tol {
+                hi = hi.max(fhi); // overlapping / touching: extend
+            } else {
+                edges.push(Edge { pos, lo, hi }); // a real gap: emit, start anew
+                lo = flo;
+                hi = fhi;
+            }
+        }
+        edges.push(Edge { pos, lo, hi });
+    };
+    for s in &sorted[1..] {
+        if (s.pos - last).abs() <= tol {
+            cluster.push(s);
+        } else {
+            flush(&cluster, &mut edges);
+            cluster.clear();
+            cluster.push(s);
+        }
+        last = s.pos;
+    }
+    flush(&cluster, &mut edges);
+    edges
+}
+
+/// Recovers the smallest ruled rectangles ("unit cells") from the merged edge
+/// graph, mirroring PyMuPDF's `intersections_to_cells`.
+///
+/// The candidate grid lines are the sorted edge positions on each axis. For each
+/// top-left corner `(cols[ci], rows[ri])` we walk right/down looking for the
+/// nearest column / row line such that all four sides of the resulting rectangle
+/// are ruled (an edge crosses each side over its full length, within `tol`).
+/// The first such rectangle is the unit cell; larger spans are left to the merge
+/// pass. A corner with no enclosing unit cell contributes nothing.
+fn lattice_cells(h_edges: &[Edge], v_edges: &[Edge], tol: f64) -> Vec<Rect> {
+    let rows = unique_positions(h_edges.iter().map(|e| e.pos), tol);
+    let cols = unique_positions(v_edges.iter().map(|e| e.pos), tol);
     if rows.len() < 2 || cols.len() < 2 {
         return Vec::new();
     }
+    let h_at = |y: f64, x0: f64, x1: f64| edge_spans(h_edges, y, x0, x1, tol);
+    let v_at = |x: f64, y0: f64, y1: f64| edge_spans(v_edges, x, y0, y1, tol);
 
-    // Coverage maps: which horizontal grid lines exist between adjacent col pairs
-    // and vice versa. We build cells where all four edges are (partially) ruled.
-    let cells = build_cells(&rows, &cols, &h_segs, &v_segs, opt);
-    let n_present = cells.iter().flatten().filter(|c| c.is_some()).count();
-    if n_present == 0 {
-        return Vec::new();
+    let mut cells = Vec::new();
+    // Anchor each unit cell at a top-left grid corner `(x0, y0)`.
+    for (ci, &x0) in cols.iter().enumerate().take(cols.len() - 1) {
+        for (ri, &y0) in rows.iter().enumerate().take(rows.len() - 1) {
+            // The smallest rectangle anchored at (x0, y0) whose four sides are all
+            // ruled. We scan bottom row lines (top→down), and for each the right
+            // column lines (left→right), taking the first `(bottom, right)` pair
+            // that fully closes a cell (mirrors PyMuPDF `find_smallest_cell`, which
+            // tries every below/right point until the box is enclosed).
+            'found: for &y1 in &rows[ri + 1..] {
+                if !v_at(x0, y0, y1) {
+                    continue; // left side not ruled down to y1
+                }
+                for &x1 in &cols[ci + 1..] {
+                    // Top + bottom must be ruled across, right ruled down.
+                    if h_at(y0, x0, x1) && h_at(y1, x0, x1) && v_at(x1, y0, y1) {
+                        cells.push(Rect::new(x0, y0, x1, y1));
+                        break 'found;
+                    }
+                }
+            }
+        }
     }
+    cells
+}
 
-    let bbox = Rect::new(cols[0], rows[0], cols[cols.len() - 1], rows[rows.len() - 1]);
+/// Whether some edge at constant `pos` (±tol) spans the **whole** of `[lo, hi]`
+/// (its extent reaches both ends within `tol`), i.e. the side is fully ruled.
+fn edge_spans(edges: &[Edge], pos: f64, lo: f64, hi: f64, tol: f64) -> bool {
+    edges
+        .iter()
+        .any(|e| (e.pos - pos).abs() <= tol && e.lo <= lo + tol && e.hi >= hi - tol)
+}
+
+/// Clusters a stream of 1-D positions into unique sorted coordinates within
+/// `tol` (single-link, cluster mean) — the grid-line coordinates of one axis.
+fn unique_positions(positions: impl Iterator<Item = f64>, tol: f64) -> Vec<f64> {
+    snap_positions(positions, tol)
+}
+
+/// Groups unit cells into contiguous tables: two cells join when they share a
+/// corner (mirrors PyMuPDF `cells_to_tables`). Disconnected ruled regions become
+/// separate groups.
+fn group_cells(cells: &[Rect]) -> Vec<Vec<Rect>> {
+    let n = cells.len();
+    let mut parent: Vec<usize> = (0..n).collect();
+    fn find(parent: &mut [usize], i: usize) -> usize {
+        let mut r = i;
+        while parent[r] != r {
+            r = parent[r];
+        }
+        // Path compression.
+        let mut x = i;
+        while parent[x] != r {
+            let nx = parent[x];
+            parent[x] = r;
+            x = nx;
+        }
+        r
+    }
+    let corners = |c: &Rect| [(c.x0, c.y0), (c.x0, c.y1), (c.x1, c.y0), (c.x1, c.y1)];
+    let same = |a: f64, b: f64| (a - b).abs() < 1e-6;
+    let all_corners: Vec<[(f64, f64); 4]> = cells.iter().map(corners).collect();
+    for i in 0..n {
+        let (left, right) = all_corners.split_at(i + 1);
+        let ci = &left[i];
+        for (off, cj) in right.iter().enumerate() {
+            let j = i + 1 + off;
+            let touch = ci
+                .iter()
+                .any(|&(ax, ay)| cj.iter().any(|&(bx, by)| same(ax, bx) && same(ay, by)));
+            if touch {
+                let ri = find(&mut parent, i);
+                let rj = find(&mut parent, j);
+                if ri != rj {
+                    parent[ri] = rj;
+                }
+            }
+        }
+    }
+    let mut groups: std::collections::HashMap<usize, Vec<Rect>> = std::collections::HashMap::new();
+    for (i, &cell) in cells.iter().enumerate() {
+        let r = find(&mut parent, i);
+        groups.entry(r).or_default().push(cell);
+    }
+    groups.into_values().collect()
+}
+
+/// Assembles one [`Table`] from a contiguous group of unit cells.
+///
+/// The group's distinct cell coordinates give the row/column grid lines; the
+/// regular grid is then walked, marking a slot present when a unit cell covers
+/// it, and the span-merge pass recovers cells that straddle missing interior
+/// rules. Returns `None` for a degenerate group (fewer than two columns of
+/// cells — a single vertical strip / lone cross of rules, not a real table).
+fn assemble_table(
+    group: &[Rect],
+    h_edges: &[Edge],
+    v_edges: &[Edge],
+    opt: &TableOptions,
+) -> Option<Table> {
+    let tol = opt.snap_tolerance;
+    // Distinct row/column coordinates from this group's cells.
+    let mut col_set: Vec<f64> = Vec::new();
+    let mut row_set: Vec<f64> = Vec::new();
+    for c in group {
+        push_unique(&mut col_set, c.x0, tol);
+        push_unique(&mut col_set, c.x1, tol);
+        push_unique(&mut row_set, c.y0, tol);
+        push_unique(&mut row_set, c.y1, tol);
+    }
+    col_set.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    row_set.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let cols = col_set;
+    let rows = row_set;
+    // PyMuPDF drops degenerate groups: a real table needs at least two columns
+    // of cells (≥ 3 distinct column lines), so a single vertical strip of rules is
+    // not reported as a table. A single ruled *row* (≥ 2 row lines) is allowed —
+    // fitz reports one-row, multi-column ruled strips as tables.
+    if cols.len() < 3 || rows.len() < 2 {
+        return None;
+    }
     let row_count = rows.len() - 1;
     let col_count = cols.len() - 1;
-    // Build the lattice presence map for span detection: a slot belongs to the
-    // table when each side is *sufficiently bounded* — an outer side must carry a
-    // ruling, while an interior side may be unruled (that absence is exactly what
-    // signals a merge). The strict per-slot `build_cells` grid (all four edges
-    // ruled) feeds the regular no-span case; this looser map recovers merged
-    // cells whose internal separators were dropped.
-    let tol = opt.snap_tolerance;
-    let h_at = |y: f64, x0: f64, x1: f64| edge_covered(&h_segs, y, x0, x1, tol);
-    let v_at = |x: f64, y0: f64, y1: f64| edge_covered(&v_segs, x, y0, y1, tol);
+
+    let bbox = Rect::new(cols[0], rows[0], cols[col_count], rows[row_count]);
+
+    let h_at = |y: f64, x0: f64, x1: f64| edge_covered_e(h_edges, y, x0, x1, tol);
+    let v_at = |x: f64, y0: f64, y1: f64| edge_covered_e(v_edges, x, y0, y1, tol);
+
+    // Presence: a slot belongs to this table when it lies inside one of the
+    // group's unit cells (covered by a ruled rectangle).
     let mut presence = vec![vec![false; col_count]; row_count];
     for r in 0..row_count {
         for c in 0..col_count {
-            let (y0, y1, x0, x1) = (rows[r], rows[r + 1], cols[c], cols[c + 1]);
-            // Outer sides must be ruled; interior sides are always acceptable.
-            let top = r > 0 || h_at(y0, x0, x1);
-            let bottom = r + 1 < row_count || h_at(y1, x0, x1);
-            let left = c > 0 || v_at(x0, y0, y1);
-            let right = c + 1 < col_count || v_at(x1, y0, y1);
-            // The strictly-ruled slots are always present; otherwise require the
-            // outer enclosure so stray interior rules can't invent a whole grid.
-            presence[r][c] = cells[r][c].is_some() || (top && bottom && left && right);
+            let cx = (cols[c] + cols[c + 1]) / 2.0;
+            let cy = (rows[r] + rows[r + 1]) / 2.0;
+            presence[r][c] = group.iter().any(|cell| {
+                cell.x0 - tol <= cx
+                    && cx <= cell.x1 + tol
+                    && cell.y0 - tol <= cy
+                    && cy <= cell.y1 + tol
+            });
         }
     }
-    let col_split = |ri: usize, ci: usize| {
-        // Is there a vertical rule on grid line `ci+1` over row band `ri`?
-        v_at(cols[ci + 1], rows[ri], rows[ri + 1])
-    };
-    let row_split = |ri: usize, ci: usize| {
-        // Is there a horizontal rule on grid line `ri+1` over col band `ci`?
-        h_at(rows[ri + 1], cols[ci], cols[ci + 1])
-    };
+    if !presence.iter().flatten().any(|&p| p) {
+        return None;
+    }
+
+    let col_split = |ri: usize, ci: usize| v_at(cols[ci + 1], rows[ri], rows[ri + 1]);
+    let row_split = |ri: usize, ci: usize| h_at(rows[ri + 1], cols[ci], cols[ci + 1]);
     let (spans, cells) = merge_spans(
         &rows, &cols, &presence, row_count, col_count, col_split, row_split,
     );
 
-    vec![Table {
+    Some(Table {
         bbox,
         row_count,
         col_count,
@@ -489,7 +737,33 @@ fn detect_lines(drawings: &[DrawPath], opt: &TableOptions) -> Vec<Table> {
         cells,
         spans,
         header: Vec::new(), // populated by `find_tables` (needs the words)
-    }]
+    })
+}
+
+/// Appends `v` to `vals` unless an entry already lies within `tol`.
+fn push_unique(vals: &mut Vec<f64>, v: f64, tol: f64) {
+    if !vals.iter().any(|&u| (u - v).abs() <= tol) {
+        vals.push(v);
+    }
+}
+
+/// Whether some [`Edge`] at constant `pos` (±tol) covers most of `[lo, hi]`
+/// (at least half the span, tolerating gaps). Used to decide whether an interior
+/// grid line carries a separating rule (for span merging).
+fn edge_covered_e(edges: &[Edge], pos: f64, lo: f64, hi: f64, tol: f64) -> bool {
+    let need = (hi - lo) * 0.5;
+    let mut covered = 0.0;
+    for e in edges {
+        if (e.pos - pos).abs() > tol {
+            continue;
+        }
+        let a = e.lo.max(lo - tol);
+        let b = e.hi.min(hi + tol);
+        if b > a {
+            covered += b - a;
+        }
+    }
+    covered >= need
 }
 
 /// Merges adjacent present grid slots into spanning cells.
@@ -659,54 +933,6 @@ fn snap_positions(positions: impl Iterator<Item = f64>, tol: f64) -> Vec<f64> {
         out.push(mean(&cluster));
     }
     out
-}
-
-/// Builds the row-major cell grid: a cell exists where all four bounding edges
-/// are at least partially covered by a ruling segment.
-fn build_cells(
-    rows: &[f64],
-    cols: &[f64],
-    h_segs: &[Segment],
-    v_segs: &[Segment],
-    opt: &TableOptions,
-) -> Vec<Vec<Option<Rect>>> {
-    let tol = opt.snap_tolerance;
-    let mut grid = Vec::with_capacity(rows.len().saturating_sub(1));
-    for ri in 0..rows.len() - 1 {
-        let (y0, y1) = (rows[ri], rows[ri + 1]);
-        let mut row = Vec::with_capacity(cols.len().saturating_sub(1));
-        for ci in 0..cols.len() - 1 {
-            let (x0, x1) = (cols[ci], cols[ci + 1]);
-            let top = edge_covered(h_segs, y0, x0, x1, tol);
-            let bottom = edge_covered(h_segs, y1, x0, x1, tol);
-            let left = edge_covered(v_segs, x0, y0, y1, tol);
-            let right = edge_covered(v_segs, x1, y0, y1, tol);
-            if top && bottom && left && right {
-                row.push(Some(Rect::new(x0, y0, x1, y1)));
-            } else {
-                row.push(None);
-            }
-        }
-        grid.push(row);
-    }
-    grid
-}
-
-/// Whether some segment at constant `pos` (±tol) spans most of `[lo, hi]`.
-fn edge_covered(segs: &[Segment], pos: f64, lo: f64, hi: f64, tol: f64) -> bool {
-    let need = (hi - lo) * 0.5; // tolerate gaps: half the span must be covered
-    let mut covered = 0.0;
-    for s in segs {
-        if (s.pos - pos).abs() > tol {
-            continue;
-        }
-        let a = s.lo.max(lo - tol);
-        let b = s.hi.min(hi + tol);
-        if b > a {
-            covered += b - a;
-        }
-    }
-    covered >= need
 }
 
 // === text strategy ========================================================

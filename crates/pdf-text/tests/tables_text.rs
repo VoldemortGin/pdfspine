@@ -96,10 +96,20 @@ fn tables_text_003_to_markdown_uses_first_row_as_header() {
 }
 
 #[test]
-fn tables_text_004_lines_strategy_falls_back_to_text() {
-    // No drawings → `Lines` strategy should fall back to text clustering.
+fn tables_text_004_lines_strategy_ignores_borderless_grid() {
+    // A borderless (no-ruling) word grid is a `Text`-strategy table, but the
+    // default `Lines` strategy detects from vector ruling evidence ONLY and must
+    // NOT cluster prose/whitespace into a table — matching PyMuPDF's default,
+    // where borderless multi-column text yields no tables. (Previously this
+    // strategy fell back to text clustering, which over-detected tables on
+    // borderless multi-column prose; that fallback was removed.)
     let (tp, ws) = build_text_page();
-    let finder = find_tables(&tp, &ws, &[], &TableOptions::with_strategy(Strategy::Lines));
-    assert_eq!(finder.len(), 1, "Lines falls back to text when no rulings");
-    assert_eq!(finder.tables[0].col_count, 3);
+    for strat in [Strategy::Lines, Strategy::LinesStrict] {
+        let finder = find_tables(&tp, &ws, &[], &TableOptions::with_strategy(strat));
+        assert!(
+            finder.is_empty(),
+            "no rulings → {strat:?} must find no table (got {})",
+            finder.len()
+        );
+    }
 }
