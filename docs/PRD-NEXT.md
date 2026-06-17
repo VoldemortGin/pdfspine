@@ -12,10 +12,11 @@ EUR-Lex 8 languages, CJK, GovInfo court/GAO/Federal-Register, and a robustness c
 synthesis, device-space gap threshold, baseline-merged column split, and `find_tables` ruling-line
 gating. Tables, multilingual, CJK, and domain breadth all measured at near-parity.
 
-**Rendering (`get_pixmap`) is now near-parity for embedded-font text**: SSIM ~0.58 → **0.92 mean /
-0.986 median** vs fitz after three root-cause fixes (full per-glyph `Trm` into the render path;
-bare-CFF `FontFile3` parsing; CCITT/JBIG2 1-bpc polarity). See §2.A for what landed and the remaining
-long tail. **1335+ Rust + 374 pytest green.** API coverage 63.7% (490/769 in `COMPAT.toml`).
+**Rendering (`get_pixmap`) is now near-parity for embedded-font text**: SSIM ~0.58 → **0.945 mean /
+0.986 median** vs fitz after four root-cause fixes (full per-glyph `Trm` into the render path;
+bare-CFF `FontFile3` parsing; CCITT/JBIG2 1-bpc polarity; CID-keyed CFF charset CID→GID). See §2.A
+for what landed and the remaining long tail. **1338+ Rust + 374 pytest green.** API coverage 63.7%
+(490/769 in `COMPAT.toml`).
 
 ## 1. Tools available (reuse, don't rebuild)
 
@@ -33,9 +34,9 @@ corpora/cache/`*-results.json` gitignored, regenerable):
 ## 2. Remaining work
 
 ### A. RENDERING — major progress; long tail remains (MEDIUM value now)
-`get_pixmap` jumped from SSIM ~0.58 → **0.92 mean / 0.986 median** vs fitz
-(`conformance/gt/RENDER-REPORT.md`; corpus-born 0.995, eurlex 0.943, pmc 0.862, robustness 0.843,
-fixtures 0.971). Three root-cause fixes landed:
+`get_pixmap` jumped from SSIM ~0.58 → **0.945 mean / 0.986 median** vs fitz
+(`conformance/gt/RENDER-REPORT.md`; corpus-born 0.995, eurlex 0.943, pmc 0.991, robustness 0.843,
+fixtures 0.971). Four root-cause fixes landed:
 1. ~~**Glyph horizontal positioning**~~ **DONE.** Root cause: the renderer scaled each glyph outline
    by `size/upem` (`Tfs` only), ignoring the CTM / text-matrix linear scale — so any PDF that bakes
    the font size into `Tm`/`cm` (Chrome, most PMC) drew glyphs 2× too big and overlapping. Fix:
@@ -53,6 +54,12 @@ fixtures 0.971). Three root-cause fixes landed:
    the standard DeviceGray convention (`0 = black`), so every CCITT/JBIG2 image rendered inverted
    (over-dark scans). Both now emit `0 = black, 1 = white`. corpus-robustness 0.73 → 0.84; the worst
    case `govdocs1-00018` went SSIM −0.17 → ~0.99.
+4. ~~**CID-keyed CFF (`CIDFontType0C`) rendered blank**~~ **DONE.** A Type0 font with `Identity-H`
+   hands the renderer the **CID**, but for a CFF CIDFont the CID→GID mapping is the **CFF charset**
+   (not `CIDToGIDMap`, which only applies to CIDFontType2/TrueType), and a subset renumbers its GIDs.
+   `resolve_gid` was using the CID directly as a GID → wrong/notdef glyph → blank body text on every
+   CID-CFF PDF (most PMC). `GlyphFont` now builds a `CID→GID` map from `ttf-parser`'s `cff::glyph_cid`
+   and routes CID-keyed CFF through it. corpus-pmc 0.86 → **0.99**.
 
 Remaining long tail (each smaller / independent; measure with `render_diff.py`):
 - **Bare Type1 PFB/PFA** (`/FontFile`) — not parseable by `ttf-parser`; needs a Type1 charstring
@@ -62,9 +69,7 @@ Remaining long tail (each smaller / independent; measure with `render_diff.py`):
 - **Image/colorspace fidelity** — remaining nuances (Indexed/Separation/ICC colorspaces, `/Decode`
   arrays not yet applied in the render path, halftone smoothing) may still tint some scanned/image
   pages; the gross 1-bpc inversion is fixed.
-- **Synthetic-bold / heavy display fonts** render slightly heavier than fitz (minor; oxide ink ≳ fitz
-  on PMC even where glyphs are correct).
-- A few CID-CFF / symbol-font pages still under-render (PMC193606/212688) — partial glyph resolution.
+- **Synthetic-bold / heavy display fonts** render slightly heavier than fitz (minor).
 Renderer code: `crates/pdf-render`; glyph data plumbing in `crates/pdf-text` (`interp.rs`,
 `renderops.rs`). Measure every change with `render_diff.py`.
 

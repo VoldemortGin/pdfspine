@@ -822,7 +822,17 @@ fn resolve_gid(
 ) -> u16 {
     let first_char = glyph.unicode.chars().next();
     if is_cid {
-        // Type0/CID: the mapper gid is the resolved program glyph id.
+        // CID-keyed CFF (CIDFontType0C): the Type0 mapper yields the *CID*
+        // (Identity-H + Identity CIDToGIDMap), and a subset CFF renumbers its
+        // glyphs, so the CID must be translated to a program GID via the CFF
+        // charset. A CID absent from the subset charset is .notdef (no draw).
+        if font.is_cid_keyed() {
+            return u16::try_from(mapper_gid)
+                .ok()
+                .and_then(|cid| font.gid_for_cid(cid))
+                .unwrap_or(0);
+        }
+        // CIDFontType2 (TrueType): the mapper gid is already the program glyph id.
         let g = u16::try_from(mapper_gid).unwrap_or(0);
         if g != 0 && g < font.num_glyphs() {
             return g;

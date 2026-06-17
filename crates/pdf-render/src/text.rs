@@ -30,6 +30,8 @@
 //! [`GlyphFont`] + [`draw_glyph_with_font`] / [`draw_text_run_with_font`], which
 //! the page driver (M6d) calls once it has resolved the page's font programs.
 
+use std::collections::HashMap;
+
 use pdf_core::geom::{Matrix, Point};
 use pdf_text::PositionedGlyph;
 use tiny_skia::{FillRule, Paint as SkPaint, PathBuilder, Stroke, Transform};
@@ -68,6 +70,12 @@ pub struct GlyphFont<'a> {
     /// The design grid size: sfnt `units_per_em`, or `round(1/FontMatrix.sx)`
     /// for bare CFF (default 1000). Never zero.
     upem: u16,
+    /// For a **CID-keyed CFF** (`CIDFontType0C`): the `CID → program GID` map
+    /// recovered from the CFF charset. A Type0 font with `Identity-H` +
+    /// `Identity` `CIDToGIDMap` hands the renderer the *CID* (not a GID), and a
+    /// subset CFF's GIDs are renumbered, so the CID must be translated through the
+    /// charset. `None` for sfnt programs and for SID (simple) CFF.
+    cid_to_gid: Option<HashMap<u16, u16>>,
 }
 
 impl<'a> GlyphFont<'a> {
@@ -88,6 +96,7 @@ impl<'a> GlyphFont<'a> {
             return Ok(Self {
                 program: FontProgram::Sfnt(Box::new(face)),
                 upem,
+                cid_to_gid: None,
             });
         }
         // Bare CFF: no sfnt directory, so derive the em size from the CFF
@@ -99,9 +108,11 @@ impl<'a> GlyphFont<'a> {
             } else {
                 1000
             };
+            let cid_to_gid = build_cff_cid_map(&cff);
             return Ok(Self {
                 program: FontProgram::Cff(Box::new(cff)),
                 upem,
+                cid_to_gid,
             });
         }
         Err(Error::Unsupported("text::GlyphFont program"))
@@ -154,6 +165,21 @@ impl<'a> GlyphFont<'a> {
         }
     }
 
+    /// Whether this program is a **CID-keyed CFF** (`CIDFontType0C`), i.e. it
+    /// carries a `CID → GID` charset that PDF CIDs must be translated through.
+    #[must_use]
+    pub fn is_cid_keyed(&self) -> bool {
+        self.cid_to_gid.is_some()
+    }
+
+    /// Translates a PDF **CID** to the program **GID** via the CID-keyed CFF
+    /// charset. `None` when this is not a CID-keyed CFF, or the CID is absent from
+    /// the (subset) charset.
+    #[must_use]
+    pub fn gid_for_cid(&self, cid: u16) -> Option<u16> {
+        self.cid_to_gid.as_ref().and_then(|m| m.get(&cid).copied())
+    }
+
     /// Builds the glyph outline (in font units, y-up) as a [`tiny_skia::Path`].
     ///
     /// Returns `None` for an absent, empty, or degenerate outline (a space
@@ -179,6 +205,28 @@ impl<'a> GlyphFont<'a> {
         }
         sink.builder.finish()
     }
+}
+
+/// Builds the `CID → GID` map for a **CID-keyed CFF** by inverting the charset
+/// (`glyph_cid(gid) = cid`), or `None` for a SID (simple) CFF.
+///
+/// First probes glyph 0/1: a SID CFF returns `None` from `glyph_cid`, so a
+/// simple CFF pays only the probe (no full scan). For a CID CFF it walks every
+/// glyph once (subset fonts are small) and records the first GID seen per CID.
+fn build_cff_cid_map(cff: &ttf_parser::cff::Table) -> Option<HashMap<u16, u16>> {
+    let n = cff.number_of_glyphs();
+    let is_cid =
+        cff.glyph_cid(GlyphId(0)).is_some() || (n > 1 && cff.glyph_cid(GlyphId(1)).is_some());
+    if !is_cid {
+        return None;
+    }
+    let mut map: HashMap<u16, u16> = HashMap::new();
+    for gid in 0..n {
+        if let Some(cid) = cff.glyph_cid(GlyphId(gid)) {
+            map.entry(cid).or_insert(gid);
+        }
+    }
+    (!map.is_empty()).then_some(map)
 }
 
 /// Bridges `ttf-parser`'s [`OutlineBuilder`] callbacks into a tiny-skia
