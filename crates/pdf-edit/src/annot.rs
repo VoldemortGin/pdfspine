@@ -15,7 +15,7 @@
 //! stream draws in the rect's own (translated) coordinate frame.
 
 use pdf_core::error::{Error, Result};
-use pdf_core::geom::{Point, Quad, Rect};
+use pdf_core::geom::{Matrix, Point, Quad, Rect};
 use pdf_core::object::{Dict, Name, ObjRef, Object, StreamObj};
 use pdf_core::pagetree;
 use pdf_core::{DocumentStore, PdfString, StringKind};
@@ -116,6 +116,16 @@ impl AnnotType {
         }
     }
 }
+
+/// MuPDF's "infinite rectangle" sentinel, returned by `popup_rect` /
+/// `apn_bbox` when the underlying value is absent. These are the exact `int`
+/// bounds MuPDF uses (`FZ_MIN_INF_RECT` / `FZ_MAX_INF_RECT`).
+pub const FZ_INFINITE_RECT: Rect = Rect::new(
+    -2_147_483_648.0,
+    -2_147_483_648.0,
+    2_147_483_520.0,
+    2_147_483_520.0,
+);
 
 /// A handle to one annotation: the document, owning page leaf and the
 /// annotation's object reference. Property accessors read live through the
@@ -490,6 +500,460 @@ impl<'a> Annot<'a> {
         (width, style, dashes)
     }
 
+    /// The page leaf's `/MediaBox` height `y1`, used to convert annotation
+    /// rectangles between PDF user space (y-up) and PyMuPDF page space (y-down).
+    fn page_top(&self) -> f64 {
+        pagetree::mediabox(self.doc, self.leaf).normalize().y1
+    }
+
+    /// Sets the annotation `/Rotate` value (PyMuPDF `Annot.set_rotation`).
+    ///
+    /// The value is normalized into `[0, 360)` exactly as fitz does (Euclidean
+    /// remainder): `-1 -> 359`, `-90 -> 270`, `360 -> 0`, `450 -> 90`,
+    /// `720 -> 0`. The key is always written (never removed).
+    ///
+    /// # Errors
+    /// Propagates object-edit errors.
+    pub fn set_rotation(&self, rotate: i64) -> Result<()> {
+        let mut d = self.dict()?;
+        d.insert(Name::new("Rotate"), Object::Integer(rotate.rem_euclid(360)));
+        self.write_dict(d)
+    }
+
+    /// The padding deltas `(left, top, right, bottom)` between `/Rect` and the
+    /// visible drawing, from `/RD` `[l t r b]` as `(l, t, -r, -b)` (PyMuPDF
+    /// `Annot.rect_delta`). `None` when `/RD` is absent.
+    #[must_use]
+    pub fn rect_delta(&self) -> Option<(f64, f64, f64, f64)> {
+        let d = self.dict().ok()?;
+        let a = d.get(&Name::new("RD")).and_then(Object::as_array)?;
+        if a.len() != 4 {
+            return None;
+        }
+        let v: Vec<f64> = a.iter().map(|o| o.as_f64().unwrap_or(0.0)).collect();
+        Some((v[0], v[1], -v[2], -v[3]))
+    }
+
+    /// Whether a `/Popup` entry is present (PyMuPDF `Annot.has_popup`).
+    #[must_use]
+    pub fn has_popup(&self) -> bool {
+        self.dict()
+            .ok()
+            .map(|d| d.contains_key(&Name::new("Popup")))
+            .unwrap_or(false)
+    }
+
+    /// The `/Popup` annotation's object number, or `0` if absent (PyMuPDF
+    /// `Annot.popup_xref`).
+    #[must_use]
+    pub fn popup_xref(&self) -> u32 {
+        self.popup_ref().map(|r| r.num).unwrap_or(0)
+    }
+
+    /// Resolves the `/Popup` reference.
+    fn popup_ref(&self) -> Option<ObjRef> {
+        self.dict()
+            .ok()?
+            .get(&Name::new("Popup"))
+            .and_then(Object::as_reference)
+    }
+
+    /// The `/Popup` annotation's `/Rect` in PyMuPDF page space (y-down), or
+    /// `None` if absent (PyMuPDF `Annot.popup_rect`).
+    #[must_use]
+    pub fn popup_rect(&self) -> Option<Rect> {
+        let r = self.popup_ref()?;
+        let pd = self.doc.resolve(r).ok()?.as_dict().cloned()?;
+        let ur = read_rect(&pd);
+        Some(self.user_to_page(ur))
+    }
+
+    /// Adds (or replaces) a `/Popup` child annotation covering `rect` (PyMuPDF
+    /// page space, y-down). The popup is linked back to this annotation via
+    /// `/Parent` and appended to the page's `/Annots`.
+    ///
+    /// # Errors
+    /// Propagates object-edit errors.
+    pub fn set_popup(&self, rect: Rect) -> Result<()> {
+        // fitz stores the RAW (non-normalized) /Rect; popup_rect normalizes on
+        // READ. Convert page space (y-down) -> user space (y-up) WITHOUT
+        // normalizing so an inverted input rect round-trips byte-identically.
+        let top = self.page_top();
+        let ur = Rect::new(rect.x0, top - rect.y1, rect.x1, top - rect.y0);
+        let mut pd = Dict::new();
+        pd.insert(Name::new("Type"), Object::Name(Name::new("Annot")));
+        pd.insert(Name::new("Subtype"), Object::Name(Name::new("Popup")));
+        pd.insert(Name::new("Rect"), rect_array(&ur));
+        pd.insert(Name::new("Parent"), Object::Reference(self.obj));
+        let popup_ref = match self.popup_ref() {
+            Some(r) => {
+                self.doc.update_object(r, Object::Dictionary(pd))?;
+                r
+            }
+            None => {
+                let r = self.doc.add_object(Object::Dictionary(pd))?;
+                append_to_annots(self.doc, self.leaf, r)?;
+                r
+            }
+        };
+        let mut d = self.dict()?;
+        d.insert(Name::new("Popup"), Object::Reference(popup_ref));
+        self.write_dict(d)
+    }
+
+    /// Resolves the `/AP /N` Form XObject stream dict, if present.
+    fn apn_stream_dict(&self) -> Option<Dict> {
+        let r = self.appearance_ref()?;
+        self.doc
+            .resolve(r)
+            .ok()?
+            .as_stream()
+            .map(|s| s.dict.clone())
+    }
+
+    /// The `/AP /N` appearance stream's `/BBox` in PyMuPDF page space (y-down)
+    /// (PyMuPDF `Annot.apn_bbox`). When there is no `/AP /N` stream, or it has no
+    /// `/BBox`, MuPDF returns its infinite-rect sentinel (the same one
+    /// `popup_rect` yields for an absent popup), so we match it.
+    #[must_use]
+    pub fn apn_bbox(&self) -> Option<Rect> {
+        let read = || -> Option<Rect> {
+            let sd = self.apn_stream_dict()?;
+            let a = sd.get(&Name::new("BBox")).and_then(Object::as_array)?;
+            if a.len() != 4 {
+                return None;
+            }
+            let v: Vec<f64> = a.iter().map(|o| o.as_f64().unwrap_or(0.0)).collect();
+            Some(self.user_to_page(Rect::new(v[0], v[1], v[2], v[3])))
+        };
+        Some(read().unwrap_or(FZ_INFINITE_RECT))
+    }
+
+    /// The `/AP /N` appearance stream's `/Matrix`, or `None` (PyMuPDF
+    /// `Annot.apn_matrix`). Defaults to the identity matrix when absent.
+    #[must_use]
+    pub fn apn_matrix(&self) -> Matrix {
+        let read = || -> Option<Matrix> {
+            let sd = self.apn_stream_dict()?;
+            let a = sd.get(&Name::new("Matrix")).and_then(Object::as_array)?;
+            if a.len() != 6 {
+                return None;
+            }
+            let v: Vec<f64> = a.iter().map(|o| o.as_f64().unwrap_or(0.0)).collect();
+            Some(Matrix::new(v[0], v[1], v[2], v[3], v[4], v[5]))
+        };
+        read().unwrap_or(Matrix::IDENTITY)
+    }
+
+    /// Sets the `/AP /N` appearance stream's `/BBox` (PyMuPDF
+    /// `Annot.set_apn_bbox`), taking a PyMuPDF page-space rect (y-down).
+    ///
+    /// # Errors
+    /// [`Error::InvalidArgument`] if there is no appearance stream; else
+    /// propagates object-edit errors.
+    pub fn set_apn_bbox(&self, rect: Rect) -> Result<()> {
+        let ur = self.page_to_user(rect).normalize();
+        self.mutate_apn(|sd| {
+            sd.insert(Name::new("BBox"), rect_array(&ur));
+        })
+    }
+
+    /// Sets the `/AP /N` appearance stream's `/Matrix` (PyMuPDF
+    /// `Annot.set_apn_matrix`).
+    ///
+    /// # Errors
+    /// [`Error::InvalidArgument`] if there is no appearance stream; else
+    /// propagates object-edit errors.
+    pub fn set_apn_matrix(&self, m: Matrix) -> Result<()> {
+        self.mutate_apn(|sd| {
+            sd.insert(
+                Name::new("Matrix"),
+                Object::Array(vec![
+                    Object::Real(m.a),
+                    Object::Real(m.b),
+                    Object::Real(m.c),
+                    Object::Real(m.d),
+                    Object::Real(m.e),
+                    Object::Real(m.f),
+                ]),
+            );
+        })
+    }
+
+    /// Applies `f` to the `/AP /N` stream dict and writes it back.
+    fn mutate_apn(&self, f: impl FnOnce(&mut Dict)) -> Result<()> {
+        let r = self
+            .appearance_ref()
+            .ok_or(Error::InvalidArgument("annotation has no /AP /N stream"))?;
+        let mut stream = self
+            .doc
+            .resolve(r)?
+            .as_stream()
+            .cloned()
+            .ok_or(Error::InvalidArgument("/AP /N is not a stream"))?;
+        f(&mut stream.dict);
+        self.doc.update_object(r, Object::Stream(stream))
+    }
+
+    /// The `/Lang` language identifier, or empty (PyMuPDF `Annot.language`).
+    ///
+    /// DEVIATION (oxide is more faithful): oxide returns the `/Lang` tag verbatim
+    /// and `""` for an absent key. PyMuPDF normalizes via MuPDF `fz_text_language`
+    /// (a lossy table: `en-US -> en`, `zh-CN -> zh-Hans`) and leaks the *system
+    /// locale* for an absent key. We keep the verbatim/deterministic behavior.
+    #[must_use]
+    pub fn language(&self) -> String {
+        self.dict()
+            .ok()
+            .and_then(|d| {
+                d.get(&Name::new("Lang"))
+                    .and_then(Object::as_string)
+                    .map(decode_text_string)
+            })
+            .unwrap_or_default()
+    }
+
+    /// Sets the `/Lang` language identifier (PyMuPDF `Annot.set_language`). An
+    /// empty string removes the key.
+    ///
+    /// # Errors
+    /// Propagates object-edit errors.
+    pub fn set_language(&self, lang: &str) -> Result<()> {
+        let mut d = self.dict()?;
+        if lang.is_empty() {
+            d.remove(&Name::new("Lang"));
+        } else {
+            d.insert(
+                Name::new("Lang"),
+                Object::String(PdfString::literal(lang.as_bytes().to_vec())),
+            );
+        }
+        self.write_dict(d)
+    }
+
+    /// The in-reply-to annotation's object number from `/IRT`, or `0` (PyMuPDF
+    /// `Annot.irt_xref`).
+    #[must_use]
+    pub fn irt_xref(&self) -> u32 {
+        self.dict()
+            .ok()
+            .and_then(|d| d.get(&Name::new("IRT")).and_then(Object::as_reference))
+            .map(|r| r.num)
+            .unwrap_or(0)
+    }
+
+    /// Sets `/IRT` (in-reply-to) to the annotation with object number `xref`
+    /// (PyMuPDF `Annot.set_irt_xref`).
+    ///
+    /// # Errors
+    /// [`Error::InvalidArgument`] if `xref` is not an annotation on this page;
+    /// else propagates object-edit errors.
+    pub fn set_irt_xref(&self, xref: u32) -> Result<()> {
+        let target = annot_refs_on_leaf(self.doc, self.leaf)
+            .into_iter()
+            .find(|r| r.num == xref)
+            .ok_or(Error::InvalidArgument(
+                "set_irt_xref: xref is not an annotation on this page",
+            ))?;
+        let mut d = self.dict()?;
+        d.insert(Name::new("IRT"), Object::Reference(target));
+        self.write_dict(d)
+    }
+
+    /// Deletes every annotation on the page that replies to this one (whose
+    /// `/IRT` resolves to this annotation), along with their popups (PyMuPDF
+    /// `Annot.delete_responses`).
+    ///
+    /// # Errors
+    /// Propagates object-edit errors.
+    pub fn delete_responses(&self) -> Result<()> {
+        let me = self.obj.num;
+        for r in annot_refs_on_leaf(self.doc, self.leaf) {
+            if r == self.obj {
+                continue;
+            }
+            let Some(d) = self.doc.resolve(r).ok().and_then(|o| o.as_dict().cloned()) else {
+                continue;
+            };
+            let is_reply = d
+                .get(&Name::new("IRT"))
+                .and_then(Object::as_reference)
+                .map(|irt| irt.num == me)
+                .unwrap_or(false);
+            if is_reply {
+                if let Some(popup) = d.get(&Name::new("Popup")).and_then(Object::as_reference) {
+                    let _ = delete_annot_on_leaf(self.doc, self.leaf, popup);
+                }
+                delete_annot_on_leaf(self.doc, self.leaf, r)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Sanitizes the `/AP /N` appearance stream by re-emitting its decoded
+    /// content wrapped in a balanced `q … Q` graphics-state guard (PyMuPDF
+    /// `Annot.clean_contents`). A no-op when there is no appearance stream.
+    ///
+    /// DEVIATION (kept): oxide produces valid, sanitized output (drops `/Filter`,
+    /// balances `q … Q`) but does NOT run MuPDF's token-level minifier/reorderer,
+    /// so the bytes differ from mupdf's minimized stream while remaining
+    /// equivalently renderable.
+    ///
+    /// # Errors
+    /// Propagates resolve / object-edit errors.
+    pub fn clean_contents(&self) -> Result<()> {
+        let Some(r) = self.appearance_ref() else {
+            return Ok(());
+        };
+        let stream = self
+            .doc
+            .resolve(r)?
+            .as_stream()
+            .cloned()
+            .ok_or(Error::InvalidArgument("/AP /N is not a stream"))?;
+        let body = self.doc.decode_stream(&stream)?.into_decoded()?;
+        let mut cleaned = Vec::with_capacity(body.len() + 4);
+        cleaned.extend_from_slice(b"q\n");
+        cleaned.extend_from_slice(trim_ascii_ws(&body));
+        cleaned.extend_from_slice(b"\nQ");
+        let mut dict = stream.dict;
+        dict.remove(&Name::new("Filter"));
+        dict.remove(&Name::new("DecodeParms"));
+        dict.insert(Name::new("Length"), Object::Integer(cleaned.len() as i64));
+        self.doc
+            .update_object(r, Object::Stream(StreamObj::new_encoded(dict, cleaned)))
+    }
+
+    // --- /FileAttachment embedded-file accessors --------------------------
+
+    /// Resolves the `/FS` file-specification dict.
+    fn filespec(&self) -> Option<Dict> {
+        let d = self.dict().ok()?;
+        match d.get(&Name::new("FS"))? {
+            Object::Dictionary(fs) => Some(fs.clone()),
+            Object::Reference(r) => self.doc.resolve(*r).ok()?.as_dict().cloned(),
+            _ => None,
+        }
+    }
+
+    /// The embedded-file stream reference under `/FS /EF /F`.
+    fn ef_stream_ref(&self) -> Option<ObjRef> {
+        let fs = self.filespec()?;
+        let ef = match fs.get(&Name::new("EF"))? {
+            Object::Dictionary(ef) => ef.clone(),
+            Object::Reference(r) => self.doc.resolve(*r).ok()?.as_dict().cloned()?,
+            _ => return None,
+        };
+        ef.get(&Name::new("F")).and_then(Object::as_reference)
+    }
+
+    /// The embedded file's decoded bytes (PyMuPDF `Annot.get_file`).
+    ///
+    /// # Errors
+    /// [`Error::InvalidArgument`] if this is not a file attachment; else
+    /// propagates resolve / decode errors.
+    pub fn get_file(&self) -> Result<Vec<u8>> {
+        let r = self
+            .ef_stream_ref()
+            .ok_or(Error::InvalidArgument("annotation has no embedded file"))?;
+        let stream = self
+            .doc
+            .resolve(r)?
+            .as_stream()
+            .cloned()
+            .ok_or(Error::InvalidArgument("/EF /F is not a stream"))?;
+        self.doc.decode_stream(&stream)?.into_decoded()
+    }
+
+    /// The file-attachment metadata `(filename, description, length)` (PyMuPDF
+    /// `Annot.file_info`). The description defaults to the *filename* when no
+    /// `/Desc` is present, matching fitz.
+    ///
+    /// # Errors
+    /// [`Error::InvalidArgument`] if this is not a file attachment.
+    pub fn file_info(&self) -> Result<(String, String, i64)> {
+        let fs = self
+            .filespec()
+            .ok_or(Error::InvalidArgument("annotation has no /FS file spec"))?;
+        let str_key = |k: &str| {
+            fs.get(&Name::new(k))
+                .and_then(Object::as_string)
+                .map(decode_text_string)
+        };
+        let filename = str_key("UF").or_else(|| str_key("F")).unwrap_or_default();
+        // fitz defaults the description to the filename when /Desc is absent.
+        let desc = str_key("Desc").unwrap_or_else(|| filename.clone());
+        let length = self.get_file().map(|b| b.len() as i64).unwrap_or(0);
+        Ok((filename, desc, length))
+    }
+
+    /// Replaces the embedded file's content (and optionally its filename /
+    /// description) (PyMuPDF `Annot.update_file`). `None` fields are left as-is.
+    ///
+    /// # Errors
+    /// [`Error::InvalidArgument`] if this is not a file attachment; else
+    /// propagates object-edit errors.
+    pub fn update_file(
+        &self,
+        buffer: Option<&[u8]>,
+        filename: Option<&str>,
+        desc: Option<&str>,
+    ) -> Result<()> {
+        let ef_ref = self
+            .ef_stream_ref()
+            .ok_or(Error::InvalidArgument("annotation has no embedded file"))?;
+        if let Some(bytes) = buffer {
+            let mut ef_dict = Dict::new();
+            ef_dict.insert(Name::new("Type"), Object::Name(Name::new("EmbeddedFile")));
+            ef_dict.insert(Name::new("Length"), Object::Integer(bytes.len() as i64));
+            let mut params = Dict::new();
+            params.insert(Name::new("Size"), Object::Integer(bytes.len() as i64));
+            ef_dict.insert(Name::new("Params"), Object::Dictionary(params));
+            self.doc.update_object(
+                ef_ref,
+                Object::Stream(StreamObj::new_encoded(ef_dict, bytes.to_vec())),
+            )?;
+        }
+        if filename.is_some() || desc.is_some() {
+            let fs_ref = match self.dict()?.get(&Name::new("FS")) {
+                Some(Object::Reference(r)) => Some(*r),
+                _ => None,
+            };
+            let mut fs = self
+                .filespec()
+                .ok_or(Error::InvalidArgument("annotation has no /FS file spec"))?;
+            if let Some(f) = filename {
+                fs.insert(Name::new("F"), text_string(f));
+                fs.insert(Name::new("UF"), text_string(f));
+            }
+            if let Some(de) = desc {
+                fs.insert(Name::new("Desc"), text_string(de));
+            }
+            match fs_ref {
+                Some(r) => self.doc.update_object(r, Object::Dictionary(fs))?,
+                None => {
+                    let mut d = self.dict()?;
+                    d.insert(Name::new("FS"), Object::Dictionary(fs));
+                    self.write_dict(d)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Converts a PDF user-space rect (y-up) to PyMuPDF page space (y-down).
+    fn user_to_page(&self, r: Rect) -> Rect {
+        let top = self.page_top();
+        Rect::new(r.x0, top - r.y1, r.x1, top - r.y0)
+    }
+
+    /// Converts a PyMuPDF page-space rect (y-down) to PDF user space (y-up).
+    fn page_to_user(&self, r: Rect) -> Rect {
+        let top = self.page_top();
+        let r = r.normalize();
+        Rect::new(r.x0, top - r.y1, r.x1, top - r.y0)
+    }
+
     /// Regenerates the `/AP /N` appearance stream from the annotation's current
     /// properties (subtype, geometry, colors, opacity, border). This is what
     /// reflects a `set_colors` / `set_opacity` change into the appearance.
@@ -591,7 +1055,23 @@ pub fn add_text_annot<'a>(
     let icon = if icon.is_empty() { "Note" } else { icon };
     d.insert(Name::new("Name"), Object::Name(Name::new(icon)));
     d.insert(Name::new("C"), color_array(Color::new(1.0, 1.0, 0.0)));
-    finalize_annot(doc, page, d, AnnotType::Text)
+    let annot = finalize_annot(doc, page, d, AnnotType::Text)?;
+    // fitz auto-creates a child /Popup for a sticky-note: a /Subtype /Popup
+    // annot with /Parent back-ref, offset to the right of the icon, appended to
+    // /Annots and linked via /Popup on the note.
+    let r = rect.normalize();
+    let popup_rect = Rect::new(r.x1, r.y0 - 100.0, r.x1 + 200.0, r.y1);
+    let mut popup = Dict::new();
+    popup.insert(Name::new("Type"), Object::Name(Name::new("Annot")));
+    popup.insert(Name::new("Subtype"), Object::Name(Name::new("Popup")));
+    popup.insert(Name::new("Rect"), rect_array(&popup_rect.normalize()));
+    popup.insert(Name::new("Parent"), Object::Reference(annot.obj));
+    let popup_ref = doc.add_object(Object::Dictionary(popup))?;
+    append_to_annots(doc, annot.leaf, popup_ref)?;
+    let mut nd = annot.dict()?;
+    nd.insert(Name::new("Popup"), Object::Reference(popup_ref));
+    annot.write_dict(nd)?;
+    Ok(annot)
 }
 
 /// `page.add_freetext_annot` — a `/FreeText` box with text drawn in it.
@@ -933,6 +1413,7 @@ pub fn add_file_annot<'a>(
     point: Point,
     bytes: &[u8],
     filename: &str,
+    desc: Option<&str>,
 ) -> Result<Annot<'a>> {
     let pc = PageContent::new(doc, page)?;
     let p = pc.to_user_space(point);
@@ -955,6 +1436,11 @@ pub fn add_file_annot<'a>(
     fs.insert(Name::new("Type"), Object::Name(Name::new("Filespec")));
     fs.insert(Name::new("F"), text_string(filename));
     fs.insert(Name::new("UF"), text_string(filename));
+    // Persist /Desc; file_info defaults the description to the filename when
+    // /Desc is absent (matching fitz), so we only write it when given.
+    if let Some(de) = desc {
+        fs.insert(Name::new("Desc"), text_string(de));
+    }
     let mut ef = Dict::new();
     ef.insert(Name::new("F"), Object::Reference(ef_ref));
     ef.insert(Name::new("UF"), Object::Reference(ef_ref));
@@ -1033,7 +1519,25 @@ fn annot_refs_on_leaf(doc: &DocumentStore, leaf: ObjRef) -> Vec<ObjRef> {
             .unwrap_or_default(),
         _ => Vec::new(),
     };
-    arr.iter().filter_map(Object::as_reference).collect()
+    // fitz filters `/Subtype /Popup` out of annotation iteration (popups are
+    // reached via the parent annot's `/Popup` ref, not the annot chain).
+    arr.iter()
+        .filter_map(Object::as_reference)
+        .filter(|r| !is_popup(doc, *r))
+        .collect()
+}
+
+/// Whether the object at `r` is a `/Subtype /Popup` annotation.
+fn is_popup(doc: &DocumentStore, r: ObjRef) -> bool {
+    doc.resolve(r)
+        .ok()
+        .and_then(|o| o.as_dict().cloned())
+        .and_then(|d| {
+            d.get(&Name::new("Subtype"))
+                .and_then(Object::as_name)
+                .map(|n| n.as_bytes() == b"Popup")
+        })
+        .unwrap_or(false)
 }
 
 /// Annotation handles on the page at `index`, in `/Annots` order.
@@ -1078,6 +1582,13 @@ pub fn delete_annot(doc: &DocumentStore, index: usize, annot: ObjRef) -> Result<
     let leaf = *pagetree::page_refs(doc)
         .get(index)
         .ok_or(Error::InvalidArgument("page index out of range"))?;
+    delete_annot_on_leaf(doc, leaf, annot)
+}
+
+/// Deletes an annotation referenced from a page leaf directly (used when the
+/// page index is not at hand, e.g. response/popup cleanup). Mirrors
+/// [`delete_annot`].
+fn delete_annot_on_leaf(doc: &DocumentStore, leaf: ObjRef, annot: ObjRef) -> Result<()> {
     let mut pd = doc
         .resolve(leaf)?
         .as_dict()
@@ -1695,6 +2206,16 @@ fn rect_array(r: &Rect) -> Object {
         Object::Real(r.x1),
         Object::Real(r.y1),
     ])
+}
+
+/// Trims leading/trailing ASCII whitespace from a byte slice.
+fn trim_ascii_ws(b: &[u8]) -> &[u8] {
+    let start = b.iter().position(|c| !c.is_ascii_whitespace()).unwrap_or(0);
+    let end = b
+        .iter()
+        .rposition(|c| !c.is_ascii_whitespace())
+        .map_or(start, |i| i + 1);
+    &b[start..end.max(start)]
 }
 
 fn read_rect(d: &Dict) -> Rect {

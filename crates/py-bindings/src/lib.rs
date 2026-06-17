@@ -591,6 +591,135 @@ impl PyAnnot {
         self.annot.border()
     }
 
+    /// Sets the `/Rotate` value (PyMuPDF `Annot.set_rotation`). `-1` removes it.
+    #[pyo3(signature = (rotate=0))]
+    fn set_rotation(&self, rotate: i64) -> PyResult<()> {
+        self.annot.set_rotation(rotate).map_err(map_err)
+    }
+
+    /// The `(left, top, right, bottom)` `/RD` deltas, or `None` (PyMuPDF
+    /// `Annot.rect_delta`).
+    fn rect_delta(&self) -> Option<(f64, f64, f64, f64)> {
+        self.annot.rect_delta()
+    }
+
+    /// Whether a `/Popup` is present (PyMuPDF `Annot.has_popup`).
+    #[getter]
+    fn has_popup(&self) -> bool {
+        self.annot.has_popup()
+    }
+
+    /// The `/Popup` object number, or `0` (PyMuPDF `Annot.popup_xref`).
+    #[getter]
+    fn popup_xref(&self) -> u32 {
+        self.annot.popup_xref()
+    }
+
+    /// The `/Popup` rect as `(x0, y0, x1, y1)`, or `None` (PyMuPDF
+    /// `Annot.popup_rect`).
+    #[getter]
+    fn popup_rect(&self) -> Option<(f64, f64, f64, f64)> {
+        self.annot.popup_rect().map(rect_tuple)
+    }
+
+    /// Adds / replaces the `/Popup` covering `rect` (PyMuPDF `Annot.set_popup`).
+    fn set_popup(&self, rect: (f64, f64, f64, f64)) -> PyResult<()> {
+        self.annot.set_popup(rect_of(rect)).map_err(map_err)
+    }
+
+    /// The `/AP /N` `/BBox` as `(x0, y0, x1, y1)`, or `None` (PyMuPDF
+    /// `Annot.apn_bbox`).
+    fn apn_bbox(&self) -> Option<(f64, f64, f64, f64)> {
+        self.annot.apn_bbox().map(rect_tuple)
+    }
+
+    /// The `/AP /N` `/Matrix` as `(a, b, c, d, e, f)` (PyMuPDF
+    /// `Annot.apn_matrix`).
+    fn apn_matrix(&self) -> (f64, f64, f64, f64, f64, f64) {
+        matrix_tuple(self.annot.apn_matrix())
+    }
+
+    /// Sets the `/AP /N` `/BBox` (PyMuPDF `Annot.set_apn_bbox`).
+    fn set_apn_bbox(&self, rect: (f64, f64, f64, f64)) -> PyResult<()> {
+        self.annot.set_apn_bbox(rect_of(rect)).map_err(map_err)
+    }
+
+    /// Sets the `/AP /N` `/Matrix` (PyMuPDF `Annot.set_apn_matrix`).
+    fn set_apn_matrix(&self, m: (f64, f64, f64, f64, f64, f64)) -> PyResult<()> {
+        self.annot
+            .set_apn_matrix(Matrix::new(m.0, m.1, m.2, m.3, m.4, m.5))
+            .map_err(map_err)
+    }
+
+    /// The `/Lang` language identifier (PyMuPDF `Annot.language`).
+    #[getter]
+    fn language(&self) -> String {
+        self.annot.language()
+    }
+
+    /// Sets `/Lang` (PyMuPDF `Annot.set_language`); empty removes it.
+    fn set_language(&self, language: &str) -> PyResult<()> {
+        self.annot.set_language(language).map_err(map_err)
+    }
+
+    /// The `/IRT` object number, or `0` (PyMuPDF `Annot.irt_xref`).
+    #[getter]
+    fn irt_xref(&self) -> u32 {
+        self.annot.irt_xref()
+    }
+
+    /// Sets `/IRT` to annotation `xref` (PyMuPDF `Annot.set_irt_xref`).
+    fn set_irt_xref(&self, xref: u32) -> PyResult<()> {
+        self.annot.set_irt_xref(xref).map_err(map_err)
+    }
+
+    /// Deletes reply annotations to this one (PyMuPDF `Annot.delete_responses`).
+    fn delete_responses(&self) -> PyResult<()> {
+        self.annot.delete_responses().map_err(map_err)
+    }
+
+    /// Sanitizes the `/AP /N` stream (PyMuPDF `Annot.clean_contents`).
+    #[pyo3(signature = (sanitize=1))]
+    fn clean_contents(&self, sanitize: i64) -> PyResult<()> {
+        let _ = sanitize;
+        self.annot.clean_contents().map_err(map_err)
+    }
+
+    /// The embedded file's bytes (PyMuPDF `Annot.get_file`).
+    fn get_file<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyBytes>> {
+        let bytes = self.annot.get_file().map_err(map_err)?;
+        Ok(PyBytes::new(py, &bytes))
+    }
+
+    /// The file-attachment info `{filename, description, length, size}` (PyMuPDF
+    /// `Annot.file_info` — exactly these 4 keys).
+    fn file_info<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        let (filename, desc, length) = self.annot.file_info().map_err(map_err)?;
+        let d = PyDict::new(py);
+        d.set_item("filename", filename)?;
+        d.set_item("description", desc)?;
+        d.set_item("length", length)?;
+        d.set_item("size", length)?;
+        Ok(d)
+    }
+
+    /// Replaces the embedded file content / metadata (PyMuPDF
+    /// `Annot.update_file`). The first parameter is named `buffer_` to match
+    /// fitz's signature so keyword calls are portable.
+    #[pyo3(signature = (buffer_=None, filename=None, ufilename=None, desc=None))]
+    fn update_file(
+        &self,
+        buffer_: Option<&[u8]>,
+        filename: Option<&str>,
+        ufilename: Option<&str>,
+        desc: Option<&str>,
+    ) -> PyResult<()> {
+        let fname = filename.or(ufilename);
+        self.annot
+            .update_file(buffer_, fname, desc)
+            .map_err(map_err)
+    }
+
     fn __repr__(&self) -> String {
         format!(
             "<oxide_pdf._core.Annot type={} xref={}>",
@@ -673,6 +802,100 @@ impl PyWidget {
     #[getter]
     fn button_states(&self) -> Vec<String> {
         self.widget.button_states()
+    }
+
+    /// The `/MK /BC` border color (PyMuPDF `Widget.border_color`).
+    #[getter]
+    fn border_color(&self) -> Option<Vec<f64>> {
+        self.widget.border_color()
+    }
+
+    /// The `/MK /BG` fill color (PyMuPDF `Widget.fill_color`).
+    #[getter]
+    fn fill_color(&self) -> Option<Vec<f64>> {
+        self.widget.fill_color()
+    }
+
+    /// The border style full name (PyMuPDF `Widget.border_style`).
+    #[getter]
+    fn border_style(&self) -> String {
+        self.widget.border_style()
+    }
+
+    /// The border width (PyMuPDF `Widget.border_width`).
+    #[getter]
+    fn border_width(&self) -> f64 {
+        self.widget.border_width()
+    }
+
+    /// The border dash pattern (PyMuPDF `Widget.border_dashes`).
+    #[getter]
+    fn border_dashes(&self) -> Option<Vec<i64>> {
+        self.widget.border_dashes()
+    }
+
+    /// The `/DA` text color (PyMuPDF `Widget.text_color`).
+    #[getter]
+    fn text_color(&self) -> Vec<f64> {
+        self.widget.text_color()
+    }
+
+    /// The `/DA` text font name (PyMuPDF `Widget.text_font`).
+    #[getter]
+    fn text_font(&self) -> String {
+        self.widget.text_font()
+    }
+
+    /// The `/DA` text font size (PyMuPDF `Widget.text_fontsize`).
+    #[getter]
+    fn text_fontsize(&self) -> f64 {
+        self.widget.text_fontsize()
+    }
+
+    /// The `/MaxLen` maximum text length (PyMuPDF `Widget.text_maxlen`).
+    #[getter]
+    fn text_maxlen(&self) -> i64 {
+        self.widget.text_maxlen()
+    }
+
+    /// The `/Q` text quadding (PyMuPDF `Widget.text_format`).
+    #[getter]
+    fn text_format(&self) -> i64 {
+        self.widget.text_format()
+    }
+
+    /// The `/MK /CA` button caption (PyMuPDF `Widget.button_caption`).
+    #[getter]
+    fn button_caption(&self) -> Option<String> {
+        self.widget.button_caption()
+    }
+
+    /// The `/F` display flags (PyMuPDF `Widget.field_display`).
+    #[getter]
+    fn field_display(&self) -> i64 {
+        self.widget.field_display()
+    }
+
+    /// Whether a signature field is signed (PyMuPDF `Widget.is_signed`).
+    #[getter]
+    fn is_signed(&self) -> Option<bool> {
+        self.widget.is_signed()
+    }
+
+    /// The current on-state for a button widget (PyMuPDF `Widget.on_state`).
+    fn on_state(&self) -> Option<String> {
+        self.widget.on_state()
+    }
+
+    /// The radio-group parent xref (PyMuPDF `Widget.rb_parent`).
+    #[getter]
+    fn rb_parent(&self) -> Option<u32> {
+        self.widget.rb_parent()
+    }
+
+    /// Resets the field to its default value (PyMuPDF `Widget.reset`).
+    fn reset(&self) -> PyResult<()> {
+        self.widget.reset().map_err(map_err)
     }
 
     /// Sets the field value (PyMuPDF `Widget.field_value = …`).
@@ -2018,17 +2241,20 @@ impl PyPage {
 
     /// Adds a `/FileAttachment` annotation embedding `bytes` (PyMuPDF
     /// `Page.add_file_annot`).
+    #[pyo3(signature = (point, bytes, filename, desc=None))]
     fn add_file_annot(
         &self,
         point: (f64, f64),
         bytes: Vec<u8>,
         filename: &str,
+        desc: Option<&str>,
     ) -> PyResult<PyAnnot> {
         wrap_annot(pdf_api::page_add_file_annot(
             &self.page,
             point_of(point),
             &bytes,
             filename,
+            desc,
         ))
     }
 

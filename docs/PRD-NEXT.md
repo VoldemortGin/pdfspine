@@ -15,8 +15,9 @@ gating. Tables, multilingual, CJK, and domain breadth all measured at near-parit
 **Rendering (`get_pixmap`) is now near-parity for embedded-font text**: SSIM ~0.58 → **0.945 mean /
 0.986 median** vs fitz after four root-cause fixes (full per-glyph `Trm` into the render path;
 bare-CFF `FontFile3` parsing; CCITT/JBIG2 1-bpc polarity; CID-keyed CFF charset CID→GID). See §2.A
-for what landed and the remaining long tail. **1338+ Rust + 445 pytest green.** API coverage **69.1%**
-(531/769 in `COMPAT.toml`) after batch-1 Page geometry + batch-2 Document page-helpers + batch-3 Shape.
+for what landed and the remaining long tail. **1338+ Rust + 479 pytest green.** API coverage **73.7%**
+(567/769 in `COMPAT.toml`) after batch-1 Page geometry + batch-2 Document page-helpers + batch-3
+Shape/Widget/Annot.
 
 ## 1. Tools available (reuse, don't rebuild)
 
@@ -88,7 +89,7 @@ Renderer code: `crates/pdf-render`; glyph data plumbing in `crates/pdf-text` (`i
   `pdf-fonts` CID→Unicode fix.
 - **CI gate** — wire a born-digital `order ≥ 0.95` (and tables count-agreement) regression gate into CI.
 
-### C. API parity coverage (track A) — 69.1% → higher
+### C. API parity coverage (track A) — 73.7% → higher
 > **NB (drift fixed 2026-06-17):** batches 3 & 4 hand-edited `COMPAT.toml` (Font/Colorspace/Link/
 > Outline/TextWriter/Tools/xref-write/text-trace → 63.7%) but did NOT update the generator
 > `scripts/_compat_catalog.py`, so regenerating regressed coverage to 53.7%. A reconciliation pass at
@@ -116,8 +117,22 @@ src/lib.rs` mean batches that both touch them run SEQUENTIALLY; new pytest goes 
    (batch-3, 2026-06-17, +15 → 69.1%):** draw_quad/sector/squiggle/zigzag (path operators
    exact-match real fitz incl. sector closepath `h` via a new `close_path` shape op), insert_text/
    insert_textbox, props (doc/page/width/height/x/y/rect/horizontal_angle/update_rect). Tests in
-   `test_longtail7.py`. **Still TODO:** **Annot members** (set_rotation/popup*/apn_*/file-attach/…)
-   + **Widget appearance** (border/fill/text colors+style, on_state, reset, …).
+   `test_longtail7.py`.
+   - ~~**Widget appearance**~~ **DONE (batch-3b, +17):** border_color/style/width/dashes, fill_color,
+     text_color/font/fontsize/maxlen/format, button_caption, field_display, is_signed, on_state,
+     reset, rb_parent, next (`/MK`+`/DA`+`/BS`+flags parsing in pdf-edit/form.rs). Tests in
+     `test_longtail8.py`.
+   - ~~**Annot members**~~ **DONE (batch-3c, +19):** set_rotation (modulo), rect_delta, popup\*
+     (+ add_text_annot now auto-creates a /Popup like fitz), apn_bbox/apn_matrix (+setters),
+     set_language/irt_xref/delete_responses/clean_contents, file-attach get_file/update_file/file_info.
+     `get_textbox` stays **deferred** (fitz reads the annot's own appearance textpage — different
+     semantics; Page.get_textbox is the supported surface).
+   - Verified by an adversarial real-fitz (.venv-oracle) cross-check workflow that caught ~10 edge-case
+     bugs the implementers missed (non-integer dashes, NoView flag, signed-sig, no-DV reset, rotation
+     modulo, popup filtering, apn/file edge cases) — all fixed. **Deliberate deviations (oxide more
+     correct than fitz, documented in tests):** Widget.text_format reads spec `/Q` (fitz returns 0);
+     Widget.text_color parses CMYK `/DA` (fitz ignores `k`); Annot.language verbatim (fitz normalizes
+     via MuPDF + leaks locale); Annot.clean_contents sanitizes but does not run MuPDF's minifier.
 4. **TextPage** extractHTML/XHTML/XML/extractSelection/Textbox/search; **Font** glyph_bbox/
    valid_codepoints/buffer.
 5. Document low-level COS (`update_object`/`update_stream`/`get_new_xref`/…), state/meta, OCG/layers.

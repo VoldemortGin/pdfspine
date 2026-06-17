@@ -29,10 +29,10 @@
 baseline = "1.24.x"
 baseline_detail = "PyMuPDF 1.24.14 / MuPDF 1.24.11"
 total = 769
-implemented = 531
-deferred = 172
+implemented = 567
+deferred = 136
 out_of_scope = 66
-coverage_pct = 69.1
+coverage_pct = 73.7
 
 # ── Matrix ──
 [[symbol]]
@@ -3298,140 +3298,163 @@ note = "/LE, /BM, /Name, /Open getters+setters"
 [[symbol]]
 name = "Annot.set_rotation"
 group = "Annot"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
+note = "/Rotate, /RD, /Popup, /AP /N BBox+Matrix, /Lang, /IRT, /FileAttachment (PRD §C batch-3)"
 
 [[symbol]]
 name = "Annot.set_popup"
 group = "Annot"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
+note = "/Rotate, /RD, /Popup, /AP /N BBox+Matrix, /Lang, /IRT, /FileAttachment (PRD §C batch-3)"
 
 [[symbol]]
 name = "Annot.popup_rect"
 group = "Annot"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
+note = "/Rotate, /RD, /Popup, /AP /N BBox+Matrix, /Lang, /IRT, /FileAttachment (PRD §C batch-3)"
 
 [[symbol]]
 name = "Annot.popup_xref"
 group = "Annot"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
+note = "/Rotate, /RD, /Popup, /AP /N BBox+Matrix, /Lang, /IRT, /FileAttachment (PRD §C batch-3)"
 
 [[symbol]]
 name = "Annot.has_popup"
 group = "Annot"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
+note = "/Rotate, /RD, /Popup, /AP /N BBox+Matrix, /Lang, /IRT, /FileAttachment (PRD §C batch-3)"
 
 [[symbol]]
 name = "Annot.set_apn_bbox"
 group = "Annot"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
+note = "/Rotate, /RD, /Popup, /AP /N BBox+Matrix, /Lang, /IRT, /FileAttachment (PRD §C batch-3)"
 
 [[symbol]]
 name = "Annot.apn_bbox"
 group = "Annot"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
+note = "/Rotate, /RD, /Popup, /AP /N BBox+Matrix, /Lang, /IRT, /FileAttachment (PRD §C batch-3)"
 
 [[symbol]]
 name = "Annot.set_apn_matrix"
 group = "Annot"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
+note = "/Rotate, /RD, /Popup, /AP /N BBox+Matrix, /Lang, /IRT, /FileAttachment (PRD §C batch-3)"
 
 [[symbol]]
 name = "Annot.apn_matrix"
 group = "Annot"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
+note = "/Rotate, /RD, /Popup, /AP /N BBox+Matrix, /Lang, /IRT, /FileAttachment (PRD §C batch-3)"
 
 [[symbol]]
 name = "Annot.set_irt_xref"
 group = "Annot"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
+note = "/Rotate, /RD, /Popup, /AP /N BBox+Matrix, /Lang, /IRT, /FileAttachment (PRD §C batch-3)"
 
 [[symbol]]
 name = "Annot.irt_xref"
 group = "Annot"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
+note = "/Rotate, /RD, /Popup, /AP /N BBox+Matrix, /Lang, /IRT, /FileAttachment (PRD §C batch-3)"
 
 [[symbol]]
 name = "Annot.delete_responses"
 group = "Annot"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
+note = "/Rotate, /RD, /Popup, /AP /N BBox+Matrix, /Lang, /IRT, /FileAttachment (PRD §C batch-3)"
+
+[[symbol]]
+name = "Annot.get_file"
+group = "Annot"
+disposition = "implemented"
+milestone = "M4"
+note = "/Rotate, /RD, /Popup, /AP /N BBox+Matrix, /Lang, /IRT, /FileAttachment (PRD §C batch-3)"
+
+[[symbol]]
+name = "Annot.update_file"
+group = "Annot"
+disposition = "implemented"
+milestone = "M4"
+note = "/Rotate, /RD, /Popup, /AP /N BBox+Matrix, /Lang, /IRT, /FileAttachment (PRD §C batch-3)"
+
+[[symbol]]
+name = "Annot.file_info"
+group = "Annot"
+disposition = "implemented"
+milestone = "M4"
+note = "/Rotate, /RD, /Popup, /AP /N BBox+Matrix, /Lang, /IRT, /FileAttachment (PRD §C batch-3)"
+
+[[symbol]]
+name = "Annot.clean_contents"
+group = "Annot"
+disposition = "implemented"
+milestone = "M4"
+note = "/Rotate, /RD, /Popup, /AP /N BBox+Matrix, /Lang, /IRT, /FileAttachment (PRD §C batch-3)"
+
+[[symbol]]
+name = "Annot.set_language"
+group = "Annot"
+disposition = "implemented"
+milestone = "M4"
+note = "/Rotate, /RD, /Popup, /AP /N BBox+Matrix, /Lang, /IRT, /FileAttachment (PRD §C batch-3)"
+
+[[symbol]]
+name = "Annot.rect_delta"
+group = "Annot"
+disposition = "implemented"
+milestone = "M4"
+note = "/Rotate, /RD, /Popup, /AP /N BBox+Matrix, /Lang, /IRT, /FileAttachment (PRD §C batch-3)"
+
+[[symbol]]
+name = "Annot.language"
+group = "Annot"
+disposition = "implemented"
+milestone = "M4"
+note = "/Rotate, /RD, /Popup, /AP /N BBox+Matrix, /Lang, /IRT, /FileAttachment (PRD §C batch-3)"
 
 [[symbol]]
 name = "Annot.get_text"
 group = "Annot"
 disposition = "implemented"
 milestone = "M4"
-
-[[symbol]]
-name = "Annot.get_textbox"
-group = "Annot"
-disposition = "deferred"
-milestone = "M4"
+note = "get_textbox needs the annot's OWN appearance textpage (fitz semantics), not page-region delegation"
 
 [[symbol]]
 name = "Annot.get_textpage"
 group = "Annot"
 disposition = "implemented"
 milestone = "M4"
-
-[[symbol]]
-name = "Annot.get_file"
-group = "Annot"
-disposition = "deferred"
-milestone = "M4"
-
-[[symbol]]
-name = "Annot.update_file"
-group = "Annot"
-disposition = "deferred"
-milestone = "M4"
-
-[[symbol]]
-name = "Annot.file_info"
-group = "Annot"
-disposition = "deferred"
-milestone = "M4"
-
-[[symbol]]
-name = "Annot.clean_contents"
-group = "Annot"
-disposition = "deferred"
-milestone = "M4"
-
-[[symbol]]
-name = "Annot.set_language"
-group = "Annot"
-disposition = "deferred"
-milestone = "M4"
-
-[[symbol]]
-name = "Annot.rect_delta"
-group = "Annot"
-disposition = "deferred"
-milestone = "M4"
+note = "get_textbox needs the annot's OWN appearance textpage (fitz semantics), not page-region delegation"
 
 [[symbol]]
 name = "Annot.next"
 group = "Annot"
 disposition = "implemented"
 milestone = "M4"
+note = "get_textbox needs the annot's OWN appearance textpage (fitz semantics), not page-region delegation"
 
 [[symbol]]
-name = "Annot.language"
+name = "Annot.get_textbox"
 group = "Annot"
 disposition = "deferred"
 milestone = "M4"
+note = "get_textbox needs the annot's OWN appearance textpage (fitz semantics), not page-region delegation"
 
 [[symbol]]
 name = "Annot.get_pixmap"
@@ -3531,103 +3554,103 @@ milestone = "M4"
 [[symbol]]
 name = "Widget.field_display"
 group = "Widget"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "Widget.border_color"
 group = "Widget"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "Widget.border_style"
 group = "Widget"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "Widget.border_width"
 group = "Widget"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "Widget.border_dashes"
 group = "Widget"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "Widget.fill_color"
 group = "Widget"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "Widget.text_color"
 group = "Widget"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "Widget.text_font"
 group = "Widget"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "Widget.text_fontsize"
 group = "Widget"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "Widget.text_maxlen"
 group = "Widget"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "Widget.text_format"
 group = "Widget"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "Widget.button_caption"
 group = "Widget"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "Widget.is_signed"
 group = "Widget"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "Widget.rb_parent"
 group = "Widget"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "Widget.reset"
 group = "Widget"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "Widget.on_state"
 group = "Widget"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "Widget.next"
 group = "Widget"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]

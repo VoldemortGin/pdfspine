@@ -561,6 +561,25 @@ impl<'a> Field<'a> {
         self.dict()
             .ok_or(Error::InvalidArgument("field is not a dictionary"))
     }
+
+    /// Clears the field's value: removes the `/V` key and regenerates each
+    /// widget's appearance from an empty value. Used by `reset` when the field
+    /// has no `/DV` default (matches PyMuPDF clearing `/V` rather than writing a
+    /// literal value).
+    fn clear_value(&self) -> Result<()> {
+        let mut d = self.dict_or_err()?;
+        d.remove(&Name::new("V"));
+        self.doc.update_object(self.obj, Object::Dictionary(d))?;
+        if matches!(
+            self.field_type(),
+            FieldType::Text | FieldType::ComboBox | FieldType::ListBox
+        ) {
+            for w in self.widget_refs() {
+                self.regen_text_ap(w, "")?;
+            }
+        }
+        Ok(())
+    }
 }
 
 // === Widget handle ========================================================
@@ -678,6 +697,244 @@ impl<'a> Widget<'a> {
         ap_n_state_names(self.doc, &d)
     }
 
+    /// The `/MK /BC` border color, as raw colorspace components (1=gray,
+    /// 3=rgb, 4=cmyk), or `None` if absent (PyMuPDF `Widget.border_color`).
+    #[must_use]
+    pub fn border_color(&self) -> Option<Vec<f64>> {
+        self.mk_color("BC")
+    }
+
+    /// The `/MK /BG` fill (background) color, raw components, or `None`
+    /// (PyMuPDF `Widget.fill_color`).
+    #[must_use]
+    pub fn fill_color(&self) -> Option<Vec<f64>> {
+        self.mk_color("BG")
+    }
+
+    /// Reads a raw color array nested under `/MK`.
+    fn mk_color(&self, key: &str) -> Option<Vec<f64>> {
+        let d = self.dict()?;
+        let mk = resolve_dict(self.doc, d.get(&Name::new("MK"))?)?;
+        let arr = mk.get(&Name::new(key)).and_then(Object::as_array)?;
+        Some(arr.iter().map(|o| o.as_f64().unwrap_or(0.0)).collect())
+    }
+
+    /// The border style full name ("Solid" / "Dashed" / "Beveled" / "Inset" /
+    /// "Underline"), from `/BS /S` (default "Solid") (PyMuPDF
+    /// `Widget.border_style`).
+    #[must_use]
+    pub fn border_style(&self) -> String {
+        let code = self
+            .bs_dict()
+            .and_then(|bs| {
+                bs.get(&Name::new("S"))
+                    .and_then(Object::as_name)
+                    .map(|n| n.as_bytes().first().copied().unwrap_or(b'S'))
+            })
+            .unwrap_or(b'S');
+        match code {
+            b'D' => "Dashed",
+            b'B' => "Beveled",
+            b'I' => "Inset",
+            b'U' => "Underline",
+            _ => "Solid",
+        }
+        .to_string()
+    }
+
+    /// The border width from `/BS /W`, defaulting to `1.0` when zero/absent
+    /// (matches PyMuPDF `Widget.border_width`).
+    #[must_use]
+    pub fn border_width(&self) -> f64 {
+        let w = self
+            .bs_dict()
+            .and_then(|bs| bs.get(&Name::new("W")).and_then(Object::as_f64))
+            .unwrap_or(0.0);
+        if w == 0.0 {
+            1.0
+        } else {
+            w
+        }
+    }
+
+    /// The border dash pattern from `/BS /D` as integers, or `None`
+    /// (PyMuPDF `Widget.border_dashes`). Real entries are rounded to the nearest
+    /// integer, mirroring MuPDF's `pdf_to_int` (e.g. `[2.5, 1.5]` -> `[3, 2]`).
+    #[must_use]
+    pub fn border_dashes(&self) -> Option<Vec<i64>> {
+        let bs = self.bs_dict()?;
+        let arr = bs.get(&Name::new("D")).and_then(Object::as_array)?;
+        Some(
+            arr.iter()
+                .map(|o| match o {
+                    Object::Integer(i) => *i,
+                    _ => o.as_f64().map(|f| f.round() as i64).unwrap_or(0),
+                })
+                .collect(),
+        )
+    }
+
+    /// Resolves the `/BS` border-style dict.
+    fn bs_dict(&self) -> Option<Dict> {
+        let d = self.dict()?;
+        resolve_dict(self.doc, d.get(&Name::new("BS"))?)
+    }
+
+    /// The effective `/DA` default-appearance string (own, inherited, or
+    /// AcroForm), or empty.
+    fn da_string(&self) -> String {
+        if let Some(da) = self.dict().and_then(|d| {
+            d.get(&Name::new("DA"))
+                .and_then(Object::as_string)
+                .map(|s| String::from_utf8_lossy(s.as_bytes()).into_owned())
+        }) {
+            return da;
+        }
+        if let Some(o) = inherited_value(self.doc, self.obj, "DA") {
+            if let Some(s) = o.as_string() {
+                return String::from_utf8_lossy(s.as_bytes()).into_owned();
+            }
+        }
+        default_appearance(self.doc).unwrap_or_default()
+    }
+
+    /// The text color parsed from `/DA`, as raw components, defaulting to
+    /// `[0,0,0]` (PyMuPDF `Widget.text_color`).
+    ///
+    /// DEVIATION (oxide is more correct): for a CMYK `/DA` (the `k` operator)
+    /// oxide returns the 4 CMYK components, whereas MuPDF/PyMuPDF's `/DA` parser
+    /// only handles `g`/`rg` and returns `(0,0,0)` for `k`. Kept intentionally.
+    #[must_use]
+    pub fn text_color(&self) -> Vec<f64> {
+        parse_da_full(&self.da_string()).2
+    }
+
+    /// The text font name parsed from `/DA`, defaulting to "Helv" (PyMuPDF
+    /// `Widget.text_font`).
+    #[must_use]
+    pub fn text_font(&self) -> String {
+        parse_da_full(&self.da_string()).0
+    }
+
+    /// The text font size parsed from `/DA`, defaulting to `0.0` (PyMuPDF
+    /// `Widget.text_fontsize`).
+    #[must_use]
+    pub fn text_fontsize(&self) -> f64 {
+        parse_da_full(&self.da_string()).1
+    }
+
+    /// The maximum text length `/MaxLen` (inherited), `0` if absent (PyMuPDF
+    /// `Widget.text_maxlen`).
+    #[must_use]
+    pub fn text_maxlen(&self) -> i64 {
+        inherited_i64(self.doc, self.obj, "MaxLen").unwrap_or(0)
+    }
+
+    /// The text quadding `/Q` (inherited): 0 left, 1 center, 2 right (PyMuPDF
+    /// `Widget.text_format`).
+    ///
+    /// DEVIATION (oxide is more correct): oxide reads the spec-correct `/Q`,
+    /// whereas PyMuPDF 1.27's getter is broken — its `pdf_text_widget_format`
+    /// never reads `/Q`, so it always returns 0. Kept intentionally.
+    #[must_use]
+    pub fn text_format(&self) -> i64 {
+        inherited_i64(self.doc, self.obj, "Q").unwrap_or(0)
+    }
+
+    /// The pushbutton caption `/MK /CA`, or `None` (PyMuPDF
+    /// `Widget.button_caption`).
+    #[must_use]
+    pub fn button_caption(&self) -> Option<String> {
+        let d = self.dict()?;
+        let mk = resolve_dict(self.doc, d.get(&Name::new("MK"))?)?;
+        mk.get(&Name::new("CA"))
+            .and_then(Object::as_string)
+            .map(decode_text_string)
+    }
+
+    /// The field display code derived from the annotation `/F` flags, matching
+    /// MuPDF `pdf_field_display` (verified against PyMuPDF 1.27 for `/F` 0..=63):
+    /// - Hidden (bit 2) set -> `1` (overrides NoView/Print);
+    /// - else NoView (bit 6) set -> `3` when Print (bit 3) also set, else `1`;
+    /// - else (neither Hidden nor NoView) -> `0` when Print set, else `2`.
+    #[must_use]
+    pub fn field_display(&self) -> i64 {
+        let f = self
+            .dict()
+            .and_then(|d| d.get(&Name::new("F")).and_then(Object::as_i64))
+            .unwrap_or(0);
+        const HIDDEN: i64 = 1 << 1; // 2
+        const PRINT: i64 = 1 << 2; // 4
+        const NO_VIEW: i64 = 1 << 5; // 32
+        if f & HIDDEN != 0 {
+            1
+        } else if f & NO_VIEW != 0 {
+            if f & PRINT != 0 {
+                3
+            } else {
+                1
+            }
+        } else if f & PRINT != 0 {
+            0
+        } else {
+            2
+        }
+    }
+
+    /// For signature fields: whether the signature is signed, `None` for
+    /// non-signature fields (PyMuPDF `Widget.is_signed`). A signed field has a
+    /// `/V` signature *dictionary*; the string getter
+    /// [`Field::field_value`] returns `None` for a dict, so we test for the `/V`
+    /// key's presence directly (inherited).
+    #[must_use]
+    pub fn is_signed(&self) -> Option<bool> {
+        if self.field_type() != FieldType::Signature {
+            return None;
+        }
+        Some(inherited_value(self.doc, self.obj, "V").is_some())
+    }
+
+    /// The current on-state name `/AS` for a button widget (checkbox/radio),
+    /// or `None` (PyMuPDF `Widget.on_state` reads the non-`Off` button state).
+    #[must_use]
+    pub fn on_state(&self) -> Option<String> {
+        if !matches!(
+            self.field_type(),
+            FieldType::CheckBox | FieldType::RadioButton
+        ) {
+            return None;
+        }
+        self.button_states().into_iter().find(|s| s != "Off")
+    }
+
+    /// The radio-group parent object number `/Parent` (radio buttons only),
+    /// or `None` (PyMuPDF `Widget.rb_parent`).
+    #[must_use]
+    pub fn rb_parent(&self) -> Option<u32> {
+        if self.field_type() != FieldType::RadioButton {
+            return None;
+        }
+        self.dict()
+            .and_then(|d| d.get(&Name::new("Parent")).and_then(Object::as_reference))
+            .map(|r| r.num)
+    }
+
+    /// Resets the field to its default value `/DV` (PyMuPDF `Widget.reset`).
+    ///
+    /// With a `/DV`, `/V` is set to it; without a `/DV`, fitz *clears* `/V`
+    /// (removes the key, leaving an empty field value) rather than writing a
+    /// literal sentinel.
+    ///
+    /// # Errors
+    /// As [`Field::set_field_value`] / [`Field::clear_value`].
+    pub fn reset(&self) -> Result<()> {
+        let field = self.field();
+        match field.default_value() {
+            Some(dv) => field.set_field_value(&dv),
+            None => field.clear_value(),
+        }
+    }
+
     /// Sets the field value through the owning field (regenerates appearances).
     ///
     /// # Errors
@@ -685,6 +942,61 @@ impl<'a> Widget<'a> {
     pub fn set_field_value(&self, value: &str) -> Result<()> {
         self.field().set_field_value(value)
     }
+}
+
+/// Resolves an object (possibly an indirect reference) into a dict clone.
+fn resolve_dict(doc: &DocumentStore, o: &Object) -> Option<Dict> {
+    match o {
+        Object::Dictionary(d) => Some(d.clone()),
+        Object::Reference(r) => doc.resolve(*r).ok().and_then(|o| o.as_dict().cloned()),
+        _ => None,
+    }
+}
+
+/// Parses a `/DA` string into `(font, fontsize, color)` matching PyMuPDF's
+/// `Widget._parse_da`: font defaults "Helv", size `0.0`, color `[0,0,0]`; the
+/// color follows the `g` (gray) / `rg` (rgb) / `k` (cmyk) operator.
+fn parse_da_full(da: &str) -> (String, f64, Vec<f64>) {
+    let mut font = "Helv".to_string();
+    let mut size = 0.0;
+    let mut color = vec![0.0, 0.0, 0.0];
+    let toks: Vec<&str> = da.split_whitespace().collect();
+    for (i, t) in toks.iter().enumerate() {
+        match *t {
+            "Tf" if i >= 2 => {
+                font = toks[i - 2].trim_start_matches('/').to_string();
+                if let Ok(v) = toks[i - 1].parse::<f64>() {
+                    size = v;
+                }
+            }
+            "g" if i >= 1 => {
+                if let Ok(v) = toks[i - 1].parse::<f64>() {
+                    color = vec![v];
+                }
+            }
+            "rg" if i >= 3 => {
+                if let (Ok(r), Ok(g), Ok(b)) = (
+                    toks[i - 3].parse::<f64>(),
+                    toks[i - 2].parse::<f64>(),
+                    toks[i - 1].parse::<f64>(),
+                ) {
+                    color = vec![r, g, b];
+                }
+            }
+            "k" if i >= 4 => {
+                if let (Ok(c), Ok(m), Ok(y), Ok(kk)) = (
+                    toks[i - 4].parse::<f64>(),
+                    toks[i - 3].parse::<f64>(),
+                    toks[i - 2].parse::<f64>(),
+                    toks[i - 1].parse::<f64>(),
+                ) {
+                    color = vec![c, m, y, kk];
+                }
+            }
+            _ => {}
+        }
+    }
+    (font, size, color)
 }
 
 /// The `/Widget` annotation references on the page at `index` (in `/Annots`

@@ -16,7 +16,7 @@ from typing import Iterator
 
 from . import _core
 from ._core import PdfError, PdfRedactionError, PdfUnsupportedError
-from .geometry import Matrix, Point, Quad, Rect
+from .geometry import FZ_MAX_INF_RECT, FZ_MIN_INF_RECT, Matrix, Point, Quad, Rect
 
 # PyMuPDF methods/properties that exist on the real API but land in later
 # milestones. Accessing them raises a typed, catchable error with a hint, not
@@ -338,6 +338,124 @@ class Annot:
         return True
 
     @property
+    def rect_delta(self):
+        """The ``(left, top, right, bottom)`` ``/RD`` rect deltas, or ``None``
+        (PyMuPDF ``annot.rect_delta``)."""
+        return self._annot.rect_delta()
+
+    @property
+    def has_popup(self) -> bool:
+        """Whether the annotation has a ``/Popup`` (PyMuPDF ``annot.has_popup``)."""
+        return self._annot.has_popup
+
+    @property
+    def popup_xref(self) -> int:
+        """The ``/Popup`` object ``xref``, or ``0`` (PyMuPDF ``annot.popup_xref``)."""
+        return self._annot.popup_xref
+
+    @property
+    def popup_rect(self) -> Rect:
+        """The ``/Popup`` rectangle (PyMuPDF ``annot.popup_rect``).
+
+        Returns the infinite rect when no popup is present, matching PyMuPDF.
+        """
+        r = self._annot.popup_rect
+        if r is None:
+            return Rect(FZ_MIN_INF_RECT, FZ_MIN_INF_RECT, FZ_MAX_INF_RECT, FZ_MAX_INF_RECT)
+        return _rect(r)
+
+    @property
+    def language(self) -> str:
+        """The ``/Lang`` language identifier (PyMuPDF ``annot.language``)."""
+        return self._annot.language
+
+    @property
+    def irt_xref(self) -> int:
+        """The ``/IRT`` in-reply-to ``xref``, or ``0`` (PyMuPDF ``annot.irt_xref``)."""
+        return self._annot.irt_xref
+
+    def apn_bbox(self) -> Rect:
+        """The ``/AP /N`` appearance ``/BBox`` (PyMuPDF ``annot.apn_bbox``).
+
+        Returns MuPDF's infinite-rect sentinel when there is no ``/AP /N`` stream
+        or it carries no ``/BBox`` (matching PyMuPDF).
+        """
+        r = self._annot.apn_bbox()
+        if r is None:
+            return Rect(FZ_MIN_INF_RECT, FZ_MIN_INF_RECT, FZ_MAX_INF_RECT, FZ_MAX_INF_RECT)
+        return _rect(r)
+
+    def apn_matrix(self) -> Matrix:
+        """The ``/AP /N`` appearance ``/Matrix`` (PyMuPDF ``annot.apn_matrix``)."""
+        return Matrix(*self._annot.apn_matrix())
+
+    def file_info(self) -> dict:
+        """The embedded-file info dict (PyMuPDF ``annot.file_info``).
+
+        Returns exactly ``{'filename', 'description', 'length', 'size'}`` to match
+        PyMuPDF 1.27's key set; ``description`` defaults to the filename when no
+        ``/Desc`` is present.
+        """
+        return self._annot.file_info()
+
+    def get_file(self) -> bytes:
+        """The embedded file's bytes (PyMuPDF ``annot.get_file``)."""
+        return self._annot.get_file()
+
+    def get_textbox(self, *args, **kwargs) -> str:
+        """DEFERRED — PyMuPDF ``annot.get_textbox`` reads the annotation's OWN
+        appearance textpage and requires a ``rect`` argument; oxide has no
+        annotation-appearance textpage yet, and delegating to the page region
+        would be semantically opposite. Use :meth:`Page.get_textbox` instead.
+        """
+        raise PdfUnsupportedError(
+            "Annot.get_textbox is not implemented yet: it needs the annotation's "
+            "own appearance textpage (fitz semantics), which differs from page "
+            "region text. Use Page.get_textbox. See the oxide_pdf parity matrix."
+        )
+
+    # --- setters / mutators ---
+    def set_rotation(self, rotation: int) -> None:
+        """Sets the ``/Rotate`` value (PyMuPDF ``annot.set_rotation``)."""
+        self._annot.set_rotation(int(rotation))
+
+    def set_popup(self, rect) -> None:
+        """Adds / replaces the ``/Popup`` covering ``rect`` (PyMuPDF
+        ``annot.set_popup``)."""
+        self._annot.set_popup(_rt(rect))
+
+    def set_apn_bbox(self, bbox) -> None:
+        """Sets the ``/AP /N`` ``/BBox`` (PyMuPDF ``annot.set_apn_bbox``)."""
+        self._annot.set_apn_bbox(_rt(bbox))
+
+    def set_apn_matrix(self, matrix) -> None:
+        """Sets the ``/AP /N`` ``/Matrix`` (PyMuPDF ``annot.set_apn_matrix``)."""
+        m = matrix
+        self._annot.set_apn_matrix((m[0], m[1], m[2], m[3], m[4], m[5]))
+
+    def set_language(self, language) -> None:
+        """Sets the ``/Lang`` identifier (PyMuPDF ``annot.set_language``)."""
+        self._annot.set_language("" if language is None else str(language))
+
+    def set_irt_xref(self, xref: int) -> None:
+        """Sets the ``/IRT`` in-reply-to reference (PyMuPDF ``annot.set_irt_xref``)."""
+        self._annot.set_irt_xref(int(xref))
+
+    def delete_responses(self) -> None:
+        """Deletes reply annotations to this one (PyMuPDF ``annot.delete_responses``)."""
+        self._annot.delete_responses()
+
+    def clean_contents(self, sanitize: int = 1) -> None:
+        """Sanitizes the ``/AP /N`` stream (PyMuPDF ``annot.clean_contents``)."""
+        self._annot.clean_contents(int(sanitize))
+
+    def update_file(self, buffer_=None, filename=None, ufilename=None, desc=None) -> None:
+        """Replaces the embedded file content / metadata (PyMuPDF
+        ``annot.update_file``). The first parameter is ``buffer_`` to match
+        fitz's signature."""
+        self._annot.update_file(buffer_=buffer_, filename=filename, ufilename=ufilename, desc=desc)
+
+    @property
     def next(self) -> "Annot | None":
         """The next annotation on the page, or ``None`` (PyMuPDF ``annot.next``)."""
         if self._siblings is None or self._index + 1 >= len(self._siblings):
@@ -394,12 +512,15 @@ class Widget:
     :meth:`update`. This wrapper buffers the pending value the same way.
     """
 
-    __slots__ = ("_widget", "_pending_value", "_has_pending")
+    __slots__ = ("_widget", "_pending_value", "_has_pending", "next")
 
     def __init__(self, core_widget: "_core.Widget") -> None:
         self._widget = core_widget
         self._pending_value = None
         self._has_pending = False
+        #: The next widget on the page, or ``None`` (PyMuPDF ``widget.next``).
+        #: Wired up by :meth:`Page.widgets` / :attr:`Page.first_widget`.
+        self.next: "Widget | None" = None
 
     @property
     def rect(self) -> Rect:
@@ -461,6 +582,84 @@ class Widget:
     def button_states(self) -> list[str]:
         """The on-states for checkbox/radio fields (PyMuPDF ``widget.button_states``)."""
         return self._widget.button_states
+
+    @property
+    def border_color(self) -> list[float] | None:
+        """The ``/MK /BC`` border color components (PyMuPDF ``widget.border_color``)."""
+        return self._widget.border_color
+
+    @property
+    def fill_color(self) -> list[float] | None:
+        """The ``/MK /BG`` fill color components (PyMuPDF ``widget.fill_color``)."""
+        return self._widget.fill_color
+
+    @property
+    def border_style(self) -> str:
+        """The border style name (PyMuPDF ``widget.border_style``)."""
+        return self._widget.border_style
+
+    @property
+    def border_width(self) -> float:
+        """The border width (PyMuPDF ``widget.border_width``)."""
+        return self._widget.border_width
+
+    @property
+    def border_dashes(self) -> list[int] | None:
+        """The border dash pattern (PyMuPDF ``widget.border_dashes``)."""
+        return self._widget.border_dashes
+
+    @property
+    def text_color(self) -> list[float]:
+        """The ``/DA`` text color components (PyMuPDF ``widget.text_color``)."""
+        return self._widget.text_color
+
+    @property
+    def text_font(self) -> str:
+        """The ``/DA`` text font name (PyMuPDF ``widget.text_font``)."""
+        return self._widget.text_font
+
+    @property
+    def text_fontsize(self) -> float:
+        """The ``/DA`` text font size (PyMuPDF ``widget.text_fontsize``)."""
+        return self._widget.text_fontsize
+
+    @property
+    def text_maxlen(self) -> int:
+        """The ``/MaxLen`` maximum text length (PyMuPDF ``widget.text_maxlen``)."""
+        return self._widget.text_maxlen
+
+    @property
+    def text_format(self) -> int:
+        """The ``/Q`` text quadding 0/1/2 (PyMuPDF ``widget.text_format``)."""
+        return self._widget.text_format
+
+    @property
+    def button_caption(self) -> str | None:
+        """The pushbutton caption ``/MK /CA`` (PyMuPDF ``widget.button_caption``)."""
+        return self._widget.button_caption
+
+    @property
+    def field_display(self) -> int:
+        """The annotation display flags ``/F`` (PyMuPDF ``widget.field_display``)."""
+        return self._widget.field_display
+
+    @property
+    def is_signed(self) -> bool | None:
+        """Whether a signature field is signed (PyMuPDF ``widget.is_signed``)."""
+        return self._widget.is_signed
+
+    @property
+    def rb_parent(self) -> int | None:
+        """The radio-group parent xref (PyMuPDF ``widget.rb_parent``)."""
+        return self._widget.rb_parent
+
+    def on_state(self) -> str | None:
+        """The button widget's current on-state name (PyMuPDF ``widget.on_state``)."""
+        return self._widget.on_state()
+
+    def reset(self) -> None:
+        """Resets the field to its default value (PyMuPDF ``widget.reset``)."""
+        self._widget.reset()
 
     def update(self, value=None) -> None:
         """Writes the field value back to the document (PyMuPDF ``widget.update``)."""
@@ -1777,7 +1976,7 @@ class Page:
 
     def add_file_annot(self, point, buffer, filename: str, *, ufilename=None, desc=None, icon=None, **_ignored) -> Annot:
         """Adds a file-attachment annotation (PyMuPDF ``page.add_file_annot``)."""
-        return Annot(self._page.add_file_annot(_pt(point), bytes(buffer), filename), parent=self)
+        return Annot(self._page.add_file_annot(_pt(point), bytes(buffer), filename, desc=desc), parent=self)
 
     def add_redact_annot(self, quad, *, text=None, fill=None, **_ignored) -> Annot:
         """Adds a redaction annotation over ``quad`` (PyMuPDF ``page.add_redact_annot``)."""
@@ -1871,13 +2070,20 @@ class Page:
 
     def widgets(self) -> list[Widget]:
         """The page's form-field widgets (PyMuPDF ``page.widgets``)."""
-        return [Widget(w) for w in self._page.widgets()]
+        ws = [Widget(w) for w in self._page.widgets()]
+        for a, b in zip(ws, ws[1:]):
+            a.next = b
+        return ws
 
     @property
     def first_widget(self) -> Widget | None:
-        """The first form-field widget, or ``None`` (PyMuPDF ``page.first_widget``)."""
-        core = self._page.first_widget
-        return Widget(core) if core is not None else None
+        """The first form-field widget, or ``None`` (PyMuPDF ``page.first_widget``).
+
+        The returned widget's :attr:`Widget.next` chain links the remaining page
+        widgets, matching PyMuPDF's linked-list traversal.
+        """
+        ws = self.widgets()
+        return ws[0] if ws else None
 
     # PyMuPDF deprecated camelCase aliases.
     def getPixmap(self, *args, **kw) -> Pixmap:  # noqa: N802

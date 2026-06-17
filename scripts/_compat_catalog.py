@@ -353,13 +353,16 @@ add_many("Annot", IMPLEMENTED, "M4", [
     "set_line_ends", "line_ends", "set_blendmode", "blendmode",
     "set_name", "set_open", "is_open",
 ], "/LE, /BM, /Name, /Open getters+setters")
+add_many("Annot", IMPLEMENTED, "M4", [
+    "set_rotation", "set_popup", "popup_rect", "popup_xref", "has_popup",
+    "set_apn_bbox", "apn_bbox", "set_apn_matrix", "apn_matrix",
+    "set_irt_xref", "irt_xref", "delete_responses",
+    "get_file", "update_file", "file_info", "clean_contents",
+    "set_language", "rect_delta", "language",
+], "/Rotate, /RD, /Popup, /AP /N BBox+Matrix, /Lang, /IRT, /FileAttachment (PRD §C batch-3)")
 add_many("Annot", DEFERRED, "M4", [
-    "set_rotation", "set_popup", "popup_rect", "popup_xref",
-    "has_popup", "set_apn_bbox", "apn_bbox", "set_apn_matrix", "apn_matrix",
-    "set_irt_xref", "irt_xref", "delete_responses", "get_text", "get_textbox",
-    "get_textpage", "get_file", "update_file", "file_info", "clean_contents",
-    "set_language", "rect_delta", "next", "language",
-])
+    "get_text", "get_textpage", "next", "get_textbox",
+], "get_textbox needs the annot's OWN appearance textpage (fitz semantics), not page-region delegation")
 add("Annot.get_pixmap", "Annot", OUT_OF_SCOPE, "M6", "annot rasterization needs M6 renderer")
 add("Annot.set_oc", "Annot", OUT_OF_SCOPE, "post-v1", "OCG out of scope")
 add("Annot.get_oc", "Annot", OUT_OF_SCOPE, "post-v1", "OCG out of scope")
@@ -372,8 +375,7 @@ add_many("Widget", IMPLEMENTED, "M4", [
     "field_name", "field_label", "field_value", "field_type",
     "field_type_string", "field_flags", "rect", "xref", "choice_values",
     "button_states", "update",
-])
-add_many("Widget", DEFERRED, "M4", [
+    # Widget appearance (PRD §C batch-3) — read properties, verified vs fitz 1.27.
     "field_display", "border_color", "border_style", "border_width",
     "border_dashes", "fill_color", "text_color", "text_font", "text_fontsize",
     "text_maxlen", "text_format", "button_caption", "is_signed", "rb_parent",

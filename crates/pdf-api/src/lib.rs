@@ -1740,6 +1740,160 @@ impl AnnotHandle {
     pub fn border(&self) -> (f64, String, Vec<f64>) {
         self.annot().border()
     }
+
+    /// Sets the `/Rotate` value (PyMuPDF `Annot.set_rotation`). `-1` removes it.
+    ///
+    /// # Errors
+    /// Propagates object-edit errors.
+    pub fn set_rotation(&self, rotate: i64) -> Result<()> {
+        self.annot().set_rotation(rotate)?;
+        Ok(())
+    }
+
+    /// The `(left, top, right, bottom)` `/RD` rect deltas, or `None` (PyMuPDF
+    /// `Annot.rect_delta`).
+    #[must_use]
+    pub fn rect_delta(&self) -> Option<(f64, f64, f64, f64)> {
+        self.annot().rect_delta()
+    }
+
+    /// Whether a `/Popup` is present (PyMuPDF `Annot.has_popup`).
+    #[must_use]
+    pub fn has_popup(&self) -> bool {
+        self.annot().has_popup()
+    }
+
+    /// The `/Popup` object number, or `0` (PyMuPDF `Annot.popup_xref`).
+    #[must_use]
+    pub fn popup_xref(&self) -> u32 {
+        self.annot().popup_xref()
+    }
+
+    /// The `/Popup` rect in page space, or `None` (PyMuPDF `Annot.popup_rect`).
+    #[must_use]
+    pub fn popup_rect(&self) -> Option<Rect> {
+        self.annot().popup_rect()
+    }
+
+    /// Adds / replaces the `/Popup` covering `rect` (PyMuPDF `Annot.set_popup`).
+    ///
+    /// # Errors
+    /// Propagates object-edit errors.
+    pub fn set_popup(&self, rect: Rect) -> Result<()> {
+        self.annot().set_popup(rect)?;
+        Ok(())
+    }
+
+    /// The `/AP /N` `/BBox` in page space, or `None` (PyMuPDF `Annot.apn_bbox`).
+    #[must_use]
+    pub fn apn_bbox(&self) -> Option<Rect> {
+        self.annot().apn_bbox()
+    }
+
+    /// The `/AP /N` `/Matrix` (PyMuPDF `Annot.apn_matrix`), identity if absent.
+    #[must_use]
+    pub fn apn_matrix(&self) -> Matrix {
+        self.annot().apn_matrix()
+    }
+
+    /// Sets the `/AP /N` `/BBox` from a page-space rect (PyMuPDF
+    /// `Annot.set_apn_bbox`).
+    ///
+    /// # Errors
+    /// Propagates object-edit errors (incl. no appearance stream).
+    pub fn set_apn_bbox(&self, rect: Rect) -> Result<()> {
+        self.annot().set_apn_bbox(rect)?;
+        Ok(())
+    }
+
+    /// Sets the `/AP /N` `/Matrix` (PyMuPDF `Annot.set_apn_matrix`).
+    ///
+    /// # Errors
+    /// Propagates object-edit errors (incl. no appearance stream).
+    pub fn set_apn_matrix(&self, m: Matrix) -> Result<()> {
+        self.annot().set_apn_matrix(m)?;
+        Ok(())
+    }
+
+    /// The `/Lang` language identifier (PyMuPDF `Annot.language`).
+    #[must_use]
+    pub fn language(&self) -> String {
+        self.annot().language()
+    }
+
+    /// Sets `/Lang` (PyMuPDF `Annot.set_language`); empty removes it.
+    ///
+    /// # Errors
+    /// Propagates object-edit errors.
+    pub fn set_language(&self, lang: &str) -> Result<()> {
+        self.annot().set_language(lang)?;
+        Ok(())
+    }
+
+    /// The `/IRT` (in-reply-to) object number, or `0` (PyMuPDF `Annot.irt_xref`).
+    #[must_use]
+    pub fn irt_xref(&self) -> u32 {
+        self.annot().irt_xref()
+    }
+
+    /// Sets `/IRT` to annotation `xref` (PyMuPDF `Annot.set_irt_xref`).
+    ///
+    /// # Errors
+    /// Propagates object-edit errors (incl. unknown xref).
+    pub fn set_irt_xref(&self, xref: u32) -> Result<()> {
+        self.annot().set_irt_xref(xref)?;
+        Ok(())
+    }
+
+    /// Deletes reply annotations to this one (PyMuPDF `Annot.delete_responses`).
+    ///
+    /// # Errors
+    /// Propagates object-edit errors.
+    pub fn delete_responses(&self) -> Result<()> {
+        self.annot().delete_responses()?;
+        Ok(())
+    }
+
+    /// Sanitizes the `/AP /N` appearance stream (PyMuPDF `Annot.clean_contents`).
+    ///
+    /// # Errors
+    /// Propagates resolve / object-edit errors.
+    pub fn clean_contents(&self) -> Result<()> {
+        self.annot().clean_contents()?;
+        Ok(())
+    }
+
+    /// The embedded file's bytes (PyMuPDF `Annot.get_file`).
+    ///
+    /// # Errors
+    /// [`Error`] if there is no embedded file or decode fails.
+    pub fn get_file(&self) -> Result<Vec<u8>> {
+        Ok(self.annot().get_file()?)
+    }
+
+    /// The file-attachment `(filename, description, length)` (PyMuPDF
+    /// `Annot.file_info`).
+    ///
+    /// # Errors
+    /// [`Error`] if this is not a file attachment.
+    pub fn file_info(&self) -> Result<(String, String, i64)> {
+        Ok(self.annot().file_info()?)
+    }
+
+    /// Replaces the embedded file content / metadata (PyMuPDF
+    /// `Annot.update_file`).
+    ///
+    /// # Errors
+    /// [`Error`] if there is no embedded file; else propagates edit errors.
+    pub fn update_file(
+        &self,
+        buffer: Option<&[u8]>,
+        filename: Option<&str>,
+        desc: Option<&str>,
+    ) -> Result<()> {
+        self.annot().update_file(buffer, filename, desc)?;
+        Ok(())
+    }
 }
 
 /// A handle to one form widget (PyMuPDF `Widget`). Owns an `Arc<DocumentStore>`
@@ -1815,6 +1969,107 @@ impl WidgetHandle {
     #[must_use]
     pub fn button_states(&self) -> Vec<String> {
         self.widget().button_states()
+    }
+
+    /// The `/MK /BC` border color components (PyMuPDF `Widget.border_color`).
+    #[must_use]
+    pub fn border_color(&self) -> Option<Vec<f64>> {
+        self.widget().border_color()
+    }
+
+    /// The `/MK /BG` fill color components (PyMuPDF `Widget.fill_color`).
+    #[must_use]
+    pub fn fill_color(&self) -> Option<Vec<f64>> {
+        self.widget().fill_color()
+    }
+
+    /// The border style full name (PyMuPDF `Widget.border_style`).
+    #[must_use]
+    pub fn border_style(&self) -> String {
+        self.widget().border_style()
+    }
+
+    /// The border width (PyMuPDF `Widget.border_width`).
+    #[must_use]
+    pub fn border_width(&self) -> f64 {
+        self.widget().border_width()
+    }
+
+    /// The border dash pattern (PyMuPDF `Widget.border_dashes`).
+    #[must_use]
+    pub fn border_dashes(&self) -> Option<Vec<i64>> {
+        self.widget().border_dashes()
+    }
+
+    /// The `/DA` text color components (PyMuPDF `Widget.text_color`).
+    #[must_use]
+    pub fn text_color(&self) -> Vec<f64> {
+        self.widget().text_color()
+    }
+
+    /// The `/DA` text font name (PyMuPDF `Widget.text_font`).
+    #[must_use]
+    pub fn text_font(&self) -> String {
+        self.widget().text_font()
+    }
+
+    /// The `/DA` text font size (PyMuPDF `Widget.text_fontsize`).
+    #[must_use]
+    pub fn text_fontsize(&self) -> f64 {
+        self.widget().text_fontsize()
+    }
+
+    /// The `/MaxLen` maximum text length (PyMuPDF `Widget.text_maxlen`).
+    #[must_use]
+    pub fn text_maxlen(&self) -> i64 {
+        self.widget().text_maxlen()
+    }
+
+    /// The `/Q` text quadding (PyMuPDF `Widget.text_format`).
+    #[must_use]
+    pub fn text_format(&self) -> i64 {
+        self.widget().text_format()
+    }
+
+    /// The `/MK /CA` button caption (PyMuPDF `Widget.button_caption`).
+    #[must_use]
+    pub fn button_caption(&self) -> Option<String> {
+        self.widget().button_caption()
+    }
+
+    /// The `/F` display flags (PyMuPDF `Widget.field_display`).
+    #[must_use]
+    pub fn field_display(&self) -> i64 {
+        self.widget().field_display()
+    }
+
+    /// Whether a signature field is signed (PyMuPDF `Widget.is_signed`).
+    #[must_use]
+    pub fn is_signed(&self) -> Option<bool> {
+        self.widget().is_signed()
+    }
+
+    /// The current `/AS` on-state for a button widget (PyMuPDF
+    /// `Widget.on_state`).
+    #[must_use]
+    pub fn on_state(&self) -> Option<String> {
+        self.widget().on_state()
+    }
+
+    /// The radio-group parent xref (PyMuPDF `Widget.rb_parent`).
+    #[must_use]
+    pub fn rb_parent(&self) -> Option<u32> {
+        self.widget().rb_parent()
+    }
+
+    /// Resets the field to its default value (PyMuPDF `Widget.reset`).
+    ///
+    /// # Errors
+    ///
+    /// As [`WidgetHandle::set_field_value`].
+    pub fn reset(&self) -> Result<()> {
+        self.widget().reset()?;
+        Ok(())
     }
 
     /// Sets the field value through the owning field (PyMuPDF
@@ -2518,8 +2773,9 @@ pub fn page_add_file_annot(
     point: Point,
     bytes: &[u8],
     filename: &str,
+    desc: Option<&str>,
 ) -> Result<AnnotHandle> {
-    let a = pdf_edit::add_file_annot(page.document(), page.number(), point, bytes, filename)?;
+    let a = pdf_edit::add_file_annot(page.document(), page.number(), point, bytes, filename, desc)?;
     let xref = a.xref();
     annot_handle(page, xref)
 }

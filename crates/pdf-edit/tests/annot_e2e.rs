@@ -58,8 +58,25 @@ fn assert_subtype_and_ap(d: &pdf_core::DocumentStore, subtype: &str) -> pdf_core
 fn annot_text_001() {
     let d = doc();
     add_text_annot(&d, 0, Point::new(100.0, 100.0), "a note", "Note").unwrap();
-    let re = assert_subtype_and_ap(&d, "Text");
+    let re = save_reopen(&d);
     let dicts = annot_dicts(&re, 0);
+    // add_text_annot auto-creates a /Popup child (matching fitz), so the page
+    // carries the Text annot (index 0) plus its Popup.
+    assert_eq!(dicts.len(), 2, "text annot + auto popup");
+    assert_eq!(annot_subtype(&dicts[0]), "Text", "first annot is the Text note");
+    assert!(
+        dicts.iter().any(|x| annot_subtype(x) == "Popup"),
+        "auto-created /Popup present"
+    );
+    // The Text annot has a /AP /N Form XObject.
+    let ap = annot_ap_dict(&re, &dicts[0]).expect("/AP /N present");
+    assert_eq!(
+        ap.get(&Name::new("Subtype"))
+            .and_then(Object::as_name)
+            .map(|n| n.as_bytes()),
+        Some(&b"Form"[..]),
+        "/AP /N must be a Form XObject"
+    );
     // Contents preserved.
     let c = dicts[0]
         .get(&Name::new("Contents"))
@@ -351,7 +368,7 @@ fn annot_redact_001() {
 fn annot_file_001() {
     let d = doc();
     let payload = b"hello embedded file \x00\x01\x02 contents";
-    add_file_annot(&d, 0, Point::new(100.0, 100.0), payload, "data.bin").unwrap();
+    add_file_annot(&d, 0, Point::new(100.0, 100.0), payload, "data.bin", None).unwrap();
     let re = assert_subtype_and_ap(&d, "FileAttachment");
     let dicts = annot_dicts(&re, 0);
     // Walk /FS → /EF → /F to the embedded-file stream and extract its bytes.
@@ -682,7 +699,7 @@ fn annot_prop_003_qpdf_check() {
         Some(Color::BLACK),
     )
     .unwrap();
-    add_file_annot(&d, 0, Point::new(500.0, 500.0), b"x", "f.txt").unwrap();
+    add_file_annot(&d, 0, Point::new(500.0, 500.0), b"x", "f.txt", None).unwrap();
     let bytes = save_bytes(&d);
     match qpdf_check(&bytes) {
         Some(true) => {}
