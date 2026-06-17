@@ -743,9 +743,11 @@ impl<'a> ContentInterpreter<'a> {
         };
 
         let start = self.out.glyphs.len();
-        // Render-op recording captures per-glyph GIDs; the text-extraction path
-        // (no recording) skips that allocation entirely.
+        // Render-op recording captures per-glyph GIDs + the full text-rendering
+        // matrix (Trm); the text-extraction path (no recording) skips both
+        // allocations entirely.
         let mut gids: Vec<u32> = Vec::new();
+        let mut trms: Vec<Matrix> = Vec::new();
         let recording = self.render_ops.is_some();
         for (code, n_bytes) in cached.mapper.iter_codes(bytes) {
             if recording {
@@ -753,6 +755,7 @@ impl<'a> ContentInterpreter<'a> {
             }
             emit_glyph_into(
                 &mut self.out.glyphs,
+                if recording { Some(&mut trms) } else { None },
                 cached,
                 code,
                 n_bytes,
@@ -764,13 +767,16 @@ impl<'a> ContentInterpreter<'a> {
 
         if recording {
             // The glyphs' `origin`/`bbox` already carry the full CTM
-            // (Trm = params·Tm·CTM), so the renderer paints with an identity CTM.
+            // (Trm = params·Tm·CTM); `trms` additionally carries the linear part
+            // so the renderer scales each outline by the true Trm (not just the
+            // scalar `size`). The run-level `ctm` stays identity.
             let font_dict = cached.dict.clone();
             let glyphs: Vec<PositionedGlyph> = self.out.glyphs[start..].to_vec();
             if !glyphs.is_empty() {
                 self.emit(RenderOp::Text(TextRun {
                     glyphs,
                     gids,
+                    trms,
                     font_dict,
                     fill_color: gs.fill_color,
                     stroke_color: gs.stroke_color,
@@ -1230,6 +1236,7 @@ impl<'a> ContentInterpreter<'a> {
 #[allow(clippy::too_many_arguments)]
 fn emit_glyph_into(
     out: &mut Vec<PositionedGlyph>,
+    trms: Option<&mut Vec<Matrix>>,
     cached: &CachedFont,
     code: u32,
     n_bytes: u8,
@@ -1252,6 +1259,11 @@ fn emit_glyph_into(
     );
     // Trm = params · Tm · CTM
     let trm = Matrix::concat(&Matrix::concat(&params, tm), &gs.ctm);
+    // Surface the full Trm to the render path (parallel to the emitted glyph) so
+    // the renderer can scale the outline by the true text-rendering matrix.
+    if let Some(trms) = trms {
+        trms.push(trm);
+    }
 
     // Glyph origin = (0,0) · Trm.
     let origin = Point::new(0.0, 0.0).transform(&trm);

@@ -39,52 +39,119 @@ use crate::canvas::Canvas;
 use crate::error::{Error, Result};
 use crate::vector::{Paint, StrokeStyle};
 
+/// A parsed embedded font program, either sfnt-wrapped or bare CFF.
+///
+/// - [`Sfnt`](FontProgram::Sfnt): a `ttf-parser` [`Face`] — `FontFile2`
+///   TrueType, or `FontFile3` OpenType/CFF (`OTTO` sfnt).
+/// - [`Cff`](FontProgram::Cff): a **bare** CFF table — `FontFile3` with
+///   `/Subtype /Type1C` (simple) or `/CIDFontType0C` (CID-keyed). These are raw
+///   CFF data with no sfnt directory, so `Face::parse` rejects them
+///   (`UnknownMagic`); `ttf-parser`'s public `cff` table parses them directly.
+///
+/// Both variants are boxed: `Face` and `cff::Table` are large structs (hundreds
+/// of bytes), so an unboxed enum would size every value to the larger variant
+/// (clippy `large_enum_variant`). Each box costs one allocation per font (built
+/// once per page replay) — negligible.
+enum FontProgram<'a> {
+    Sfnt(Box<Face<'a>>),
+    Cff(Box<ttf_parser::cff::Table<'a>>),
+}
+
 /// A parsed embedded font program ready for glyph rasterization.
 ///
-/// Wraps a `ttf-parser` [`Face`] borrowed from the font program bytes
-/// (`FontFile2` TrueType or `FontFile3` OpenType/CFF). Construction parses the
-/// program once; the per-glyph accessors are cheap. The page driver (M6d)
-/// resolves the font dict to its embedded program and builds one of these per
-/// font, then renders runs through [`draw_text_run_with_font`].
+/// Wraps the parsed program (see [`FontProgram`]) plus its design grid size.
+/// Construction parses the program once; the per-glyph accessors are cheap. The
+/// page driver (M6d) resolves the font dict to its embedded program and builds
+/// one of these per font, then renders runs through [`draw_text_run_with_font`].
 pub struct GlyphFont<'a> {
-    face: Face<'a>,
+    program: FontProgram<'a>,
+    /// The design grid size: sfnt `units_per_em`, or `round(1/FontMatrix.sx)`
+    /// for bare CFF (default 1000). Never zero.
+    upem: u16,
 }
 
 impl<'a> GlyphFont<'a> {
     /// Parses an embedded font program (`FontFile2`/`FontFile3` bytes).
     ///
-    /// `index` selects a face inside a TrueType/OpenType collection (0 for the
-    /// common single-face program).
+    /// Tries an sfnt parse first (TrueType / OpenType-CFF); on failure falls back
+    /// to a **bare CFF** parse (`FontFile3` `/Type1C` / `/CIDFontType0C`, which
+    /// carry no sfnt wrapper). `index` selects a face inside a TrueType/OpenType
+    /// collection (0 for the common single-face program; ignored for bare CFF).
     ///
     /// # Errors
     ///
-    /// [`Error::Unsupported`] if the bytes are not a `ttf-parser`-parseable
-    /// TrueType/OpenType program (e.g. a bare Type1 `FontFile`).
+    /// [`Error::Unsupported`] if the bytes are neither a `ttf-parser`-parseable
+    /// sfnt nor a bare CFF (e.g. a Type1 PFB `FontFile`).
     pub fn from_program(data: &'a [u8], index: u32) -> Result<Self> {
-        let face =
-            Face::parse(data, index).map_err(|_| Error::Unsupported("text::GlyphFont program"))?;
-        Ok(Self { face })
+        if let Ok(face) = Face::parse(data, index) {
+            let upem = face.units_per_em().max(1);
+            return Ok(Self {
+                program: FontProgram::Sfnt(Box::new(face)),
+                upem,
+            });
+        }
+        // Bare CFF: no sfnt directory, so derive the em size from the CFF
+        // FontMatrix (`sx = 1/upem`; standard 0.001 → 1000).
+        if let Some(cff) = ttf_parser::cff::Table::parse(data) {
+            let sx = cff.matrix().sx.abs();
+            let upem = if sx.is_finite() && sx > f32::EPSILON {
+                (1.0 / sx).round().clamp(1.0, f32::from(u16::MAX)) as u16
+            } else {
+                1000
+            };
+            return Ok(Self {
+                program: FontProgram::Cff(Box::new(cff)),
+                upem,
+            });
+        }
+        Err(Error::Unsupported("text::GlyphFont program"))
     }
 
     /// The font's design grid size (`units_per_em`); the divisor that scales
     /// glyph-unit outlines to a unit font size. Never zero (clamped to 1).
     #[must_use]
     pub fn units_per_em(&self) -> u16 {
-        self.face.units_per_em().max(1)
+        self.upem.max(1)
     }
 
     /// The number of glyphs in the program.
     #[must_use]
     pub fn num_glyphs(&self) -> u16 {
-        self.face.number_of_glyphs()
+        match &self.program {
+            FontProgram::Sfnt(face) => face.number_of_glyphs(),
+            FontProgram::Cff(cff) => cff.number_of_glyphs(),
+        }
     }
 
     /// Looks up the glyph id for a Unicode scalar via the font's `cmap`, if any.
     ///
-    /// Used as a fallback when no explicit code→GID mapping is supplied.
+    /// Only meaningful for sfnt programs (a TrueType/OpenType `cmap` is keyed by
+    /// Unicode). Bare CFF returns `None`: its built-in encoding is keyed by the
+    /// 1-byte font *code*, not Unicode, so a Unicode lookup would mis-resolve —
+    /// the caller uses the name path ([`glyph_for_name`](Self::glyph_for_name))
+    /// instead.
     #[must_use]
     pub fn glyph_for_char(&self, c: char) -> Option<u16> {
-        self.face.glyph_index(c).map(|g| g.0)
+        match &self.program {
+            FontProgram::Sfnt(face) => face.glyph_index(c).map(|g| g.0),
+            FontProgram::Cff(_) => None,
+        }
+    }
+
+    /// Looks up the glyph id for a PostScript glyph **name** via the program's
+    /// CFF charset / `post` table (`ttf-parser`'s `glyph-names` feature).
+    ///
+    /// This is the resolution path for **simple** CFF/Type1 fonts (`FontFile3`):
+    /// their program usually carries no `cmap`, so a code is mapped to a glyph
+    /// name through the PDF `/Encoding` (here approximated by the AGL name of the
+    /// glyph's Unicode) and then to a glyph id by name. Returns `None` when the
+    /// program exposes no name table or the name is absent.
+    #[must_use]
+    pub fn glyph_for_name(&self, name: &str) -> Option<u16> {
+        match &self.program {
+            FontProgram::Sfnt(face) => face.glyph_index_by_name(name).map(|g| g.0),
+            FontProgram::Cff(cff) => cff.glyph_index_by_name(name).map(|g| g.0),
+        }
     }
 
     /// Builds the glyph outline (in font units, y-up) as a [`tiny_skia::Path`].
@@ -100,9 +167,16 @@ impl<'a> GlyphFont<'a> {
         let mut sink = PathSink {
             builder: PathBuilder::new(),
         };
-        // `outline_glyph` returns None for a missing glyph; an empty builder
-        // (whitespace) `finish`es to None as well.
-        self.face.outline_glyph(GlyphId(gid), &mut sink)?;
+        // A missing glyph returns None/Err; an empty builder (whitespace)
+        // `finish`es to None as well.
+        match &self.program {
+            FontProgram::Sfnt(face) => {
+                face.outline_glyph(GlyphId(gid), &mut sink)?;
+            }
+            FontProgram::Cff(cff) => {
+                cff.outline(GlyphId(gid), &mut sink).ok()?;
+            }
+        }
         sink.builder.finish()
     }
 }
@@ -233,39 +307,39 @@ pub fn draw_glyph_with_font(
     };
 
     let upem = f64::from(font.units_per_em());
+    let Some(transform) = glyph_device_transform(glyph, upem, canvas.base_transform(), ctm) else {
+        return Ok(()); // singular transform (zero size / collapsed ctm): no draw.
+    };
     let mut scratch = SkPaint::default();
     draw_glyph_path(
         canvas,
         glyph,
         &path,
-        upem,
+        transform,
         stroke_paint,
         stroke,
-        ctm,
         &mut scratch,
     );
     Ok(())
 }
 
-/// Paints a **prebuilt** glyph outline `path` (font units, y-up) at the glyph's
-/// device placement — the hot inner step the page driver calls for every glyph
-/// occurrence with a cached [`tiny_skia::Path`] (so the outline is extracted
-/// once per `(font, gid)`, not per occurrence).
+/// Paints a **prebuilt** glyph outline `path` (font units, y-up) at a
+/// **precomputed** device `transform` — the hot inner step the page driver calls
+/// for every glyph occurrence with a cached [`tiny_skia::Path`] (so the outline
+/// is extracted once per `(font, gid)`, not per occurrence) and a per-glyph
+/// font-unit → device transform (see [`glyph_transform_from_trm`] /
+/// [`glyph_device_transform`]).
 ///
-/// `upem` is the source font's `units_per_em` (the divisor baked into the glyph
-/// placement transform). `scratch` is a reusable [`SkPaint`] the caller keeps
-/// across glyphs so each glyph does not allocate a fresh paint/shader; only its
-/// color is updated here. The render-mode logic mirrors
-/// [`draw_glyph_with_font`].
-#[allow(clippy::too_many_arguments)]
+/// `scratch` is a reusable [`SkPaint`] the caller keeps across glyphs so each
+/// glyph does not allocate a fresh paint/shader; only its color is updated here.
+/// The render-mode logic mirrors [`draw_glyph_with_font`].
 pub(crate) fn draw_glyph_path(
     canvas: &mut Canvas,
     glyph: &PositionedGlyph,
     path: &tiny_skia::Path,
-    upem: f64,
+    transform: Transform,
     stroke_paint: Paint,
     stroke: &StrokeStyle,
-    ctm: Matrix,
     scratch: &mut SkPaint<'static>,
 ) {
     let mode = glyph.render_mode;
@@ -277,10 +351,6 @@ pub(crate) fn draw_glyph_path(
     if !do_fill && !do_stroke {
         return;
     }
-
-    let Some(transform) = glyph_device_transform(glyph, upem, canvas.base_transform(), ctm) else {
-        return; // singular transform (zero size / collapsed ctm): no draw.
-    };
 
     let pixmap = canvas.pixmap_mut();
     scratch.anti_alias = true;
@@ -327,15 +397,35 @@ pub fn draw_text_run_with_font(
     Ok(())
 }
 
-/// Builds the font-unit → device-pixel [`Transform`] for one glyph.
+/// Builds the font-unit → device-pixel [`Transform`] from a glyph's **full
+/// text-rendering matrix** `trm` (`= params · Tm · CTM`, em-space → PDF user
+/// space; see [`pdf_text::TextRun::trms`]).
+///
+/// Composition (a font-unit point, y-up, transformed left-to-right):
+/// `scale(1/upem) · trm · base`. Because `trm` carries the *entire* linear part —
+/// the CTM / text-matrix scale, horizontal scaling (`Th`), and any rotation /
+/// shear — this places and sizes each glyph exactly as the content stream
+/// specifies, where the scalar `size`-only path could not. Returns `None` if the
+/// transform is non-finite or collapses to zero area.
+pub(crate) fn glyph_transform_from_trm(trm: Matrix, upem: f64, base: Matrix) -> Option<Transform> {
+    if !upem.is_finite() || upem == 0.0 {
+        return None;
+    }
+    let inv_upem = 1.0 / upem;
+    // font-unit -> em space: divide by units_per_em; then trm -> user; then base.
+    let full = Matrix::scale(inv_upem, inv_upem) * trm * base;
+    finalize_transform(full)
+}
+
+/// Builds the font-unit → device-pixel [`Transform`] for one glyph from its
+/// axis-aligned `origin` + scalar `size` (the legacy, rotation-free placement).
 ///
 /// Composition (a font-unit point `(gx, gy)`, y-up, transformed left-to-right):
 /// `scale(s) · translate(origin) · ctm · base`, where `s = size / units_per_em`.
-/// The placement uses the glyph's axis-aligned `origin`; a rotated/sheared text
-/// matrix is not reconstructible from [`PositionedGlyph`] (only `origin` + the
-/// axis-aligned `bbox` survive the interpreter), so upright placement is used —
-/// a documented approximation for rotated text. Returns `None` if the resulting
-/// transform is non-finite or collapses to zero area.
+/// This cannot express the CTM / text-matrix scale (only `Tfs`), so the page
+/// driver prefers [`glyph_transform_from_trm`]; this remains the fallback when no
+/// `trm` is available. Returns `None` if the transform is non-finite or collapses
+/// to zero area.
 fn glyph_device_transform(
     glyph: &PositionedGlyph,
     upem: f64,
@@ -351,6 +441,12 @@ fn glyph_device_transform(
     let placement = Matrix::new(s, 0.0, 0.0, s, ox, oy);
     // user space -> device pixels: ctm, then the canvas base transform.
     let full = placement * ctm * base;
+    finalize_transform(full)
+}
+
+/// Converts a composed [`Matrix`] into a [`tiny_skia::Transform`], rejecting a
+/// non-finite or zero-determinant (collapsed) result (nothing to fill).
+fn finalize_transform(full: Matrix) -> Option<Transform> {
     let t = Transform::from_row(
         full.a as f32,
         full.b as f32,
@@ -1066,6 +1162,74 @@ mod tests {
         // No font program is reachable, so nothing is painted (text stays
         // extractable; rasterization needs the font-aware path).
         assert_eq!(count_painted(&cv), 0);
+    }
+
+    // ----- RENDER-TEXT-011: the full Trm scales the glyph (CTM-scale fix) ---
+
+    #[test]
+    fn render_text_011_trm_carries_ctm_scale() {
+        // A PDF that bakes the font size / scale into Tm or the CTM produces a
+        // Trm whose linear part is NOT just `Tfs`. e.g. Tfs=10 under a 0.5× CTM
+        // gives Trm linear 5. The transform must scale the outline by Trm/upem
+        // (5/1000), NOT by size/upem (10/1000) — the regression this guards.
+        let upem = 1000.0;
+        let base = Matrix::IDENTITY;
+        let trm = Matrix::new(5.0, 0.0, 0.0, 5.0, 100.0, 200.0);
+        let t = glyph_transform_from_trm(trm, upem, base).expect("finite transform");
+        assert!((t.sx - 0.005).abs() < 1e-9, "sx={} (want 0.005)", t.sx);
+        assert!((t.sy - 0.005).abs() < 1e-9, "sy={} (want 0.005)", t.sy);
+        assert!((t.tx - 100.0).abs() < 1e-6, "tx={}", t.tx);
+        assert!((t.ty - 200.0).abs() < 1e-6, "ty={}", t.ty);
+
+        // The legacy `size`-only path (size=10, ctm=identity) ignores the 0.5×
+        // CTM and would scale by 0.01 — double. Confirms the two paths diverge,
+        // i.e. the Trm path genuinely accounts for the CTM scale.
+        let glyph = glyph_at(Point::new(100.0, 200.0), 10.0, 0x000000, 0);
+        let legacy =
+            glyph_device_transform(&glyph, upem, base, Matrix::IDENTITY).expect("finite legacy");
+        assert!(
+            (legacy.sx - 0.01).abs() < 1e-9,
+            "legacy sx={} (want 0.01)",
+            legacy.sx
+        );
+        assert!(
+            (legacy.sx - t.sx).abs() > 1e-6,
+            "Trm path must differ from the size-only path"
+        );
+    }
+
+    // ----- RENDER-TEXT-012: the full Trm carries rotation/shear --------------
+
+    #[test]
+    fn render_text_012_trm_carries_rotation() {
+        // Trm = scale(5) · rotate(90°) → linear [0, 5, -5, 0]. The transform must
+        // reproduce the off-diagonal (rotation) terms that the size-only path
+        // (diagonal only) cannot express.
+        let upem = 1000.0;
+        let base = Matrix::IDENTITY;
+        let trm = Matrix::new(0.0, 5.0, -5.0, 0.0, 10.0, 20.0);
+        let t = glyph_transform_from_trm(trm, upem, base).expect("finite transform");
+        assert!((t.sx - 0.0).abs() < 1e-9, "sx={}", t.sx);
+        assert!((t.ky - 0.005).abs() < 1e-9, "ky={}", t.ky);
+        assert!((t.kx + 0.005).abs() < 1e-9, "kx={}", t.kx);
+        assert!((t.sy - 0.0).abs() < 1e-9, "sy={}", t.sy);
+    }
+
+    // ----- RENDER-TEXT-013: degenerate Trm / upem yields no transform --------
+
+    #[test]
+    fn render_text_013_trm_degenerate_none() {
+        let base = Matrix::IDENTITY;
+        // Zero upem: no scale possible.
+        assert!(
+            glyph_transform_from_trm(Matrix::new(5.0, 0.0, 0.0, 5.0, 0.0, 0.0), 0.0, base)
+                .is_none()
+        );
+        // Collapsed linear part (zero determinant): nothing to fill.
+        assert!(
+            glyph_transform_from_trm(Matrix::new(0.0, 0.0, 0.0, 0.0, 1.0, 2.0), 1000.0, base)
+                .is_none()
+        );
     }
 
     // ----- RENDER-TEXT-PROP-001: missing glyph id never panics / draws -----

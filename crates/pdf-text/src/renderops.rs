@@ -91,6 +91,14 @@ pub struct TextRun {
     /// The glyph id in the embedded font program for each glyph (parallel to
     /// `glyphs`): `FontMapper::gid(code)`.
     pub gids: Vec<u32>,
+    /// The full text-rendering matrix `Trm = params · Tm · CTM` for each glyph
+    /// (parallel to `glyphs`). This is the em-space → PDF user space transform
+    /// (`params` already carries `Tfs`/`Th`/`Trise`), so the renderer places a
+    /// font-unit outline with `scale(1/upem) · Trm · base` — capturing the CTM /
+    /// text-matrix scale, horizontal scaling, and rotation/shear that the glyph's
+    /// scalar `size` alone cannot express. Empty for a run recorded before this
+    /// field existed (the renderer then falls back to `origin` + `size`).
+    pub trms: Vec<Matrix>,
     /// The resolved font dictionary (carries `/FontDescriptor` → `/FontFile*`).
     pub font_dict: Dict,
     /// The fill color packed as `0x00RRGGBB` (for fill render modes).

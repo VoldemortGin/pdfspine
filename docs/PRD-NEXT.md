@@ -10,7 +10,11 @@
 EUR-Lex 8 languages, CJK, GovInfo court/GAO/Federal-Register, and a robustness corpus — see
 `docs/BENCHMARKS.md`). Five extraction fixes landed: column-major reading order, inter-word space
 synthesis, device-space gap threshold, baseline-merged column split, and `find_tables` ruling-line
-gating. Tables, multilingual, CJK, and domain breadth all measured at near-parity. **1335 Rust +
+gating. Tables, multilingual, CJK, and domain breadth all measured at near-parity.
+
+**Rendering (`get_pixmap`) is now near-parity for embedded-font text**: SSIM ~0.58 → **0.89 mean /
+0.985 median** vs fitz after two root-cause fixes (full per-glyph `Trm` into the render path; bare-CFF
+`FontFile3` parsing). See §2.A for what landed and the remaining long tail. **1335+ Rust +
 374 pytest green.** API coverage 63.7% (490/769 in `COMPAT.toml`).
 
 ## 1. Tools available (reuse, don't rebuild)
@@ -28,18 +32,35 @@ corpora/cache/`*-results.json` gitignored, regenerable):
 
 ## 2. Remaining work
 
-### A. RENDERING — the biggest remaining gap to "match fitz" (HIGH value, substantial)
-`get_pixmap` is NOT at parity: SSIM ~0.58 vs fitz (`conformance/gt/RENDER-REPORT.md`). Page geometry
-is correct (page-box sizes match ≤1px); the glyph rasterizer is the problem. Findings, by impact:
-1. **Glyph horizontal positioning** — glyphs overlap/compress on clean text (wrong advance-width
-   handling or text-matrix scaling). Hits ALL text; fix first. Objective fn = born-digital render
-   SSIM (`render_diff.py` on `corpus-born`), target ≥0.9. NB extraction positions are already
-   correct, so the renderer uses a different/buggy advance path than `pdf-text` layout.
-2. **Body glyphs not drawn for some embedded font types** (subset CIDFonts / Type1 / certain
-   encodings) — vector rules render but text is blank on many PMC/IRS/govdocs pages.
-3. **Image/colorspace fidelity** — scanned-image pages render with wrong brightness/contrast.
-4. **Synthetic-bold / heavy display fonts** render lighter than fitz (minor).
-Renderer code: `crates/pdf-render`. Measure every change with `render_diff.py`.
+### A. RENDERING — major progress; long tail remains (MEDIUM value now)
+`get_pixmap` jumped from SSIM ~0.58 → **0.89 mean / 0.985 median** vs fitz
+(`conformance/gt/RENDER-REPORT.md`; corpus-born 0.995, eurlex 0.943, pmc 0.861, fixtures 0.971).
+Two root-cause fixes landed:
+1. ~~**Glyph horizontal positioning**~~ **DONE.** Root cause: the renderer scaled each glyph outline
+   by `size/upem` (`Tfs` only), ignoring the CTM / text-matrix linear scale — so any PDF that bakes
+   the font size into `Tm`/`cm` (Chrome, most PMC) drew glyphs 2× too big and overlapping. Fix:
+   `pdf-text` now carries the full per-glyph `Trm = params·Tm·CTM` into the render path
+   (`TextRun.trms`); the renderer places each outline with `scale(1/upem)·Trm·base` (also fixes
+   rotated/sheared text). corpus-born 0.65 → 0.995.
+2. ~~**Body glyphs not drawn for some embedded font types**~~ **DONE for bare CFF.** Root cause:
+   `FontFile3` with `/Subtype /Type1C` (simple) or `/CIDFontType0C` (CID) is *bare* CFF (no sfnt
+   wrapper), which `ttf-parser`'s `Face::parse` rejects (`UnknownMagic`) → whole pages blank. Fix:
+   `GlyphFont` now falls back to `ttf-parser`'s public `cff::Table::parse` for bare CFF, and
+   `resolve_gid` resolves simple-CFF glyphs by AGL name (charset) instead of code-as-gid. corpus-pmc
+   0.40 → 0.86.
+
+Remaining long tail (each smaller / independent; measure with `render_diff.py`):
+- **Bare Type1 PFB/PFA** (`/FontFile`) — not parseable by `ttf-parser`; needs a Type1 charstring
+  interpreter (or Type1→CFF). Hits eurlex `32006L0112_ES`, some govdocs. Text stays extractable.
+- **Non-embedded standard-14 fonts** (Helvetica/Times/Courier with no embedded program) are not
+  rasterized — no license-clean substitute bundled. Blanks most govdocs1 body text.
+- **Image/colorspace fidelity** — scanned/image pages render with wrong brightness/contrast or
+  over-dark (worst case `govdocs1-00018` SSIM −0.17; an image, not text).
+- **Synthetic-bold / heavy display fonts** render slightly heavier than fitz (minor; oxide ink ≳ fitz
+  on PMC even where glyphs are correct).
+- A few CID-CFF / symbol-font pages still under-render (PMC193606/212688) — partial glyph resolution.
+Renderer code: `crates/pdf-render`; glyph data plumbing in `crates/pdf-text` (`interp.rs`,
+`renderops.rs`). Measure every change with `render_diff.py`.
 
 ### B. Extraction breadth (LOWER priority — diminishing returns; text already at parity)
 - **RTL / Arabic (bidi)** — the one untested script class; most likely to surface a real bug. Needs

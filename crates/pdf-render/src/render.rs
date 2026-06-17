@@ -491,9 +491,30 @@ fn draw_text(
     };
     let upem = f64::from(font.units_per_em());
 
-    // The stroke paint (for stroked text render modes) + device width.
+    // The canvas base transform (PDF user space → device pixels) is constant for
+    // the run; capture it by value so the per-glyph transform build does not
+    // re-borrow `canvas` inside the draw loop.
+    let base = canvas.base_transform();
+    // Glyphs carry their full text-rendering matrix (`Trm = params·Tm·CTM`) in
+    // parallel; the renderer scales each outline by the true Trm (capturing the
+    // CTM / text-matrix scale + rotation) instead of by the scalar `size` alone.
+    // A run recorded without `trms` (legacy) falls back to an origin+size Trm.
+    let has_trms = run.trms.len() == run.glyphs.len();
+
+    // The stroke paint (for stroked text render modes) + device width. The
+    // user-space line width scales by the *graphics* transform (CTM), not the
+    // font size, so divide the Trm's combined device scale by the font size to
+    // recover the user→device scale (Th≈1); fall back to the run CTM scale.
     let stroke_paint = Paint::from_rgb_alpha(run.stroke_color, run.fill_alpha);
-    let dev_scale = scale_for_ctm(run.ctm, canvas.base_transform());
+    let dev_scale = run
+        .trms
+        .first()
+        .zip(run.glyphs.first())
+        .and_then(|(trm, g)| {
+            let sz = g.size.abs() as f32;
+            (sz > f32::EPSILON).then(|| scale_for_ctm(*trm, base) / sz)
+        })
+        .unwrap_or_else(|| scale_for_ctm(run.ctm, base));
     let stroke = StrokeStyle {
         width: (run.stroke_width as f32 * dev_scale).max(f32::MIN_POSITIVE),
         ..StrokeStyle::default()
@@ -501,15 +522,13 @@ fn draw_text(
     // One reusable paint for the whole run: each glyph only updates its color,
     // avoiding a fresh paint/shader allocation per glyph occurrence.
     let mut scratch = tiny_skia::Paint::default();
+    // Type0/CID vs simple decides the gid-resolution order (see `resolve_gid`).
+    let is_cid = is_type0(&run.font_dict);
 
-    for (glyph, &gid) in run.glyphs.iter().zip(run.gids.iter()) {
-        // GID resolution:
-        // - Simple (non-CID) fonts: `FontMapper::gid` returns the *code*, which is
-        //   not the program glyph id. Resolve via the embedded program's `cmap`
-        //   using the glyph's Unicode (the common WinAnsi/Standard simple case).
-        // - Type0/CID fonts: the supplied `gid` is the CIDToGIDMap-resolved glyph
-        //   id (Identity CID programs usually have no usable cmap), so use it.
-        let resolved = resolve_gid(&font, glyph, gid);
+    for (i, (glyph, &gid)) in run.glyphs.iter().zip(run.gids.iter()).enumerate() {
+        // Resolve the program glyph id (cmap / CFF charset / mapper gid — the
+        // order depends on simple vs CID; see `resolve_gid`).
+        let resolved = resolve_gid(&font, glyph, gid, is_cid);
         // The glyph outline is extracted once per `(font, gid)` and reused for
         // every later occurrence (the per-render glyph-Path cache).
         let path = glyph_paths
@@ -518,14 +537,30 @@ fn draw_text(
         let Some(path) = path.as_ref() else {
             continue; // whitespace / missing / degenerate glyph: no draw.
         };
+        // Per-glyph font-unit → device transform from the true Trm (or, for a
+        // legacy run without `trms`, the origin+size reconstruction).
+        let trm = if has_trms {
+            run.trms[i]
+        } else {
+            Matrix::new(
+                glyph.size,
+                0.0,
+                0.0,
+                glyph.size,
+                glyph.origin.x,
+                glyph.origin.y,
+            )
+        };
+        let Some(transform) = crate::text::glyph_transform_from_trm(trm, upem, base) else {
+            continue; // singular transform (zero size / collapsed matrix): no draw.
+        };
         crate::text::draw_glyph_path(
             canvas,
             glyph,
             path,
-            upem,
+            transform,
             stroke_paint,
             &stroke,
-            run.ctm,
             &mut scratch,
         );
     }
@@ -536,11 +571,21 @@ fn draw_text(
 
 /// Whether a font dict is `/Subtype /Type3`.
 fn is_type3(font_dict: &Dict) -> bool {
+    font_subtype_is(font_dict, "Type3")
+}
+
+/// Whether a font dict is `/Subtype /Type0` (a composite / CID-keyed font).
+fn is_type0(font_dict: &Dict) -> bool {
+    font_subtype_is(font_dict, "Type0")
+}
+
+/// Whether a font dict's `/Subtype` equals `want`.
+fn font_subtype_is(font_dict: &Dict, want: &str) -> bool {
     font_dict
         .get(&Name::new("Subtype"))
         .and_then(Object::as_name)
         .and_then(Name::as_str)
-        == Some("Type3")
+        == Some(want)
 }
 
 /// Renders a [`TextRun`] painted in a Type3 font: each shown code resolves to a
@@ -573,8 +618,12 @@ fn draw_type3_run(
     };
     let differences = type3_differences(doc, &run.font_dict);
     let resources = type3_dict_key(doc, &run.font_dict, "Resources").unwrap_or_default();
+    // Prefer the recorded full Trm (`params·Tm·CTM`) so a Type3 glyph tracks the
+    // content CTM / text-matrix scale + rotation; fall back to the origin+size
+    // upright reconstruction for a legacy run without `trms`.
+    let has_trms = run.trms.len() == run.glyphs.len();
 
-    for glyph in &run.glyphs {
+    for (i, glyph) in run.glyphs.iter().enumerate() {
         // Resolve the glyph name for this code via /Encoding /Differences.
         let Some(name) = differences.get(&glyph.code).cloned() else {
             continue; // unmapped code: no glyph.
@@ -584,18 +633,22 @@ fn draw_type3_run(
             continue; // missing CharProc: draw nothing (tolerant).
         };
 
-        // Per-glyph text-rendering matrix (upright approximation): the
-        // interpreter keeps only the glyph `origin` (= (0,0)·Trm) and `size`
-        // (= Tfs) — rotation/shear are lost (the documented upright-text
-        // approximation). Trm ≈ [Tfs 0 0 Tfs ox oy].
-        let trm = Matrix::new(
-            glyph.size,
-            0.0,
-            0.0,
-            glyph.size,
-            glyph.origin.x,
-            glyph.origin.y,
-        );
+        // Per-glyph text-rendering matrix. The recorded Trm carries the full
+        // linear part (CTM/text-matrix scale + rotation); the fallback keeps only
+        // the glyph `origin` (= (0,0)·Trm) and `size` (= Tfs), i.e. the upright
+        // approximation `Trm ≈ [Tfs 0 0 Tfs ox oy]`.
+        let trm = if has_trms {
+            run.trms[i]
+        } else {
+            Matrix::new(
+                glyph.size,
+                0.0,
+                0.0,
+                glyph.size,
+                glyph.origin.x,
+                glyph.origin.y,
+            )
+        };
         // glyph space → user space → (page) device: FontMatrix · Trm, then any
         // enclosing Type3 extra_ctm.
         let glyph_to_user = Matrix::concat(&Matrix::concat(&font_matrix, &trm), &ctx.extra_ctm);
@@ -750,26 +803,60 @@ fn charproc_is_uncolored(proc_bytes: &[u8]) -> bool {
 /// Resolves the program glyph id for one positioned glyph.
 ///
 /// `mapper_gid` is what `FontMapper::gid(code)` returned: for a Type0/CID font
-/// it is the (CIDToGIDMap-resolved) program glyph id; for a simple font it is the
-/// raw character code (not a glyph id). So the resolution order is:
-/// 1. If the supplied `mapper_gid` is in range and non-`.notdef`, trust it
-///    (the CID path) — but only when it differs from a plausible code so we
-///    don't mistake a simple-font code for a gid;
-/// 2. else look the glyph up in the program `cmap` by its Unicode scalar (the
-///    simple-font path);
-/// 3. else fall back to `mapper_gid` clamped into range.
-fn resolve_gid(font: &GlyphFont, glyph: &pdf_text::PositionedGlyph, mapper_gid: u32) -> u16 {
-    // Prefer a cmap lookup by Unicode (correct for simple WinAnsi/Standard fonts,
-    // and harmless for CID fonts whose program also carries a cmap).
-    if let Some(ch) = glyph.unicode.chars().next() {
+/// (`is_cid`) it is the (CIDToGIDMap-resolved) program glyph id — authoritative;
+/// for a simple font it is the raw character code (not a glyph id). The two kinds
+/// resolve in different orders:
+///
+/// - **CID (`Type0`)**: trust `mapper_gid` (CID = GID for the common Identity
+///   CIDToGIDMap; otherwise the map already translated it); fall back to a
+///   program `cmap` probe by Unicode only when it is `.notdef`/out-of-range.
+/// - **Simple**: the program `cmap` by Unicode (TrueType `FontFile2`), then the
+///   CFF charset / `post` table by the glyph's AGL name (CFF/Type1 `FontFile3`,
+///   which usually has no `cmap`), then the raw code clamped into range (some
+///   symbolic TrueType fonts index by code).
+fn resolve_gid(
+    font: &GlyphFont,
+    glyph: &pdf_text::PositionedGlyph,
+    mapper_gid: u32,
+    is_cid: bool,
+) -> u16 {
+    let first_char = glyph.unicode.chars().next();
+    if is_cid {
+        // Type0/CID: the mapper gid is the resolved program glyph id.
+        let g = u16::try_from(mapper_gid).unwrap_or(0);
+        if g != 0 && g < font.num_glyphs() {
+            return g;
+        }
+        // .notdef / out of range: last-ditch cmap probe by Unicode.
+        if let Some(ch) = first_char {
+            if let Some(gg) = font.glyph_for_char(ch) {
+                if gg != 0 {
+                    return gg;
+                }
+            }
+        }
+        return g;
+    }
+
+    // Simple font. 1) program cmap by Unicode (TrueType with a cmap).
+    if let Some(ch) = first_char {
         if let Some(g) = font.glyph_for_char(ch) {
             if g != 0 {
                 return g;
             }
         }
     }
-    // No cmap hit: use the mapper gid (the Identity-CID path) when it is a valid,
-    // non-notdef glyph index.
+    // 2) CFF charset / post by the glyph's AGL name (CFF/Type1 lack a cmap).
+    if let Some(ch) = first_char {
+        if let Some(name) = pdf_fonts::unicode_to_glyph_name(ch as u32) {
+            if let Some(g) = font.glyph_for_name(&name) {
+                if g != 0 {
+                    return g;
+                }
+            }
+        }
+    }
+    // 3) last resort: the raw code clamped (symbolic TrueType indexed by code).
     let g = u16::try_from(mapper_gid).unwrap_or(0);
     if g != 0 && g < font.num_glyphs() {
         return g;
