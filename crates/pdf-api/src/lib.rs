@@ -1138,6 +1138,37 @@ impl Document {
         Ok(to)
     }
 
+    /// Reference-copies the page at `from` to final position `to` (PyMuPDF
+    /// `Document.copy_page`). Unlike [`fullcopy_page`](Self::fullcopy_page) this
+    /// is a shallow copy: the new leaf shares the original's content/resources.
+    /// `to` is the 0-based position the copy should occupy (clamped to
+    /// `[0, page_count]`); callers pass `page_count` to append.
+    ///
+    /// # Errors
+    ///
+    /// A typed [`Error`] for an out-of-range `from`.
+    pub fn copy_page(&self, from: usize, to: usize) -> Result<()> {
+        let mut ed = pdf_edit::PageEditor::new(&self.store)?;
+        ed.copy_page(from, to)?;
+        self.refresh_pages();
+        Ok(())
+    }
+
+    /// Moves the page at `from` to final position `to` (PyMuPDF
+    /// `Document.move_page`). `to` is the desired 0-based position interpreted
+    /// against the order *after* `from` has been removed (clamped); callers pass
+    /// `page_count` to append.
+    ///
+    /// # Errors
+    ///
+    /// A typed [`Error`] for an out-of-range `from`.
+    pub fn move_page(&self, from: usize, to: usize) -> Result<()> {
+        let mut ed = pdf_edit::PageEditor::new(&self.store)?;
+        ed.move_page(from, to)?;
+        self.refresh_pages();
+        Ok(())
+    }
+
     // --- page labels (PRD §8.9) -------------------------------------------
 
     /// Writes `/Root /PageLabels` from `specs` (PyMuPDF
@@ -1162,6 +1193,14 @@ impl Document {
             .collect();
         pdf_edit::set_labels(&self.store, &labels)?;
         Ok(())
+    }
+
+    /// The `/Root /PageLabels` ranges as PyMuPDF `Document.get_page_labels`
+    /// tuples `(start_page, style, prefix, first_value)`, sorted by start page.
+    /// `style` is `"D"|"r"|"R"|"a"|"A"` or `""`. Empty when there are no labels.
+    #[must_use]
+    pub fn get_page_labels(&self) -> Vec<(usize, String, String, i64)> {
+        pdf_edit::get_label_rules(&self.store)
     }
 
     // --- char widths (PRD §8.6) -------------------------------------------

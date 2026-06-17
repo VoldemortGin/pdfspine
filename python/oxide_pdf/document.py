@@ -2275,6 +2275,22 @@ class Document:
         ``doc.get_page_pixmap``)."""
         return self.load_page(int(pno)).get_pixmap(**kw)
 
+    def get_page_images(self, pno: int, full: bool = False) -> list[tuple]:
+        """The images on page ``pno`` as PyMuPDF tuples (PyMuPDF
+        ``doc.get_page_images``)."""
+        return self.load_page(int(pno)).get_images(full=full)
+
+    def get_page_fonts(self, pno: int, full: bool = False) -> list[tuple]:
+        """The fonts on page ``pno`` as PyMuPDF tuples (PyMuPDF
+        ``doc.get_page_fonts``)."""
+        return self.load_page(int(pno)).get_fonts(full=full)
+
+    def search_page_for(self, pno: int, text: str, **kw) -> list:
+        """Searches page ``pno`` for ``text`` (PyMuPDF ``doc.search_page_for``).
+
+        Returns a list of :class:`Quad` (``quads=True``) or :class:`Rect`."""
+        return self.load_page(int(pno)).search_for(text, **kw)
+
     def extractImage(self, xref: int) -> dict:  # noqa: N802
         return self.extract_image(xref)
 
@@ -2462,9 +2478,148 @@ class Document:
         """Keeps only ``pages`` in order (PyMuPDF ``doc.select``)."""
         self._doc.select([int(p) for p in pages])
 
+    def copy_page(self, pno: int, to: int = -1) -> None:
+        """Reference-copies page ``pno`` in front of page ``to`` (PyMuPDF
+        ``doc.copy_page``); ``to == -1`` (or out of range) appends.
+
+        This is a *shallow* copy — the new page shares the source's content and
+        resources. For an independent deep copy use :meth:`fullcopy_page`.
+        """
+        count = self._doc.page_count
+        if pno < 0:
+            pno += count
+        # PyMuPDF: insert the copy in front of page ``to`` (the new page becomes
+        # page ``to``); ``to == -1`` / out-of-range appends at the end.
+        target = count if to < 0 or to >= count else to
+        self._doc.copy_page(int(pno), int(target))
+
+    def move_page(self, pno: int, to: int = -1) -> None:
+        """Moves page ``pno`` in front of page ``to`` (PyMuPDF ``doc.move_page``);
+        ``to == -1`` (or out of range) moves it to the end."""
+        count = self._doc.page_count
+        if pno < 0:
+            pno += count
+        if to < 0 or to >= count:
+            target = count  # append (clamped to post-removal length)
+        else:
+            # PyMuPDF inserts in front of original page ``to`` then removes the
+            # original ``pno``; when ``pno`` precedes ``to`` that removal shifts
+            # the final position down by one.
+            target = to - 1 if pno < to else to
+        self._doc.move_page(int(pno), int(target))
+
+    def delete_pages(self, *args, **kw) -> None:
+        """Deletes multiple pages (PyMuPDF ``doc.delete_pages``).
+
+        Accepts the same forms as PyMuPDF:
+
+        * ``delete_pages(from_page, to_page)`` / ``delete_pages(from_page=a,
+          to_page=b)`` — the inclusive range ``a..=b``;
+        * ``delete_pages(numbers)`` / ``delete_pages(numbers=[...])`` — an
+          explicit list/tuple/range of page numbers;
+        * ``delete_pages(n)`` — a single page.
+
+        Negative page numbers count from the end. Pages are kept via
+        :meth:`select` of the complement, so the operation is order-preserving.
+        """
+        count = self._doc.page_count
+
+        def _norm(n: int) -> int:
+            n = int(n)
+            return n + count if n < 0 else n
+
+        numbers: list[int]
+        if "numbers" in kw:
+            numbers = [_norm(n) for n in kw["numbers"]]
+        elif "from_page" in kw or "to_page" in kw:
+            frm = _norm(kw.get("from_page", 0))
+            to = _norm(kw.get("to_page", count - 1))
+            numbers = list(range(frm, to + 1))
+        elif len(args) == 1 and isinstance(args[0], (list, tuple, range)):
+            numbers = [_norm(n) for n in args[0]]
+        elif len(args) == 2:
+            frm, to = _norm(args[0]), _norm(args[1])
+            numbers = list(range(frm, to + 1))
+        elif len(args) == 1:
+            numbers = [_norm(args[0])]
+        else:
+            raise ValueError("delete_pages: expected (from, to), a list, or numbers=[...]")
+
+        drop = {n for n in numbers if 0 <= n < count}
+        keep = [i for i in range(count) if i not in drop]
+        self._doc.select(keep)
+
+    def insert_page(
+        self,
+        pno: int,
+        text=None,
+        fontsize: float = 11,
+        width: float = 595,
+        height: float = 842,
+        fontname: str = "helv",
+        fontfile: str | None = None,
+        color=None,
+        **_ignored,
+    ) -> int:
+        """Inserts a new blank page in front of page ``pno`` (PyMuPDF
+        ``doc.insert_page``); ``pno == -1`` appends.
+
+        Optionally draws ``text`` (a string or list of strings, one per line)
+        starting near the top-left. Returns the number of text lines inserted
+        (``0`` when ``text`` is ``None``), matching PyMuPDF.
+        """
+        page = self.new_page(pno, width=width, height=height)
+        if text is None:
+            return 0
+        lines = text if isinstance(text, (list, tuple)) else str(text).splitlines() or [str(text)]
+        page.insert_text(
+            Point(50, 72),
+            "\n".join(str(line) for line in lines),
+            fontsize=fontsize,
+            fontname=fontname,
+            fontfile=fontfile,
+            color=(0, 0, 0) if color is None else color,
+        )
+        return len(lines)
+
     def get_page_label(self, pno: int) -> str:
         """The page label of physical page ``pno`` (PyMuPDF helper)."""
         return self._doc.get_page_label(pno)
+
+    def get_label(self, pno: int) -> str:
+        """The computed ``/PageLabels`` label of page ``pno`` (PyMuPDF
+        ``doc.get_page_label`` equivalent at the document level)."""
+        if pno < 0:
+            pno += self._doc.page_count
+        return self._doc.get_page_label(int(pno))
+
+    def get_page_labels(self) -> list[dict]:
+        """The ``/Root /PageLabels`` rules (PyMuPDF ``doc.get_page_labels``).
+
+        Returns a list of dicts ``{"startpage": int, "prefix": str, "style":
+        str, "firstpagenum": int}``, one per number-tree range, sorted by start
+        page. Empty when the document has no page labels.
+        """
+        return [
+            {
+                "startpage": start,
+                "prefix": prefix,
+                "style": style,
+                "firstpagenum": first,
+            }
+            for start, style, prefix, first in self._doc.get_page_labels()
+        ]
+
+    def get_page_numbers(self, label: str, only_one: bool = False) -> list[int]:
+        """The 0-based page numbers whose computed label equals ``label`` (PyMuPDF
+        ``doc.get_page_numbers``). With ``only_one`` stops after the first hit."""
+        out: list[int] = []
+        for i in range(self._doc.page_count):
+            if self._doc.get_page_label(i) == label:
+                out.append(i)
+                if only_one:
+                    break
+        return out
 
     def set_page_labels(self, labels) -> None:
         """Writes ``/Root /PageLabels`` (PyMuPDF ``doc.set_page_labels``).

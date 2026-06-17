@@ -15,8 +15,8 @@ gating. Tables, multilingual, CJK, and domain breadth all measured at near-parit
 **Rendering (`get_pixmap`) is now near-parity for embedded-font text**: SSIM ~0.58 → **0.945 mean /
 0.986 median** vs fitz after four root-cause fixes (full per-glyph `Trm` into the render path;
 bare-CFF `FontFile3` parsing; CCITT/JBIG2 1-bpc polarity; CID-keyed CFF charset CID→GID). See §2.A
-for what landed and the remaining long tail. **1338+ Rust + 391 pytest green.** API coverage **65.7%**
-(505/769 in `COMPAT.toml`) after batch-1 Page geometry/boxes.
+for what landed and the remaining long tail. **1338+ Rust + 419 pytest green.** API coverage **67.1%**
+(516/769 in `COMPAT.toml`) after batch-1 Page geometry + batch-2 Document page-helpers.
 
 ## 1. Tools available (reuse, don't rebuild)
 
@@ -88,7 +88,7 @@ Renderer code: `crates/pdf-render`; glyph data plumbing in `crates/pdf-text` (`i
   `pdf-fonts` CID→Unicode fix.
 - **CI gate** — wire a born-digital `order ≥ 0.95` (and tables count-agreement) regression gate into CI.
 
-### C. API parity coverage (track A) — 65.7% → higher
+### C. API parity coverage (track A) — 67.1% → higher
 > **NB (drift fixed 2026-06-17):** batches 3 & 4 hand-edited `COMPAT.toml` (Font/Colorspace/Link/
 > Outline/TextWriter/Tools/xref-write/text-trace → 63.7%) but did NOT update the generator
 > `scripts/_compat_catalog.py`, so regenerating regressed coverage to 53.7%. A reconciliation pass at
@@ -106,9 +106,12 @@ src/lib.rs` mean batches that both touch them run SEQUENTIALLY; new pytest goes 
    `transformation_matrix`/`rotation_matrix`/`derotation_matrix` (fitz-matched at rot 0/90/180/270),
    `xref`, `parent` (python-level owning-Document ref), `mediabox_size`/`cropbox_position`. Only
    `remove_rotation` left deferred (needs content-stream rewriting). Tests in `test_longtail5.py`.
-2. **Document page-helpers** — `get_page_images`/`get_page_fonts`/`search_page_for`/`get_page_pixmap`
-   (one-line delegations), `get_page_labels`/`get_page_numbers`/`get_label`, page-ops
-   `insert_page`/`copy_page`/`move_page`/`delete_pages`.
+2. ~~**Document page-helpers**~~ **DONE (batch-2, 2026-06-17, +11 → 67.1%):** `get_page_images`/
+   `get_page_fonts`/`search_page_for`/`get_page_pixmap` (delegations), `get_page_labels`/
+   `get_page_numbers`/`get_label` (`/PageLabels` number-tree parsing in `crates/pdf-edit/pagelabel.rs`;
+   labels + page-numbers exact-match real fitz on roman/decimal/prefix rules), page-ops
+   `insert_page`/`copy_page`/`move_page`/`delete_pages` (page count + order exact-match real fitz).
+   Tests in `test_longtail6.py`.
 3. **Annot members** + **Widget appearance** (colors/border/text-style) + **Shape** draw_quad/sector/
    squiggle/zigzag + insert_text/insert_textbox + props.
 4. **TextPage** extractHTML/XHTML/XML/extractSelection/Textbox/search; **Font** glyph_bbox/

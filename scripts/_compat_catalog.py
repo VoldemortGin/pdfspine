@@ -115,7 +115,7 @@ add_many("Document", IMPLEMENTED, "M1", ["load_page", "__getitem__", "pages", "p
 add_many("Document", IMPLEMENTED, "M3", ["new_page", "insert_pdf", "delete_page", "select"])
 add_many("Document", IMPLEMENTED, "M3", ["fullcopy_page", "reload_page", "page_xref"])
 add_many("Document", IMPLEMENTED, "M3", ["page_cropbox"], "per-page /CropBox accessor")
-add_many("Document", DEFERRED, "M3", [
+add_many("Document", IMPLEMENTED, "M3", [
     "insert_page", "copy_page", "move_page", "delete_pages",
 ])
 add("Document.insert_file", "Document", DEFERRED, "M5", "image inputs in scope; non-image unsupported")
@@ -189,15 +189,16 @@ add_many("Document", DEFERRED, "post-v1", [
     "get_oc", "get_ocmd", "set_ocmd",
 ], "OCMD / layer-config nesting deferred (PRD §3.2 #5)")
 # Page labels
-add_many("Document", DEFERRED, "M3", [
-    "get_page_labels", "get_page_numbers", "get_label", "get_page_label",
+add_many("Document", IMPLEMENTED, "M3", [
+    "get_page_labels", "get_page_numbers", "get_label",
 ])
+add_many("Document", DEFERRED, "M3", ["get_page_label"])
 add("Document.set_page_labels", "Document", IMPLEMENTED, "M3", "writes /Root /PageLabels number tree")
 # Document-wide page-content helpers
 add_many("Document", IMPLEMENTED, "M2", ["get_page_text"])
-add("Document.get_page_pixmap", "Document", DEFERRED, "M5", "image-only path in scope; vector unsupported")
+add("Document.get_page_pixmap", "Document", IMPLEMENTED, "M5", "full-page render (delegates to Page.get_pixmap)")
 add("Document.get_page_xobjects", "Document", IMPLEMENTED, "M2", "per-page XObject inventory (Form + Image)")
-add_many("Document", DEFERRED, "M2", [
+add_many("Document", IMPLEMENTED, "M2", [
     "get_page_images", "get_page_fonts", "search_page_for",
 ])
 # Forms helpers actually implemented in source

@@ -2253,6 +2253,19 @@ impl PyDocument {
             .map_err(map_err)
     }
 
+    /// Reference-copies page `from_` to final 0-based position `to` (PyMuPDF
+    /// `Document.copy_page`). The python wrapper resolves the PyMuPDF
+    /// "insert in front of page `to`" semantics into a concrete position.
+    fn copy_page(&self, from_: usize, to: usize) -> PyResult<()> {
+        self.doc.copy_page(from_, to).map_err(map_err)
+    }
+
+    /// Moves page `from_` to final 0-based position `to` (PyMuPDF
+    /// `Document.move_page`). `to` is interpreted against the post-removal order.
+    fn move_page(&self, from_: usize, to: usize) -> PyResult<()> {
+        self.doc.move_page(from_, to).map_err(map_err)
+    }
+
     /// The `/MediaBox` of page `pno` as `(x0, y0, x1, y1)` (PyMuPDF
     /// `Document.page_mediabox`).
     fn page_mediabox(&self, pno: usize) -> PyResult<(f64, f64, f64, f64)> {
@@ -2770,6 +2783,12 @@ impl PyDocument {
     /// exposed at the document level for convenience).
     fn get_page_label(&self, pno: usize) -> String {
         self.doc.get_label(pno)
+    }
+
+    /// The `/Root /PageLabels` ranges as `(start_page, style, prefix,
+    /// first_value)` tuples (PyMuPDF `Document.get_page_labels`).
+    fn get_page_labels(&self) -> Vec<(usize, String, String, i64)> {
+        self.doc.get_page_labels()
     }
 
     // --- forms (PRD §8.8) ------------------------------------------------

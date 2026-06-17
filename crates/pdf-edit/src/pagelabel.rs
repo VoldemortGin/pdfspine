@@ -48,6 +48,21 @@ pub fn get_label(doc: &DocumentStore, index: usize) -> String {
     out
 }
 
+/// The `/PageLabels` ranges as PyMuPDF `get_page_labels` tuples
+/// `(start_page, style, prefix, first_value)`, sorted by `start_page`. `style`
+/// is the single style char (`"D"|"r"|"R"|"a"|"A"`) or `""` when absent. Empty
+/// when the document has no `/PageLabels`.
+#[must_use]
+pub fn get_label_rules(doc: &DocumentStore) -> Vec<(usize, String, String, i64)> {
+    read_ranges(doc)
+        .into_iter()
+        .map(|r| {
+            let style = r.style.map(|b| (b as char).to_string()).unwrap_or_default();
+            (r.start_page, style, r.prefix, r.first_value)
+        })
+        .collect()
+}
+
 /// One page-label range to write (PyMuPDF set_page_labels spec entry).
 #[derive(Clone, Debug)]
 pub struct LabelSpec {

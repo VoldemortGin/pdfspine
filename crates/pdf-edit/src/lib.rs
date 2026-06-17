@@ -65,7 +65,7 @@ pub use page_content::{
     wrap_contents,
 };
 pub use page_ops::PageEditor;
-pub use pagelabel::{get_label, set_labels, LabelSpec};
+pub use pagelabel::{get_label, get_label_rules, set_labels, LabelSpec};
 pub use redact::apply_redactions;
 pub use scrub::{bake, scrub, ScrubOptions};
 pub use text::{insert_text, insert_textbox, Align, TextOptions};
