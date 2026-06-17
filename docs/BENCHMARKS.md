@@ -85,15 +85,46 @@ text-extracted in isolated subprocesses so a panic cannot be hidden:
 
 (Scales to the full GovDocs1 / SafeDocs corpora via `conformance/gt/fetch_robustness.py`.)
 
+### Domain breadth (GovInfo, 30 docs)
+
+Public-domain US federal documents across three more domains — court opinions (USCOURTS), GAO audit
+reports, and the Federal Register (dense multi-column regulatory). 30/30 open, 0 panics. Text
+similarity vs fitz:
+
+| domain | Levenshtein | Jaccard |
+|---|---:|---:|
+| USCOURTS (court opinions) | 0.961 | 0.999 |
+| GAOREPORTS (audit) | 0.944 | 0.980 |
+| FR (Federal Register) | 0.922 | 0.994 |
+
+### Tables (`find_tables` vs fitz, 30 docs / 1581 pages)
+
+| metric | value |
+|---|---:|
+| per-page table-count agreement | **97.7%** |
+| grid-shape (rows×cols) match on matched tables | **71.2%** |
+| cell-text F1 on matched tables | **0.928** |
+| oxide tables detected (vs fitz 170) | 200 |
+
+oxide's `find_tables` is at near-parity with fitz after gating detection on real ruling-line
+evidence (borderless prose no longer produces spurious tables).
+
 ## 4. What changed (2026-06-16)
 
-Three text-extraction fixes closed most of the gap to fitz:
+Five extraction fixes closed the gap to fitz:
 1. **Column-major reading order** — occupancy-valley gutter detection (was row-major interleaving on
    multi-column pages).
 2. **Inter-word space synthesis** — recover word spaces on TJ-kerned PDFs that omit space glyphs
    (LaTeX/scientific typesetting).
 3. **Device-space gap threshold** — scale the word-gap threshold by the rendered glyph size, not the
    raw `Tf` operand (fixes word-shatter on PDFs that bake scale into the CTM).
+4. **Baseline-merged column split** — separate columns whose lines share an exact baseline (was
+   character-interleaving a few tight-column lines).
+5. **`find_tables` ruling-line gating** — detect tables from real vector rulings, not prose
+   whitespace (was over-detecting tables 9× on borderless multi-column text).
+
+> **Not yet at parity:** page *rendering* (`get_pixmap`) — SSIM ~0.58 vs fitz; the glyph rasterizer
+> has positioning and font-coverage gaps. Text extraction (above) is the part now at fitz parity.
 
 ## 5. Reproduce
 
