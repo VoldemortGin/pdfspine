@@ -1,123 +1,95 @@
-# PRD-NEXT — Accuracy & Parity Roadmap (continuation)
+# PRD-NEXT — Remaining Work Roadmap
 
-> Working doc for resuming the oxide-pdf build. Created 2026-06-16. Priority order set by
-> the user: **B (extraction accuracy) first, A (API parity coverage) interleaved.**
-> Single source of truth for symbol coverage remains `COMPAT.toml`; this file tracks the
-> in-flight accuracy work + the next coverage batches.
+> Live to-do list for resuming the oxide-pdf build. Updated 2026-06-17. Completed work has been
+> removed; this file tracks only what is LEFT. Symbol-coverage source of truth = `COMPAT.toml`;
+> benchmark numbers = `docs/BENCHMARKS.md` + machine reports in `conformance/`.
 
-## 0. Status snapshot (as of 2026-06-16, this session)
+## 0. Current state (what is DONE — do not redo)
 
-Baseline before session: 1325 Rust + 374 pytest green; COMPAT coverage 63.7% (490/769).
+**Text extraction is at parity with fitz** (proven objectively across born-digital, PMC scientific,
+EUR-Lex 8 languages, CJK, GovInfo court/GAO/Federal-Register, and a robustness corpus — see
+`docs/BENCHMARKS.md`). Five extraction fixes landed: column-major reading order, inter-word space
+synthesis, device-space gap threshold, baseline-merged column split, and `find_tables` ruling-line
+gating. Tables, multilingual, CJK, and domain breadth all measured at near-parity. **1335 Rust +
+374 pytest green.** API coverage 63.7% (490/769 in `COMPAT.toml`).
 
-**TEXT EXTRACTION IS NOW AT PARITY WITH FITZ.** Committed this session: objective GT harness
-(`05e90a3`) + 4 text fixes — `15d02a9` column-major reading order, `fa31931` inter-word space
-synthesis, `8c80f61` device-space gap threshold (not raw Tf), `c88e807` baseline-merged column
-split. Corpora added: born-digital, PMC, EUR-Lex (8 langs), GovDocs1 robustness, CJK.
-Benchmark (`bcfa980`/`904097f`, see `docs/BENCHMARKS.md`): 58-doc objective GT oxide
-**lev 0.834 / f1 0.868 / jaccard 0.834 / order 0.975** vs fitz 0.848/0.879/0.836/0.983 — within
-1–2%, jaccard dead-even. CJK tied; 8-language at near-parity; robustness 23/23 open / 0 panics;
-real-corpus vs fitz Lev 0.823→0.895, Jaccard 0.909→0.971. **1331 Rust + 374 pytest green.**
+## 1. Tools available (reuse, don't rebuild)
 
-## 1. Track B — Extraction accuracy
+Objective ground-truth + differential harness lives in `conformance/gt/` (scripts committed;
+corpora/cache/`*-results.json` gitignored, regenerable):
+- `run_gt.py` — scores oxide vs fitz vs pdfminer vs SAME ground truth → `GT-REPORT.md`.
+- `score.py` — decomposed metrics (lev/f1/jaccard/order), CJK-aware, NFKC normalization.
+- Fetchers/generators: `born_digital.py`, `born_cjk.py`, `pmc_fetch.py`, `fetch_eurlex.py`
+  (8 langs), `fetch_govinfo.py` (court/GAO/FR), `fetch_robustness.py` (GovDocs1/SafeDocs).
+- `tables_diff.py` — find_tables vs fitz. `render_diff.py` — get_pixmap vs fitz (SSIM).
+- Real-corpus differential vs fitz: `conformance/run_validation.py` + `fetch_corpus.py`.
+- Oracle venv `.venv-oracle` (fitz 1.27 + pdfminer); project venv `.venv` (oxide_pdf wheel). No
+  oracle output is ever committed (clean-room / AGPL-safe).
 
-Headline text-extraction parity ACHIEVED (above). Remaining B items (lower priority now):
+## 2. Remaining work
 
-### 1.1 Missing inter-word spaces — DONE (`fa31931` + `8c80f61` Tf-scale). PMC f1 0.219→0.528.
-### 1.2 Residual content gap — DONE. After the space + Tf-scale + baseline-split fixes, oxide
-content matches fitz on real corpora (PMC jaccard 0.415 vs 0.419; EUR-Lex 0.939 vs 0.941; born
-0.965 = fitz). No systematic content deficit remains.
+### A. RENDERING — the biggest remaining gap to "match fitz" (HIGH value, substantial)
+`get_pixmap` is NOT at parity: SSIM ~0.58 vs fitz (`conformance/gt/RENDER-REPORT.md`). Page geometry
+is correct (page-box sizes match ≤1px); the glyph rasterizer is the problem. Findings, by impact:
+1. **Glyph horizontal positioning** — glyphs overlap/compress on clean text (wrong advance-width
+   handling or text-matrix scaling). Hits ALL text; fix first. Objective fn = born-digital render
+   SSIM (`render_diff.py` on `corpus-born`), target ≥0.9. NB extraction positions are already
+   correct, so the renderer uses a different/buggy advance path than `pdf-text` layout.
+2. **Body glyphs not drawn for some embedded font types** (subset CIDFonts / Type1 / certain
+   encodings) — vector rules render but text is blank on many PMC/IRS/govdocs pages.
+3. **Image/colorspace fidelity** — scanned-image pages render with wrong brightness/contrast.
+4. **Synthetic-bold / heavy display fonts** render lighter than fitz (minor).
+Renderer code: `crates/pdf-render`. Measure every change with `render_diff.py`.
 
-### 1.2b Minor follow-ups (polish):
-- **Kangxi-radical fold** — oxide raw CJK output uses radical codepoints (U+2F09 ⼉) where fitz
-  folds to canonical ideographs (U+513F 儿). NFKC-equivalent/cosmetic (scorer neutralizes it).
-  Small `pdf-fonts`/CID→Unicode fix for exact raw-output parity. Low priority.
-- Scale the GovDocs1 robustness corpus (fetcher got 23 due to a throttled link; rerun for 250+).
-- Wire a born-digital `order ≥ 0.95` regression gate into CI.
-- Extend differential to RENDERING (pixmap SSIM vs fitz) and TABLES (find_tables vs JATS/fitz).
+### B. Extraction breadth (LOWER priority — diminishing returns; text already at parity)
+- **RTL / Arabic (bidi)** — the one untested script class; most likely to surface a real bug. Needs
+  bidi-aware GT (visual vs logical order). Born-digital Arabic (Chrome) or UN ODS Arabic PDFs.
+- **FinTabNet gold table GT** — now that `find_tables` is fixed, validate table *structure* against
+  human ground truth (not just fitz). FinTabNet (IBM, CDLA-Permissive) ships real PDF pages + cell
+  structure; HF `bsmock/FinTabNet.c`. (Earlier fetch was flaky — retry.)
+- **Scale robustness** — `fetch_robustness.py` got only 23 (throttled link); rerun for thousands of
+  GovDocs1/SafeDocs PDFs for stronger never-panic + differential evidence.
+- **More domains/langs** — DocLayNet (finance/law/patent/manual, per-cell text GT; official 7.5GB
+  zip ships real PDFs — HF mirrors strip them; needs zip64 range-extraction), more EUR-Lex, Japanese.
+- **Kangxi-radical fold (CJK polish)** — oxide raw CJK output uses radical codepoints (U+2F09 ⼉)
+  where fitz folds to canonical ideographs (U+513F 儿). NFKC-equivalent/cosmetic. Small
+  `pdf-fonts` CID→Unicode fix.
+- **CI gate** — wire a born-digital `order ≥ 0.95` (and tables count-agreement) regression gate into CI.
 
-### 1.3 Refresh the fitz-oracle corpus report on current HEAD
-`conformance/REPORT.md` (text vs fitz: Lev 0.823) is from 2026-06-15, BEFORE the
-reading-order + spacing fixes. Re-fetch (`fetch_corpus.py`) + re-run `run_validation.py`
-to get refreshed numbers; the multi-column IRS forms (p501 0.387, p502 0.537, p15 0.544)
-should improve markedly now.
-
-### 1.4 Strengthen the ground-truth layers
-- **Expand born-digital** (`conformance/gt/born_digital.py`): add tables, figure+caption,
-  footnotes, mixed 1/2-col, wider font/size variety. Cheap, perfect GT, zero license risk.
-- **Expand PMC** (`pmc_fetch.py --n 25..50`): prefer final-published-version articles;
-  improve XML↔PDF correspondence (body-only normalization both sides) so absolute content
-  scores aren't depressed by the structural mismatch. NOTE: NCBI `oa_package` paths moved
-  under `/pub/pmc/deprecated/` and are scheduled for **removal Aug 2026** → migrate the
-  fetcher to AWS S3 `pmc-oa-opendata` (version-keyed, `license_code` in JSON) before then.
-- **(Optional) GROTOAP2 TrueViz** layer (CC-BY): gold per-zone reading-order labels on PMC
-  PDFs — the strongest objective reading-order scorer. Keep CERMINE *code* (AGPL) out.
-- **Human spot-check**: for oxide-vs-fitz divergences, confirm who's right (catches the
-  cases where we should *exceed* fitz, which the similarity metric alone can't credit).
-
-### 1.5 Extend differential beyond text
-- **Rendering**: pixel-diff oxide `get_pixmap` vs fitz render on the corpus (SSIM/MSE).
-- **Tables**: `find_tables` vs fitz / vs JATS `<table-wrap>` ground truth.
-
-### 1.6 Wire GT harness into CI as a regression gate
-Add a fast born-digital subset (committed tiny synthetic PDFs, or generate in CI) with an
-`order ≥ 0.95` gate so reading-order can never silently regress.
-
-## 2. Reference — the objective GT harness (`conformance/gt/`)
-Built this session. Scripts committed; corpora/cache/raw-json gitignored (regenerable).
-- `score.py` — decomposed metrics: token P/R/F1, set Jaccard, **order** (alignment-based,
-  isolates ordering from content), Levenshtein ratio; NFKC + ligature/soft-hyphen/de-hyphen
-  normalization.
-- `born_digital.py` — Chrome-rendered multi-column PDFs from public-domain prose (Gutenberg);
-  source order = known reading order. Variants: 1col/2col/2col-justified/3col/2col-with-header/
-  2col-narrow-gutter. `--out conformance/gt/corpus-born`.
-- `pmc_fetch.py` — CC-BY/CC0 PMC OA sample (real PDF + JATS XML). `--out corpus-pmc --n N`.
-- `jats_text.py` — JATS/NXML → logical-order body ground truth.
-- `run_gt.py` — scores oxide vs fitz vs pdfminer vs SAME ground truth; emits GT-REPORT*.md +
-  json with a "match/exceed fitz (order)" head-to-head. `--manifest <m> [--manifest <m2>]`.
-- Oracle venv: `.venv-oracle` (fitz 1.27 + pdfminer). Project venv: `.venv` (oxide_pdf wheel).
-- No oracle output is committed (clean-room / AGPL-safe).
+### C. API parity coverage (track A) — 63.7% → higher
+Full per-symbol spec exists (workflow `wf_f5e56138-2f9`; 146 symbols: 68 pure-python, 66 needs-rust,
+9 already-exist → just update COMPAT, 3 reclassify-oos). Two groups need re-spec (socket-failed):
+Shape-members, TextPage-extract. The monoliths `python/oxide_pdf/document.py` + `crates/py-bindings/
+src/lib.rs` mean batches that both touch them run SEQUENTIALLY; new pytest goes in
+`python/tests/test_longtail5.py`. Suggested batch order (cheap pure-python first):
+1. **Page geometry/boxes** — `set_mediabox`/`set_cropbox` (PageEditor methods already exist in
+   pdf-edit; need pdf-api facade + PyPage binding + stub), `set_artbox`/`bleedbox`/`trimbox`
+   (pure-python via `xref_set_key` once Page carries a Document parent ref — shared prerequisite),
+   `transformation_matrix`/`rotation_matrix`/`derotation_matrix`, `xref`/`parent`, `mediabox_size`/
+   `cropbox_position`, `remove_rotation`.
+2. **Document page-helpers** — `get_page_images`/`get_page_fonts`/`search_page_for`/`get_page_pixmap`
+   (one-line delegations), `get_page_labels`/`get_page_numbers`/`get_label`, page-ops
+   `insert_page`/`copy_page`/`move_page`/`delete_pages`.
+3. **Annot members** + **Widget appearance** (colors/border/text-style) + **Shape** draw_quad/sector/
+   squiggle/zigzag + insert_text/insert_textbox + props.
+4. **TextPage** extractHTML/XHTML/XML/extractSelection/Textbox/search; **Font** glyph_bbox/
+   valid_codepoints/buffer.
+5. Document low-level COS (`update_object`/`update_stream`/`get_new_xref`/…), state/meta, OCG/layers.
+Regenerate `COMPAT.toml` + refresh `PARITY.md` after each batch.
 
 ## 3. Verify suite (run from repo root before every commit)
 ```
 cargo fmt --all --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
-cargo test --workspace                      # expect ~1325+ passed, 0 failed
+cargo test --workspace                      # expect 1335+ passed, 0 failed
 source .venv/bin/activate && env -u CONDA_PREFIX maturin develop -q
 env -u CONDA_PREFIX python -m pytest python/tests/ -q     # expect 374+ passed
-# accuracy objective functions:
-env -u CONDA_PREFIX .venv/bin/python conformance/gt/run_gt.py --manifest conformance/gt/corpus-born/manifest.json --report /tmp/b.md --json /tmp/b.json
-env -u CONDA_PREFIX .venv/bin/python conformance/gt/run_gt.py --manifest conformance/gt/corpus-pmc/manifest.json  --report /tmp/p.md --json /tmp/p.json
 ```
-Gotcha: maturin needs `env -u CONDA_PREFIX`. Commit messages: **no backticks** (shell
-command-substitutes them).
+Gotchas: maturin needs `env -u CONDA_PREFIX`. Commit messages: **no backticks** (shell substitutes
+them). Only ONE agent rebuilds the wheel at a time; don't run scoring while a wheel rebuild is in
+flight (shared `.venv`). Subagents must not commit (main loop verifies + commits).
 
-## 4. Track A — API parity coverage (interleave)
-Current: 63.7% (490/769 in `COMPAT.toml`). A full per-symbol implementation spec for the
-remaining deferred long-tail was produced this session (workflow `wf_f5e56138-2f9`,
-result cached at `/private/tmp/.../tasks/w2avqqcpb.output`): **146 symbols specced — 68
-pure-python, 66 needs-rust, 9 already-exists (just update COMPAT), 3 reclassify-oos.**
-Two groups failed to spec (socket error) and need re-spec: **Shape-members, TextPage-extract.**
-
-Suggested batch order (land cheap pure-python first; monoliths `document.py` + `lib.rs`
-mean batches that both touch them run SEQUENTIALLY; new tests go in `python/tests/test_longtail5.py`):
-1. **Page geometry/boxes** — `set_mediabox/set_cropbox` (PageEditor methods already exist in
-   pdf-edit; just need pdf-api facade + PyPage binding + stub), `set_artbox/bleedbox/trimbox`
-   (pure-python via `xref_set_key` once Page carries a Document parent ref — needed by several),
-   `transformation_matrix/rotation_matrix/derotation_matrix`, `xref/parent`, `mediabox_size/
-   cropbox_position`, `remove_rotation`.
-2. **Document page-helpers** — `get_page_images/get_page_fonts/search_page_for/get_page_pixmap`
-   (one-line delegations to `self[pno].*`), `get_page_labels/get_page_numbers/get_label`,
-   page-ops `insert_page/copy_page/move_page/delete_pages`.
-3. **Annot members** + **Widget appearance members** (colors/border/text-style) + **Shape**
-   draw_quad/sector/squiggle/zigzag + insert_text/insert_textbox + props.
-4. **TextPage** extractHTML/XHTML/XML/extractSelection/Textbox/search; **Font** glyph_bbox/
-   valid_codepoints/buffer.
-5. Document low-level COS (`update_object/update_stream/get_new_xref/...`), state/meta,
-   then OCG/layers (post-v1).
-Reclassify to out-of-scope / mark already-exists per the spec; regenerate `COMPAT.toml`
-and refresh `PARITY.md` after each batch.
-
-## 5. Pre-public chores (unchanged, from memory)
+## 4. Pre-public chores (do last, before going public)
 Folder rename `~/workspace/pypdf` → `oxide-pdf` + recreate `.venv` (FINAL step); commit-message
-reword (backtick history); PyPI publish (`docs/RELEASE-PYPI.md`). Repo stays PRIVATE until
-everything done (full parity + real-corpus accuracy + docs + CLI + OCR).
+backtick reword; PyPI publish (`docs/RELEASE-PYPI.md`). Repo stays PRIVATE until everything is done
+(full parity + accuracy + docs + CLI + OCR), then flip to public + push.
