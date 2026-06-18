@@ -1,7 +1,7 @@
 """Tests for the PyMuPDF compatibility map (COMPAT.toml + compat-symbol-guard).
 
 These operate purely on the checked-in artifacts and the ``python/`` source —
-they do NOT import the compiled ``oxide_pdf`` module (the compat worktree has no
+they do NOT import the compiled ``pdfspine`` module (the compat worktree has no
 built wheel). Stdlib only (``tomllib``, Python 3.11+).
 
 Runnable two ways::

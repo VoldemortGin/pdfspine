@@ -1,4 +1,4 @@
-"""Type stubs for the :mod:`oxide_pdf` package."""
+"""Type stubs for the :mod:`pdfspine` package."""
 
 from . import _core as _core
 from ._core import (

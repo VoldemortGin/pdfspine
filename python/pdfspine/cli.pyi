@@ -1,4 +1,4 @@
-"""Type stubs for :mod:`oxide_pdf.cli`."""
+"""Type stubs for :mod:`pdfspine.cli`."""
 
 import argparse
 from typing import Sequence

@@ -1,4 +1,4 @@
-"""oxide_pdf — an Apache-2.0-licensed, pure-Rust reimplementation of PyMuPDF (``fitz``).
+"""pdfspine — an Apache-2.0-licensed, pure-Rust reimplementation of PyMuPDF (``fitz``).
 
 This is the native, idiomatic-Python package backed by the Rust ``_core``
 extension module. M1f exposes the read surface (PRD §7 / §9.2): :func:`open`
@@ -6,7 +6,7 @@ returns a :class:`Document` with ``page_count``/indexing/``load_page``/
 ``metadata`` and per-page geometry (``rect``/``rotation``/``bound``/boxes).
 
 Geometry is returned to Python as PyMuPDF-compatible value types
-(:class:`Rect`, :class:`Matrix`, …) defined in :mod:`oxide_pdf.geometry`.
+(:class:`Rect`, :class:`Matrix`, …) defined in :mod:`pdfspine.geometry`.
 """
 
 from __future__ import annotations

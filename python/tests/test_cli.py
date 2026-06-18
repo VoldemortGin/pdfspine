@@ -1,4 +1,4 @@
-"""CLI surface tests for ``oxide_pdf.cli`` (the ``oxide-pdf`` command).
+"""CLI surface tests for ``pdfspine.cli`` (the ``pdfspine`` command).
 
 All fixtures are self-generated in-test (raw PDF bytes) — no external files
 (PRD §10). Tests invoke ``cli.main([...])`` directly and capture stdout via
@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import zlib
 
-from oxide_pdf import cli
+from pdfspine import cli
 import pytest
 
 
@@ -264,9 +264,9 @@ def test_cli_008_merge_page_count_is_sum(tmp_path, capsys):
     out = tmp_path / "merged.pdf"
     rc = cli.main(["merge", str(a), str(b), "-o", str(out)])
     assert rc == 0
-    import oxide_pdf
+    import pdfspine
 
-    assert oxide_pdf.open(str(out)).page_count == 5
+    assert pdfspine.open(str(out)).page_count == 5
 
 
 # ==========================================================================
@@ -281,10 +281,10 @@ def test_cli_009_split_writes_one_pdf_per_page(tmp_path, capsys):
     assert rc == 0
     pdfs = sorted(outdir.glob("*.pdf"))
     assert len(pdfs) == 3
-    import oxide_pdf
+    import pdfspine
 
     for p in pdfs:
-        assert oxide_pdf.open(str(p)).page_count == 1
+        assert pdfspine.open(str(p)).page_count == 1
 
 
 def test_cli_010_split_ranges(tmp_path, capsys):
@@ -294,10 +294,10 @@ def test_cli_010_split_ranges(tmp_path, capsys):
     assert rc == 0
     pdfs = sorted(outdir.glob("*.pdf"))
     assert len(pdfs) == 2
-    import oxide_pdf
+    import pdfspine
 
     for p in pdfs:
-        assert oxide_pdf.open(str(p)).page_count == 2
+        assert pdfspine.open(str(p)).page_count == 2
 
 
 # ==========================================================================
@@ -310,9 +310,9 @@ def test_cli_011_pages_select_subset(tmp_path, capsys):
     out = tmp_path / "subset.pdf"
     rc = cli.main(["pages", str(pdf), "--select", "1,3", "-o", str(out)])
     assert rc == 0
-    import oxide_pdf
+    import pdfspine
 
-    d = oxide_pdf.open(str(out))
+    d = pdfspine.open(str(out))
     assert d.page_count == 2
     assert "P1" in d[0].get_text()
     assert "P3" in d[1].get_text()
@@ -323,9 +323,9 @@ def test_cli_012_pages_select_reorder(tmp_path, capsys):
     out = tmp_path / "reordered.pdf"
     rc = cli.main(["pages", str(pdf), "--select", "3,1", "-o", str(out)])
     assert rc == 0
-    import oxide_pdf
+    import pdfspine
 
-    d = oxide_pdf.open(str(out))
+    d = pdfspine.open(str(out))
     assert d.page_count == 2
     assert "P3" in d[0].get_text()
     assert "P1" in d[1].get_text()
@@ -359,10 +359,10 @@ def test_cli_014_toc_runs_on_no_outline(tmp_path, capsys):
 
 def test_cli_015_toc_prints_entries(tmp_path, capsys):
     # Build a doc, attach a TOC, save, then dump it via the CLI.
-    import oxide_pdf
+    import pdfspine
 
     src = _write(tmp_path, "m.pdf", multipage_text_pdf(["P1", "P2"]))
-    doc = oxide_pdf.open(str(src))
+    doc = pdfspine.open(str(src))
     doc.set_toc([[1, "Chapter One", 1], [1, "Chapter Two", 2]])
     with_toc = tmp_path / "with_toc.pdf"
     doc.save(str(with_toc))
@@ -410,12 +410,12 @@ def test_cli_018_bad_page_range_nonzero_no_traceback(tmp_path, capsys):
 
 
 def test_cli_019_version(capsys):
-    import oxide_pdf
+    import pdfspine
 
     rc = cli.main(["--version"])
     out = capsys.readouterr().out
     assert rc == 0
-    assert oxide_pdf.__version__ in out
+    assert pdfspine.__version__ in out
 
 
 def test_cli_020_no_args_shows_help_nonzero(capsys):

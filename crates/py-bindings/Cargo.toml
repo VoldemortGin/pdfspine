@@ -6,7 +6,7 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 rust-version.workspace = true
-description = "PyO3 bindings for oxide-pdf; builds the _core extension module. FFI chokepoint."
+description = "PyO3 bindings for pdfspine; builds the _core extension module. FFI chokepoint."
 publish = false
 
 [lib]
@@ -16,7 +16,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 # Default features (incl. `encryption` and `paddle-ocr`) are on, so the shipped
-# wheel gets oxide's pure-Rust PaddleOCR engine (`engine="paddle"`); `paddle-ocr`
+# wheel gets pdfspine's pure-Rust PaddleOCR engine (`engine="paddle"`); `paddle-ocr`
 # is named explicitly to make the dependency intentional and survive any future
 # change to pdf-api's default set.
 pdf-api = { workspace = true, features = ["paddle-ocr"] }

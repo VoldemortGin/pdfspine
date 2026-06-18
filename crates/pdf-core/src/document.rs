@@ -744,7 +744,7 @@ impl DocumentStore {
 
     /// The dictionary keys of object `num` (names, no leading slash), or an empty
     /// vector for a non-dict / missing object (PyMuPDF `xref_get_keys`). Keys are
-    /// returned in the backing dictionary's order (sorted, an oxide model trait).
+    /// returned in the backing dictionary's order (sorted, an pdfspine model trait).
     ///
     /// # Errors
     ///

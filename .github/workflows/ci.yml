@@ -136,7 +136,7 @@ jobs:
       - name: Build + install (maturin develop)
         run: maturin develop
       - name: pytest (incl. doctests)
-        run: pytest --doctest-modules python/oxide_pdf || pytest
+        run: pytest --doctest-modules python/pdfspine || pytest
 
   # ----------------------------------------------------------- TDD guards
   tdd-guards:
@@ -196,8 +196,8 @@ jobs:
         shell: bash
         run: |
           python -m pip install --upgrade pip
-          python -m pip install --no-index --find-links dist oxide-pdf
-          python -c "import oxide_pdf; print('oxide_pdf', oxide_pdf.__version__)"
+          python -m pip install --no-index --find-links dist pdfspine
+          python -c "import pdfspine; print('pdfspine', pdfspine.__version__)"
       - uses: actions/upload-artifact@v4
         with:
           name: wheels-${{ matrix.os }}

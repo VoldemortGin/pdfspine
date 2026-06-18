@@ -1,7 +1,7 @@
-# oxide-pdf — PyPI Release Sub-PRD / Runbook
+# pdfspine — PyPI Release Sub-PRD / Runbook
 
 > **Audience:** an automated agent (Codex) or a human executing the first PyPI
-> publish of `oxide-pdf`. This is a self-contained, step-by-step runbook with
+> publish of `pdfspine`. This is a self-contained, step-by-step runbook with
 > exact config. Anything marked **[MANUAL — pypi.org]** must be done in the PyPI
 > web UI by a human/account owner; everything else is code + CI.
 
@@ -11,10 +11,10 @@
 
 | Fact | Value |
 |---|---|
-| PyPI distribution name | **`oxide-pdf`** (verified FREE on PyPI 2026-06-15) |
-| Python import package | **`oxide_pdf`** (+ `import fitz` compat shim — see §4) |
+| PyPI distribution name | **`pdfspine`** (verified FREE on PyPI 2026-06-15) |
+| Python import package | **`pdfspine`** (+ `import fitz` compat shim — see §4) |
 | License | **Apache-2.0** (`LICENSE` + `NOTICE` present) |
-| GitHub repo | `git@github.com:VoldemortGin/oxide-pdf.git` (owner `VoldemortGin`) — **currently PRIVATE** |
+| GitHub repo | `git@github.com:VoldemortGin/pdfspine.git` (owner `VoldemortGin`) — **currently PRIVATE** |
 | Build backend | **maturin** (PyO3) — this is a **compiled Rust extension**, not pure Python |
 | ABI | **abi3-py311** → ONE wheel per (OS, arch) covers CPython **≥ 3.11** |
 | `requires-python` | **`>=3.11`** (buffer-protocol stable-ABI slots need 3.11) |
@@ -29,7 +29,7 @@
 1100+ tests green, **but it has NOT yet been validated on a real-world PDF
 corpus** (no differential-accuracy numbers vs PyMuPDF yet — see the project's
 validation task). Shipping the first artifact as a **pre-release** (`0.1.0a1`):
-- PyPI marks it "pre-release"; `pip install oxide-pdf` will **not** pick it up
+- PyPI marks it "pre-release"; `pip install pdfspine` will **not** pick it up
   unless the user passes `--pre` — so nobody is surprised by alpha-quality.
 - Lets us exercise the whole publish pipeline for real, safely.
 
@@ -67,7 +67,7 @@ requires = ["maturin>=1.7,<2"]
 build-backend = "maturin"
 
 [project]
-name = "oxide-pdf"
+name = "pdfspine"
 # Option A (recommended): let maturin read the version from Cargo.toml -> use dynamic
 dynamic = ["version"]
 # Option B: hard-code -> version = "0.1.0a1"
@@ -76,7 +76,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"                 # SPDX expression (PEP 639)
 license-files = ["LICENSE", "NOTICE"]
-authors = [{ name = "oxide-pdf authors" }]
+authors = [{ name = "pdfspine authors" }]
 keywords = ["pdf", "fitz", "pymupdf", "text-extraction", "render", "rust", "mupdf-alternative"]
 classifiers = [
   "Development Status :: 3 - Alpha",
@@ -93,22 +93,22 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/VoldemortGin/oxide-pdf"
-Repository = "https://github.com/VoldemortGin/oxide-pdf"
-Issues = "https://github.com/VoldemortGin/oxide-pdf/issues"
+Homepage = "https://github.com/VoldemortGin/pdfspine"
+Repository = "https://github.com/VoldemortGin/pdfspine"
+Issues = "https://github.com/VoldemortGin/pdfspine/issues"
 
 [tool.maturin]
-module-name = "oxide_pdf._core"
+module-name = "pdfspine._core"
 python-source = "python"
 features = ["pyo3/abi3-py311"]
 # strip release binaries for smaller wheels
 strip = true
 # IMPORTANT: control which top-level python packages ship — see §4
-# include = ["python/oxide_pdf/**/*"]   # if you must exclude fitz/pymupdf
+# include = ["python/pdfspine/**/*"]   # if you must exclude fitz/pymupdf
 ```
 
-> If `name = "oxide-pdf"` with hyphen errors in maturin, keep the hyphen for the
-> dist name; the import package is `oxide_pdf` (dir under `python/`). The current
+> If `name = "pdfspine"` with hyphen errors in maturin, keep the hyphen for the
+> dist name; the import package is `pdfspine` (dir under `python/`). The current
 > repo is already configured this way.
 
 ---
@@ -121,19 +121,19 @@ The repo has `python/fitz/` and `python/pymupdf/` top-level compat packages so
   (`import fitz` could resolve to ours, silently breaking their PyMuPDF code).
 - Squatting another project's import name in a public wheel is hostile/confusing.
 
-**Recommended for v0.1.x:** ship **only** the `oxide_pdf` package. Provide
-compatibility as a sub-import (e.g. `from oxide_pdf import fitz as fitz` /
-`import oxide_pdf.fitz`) rather than a top-level `fitz`. Offer a separate opt-in
-distribution (`oxide-pdf-fitz`) later if a true drop-in `import fitz` is wanted.
+**Recommended for v0.1.x:** ship **only** the `pdfspine` package. Provide
+compatibility as a sub-import (e.g. `from pdfspine import fitz as fitz` /
+`import pdfspine.fitz`) rather than a top-level `fitz`. Offer a separate opt-in
+distribution (`pdfspine-fitz`) later if a true drop-in `import fitz` is wanted.
 
 **Action for Codex:**
-1. Confirm the built wheel's contents: `python -m zipfile -l dist/oxide_pdf-*.whl`
-   (or `unzip -l`). It should contain `oxide_pdf/…` and **must NOT** contain
+1. Confirm the built wheel's contents: `python -m zipfile -l dist/pdfspine-*.whl`
+   (or `unzip -l`). It should contain `pdfspine/…` and **must NOT** contain
    top-level `fitz/` or `pymupdf/`.
 2. If they ARE present, exclude them: move the compat shims under
-   `python/oxide_pdf/fitz/` + `python/oxide_pdf/pymupdf/` (adjust imports), or set
-   `[tool.maturin] include`/`exclude` so only `oxide_pdf` is packaged. Re-verify.
-3. Update the README install/usage to show `import oxide_pdf` (and the compat
+   `python/pdfspine/fitz/` + `python/pdfspine/pymupdf/` (adjust imports), or set
+   `[tool.maturin] include`/`exclude` so only `pdfspine` is packaged. Re-verify.
+3. Update the README install/usage to show `import pdfspine` (and the compat
    import path) — not a bare `import fitz`.
 
 *(If the owner explicitly wants the aggressive drop-in `import fitz` behavior,
@@ -263,8 +263,8 @@ jobs:
         shell: bash
         run: |
           python -m pip install --upgrade pip
-          pip install --only-binary :all: --find-links dist oxide-pdf
-          python -c "import oxide_pdf; print('import OK', oxide_pdf.__version__)"
+          pip install --only-binary :all: --find-links dist pdfspine
+          python -c "import pdfspine; print('import OK', pdfspine.__version__)"
           pip install pytest
           pytest python/tests -q
 
@@ -302,11 +302,11 @@ Notes:
 Do this in the PyPI web UI as the account owner BEFORE the first publish:
 
 1. Log in to **https://pypi.org** → account → **Publishing** → **Add a pending publisher**
-   (the project `oxide-pdf` doesn't exist yet — a "pending" publisher creates it on first upload).
+   (the project `pdfspine` doesn't exist yet — a "pending" publisher creates it on first upload).
 2. Fill:
-   - **PyPI Project Name:** `oxide-pdf`
+   - **PyPI Project Name:** `pdfspine`
    - **Owner:** `VoldemortGin`
-   - **Repository name:** `oxide-pdf`
+   - **Repository name:** `pdfspine`
    - **Workflow name:** `release.yml`
    - **Environment name:** `pypi`
 3. Repeat the same on **https://test.pypi.org** with **Environment name:** `testpypi`
@@ -327,8 +327,8 @@ No API tokens are stored anywhere. ✅
    ```bash
    python -m venv /tmp/v && . /tmp/v/bin/activate
    pip install --pre --index-url https://test.pypi.org/simple/ \
-       --extra-index-url https://pypi.org/simple/ oxide-pdf
-   python -c "import oxide_pdf; d=oxide_pdf.open; print('ok', oxide_pdf.__version__)"
+       --extra-index-url https://pypi.org/simple/ pdfspine
+   python -c "import pdfspine; d=pdfspine.open; print('ok', pdfspine.__version__)"
    ```
    (extra-index-url lets TestPyPI resolve real deps if any.)
 
@@ -341,11 +341,11 @@ No API tokens are stored anywhere. ✅
 maturin build --release --features pyo3/abi3-py311 --out dist
 maturin sdist --out dist
 python -m twine check dist/*            # README renders, metadata valid
-python -m zipfile -l dist/oxide_pdf-*.whl | grep -E "fitz/|pymupdf/" \
-  && echo "WARN: top-level shim shipped — see §4" || echo "wheel clean (oxide_pdf only)"
+python -m zipfile -l dist/pdfspine-*.whl | grep -E "fitz/|pymupdf/" \
+  && echo "WARN: top-level shim shipped — see §4" || echo "wheel clean (pdfspine only)"
 # clean-venv install + smoke
-python -m venv /tmp/w && . /tmp/w/bin/activate && pip install dist/oxide_pdf-*.whl
-python -c "import oxide_pdf; print(oxide_pdf.__version__)"
+python -m venv /tmp/w && . /tmp/w/bin/activate && pip install dist/pdfspine-*.whl
+python -c "import pdfspine; print(pdfspine.__version__)"
 ```
 
 ---
@@ -371,10 +371,10 @@ python -c "import oxide_pdf; print(oxide_pdf.__version__)"
 
 ```bash
 # fresh venv, install from real PyPI (note --pre for the alpha)
-pip install --pre oxide-pdf
-python -c "import oxide_pdf; print(oxide_pdf.__version__); print(oxide_pdf.open)"
+pip install --pre pdfspine
+python -c "import pdfspine; print(pdfspine.__version__); print(pdfspine.open)"
 ```
-- Check the project page https://pypi.org/project/oxide-pdf/ renders the README,
+- Check the project page https://pypi.org/project/pdfspine/ renders the README,
   shows Apache-2.0, links, and the platform wheels are all present.
 - Confirm wheels exist for: linux x86_64+aarch64 (manylinux+musllinux),
   macOS x86_64+arm64, windows x64, plus the sdist.
@@ -405,11 +405,11 @@ python -c "import oxide_pdf; print(oxide_pdf.__version__); print(oxide_pdf.open)
 
 - [ ] TestPyPI dry run succeeded; clean-venv install + import worked.
 - [ ] §7 Trusted Publishing configured for both PyPI and TestPyPI.
-- [ ] Wheel verified to contain **only `oxide_pdf`** (no top-level `fitz`/`pymupdf`), §4.
+- [ ] Wheel verified to contain **only `pdfspine`** (no top-level `fitz`/`pymupdf`), §4.
 - [ ] `twine check` passes (README renders).
 - [ ] Tag `v0.1.0a1` pushed; `release` workflow green end-to-end.
-- [ ] `pip install --pre oxide-pdf` works from real PyPI on Linux/macOS/Windows;
-      `import oxide_pdf` succeeds and `__version__` matches.
+- [ ] `pip install --pre pdfspine` works from real PyPI on Linux/macOS/Windows;
+      `import pdfspine` succeeds and `__version__` matches.
 - [ ] PyPI project page shows Apache-2.0, README, all platform wheels + sdist.
 - [ ] (Provenance) PEP 740 attestations attached by gh-action-pypi-publish.
 

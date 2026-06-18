@@ -2,7 +2,7 @@
 // permitted to use `unsafe` (PyO3 generates FFI glue). It therefore does NOT
 // `forbid(unsafe_code)`; instead it requires `unsafe` to be explicitly scoped.
 #![deny(unsafe_op_in_unsafe_fn)]
-//! PyO3 bindings exposing oxide_pdf's Rust core to Python as the `_core` module.
+//! PyO3 bindings exposing pdfspine's Rust core to Python as the `_core` module.
 //!
 //! M1f exposes the read surface (PRD §7 / §9.2 / §9.4): `open`, a `Document`
 //! handle and a `Page` handle, both using the **handle/index pattern** — each
@@ -116,7 +116,7 @@ fn build_save_opts(
 
 /// A page handle (PRD §9.2). Holds a cloned `pdf_api::Page` (its own `Arc` onto
 /// the document store) — `'static`, no borrow crosses the boundary.
-#[pyclass(name = "Page", module = "oxide_pdf._core", frozen)]
+#[pyclass(name = "Page", module = "pdfspine._core", frozen)]
 struct PyPage {
     page: pdf_api::Page,
 }
@@ -176,7 +176,7 @@ fn unpack_color(rgb: u32) -> (f64, f64, f64) {
 /// A reusable text-extraction handle (PyMuPDF `TextPage`, PRD §9.4). Holds the
 /// model built once from a [`Page`]; `Page.get_text(..., textpage=tp)` and
 /// `Page.search_for(..., textpage=tp)` reuse it instead of re-parsing.
-#[pyclass(name = "TextPage", module = "oxide_pdf._core", frozen)]
+#[pyclass(name = "TextPage", module = "pdfspine._core", frozen)]
 struct PyTextPage {
     page: pdf_api::Page,
     tp: pdf_api::TextPage,
@@ -331,7 +331,7 @@ impl PyTextPage {
 
     fn __repr__(&self) -> String {
         format!(
-            "<oxide_pdf._core.TextPage blocks={} {:.0}x{:.0}>",
+            "<pdfspine._core.TextPage blocks={} {:.0}x{:.0}>",
             self.tp.blocks.len(),
             self.tp.width,
             self.tp.height
@@ -515,7 +515,7 @@ fn quad_tuple(q: &Quad) -> (f64, f64, f64, f64, f64, f64, f64, f64) {
 /// An annotation handle (PyMuPDF `Annot`). Owns an `AnnotHandle` (its own
 /// `Arc` onto the store + the annot xref) — `'static`, no borrow crosses the
 /// boundary.
-#[pyclass(name = "Annot", module = "oxide_pdf._core", frozen)]
+#[pyclass(name = "Annot", module = "pdfspine._core", frozen)]
 struct PyAnnot {
     annot: AnnotHandle,
 }
@@ -816,7 +816,7 @@ impl PyAnnot {
 
     fn __repr__(&self) -> String {
         format!(
-            "<oxide_pdf._core.Annot type={} xref={}>",
+            "<pdfspine._core.Annot type={} xref={}>",
             self.annot.type_string(),
             self.annot.xref()
         )
@@ -826,7 +826,7 @@ impl PyAnnot {
 // --- Widget handle (PRD §8.8 / §9.4) --------------------------------------
 
 /// A form-widget handle (PyMuPDF `Widget`). Owns a `WidgetHandle`.
-#[pyclass(name = "Widget", module = "oxide_pdf._core", frozen)]
+#[pyclass(name = "Widget", module = "pdfspine._core", frozen)]
 struct PyWidget {
     widget: WidgetHandle,
 }
@@ -1009,7 +1009,7 @@ impl PyWidget {
 
     fn __repr__(&self) -> String {
         format!(
-            "<oxide_pdf._core.Widget field={:?} xref={}>",
+            "<pdfspine._core.Widget field={:?} xref={}>",
             self.widget.field_name(),
             self.widget.xref()
         )
@@ -1036,7 +1036,7 @@ fn field_type_int(ft: pdf_api::FieldType) -> i32 {
 /// A path/paint builder over one page (PyMuPDF `Shape`). Wraps the owned
 /// [`ShapeHandle`] in an `Option` so `commit` (which consumes the handle) can
 /// take it out of the `&mut self`.
-#[pyclass(name = "Shape", module = "oxide_pdf._core")]
+#[pyclass(name = "Shape", module = "pdfspine._core")]
 struct PyShape {
     shape: Option<ShapeHandle>,
 }
@@ -1190,7 +1190,7 @@ fn drawing_to_py<'py>(py: Python<'py>, d: &Drawing) -> PyResult<Bound<'py, PyDic
 /// One detected table (PyMuPDF `Table`). Owns an [`ApiTable`] (its own `Arc`
 /// onto the page words + the table geometry) — `'static`, no borrow crosses the
 /// boundary.
-#[pyclass(name = "Table", module = "oxide_pdf._core", frozen)]
+#[pyclass(name = "Table", module = "pdfspine._core", frozen)]
 struct PyTable {
     table: ApiTable,
 }
@@ -1269,14 +1269,14 @@ impl PyTable {
         self.table.to_markdown()
     }
 
-    /// The table as an HTML `<table>` string (oxide-pdf extra; not in PyMuPDF).
+    /// The table as an HTML `<table>` string (pdfspine extra; not in PyMuPDF).
     fn to_html(&self) -> String {
         self.table.to_html()
     }
 
     fn __repr__(&self) -> String {
         format!(
-            "<oxide_pdf._core.Table {}x{}>",
+            "<pdfspine._core.Table {}x{}>",
             self.table.row_count(),
             self.table.col_count()
         )
@@ -1285,7 +1285,7 @@ impl PyTable {
 
 /// A page's detected tables (PyMuPDF `TableFinder`). Iterable; `len()` is the
 /// table count.
-#[pyclass(name = "TableFinder", module = "oxide_pdf._core", frozen)]
+#[pyclass(name = "TableFinder", module = "pdfspine._core", frozen)]
 struct PyTableFinder {
     finder: ApiTableFinder,
 }
@@ -1328,7 +1328,7 @@ impl PyTableFinder {
     }
 
     fn __repr__(&self) -> String {
-        format!("<oxide_pdf._core.TableFinder tables={}>", self.finder.len())
+        format!("<pdfspine._core.TableFinder tables={}>", self.finder.len())
     }
 }
 
@@ -1429,11 +1429,11 @@ impl PyPage {
     /// `dpi` is the render resolution; `full=False` (image-region-only OCR) is
     /// not yet implemented and falls back to full-page OCR; `tessdata` overrides
     /// the language-data directory (Tesseract only). `engine` is `"tesseract"`
-    /// (default) or `"paddle"` (oxide's pure-Rust PaddleOCR, default-on
+    /// (default) or `"paddle"` (pdfspine's pure-Rust PaddleOCR, default-on
     /// `paddle-ocr` feature). Raises `PdfUnsupportedError` if the engine is
     /// unavailable. Heavy render + OCR work runs with the GIL released.
     #[pyo3(signature = (flags=3, language="eng", dpi=72, full=true, tessdata=None, engine="tesseract"))]
-    // Mirrors PyMuPDF's `get_textpage_ocr` keyword surface plus the oxide
+    // Mirrors PyMuPDF's `get_textpage_ocr` keyword surface plus the pdfspine
     // `engine` selector; the arg count is the public API, not a refactor target.
     #[allow(clippy::too_many_arguments)]
     fn get_textpage_ocr(
@@ -2460,7 +2460,7 @@ impl PyPage {
     }
 
     fn __repr__(&self) -> String {
-        format!("<oxide_pdf._core.Page number={}>", self.page.number())
+        format!("<pdfspine._core.Page number={}>", self.page.number())
     }
 }
 
@@ -2484,7 +2484,7 @@ fn align_of(align: i32) -> Align {
 
 /// A document handle (PRD §9.2 / §9.4). Holds a `pdf_api::Document` (cheap to
 /// clone: `Arc` bumps) so every `Page` it produces is independent of this object.
-#[pyclass(name = "Document", module = "oxide_pdf._core", frozen)]
+#[pyclass(name = "Document", module = "pdfspine._core", frozen)]
 struct PyDocument {
     doc: ApiDocument,
 }
@@ -2979,10 +2979,10 @@ impl PyDocument {
     /// `engine`, and rebuilt with the page image plus an invisible OCR text
     /// layer. `compress` is accepted for API symmetry; `language` is a Tesseract
     /// code; `tessdata` overrides the language-data directory (Tesseract only).
-    /// `engine` is `"tesseract"` (default) or `"paddle"` (oxide's pure-Rust
+    /// `engine` is `"tesseract"` (default) or `"paddle"` (pdfspine's pure-Rust
     /// PaddleOCR, default-on `paddle-ocr` feature). Raises `PdfUnsupportedError`
     /// if the engine is unavailable. The heavy render + OCR work runs with the
-    /// GIL released. `dpi` (an oxide extension) tunes the recognition resolution.
+    /// GIL released. `dpi` (an pdfspine extension) tunes the recognition resolution.
     #[pyo3(signature = (*, compress=true, language="eng", tessdata=None, dpi=300, engine="tesseract"))]
     fn pdfocr_tobytes<'py>(
         &self,
@@ -3008,7 +3008,7 @@ impl PyDocument {
     /// Writes a searchable "sandwich" PDF to `filename` (PyMuPDF
     /// `Document.pdfocr_save`). See [`PyDocument::pdfocr_tobytes`].
     #[pyo3(signature = (filename, *, compress=true, language="eng", tessdata=None, dpi=300, engine="tesseract"))]
-    // Mirrors PyMuPDF's `pdfocr_save` keyword surface plus the oxide `engine`
+    // Mirrors PyMuPDF's `pdfocr_save` keyword surface plus the pdfspine `engine`
     // selector; the arg count is the public API, not a refactor target.
     #[allow(clippy::too_many_arguments)]
     fn pdfocr_save(
@@ -3509,7 +3509,7 @@ impl PyDocument {
 
     fn __repr__(&self) -> String {
         format!(
-            "<oxide_pdf._core.Document page_count={}>",
+            "<pdfspine._core.Document page_count={}>",
             self.doc.page_count()
         )
     }
@@ -3538,7 +3538,7 @@ fn open_bytes(py: Python<'_>, data: &[u8]) -> PyResult<PyDocument> {
     Ok(PyDocument { doc })
 }
 
-/// Returns the oxide_pdf version string.
+/// Returns the pdfspine version string.
 #[pyfunction]
 fn version() -> &'static str {
     VERSION
@@ -3573,7 +3573,7 @@ fn colorspace_name(cs: Colorspace) -> &'static str {
 ///   `Arc` clone is alive (a live export, or the boxed clone in a `Py_buffer`),
 ///   the mutation lands in a fresh allocation, so a view can never observe a
 ///   mutate-under-view or use-after-free.
-#[pyclass(name = "Pixmap", module = "oxide_pdf._core")]
+#[pyclass(name = "Pixmap", module = "pdfspine._core")]
 struct PyPixmap {
     pix: ApiPixmap,
     /// The number of live buffer exports (for `readonly` + diagnostics; the COW
@@ -4005,7 +4005,7 @@ impl PyPixmap {
 
 /// A recorded, replayable page render (PyMuPDF `DisplayList`). Built by
 /// `page.get_displaylist()`; replay with `dl.get_pixmap(...)`.
-#[pyclass(name = "DisplayList", module = "oxide_pdf")]
+#[pyclass(name = "DisplayList", module = "pdfspine")]
 struct PyDisplayList {
     inner: Arc<ApiDisplayList>,
 }
@@ -4055,7 +4055,7 @@ impl PyDisplayList {
 
 /// A standalone Core-14 font handle (PyMuPDF `fitz.Font`): name, vertical
 /// metrics, glyph advances and glyph-name ↔ Unicode helpers.
-#[pyclass(name = "Font", module = "oxide_pdf._core", frozen)]
+#[pyclass(name = "Font", module = "pdfspine._core", frozen)]
 struct PyFont {
     inner: pdf_api::Font,
 }
@@ -4225,7 +4225,7 @@ impl PyFont {
 
     /// The embedded font program bytes (PyMuPDF `Font.buffer`).
     ///
-    /// DEFERRED: oxide's `Font` is a Core-14 **metrics-only** handle (built from
+    /// DEFERRED: pdfspine's `Font` is a Core-14 **metrics-only** handle (built from
     /// a font name; it carries no `/FontFile*` program and has no access to an
     /// embedded font's outline bytes). PyMuPDF returns a bundled TTF's bytes;
     /// returning empty bytes would be a misleading non-implementation, so this
@@ -4233,7 +4233,7 @@ impl PyFont {
     #[getter]
     fn buffer(&self) -> PyResult<Py<PyBytes>> {
         Err(PdfUnsupportedError::new_err(
-            "Font.buffer is deferred: the oxide Font is a metrics-only Core-14 \
+            "Font.buffer is deferred: the pdfspine Font is a metrics-only Core-14 \
              handle with no embedded /FontFile* program to expose",
         ))
     }
@@ -4271,7 +4271,7 @@ impl PyFont {
     ) -> PyResult<(f64, f64, f64, f64)> {
         let _ = chr;
         Err(PdfUnsupportedError::new_err(
-            "Font.glyph_bbox is deferred: the oxide Font is a metrics-only \
+            "Font.glyph_bbox is deferred: the pdfspine Font is a metrics-only \
              Core-14 handle with no per-glyph outlines (only a font-level bbox)",
         ))
     }
@@ -4285,7 +4285,7 @@ impl PyFont {
 
 /// A node of the document outline tree (PyMuPDF `Outline`). Holds an owned
 /// [`pdf_api::OutlineNode`]; `next`/`down` clone the relevant subtree.
-#[pyclass(name = "Outline", module = "oxide_pdf._core", frozen)]
+#[pyclass(name = "Outline", module = "pdfspine._core", frozen)]
 struct PyOutline {
     node: pdf_api::OutlineNode,
 }
@@ -4342,7 +4342,7 @@ impl PyOutline {
     }
 
     fn __repr__(&self) -> String {
-        format!("<oxide_pdf._core.Outline title={:?}>", self.node.title)
+        format!("<pdfspine._core.Outline title={:?}>", self.node.title)
     }
 }
 
@@ -4351,7 +4351,7 @@ impl PyOutline {
 /// A page link annotation (PyMuPDF `Link`). Holds an owned snapshot of the
 /// page's links plus this link's index, so `next` can walk the chain without
 /// re-reading the page; carries the owning [`pdf_api::Page`] for `set_*`.
-#[pyclass(name = "Link", module = "oxide_pdf._core", frozen)]
+#[pyclass(name = "Link", module = "pdfspine._core", frozen)]
 struct PyLink {
     page: pdf_api::Page,
     links: Arc<Vec<pdf_api::Link>>,
@@ -4457,7 +4457,7 @@ impl PyLink {
 
     fn __repr__(&self) -> String {
         format!(
-            "<oxide_pdf._core.Link kind={} xref={}>",
+            "<pdfspine._core.Link kind={} xref={}>",
             self.kind(),
             self.cur().xref
         )
@@ -4470,7 +4470,7 @@ impl PyLink {
 /// Most methods are diagnostic / cache knobs that are no-ops in the pure-Rust
 /// core (there is no global MuPDF store); they never raise so existing code that
 /// pokes them keeps working.
-#[pyclass(name = "Tools", module = "oxide_pdf._core")]
+#[pyclass(name = "Tools", module = "pdfspine._core")]
 struct PyTools {
     /// A monotonically increasing id counter for `gen_id`.
     counter: std::sync::atomic::AtomicI64,

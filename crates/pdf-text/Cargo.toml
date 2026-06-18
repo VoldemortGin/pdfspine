@@ -6,7 +6,7 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 rust-version.workspace = true
-description = "Content-stream text interpreter, TextPage, get_text formats and search for oxide-pdf. Placeholder in M0."
+description = "Content-stream text interpreter, TextPage, get_text formats and search for pdfspine. Placeholder in M0."
 
 [dependencies]
 pdf-core.workspace = true

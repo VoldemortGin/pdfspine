@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
-"""Differential TABLE-extraction test: oxide-pdf ``find_tables`` vs fitz.
+"""Differential TABLE-extraction test: pdfspine ``find_tables`` vs fitz.
 
-oxide-pdf exposes ``Page.find_tables() -> TableFinder`` (M7). This harness measures,
-objectively, how closely oxide's table detection and structure agree with fitz
+pdfspine exposes ``Page.find_tables() -> TableFinder`` (M7). This harness measures,
+objectively, how closely pdfspine's table detection and structure agree with fitz
 (PyMuPDF), the reference implementation, on table-dense PDFs.
 
 How it works
 ------------
 fitz (AGPL) must NEVER be imported into our interpreter, and a Rust panic/abort in
-oxide must not take down the run. So every ``find_tables`` call happens in an
+pdfspine must not take down the run. So every ``find_tables`` call happens in an
 ISOLATED SUBPROCESS under a wall-clock timeout (mirroring ``oracle_extract.py`` /
-``oxide_worker.py`` / ``run_validation.py``):
+``pdfspine_worker.py`` / ``run_validation.py``):
 
-- ``--worker oxide`` runs inside the project venv (with our built wheel).
+- ``--worker pdfspine`` runs inside the project venv (with our built wheel).
 - ``--worker fitz``  runs inside ``.venv-oracle`` (PyMuPDF).
 
 Each worker reads ``<pdf> <page_index>`` and prints a JSON list of tables, each::
@@ -21,16 +21,16 @@ Each worker reads ``<pdf> <page_index>`` and prints a JSON list of tables, each:
 
 The parent (the default mode) drives both workers per page and compares:
 
-  (a) table-COUNT agreement   — |#oxide - #fitz| == 0 ?
+  (a) table-COUNT agreement   — |#pdfspine - #fitz| == 0 ?
   (b) GRID-SHAPE agreement    — for tables matched by bbox IoU > 0.5, does
                                  (rows, cols) match exactly?
   (c) CELL-TEXT agreement     — token F1 (via gt/score.py) of the two tables'
-                                 flattened cell text, oxide-vs-fitz.
+                                 flattened cell text, pdfspine-vs-fitz.
 
 Reports per-doc and aggregate: table-count agreement rate, mean grid-shape match,
 mean cell-text F1, plus the worst divergences with a one-line cause guess.
 
-NOTE on the reference: this is oxide-vs-fitz *agreement*, not accuracy against a
+NOTE on the reference: this is pdfspine-vs-fitz *agreement*, not accuracy against a
 human-labelled gold. fitz is the de-facto reference but is itself imperfect at
 table detection; treat the numbers as parity-with-fitz, not ground truth.
 (FinTabNet structural GT was considered as an objective anchor but skipped to keep
@@ -61,7 +61,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 GT_DIR = Path(__file__).resolve().parent
 THIS = Path(__file__).resolve()
 
-# Default interpreters: oxide -> project venv with wheel; fitz -> .venv-oracle.
+# Default interpreters: pdfspine -> project venv with wheel; fitz -> .venv-oracle.
 DEFAULT_OXIDE_PY = str(REPO_ROOT / ".venv" / "bin" / "python")
 DEFAULT_FITZ_PY = str(REPO_ROOT / ".venv-oracle" / "bin" / "python")
 
@@ -70,14 +70,14 @@ sys.path.insert(0, str(GT_DIR))
 
 
 # ===========================================================================
-# WORKER MODE — runs in an isolated subprocess (oxide venv OR .venv-oracle).
+# WORKER MODE — runs in an isolated subprocess (pdfspine venv OR .venv-oracle).
 # Never mix the two engines in one interpreter. Output: JSON list of tables.
 # ===========================================================================
 def _flatten_cells(extract_rows: list) -> str:
     """Flatten a table's ``extract()`` grid (list[list[cell]]) to a text blob.
 
     Cells may be ``None`` (empty / merged-span placeholder) or strings (fitz) or
-    arbitrary scalars (oxide). Order is row-major; we join with spaces. This is the
+    arbitrary scalars (pdfspine). Order is row-major; we join with spaces. This is the
     text we token-F1 score between the two engines.
     """
     parts: list[str] = []
@@ -95,7 +95,7 @@ def _flatten_cells(extract_rows: list) -> str:
 def _as_bbox(bbox_obj) -> list[float]:
     """Normalize a table bbox to ``[x0, y0, x1, y1]`` floats.
 
-    oxide returns a ``Rect`` (tuple-iterable, also has .x0/.y0/.x1/.y1); fitz
+    pdfspine returns a ``Rect`` (tuple-iterable, also has .x0/.y0/.x1/.y1); fitz
     returns a 4-tuple. Both iterate to exactly four numbers.
     """
     try:
@@ -138,10 +138,10 @@ def _table_record(tbl) -> dict:
     return rec
 
 
-def _worker_oxide(pdf: str, page_index: int) -> list[dict]:
-    import oxide_pdf
+def _worker_pdfspine(pdf: str, page_index: int) -> list[dict]:
+    import pdfspine
 
-    doc = oxide_pdf.open(pdf)
+    doc = pdfspine.open(pdf)
     try:
         page = doc.load_page(page_index)
         finder = page.find_tables()
@@ -185,8 +185,8 @@ def _run_worker(mode: str, pdf: str, page_index: int) -> int:
         os.dup2(2, 1)  # fd 1 -> stderr while the engine runs
         sys.stdout = sys.stderr
         try:
-            if mode == "oxide":
-                out["tables"] = _worker_oxide(pdf, page_index)
+            if mode == "pdfspine":
+                out["tables"] = _worker_pdfspine(pdf, page_index)
             elif mode == "fitz":
                 out["tables"] = _worker_fitz(pdf, page_index)
             else:
@@ -256,7 +256,7 @@ def iou(a: list[float], b: list[float]) -> float:
 
 
 def match_tables(ox: list[dict], fz: list[dict], iou_thr: float = 0.5) -> list[tuple[int, int, float]]:
-    """Greedy bbox-IoU matching oxide->fitz. Returns [(ox_i, fz_j, iou), ...].
+    """Greedy bbox-IoU matching pdfspine->fitz. Returns [(ox_i, fz_j, iou), ...].
 
     Highest-IoU pairs first; each table used at most once; only pairs above the
     threshold are kept. Unmatched tables on either side are reported separately.
@@ -281,7 +281,7 @@ def match_tables(ox: list[dict], fz: list[dict], iou_thr: float = 0.5) -> list[t
 
 
 def compare_page(ox_res: dict, fz_res: dict, score_all) -> dict:
-    """Compare one page's oxide vs fitz table sets. Returns a per-page record."""
+    """Compare one page's pdfspine vs fitz table sets. Returns a per-page record."""
     ox = ox_res.get("tables", []) if ox_res.get("ok") else []
     fz = fz_res.get("tables", []) if fz_res.get("ok") else []
     n_ox, n_fz = len(ox), len(fz)
@@ -328,17 +328,17 @@ def guess_cause(doc_rec: dict) -> str:
     n_fz = doc_rec["tot_fz"]
     nm = doc_rec["n_matched"]
     if doc_rec["ox_fail_pages"] and not doc_rec["fz_fail_pages"]:
-        return "oxide worker failed/panicked on some page(s)"
+        return "pdfspine worker failed/panicked on some page(s)"
     if doc_rec["fz_fail_pages"] and not doc_rec["ox_fail_pages"]:
         return "fitz worker failed on some page(s)"
     if n_ox == 0 and n_fz > 0:
-        return "oxide finds NO tables where fitz does (detection miss)"
+        return "pdfspine finds NO tables where fitz does (detection miss)"
     if n_fz == 0 and n_ox > 0:
-        return "oxide finds tables where fitz finds none (over-detection)"
+        return "pdfspine finds tables where fitz finds none (over-detection)"
     if n_ox < n_fz:
-        return f"oxide under-segments: {n_ox} vs fitz {n_fz} tables (merges/misses)"
+        return f"pdfspine under-segments: {n_ox} vs fitz {n_fz} tables (merges/misses)"
     if n_ox > n_fz:
-        return f"oxide over-segments: {n_ox} vs fitz {n_fz} tables (splits/spurious)"
+        return f"pdfspine over-segments: {n_ox} vs fitz {n_fz} tables (splits/spurious)"
     if nm > 0 and doc_rec["shape_match_rate"] < 0.5:
         return "tables overlap but GRID shape disagrees (row/col boundary detection)"
     if nm > 0 and doc_rec["mean_cell_f1"] < 0.5:
@@ -346,13 +346,13 @@ def guess_cause(doc_rec: dict) -> str:
     return "minor / mixed divergence"
 
 
-def process_doc(pdf: Path, doc_id: str, oxide_py: str, fitz_py: str,
+def process_doc(pdf: Path, doc_id: str, pdfspine_py: str, fitz_py: str,
                 timeout: float, score_all) -> dict:
     """Run both engines over every page of one PDF; aggregate per-doc metrics."""
-    # Page count from the oxide side (cheap, in-process is fine here — just count).
+    # Page count from the pdfspine side (cheap, in-process is fine here — just count).
     try:
-        import oxide_pdf  # noqa: PLC0415
-        d = oxide_pdf.open(str(pdf))
+        import pdfspine  # noqa: PLC0415
+        d = pdfspine.open(str(pdf))
         n_pages = d.page_count
         d.close()
     except Exception as exc:  # noqa: BLE001
@@ -361,7 +361,7 @@ def process_doc(pdf: Path, doc_id: str, oxide_py: str, fitz_py: str,
 
     page_recs: list[dict] = []
     for p in range(n_pages):
-        ox_res = call_worker(oxide_py, "oxide", pdf, p, timeout)
+        ox_res = call_worker(pdfspine_py, "pdfspine", pdf, p, timeout)
         fz_res = call_worker(fitz_py, "fitz", pdf, p, timeout)
         page_recs.append(compare_page(ox_res, fz_res, score_all))
 
@@ -438,7 +438,7 @@ def gather_inputs(args) -> list[tuple[str, Path]]:
 # --------------------------------------------------------------------------- #
 # Reporting
 # --------------------------------------------------------------------------- #
-def build_report(docs: list[dict], oxide_py: str, fitz_py: str,
+def build_report(docs: list[dict], pdfspine_py: str, fitz_py: str,
                  fitz_version: str | None) -> str:
     valid = [d for d in docs if "error" not in d]
     # Aggregate (page- and table-weighted).
@@ -457,23 +457,23 @@ def build_report(docs: list[dict], oxide_py: str, fitz_py: str,
     match_recall_fz = (tot_matched / tot_fz) if tot_fz else 0.0
 
     L: list[str] = []
-    L.append("# Table-extraction differential — oxide-pdf vs fitz\n")
+    L.append("# Table-extraction differential — pdfspine vs fitz\n")
     L.append(f"Harness: `{THIS}`  ")
-    L.append(f"oxide python: `{oxide_py}`  ")
+    L.append(f"pdfspine python: `{pdfspine_py}`  ")
     L.append(f"fitz python:  `{fitz_py}` (PyMuPDF {fitz_version or '?'})  ")
     L.append("Match rule: bbox IoU > 0.5; grid-shape = exact (rows,cols); "
-             "cell-text = token-F1 (`gt/score.py`) of flattened cells, oxide-vs-fitz.\n")
+             "cell-text = token-F1 (`gt/score.py`) of flattened cells, pdfspine-vs-fitz.\n")
 
-    L.append("## Aggregate (oxide vs fitz)\n")
+    L.append("## Aggregate (pdfspine vs fitz)\n")
     L.append(f"- Documents scored: **{len(valid)}** ({len(docs)-len(valid)} open-errors), "
              f"pages: **{tot_pages}**")
-    L.append(f"- Tables detected: oxide **{tot_ox}**, fitz **{tot_fz}** "
-             f"(ratio oxide/fitz = {tot_ox/tot_fz:.2f})" if tot_fz else
-             f"- Tables detected: oxide **{tot_ox}**, fitz **{tot_fz}**")
-    L.append(f"- **Table-count agreement** (per-page #oxide==#fitz): "
+    L.append(f"- Tables detected: pdfspine **{tot_ox}**, fitz **{tot_fz}** "
+             f"(ratio pdfspine/fitz = {tot_ox/tot_fz:.2f})" if tot_fz else
+             f"- Tables detected: pdfspine **{tot_ox}**, fitz **{tot_fz}**")
+    L.append(f"- **Table-count agreement** (per-page #pdfspine==#fitz): "
              f"**{count_agree_rate*100:.1f}%** ({count_agree_pages}/{tot_pages} pages)")
     L.append(f"- Tables matched by IoU>0.5: **{tot_matched}** "
-             f"(= {match_recall_ox*100:.0f}% of oxide, {match_recall_fz*100:.0f}% of fitz tables)")
+             f"(= {match_recall_ox*100:.0f}% of pdfspine, {match_recall_fz*100:.0f}% of fitz tables)")
     L.append(f"- **Grid-shape match** on matched pairs (exact rows×cols): "
              f"**{shape_match_rate*100:.1f}%** ({shape_matches}/{tot_matched})")
     L.append(f"- **Mean cell-text F1** on matched pairs: **{mean_cell_f1:.3f}**\n")
@@ -527,7 +527,7 @@ def build_report(docs: list[dict], oxide_py: str, fitz_py: str,
     L.append("- FinTabNet structural ground truth was considered as an objective anchor "
              "but **skipped** to keep the run self-contained and fast (HF fetch is heavy/"
              "flaky); add it later for an absolute structure score.")
-    L.append("- All numbers are oxide-vs-fitz; no Rust changes were made.")
+    L.append("- All numbers are pdfspine-vs-fitz; no Rust changes were made.")
     return "\n".join(L)
 
 
@@ -536,24 +536,24 @@ def _verdict(cnt: float, shp: float, f1: float, rec_ox: float, rec_fz: float,
     lines: list[str] = []
     # Overall headline.
     if cnt >= 0.8 and shp >= 0.7 and f1 >= 0.7:
-        lines.append("**Strong parity.** oxide's `find_tables` largely agrees with fitz on "
+        lines.append("**Strong parity.** pdfspine's `find_tables` largely agrees with fitz on "
                      "count, grid shape, and cell text.")
     elif cnt >= 0.5 and f1 >= 0.5:
-        lines.append("**Partial parity.** oxide detects tables in the same regions as fitz, "
+        lines.append("**Partial parity.** pdfspine detects tables in the same regions as fitz, "
                      "but diverges on segmentation and/or grid structure on a meaningful share "
                      "of pages.")
     else:
-        lines.append("**Weak parity.** oxide's table detection diverges substantially from "
+        lines.append("**Weak parity.** pdfspine's table detection diverges substantially from "
                      "fitz on this corpus — treat `find_tables` as experimental.")
     # Direction of detection bias.
     if tot_fz and tot_ox / tot_fz < 0.75:
-        lines.append(f"- oxide **under-detects**: {tot_ox} tables vs fitz {tot_fz} "
+        lines.append(f"- pdfspine **under-detects**: {tot_ox} tables vs fitz {tot_fz} "
                      "(merging adjacent tables or missing them).")
     elif tot_fz and tot_ox / tot_fz > 1.33:
-        lines.append(f"- oxide **over-detects**: {tot_ox} tables vs fitz {tot_fz} "
+        lines.append(f"- pdfspine **over-detects**: {tot_ox} tables vs fitz {tot_fz} "
                      "(splitting one table into many / spurious detections).")
     else:
-        lines.append(f"- Table counts are broadly comparable ({tot_ox} oxide / {tot_fz} fitz).")
+        lines.append(f"- Table counts are broadly comparable ({tot_ox} pdfspine / {tot_fz} fitz).")
     lines.append(f"- Of matched (overlapping) tables, exact grid shape agrees "
                  f"{shp*100:.0f}% of the time and cell text scores F1 {f1:.2f}.")
     return lines
@@ -575,9 +575,9 @@ def probe_fitz_version(fitz_py: str) -> str | None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description="oxide-vs-fitz table-extraction diff")
+    ap = argparse.ArgumentParser(description="pdfspine-vs-fitz table-extraction diff")
     # Hidden worker mode (re-invoked as a subprocess).
-    ap.add_argument("--worker", choices=["oxide", "fitz"], default=None,
+    ap.add_argument("--worker", choices=["pdfspine", "fitz"], default=None,
                     help=argparse.SUPPRESS)
     ap.add_argument("--pdf", default=None, help=argparse.SUPPRESS)
     ap.add_argument("--page", type=int, default=0, help=argparse.SUPPRESS)
@@ -587,7 +587,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--corpus", type=Path, action="append", default=[],
                     help="directory of *.pdf to scan (repeatable)")
     ap.add_argument("--sample", type=int, default=None, help="cap to first N documents")
-    ap.add_argument("--oxide-python", default=DEFAULT_OXIDE_PY)
+    ap.add_argument("--pdfspine-python", default=DEFAULT_OXIDE_PY)
     ap.add_argument("--fitz-python", default=DEFAULT_FITZ_PY)
     ap.add_argument("--timeout", type=float, default=90.0,
                     help="per-(page,engine) wall-clock timeout (s)")
@@ -632,7 +632,7 @@ def main(argv: list[str] | None = None) -> int:
                          "pages": [], "n_pages": 0})
             print(f"[{k}/{len(inputs)}] {doc_id}: MISSING", flush=True)
             continue
-        d = process_doc(pdf, doc_id, args.oxide_python, args.fitz_python,
+        d = process_doc(pdf, doc_id, args.pdfspine_python, args.fitz_python,
                         args.timeout, score_all)
         docs.append(d)
         if "error" in d:
@@ -646,7 +646,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # Write JSON + report.
     payload = {
-        "oxide_python": args.oxide_python,
+        "pdfspine_python": args.pdfspine_python,
         "fitz_python": args.fitz_python,
         "fitz_version": fitz_version,
         "timeout": args.timeout,
@@ -655,7 +655,7 @@ def main(argv: list[str] | None = None) -> int:
     }
     args.json.parent.mkdir(parents=True, exist_ok=True)
     args.json.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-    report = build_report(docs, args.oxide_python, args.fitz_python, fitz_version)
+    report = build_report(docs, args.pdfspine_python, args.fitz_python, fitz_version)
     args.report.parent.mkdir(parents=True, exist_ok=True)
     args.report.write_text(report, encoding="utf-8")
     print(f"\nWrote {args.json}\nWrote {args.report}", flush=True)

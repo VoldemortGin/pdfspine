@@ -10,21 +10,21 @@ form-field annotation dict:
   - reset (revert /V to /DV) and next (page widget linked-list).
 
 Every expected value below is the GROUND TRUTH captured from REAL PyMuPDF 1.27
-(``.venv-oracle``); the in-repo ``.venv`` ``fitz`` is the oxide shim, so the
-oracle values are embedded as literals here. The native ``oxide_pdf`` API reads
+(``.venv-oracle``); the in-repo ``.venv`` ``fitz`` is the pdfspine shim, so the
+oracle values are embedded as literals here. The native ``pdfspine`` API reads
 the identical fixtures and must reproduce these values.
 
 DEVIATION: ``Widget.text_format`` — PyMuPDF 1.27's getter ALWAYS returns 0 (its
 ``pdf_text_widget_format`` never reads ``/Q`` from the dict, and its setter never
-writes ``/Q``). oxide reads the spec-correct ``/Q`` value instead (so oxide is
-strictly more correct here); the test asserts oxide's spec-correct read.
+writes ``/Q``). pdfspine reads the spec-correct ``/Q`` value instead (so pdfspine is
+strictly more correct here); the test asserts pdfspine's spec-correct read.
 """
 
 from __future__ import annotations
 
 import base64
 
-import oxide_pdf
+import pdfspine
 import pytest
 
 
@@ -117,7 +117,7 @@ def _write(tmp_path, name: str, data: bytes) -> str:
 
 
 def _widgets_by_name(path: str) -> dict[str, object]:
-    doc = oxide_pdf.open(path)
+    doc = pdfspine.open(path)
     return {w.field_name: w for w in doc[0].widgets()}
 
 
@@ -195,7 +195,7 @@ def test_text_maxlen(tmp_path):
 
 
 def test_text_format_reads_quadding(tmp_path):
-    # DEVIATION: fitz 1.27 always returns 0; oxide reads the spec-correct /Q.
+    # DEVIATION: fitz 1.27 always returns 0; pdfspine reads the spec-correct /Q.
     w = _widgets_by_name(_write(tmp_path, "f.pdf", _FORM_PDF))
     assert w["txt1"].text_format == 1
     assert w["cb1"].text_format == 0
@@ -243,7 +243,7 @@ def test_on_state_checkbox(tmp_path):
 
 
 def test_on_state_and_rb_parent_radio(tmp_path):
-    doc = oxide_pdf.open(_write(tmp_path, "radio.pdf", _RADIO_PDF))
+    doc = pdfspine.open(_write(tmp_path, "radio.pdf", _RADIO_PDF))
     ws = doc[0].widgets()
     assert [wi.field_type_string for wi in ws] == ["RadioButton", "RadioButton"]
     assert ws[0].on_state() == "opt1"
@@ -263,7 +263,7 @@ def test_rb_parent_none_for_non_radio(tmp_path):
 
 def test_reset_reverts_to_default(tmp_path):
     path = _write(tmp_path, "reset.pdf", _RESET_PDF)
-    doc = oxide_pdf.open(path)
+    doc = pdfspine.open(path)
     wi = doc[0].widgets()[0]
     assert wi.field_value == "current"
     wi.reset()
@@ -273,7 +273,7 @@ def test_reset_reverts_to_default(tmp_path):
 # === next (page widget linked list) ==========================================
 
 def test_next_links_page_widgets(tmp_path):
-    doc = oxide_pdf.open(_write(tmp_path, "f.pdf", _FORM_PDF))
+    doc = pdfspine.open(_write(tmp_path, "f.pdf", _FORM_PDF))
     page = doc[0]
     ws = page.widgets()
     assert [wi.field_name for wi in ws] == ["txt1", "cb1", "pb1"]
@@ -283,7 +283,7 @@ def test_next_links_page_widgets(tmp_path):
 
 
 def test_first_widget_next_chain(tmp_path):
-    doc = oxide_pdf.open(_write(tmp_path, "f.pdf", _FORM_PDF))
+    doc = pdfspine.open(_write(tmp_path, "f.pdf", _FORM_PDF))
     first = doc[0].first_widget
     assert first is not None
     assert first.field_name == "txt1"
@@ -295,12 +295,12 @@ def test_first_widget_next_chain(tmp_path):
 # === Annot members (PRD §C batch-3) ==========================================
 #
 # Fixtures BELOW were built with REAL PyMuPDF 1.27 (.venv-oracle) and embedded as
-# base64. The native oxide_pdf reads the identical bytes and must reproduce the
+# base64. The native pdfspine reads the identical bytes and must reproduce the
 # oracle values captured alongside each fixture.
 #
 # DEVIATION: PyMuPDF's ``Annot.language`` getter leaks the *system locale*
-# (e.g. ``"zh-Hans"``) for annotations that carry NO ``/Lang`` key; oxide returns
-# the spec-correct empty string. The tests assert oxide's value where /Lang is
+# (e.g. ``"zh-Hans"``) for annotations that carry NO ``/Lang`` key; pdfspine returns
+# the spec-correct empty string. The tests assert pdfspine's value where /Lang is
 # absent and the real oracle value (``"en"``) where /Lang is present.
 
 # fixture1: a Text note (xref 5) with /Lang(en) + /Popup, a Square (xref 8) with
@@ -379,7 +379,7 @@ _FILE_PDF_B64 = (
 
 
 def _annot_doc():
-    return oxide_pdf.open(stream=base64.b64decode(_ANNOT_PDF_B64), filetype="pdf")
+    return pdfspine.open(stream=base64.b64decode(_ANNOT_PDF_B64), filetype="pdf")
 
 
 def _by_xref(page) -> dict[int, object]:
@@ -422,7 +422,7 @@ def test_annot_apn_bbox_matrix():
 def test_annot_language():
     page = _annot_doc()[0]
     a = _by_xref(page)
-    # xref 5 carries /Lang(en); the others carry none (oxide: spec-correct "").
+    # xref 5 carries /Lang(en); the others carry none (pdfspine: spec-correct "").
     assert a[5].language == "en"
     assert a[8].language == ""
     assert a[10].language == ""
@@ -451,7 +451,7 @@ def test_annot_set_popup_roundtrip():
     page = _annot_doc()[0]
     sq = _by_xref(page)[8]
     assert sq.has_popup is False
-    sq.set_popup(oxide_pdf.Rect(50, 60, 150, 160))
+    sq.set_popup(pdfspine.Rect(50, 60, 150, 160))
     # Re-read.
     sq2 = _by_xref(page)[8]
     assert sq2.has_popup is True
@@ -479,8 +479,8 @@ def test_annot_set_apn_bbox_matrix_roundtrip():
     sq = _by_xref(page)[8]
     # set_apn_bbox takes page space; apn_bbox reads it back in page space, so
     # the round-trip is involutive.
-    sq.set_apn_bbox(oxide_pdf.Rect(0, 0, 50, 50))
-    sq.set_apn_matrix(oxide_pdf.Matrix(2, 0, 0, 2, 0, 0))
+    sq.set_apn_bbox(pdfspine.Rect(0, 0, 50, 50))
+    sq.set_apn_matrix(pdfspine.Matrix(2, 0, 0, 2, 0, 0))
     sq2 = _by_xref(page)[8]
     assert _approx(tuple(sq2.apn_bbox()), (0.0, 0.0, 50.0, 50.0))
     assert _approx(tuple(sq2.apn_matrix()), (2.0, 0.0, 0.0, 2.0, 0.0, 0.0))
@@ -511,12 +511,12 @@ def test_annot_get_textbox():
     # supported surface.
     page = _annot_doc()[0]
     note = _by_xref(page)[5]
-    with pytest.raises(oxide_pdf.PdfUnsupportedError):
+    with pytest.raises(pdfspine.PdfUnsupportedError):
         note.get_textbox((0, 0, 100, 100))
 
 
 def test_annot_file_get_info():
-    doc = oxide_pdf.open(stream=base64.b64decode(_FILE_PDF_B64), filetype="pdf")
+    doc = pdfspine.open(stream=base64.b64decode(_FILE_PDF_B64), filetype="pdf")
     fa = [a for a in doc[0].annots() if a.type[1] == "FileAttachment"][0]
     assert fa.get_file() == b"hello file content"
     info = fa.file_info()
@@ -528,7 +528,7 @@ def test_annot_file_get_info():
 
 
 def test_annot_update_file():
-    doc = oxide_pdf.open(stream=base64.b64decode(_FILE_PDF_B64), filetype="pdf")
+    doc = pdfspine.open(stream=base64.b64decode(_FILE_PDF_B64), filetype="pdf")
     fa = [a for a in doc[0].annots() if a.type[1] == "FileAttachment"][0]
     # fitz's first param is `buffer_` (not `buffer`).
     fa.update_file(buffer_=b"replaced bytes!", filename="new.txt", desc="updated")

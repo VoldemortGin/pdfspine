@@ -12,7 +12,7 @@ import gc
 import struct
 import zlib
 
-import oxide_pdf
+import pdfspine
 import pytest
 
 
@@ -91,7 +91,7 @@ _DRAW = "q 200 0 0 200 0 0 cm /Im0 Do Q"
 def test_pypixmap_001_image_only_get_pixmap():
     w, h = 8, 6
     samples = _rgb_samples(w, h)
-    doc = oxide_pdf.open(stream=image_only_pdf(w, h, samples, _DRAW))
+    doc = pdfspine.open(stream=image_only_pdf(w, h, samples, _DRAW))
     page = doc[0]
     assert page.is_image_only
     pix = page.get_pixmap()
@@ -108,7 +108,7 @@ def test_pypixmap_001_image_only_get_pixmap():
 def test_pypixmap_002_save_png_roundtrip(tmp_path):
     w, h = 8, 6
     samples = _rgb_samples(w, h)
-    doc = oxide_pdf.open(stream=image_only_pdf(w, h, samples, _DRAW))
+    doc = pdfspine.open(stream=image_only_pdf(w, h, samples, _DRAW))
     pix = doc[0].get_pixmap()
     out = tmp_path / "out.png"
     pix.save(str(out))
@@ -125,7 +125,7 @@ def test_pypixmap_002_save_png_roundtrip(tmp_path):
 
 def test_pypixmap_003_memoryview():
     w, h = 4, 4
-    doc = oxide_pdf.open(stream=image_only_pdf(w, h, _rgb_samples(w, h), _DRAW))
+    doc = pdfspine.open(stream=image_only_pdf(w, h, _rgb_samples(w, h), _DRAW))
     pix = doc[0].get_pixmap()
     mv = memoryview(pix)
     assert len(mv) == w * h * 3
@@ -141,7 +141,7 @@ def test_pypixmap_003_memoryview():
 
 def test_pixmap_buf_lifetime():
     # Build a blank gray pixmap and write a known pattern.
-    pix = oxide_pdf.Pixmap(1, (0, 0, 2, 2), False)  # n=1, 4 bytes
+    pix = pdfspine.Pixmap(1, (0, 0, 2, 2), False)  # n=1, 4 bytes
     for y in range(2):
         for x in range(2):
             pix.set_pixel(x, y, [10 * (y * 2 + x) + 1])
@@ -156,7 +156,7 @@ def test_pixmap_buf_lifetime():
 
     # (b) Mutate via a *fresh* handle (a new Pixmap can't touch this buffer);
     #     and an in-place mutation on a pixmap with a live view copies-on-write.
-    pix2 = oxide_pdf.Pixmap(1, (0, 0, 2, 2), False)
+    pix2 = pdfspine.Pixmap(1, (0, 0, 2, 2), False)
     mv2 = memoryview(pix2)
     base = bytes(mv2)
     pix2.clear_with(0xFF)  # in-place mutate under a live view → COW
@@ -175,7 +175,7 @@ def test_pypixmap_vector_page_renders():
     samples = _rgb_samples(w, h)
     # Content paints a red path (re/f) → a vector page. In M6d this renders
     # full-page (no PdfUnsupportedError); the page MediaBox is 200x200.
-    doc = oxide_pdf.open(stream=image_only_pdf(w, h, samples, "1 0 0 rg 0 0 20 20 re f"))
+    doc = pdfspine.open(stream=image_only_pdf(w, h, samples, "1 0 0 rg 0 0 20 20 re f"))
     page = doc[0]
     assert not page.is_image_only
     pix = page.get_pixmap()
@@ -227,7 +227,7 @@ def test_pypixmap_undecodable_image_text_independent():
         ],
         root=1,
     )
-    doc = oxide_pdf.open(stream=pdf)
+    doc = pdfspine.open(stream=pdf)
     page = doc[0]
     # get_text works regardless of the broken image.
     assert "hello" in page.get_text("text")
@@ -245,7 +245,7 @@ def test_pypixmap_undecodable_image_text_independent():
 def test_pyextract_image_001_dict():
     w, h = 8, 6
     samples = _rgb_samples(w, h)
-    doc = oxide_pdf.open(stream=image_only_pdf(w, h, samples, _DRAW))
+    doc = pdfspine.open(stream=image_only_pdf(w, h, samples, _DRAW))
     info = doc.extract_image(4)
     assert info["ext"] == "png"
     assert info["width"] == w
@@ -262,7 +262,7 @@ def test_pyextract_image_001_dict():
 def test_pyfitz_pixmap_parity(tmp_path):
     import fitz
 
-    assert fitz.Pixmap is oxide_pdf.Pixmap
+    assert fitz.Pixmap is pdfspine.Pixmap
     w, h = 4, 4
     samples = _rgb_samples(w, h)
     doc = fitz.open(stream=image_only_pdf(w, h, samples, _DRAW))
@@ -284,7 +284,7 @@ def test_pyfitz_pixmap_parity(tmp_path):
 def test_pypixmap_scale_and_alpha():
     w, h = 8, 6
     samples = _rgb_samples(w, h)
-    doc = oxide_pdf.open(stream=image_only_pdf(w, h, samples, _DRAW))
+    doc = pdfspine.open(stream=image_only_pdf(w, h, samples, _DRAW))
     page = doc[0]
     # dpi=144 → 2x scale.
     pix = page.get_pixmap(dpi=144)
@@ -302,7 +302,7 @@ def test_pypixmap_scale_and_alpha():
 
 
 def test_pypixmap_blank_and_pixel():
-    pix = oxide_pdf.Pixmap(3, (0, 0, 2, 2), False)
+    pix = pdfspine.Pixmap(3, (0, 0, 2, 2), False)
     assert (pix.width, pix.height, pix.n) == (2, 2, 3)
     assert pix.pixel(0, 0) == (0, 0, 0)
     pix.set_pixel(1, 1, [9, 8, 7])
@@ -341,7 +341,7 @@ def _vector_page_pdf(content: str, media: str = "[0 0 200 200]") -> bytes:
 
 def test_pyrender_001_page_renders_non_blank():
     # A green rect over most of the page: a self-built page → non-blank raster.
-    doc = oxide_pdf.open(stream=_vector_page_pdf("0 1 0 rg 20 20 160 160 re f"))
+    doc = pdfspine.open(stream=_vector_page_pdf("0 1 0 rg 20 20 160 160 re f"))
     page = doc[0]
     pix = page.get_pixmap()
     assert (pix.width, pix.height, pix.n) == (200, 200, 3)
@@ -356,7 +356,7 @@ def test_pyrender_001_page_renders_non_blank():
 
 
 def test_pyrender_002_vector_page_save(tmp_path):
-    doc = oxide_pdf.open(stream=_vector_page_pdf("0 0 1 rg 0 0 200 200 re f"))
+    doc = pdfspine.open(stream=_vector_page_pdf("0 0 1 rg 0 0 200 200 re f"))
     pix = doc[0].get_pixmap()  # no PdfUnsupportedError
     out = tmp_path / "page.png"
     pix.save(str(out))
@@ -371,7 +371,7 @@ def test_pyrender_002_vector_page_save(tmp_path):
 
 
 def test_pyrender_003_dpi_scales():
-    doc = oxide_pdf.open(stream=_vector_page_pdf("1 0 0 rg 0 0 200 200 re f"))
+    doc = pdfspine.open(stream=_vector_page_pdf("1 0 0 rg 0 0 200 200 re f"))
     page = doc[0]
     base = page.get_pixmap()
     assert (base.width, base.height) == (200, 200)
@@ -385,7 +385,7 @@ def test_pyrender_003_dpi_scales():
 
 
 def test_pyrender_004_displaylist_replay_matches():
-    doc = oxide_pdf.open(stream=_vector_page_pdf("0 0 1 rg 30 30 140 140 re f"))
+    doc = pdfspine.open(stream=_vector_page_pdf("0 0 1 rg 30 30 140 140 re f"))
     page = doc[0]
     direct = page.get_pixmap()
     dl = page.get_displaylist()
@@ -394,7 +394,7 @@ def test_pyrender_004_displaylist_replay_matches():
     assert (replay.width, replay.height) == (direct.width, direct.height)
     assert bytes(replay.samples) == bytes(direct.samples)
     # DisplayList is exported on the package + fitz shim.
-    assert isinstance(dl, oxide_pdf.DisplayList)
+    assert isinstance(dl, pdfspine.DisplayList)
 
 
 # --- PYRENDER-005: fitz shim parity on a rendered page --------------------
@@ -411,6 +411,6 @@ def test_pyrender_005_fitz_parity():
     # camelCase alias + DisplayList exported on fitz.
     pix2 = page.getPixmap()
     assert (pix2.width, pix2.height) == (200, 200)
-    assert fitz.DisplayList is oxide_pdf.DisplayList
+    assert fitz.DisplayList is pdfspine.DisplayList
     dl = page.get_displaylist()
     assert bytes(dl.get_pixmap().samples) == bytes(pix.samples)

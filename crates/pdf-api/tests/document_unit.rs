@@ -98,7 +98,7 @@ fn two_page_doc() -> Vec<u8> {
         ),
         (
             "Producer",
-            Object::String(PdfString::literal(b"oxide-pdf-test".to_vec())),
+            Object::String(PdfString::literal(b"pdfspine-test".to_vec())),
         ),
         (
             "CreationDate",
@@ -133,7 +133,7 @@ fn doc_open_002_open_path() {
     // DOC-OPEN-002: write to a temp file and open by path.
     let bytes = two_page_doc();
     let dir = std::env::temp_dir();
-    let path = dir.join(format!("oxide-pdf-docopen-{}.pdf", std::process::id()));
+    let path = dir.join(format!("pdfspine-docopen-{}.pdf", std::process::id()));
     std::fs::write(&path, &bytes).unwrap();
     let doc = Document::open(&path).unwrap();
     assert_eq!(doc.page_count(), 2);
@@ -177,7 +177,7 @@ fn doc_meta_001_info_parsed() {
     let md = doc.metadata();
     assert_eq!(md.title.as_deref(), Some("Hello Title"));
     assert_eq!(md.author.as_deref(), Some("Jane Doe"));
-    assert_eq!(md.producer.as_deref(), Some("oxide-pdf-test"));
+    assert_eq!(md.producer.as_deref(), Some("pdfspine-test"));
     assert_eq!(md.creation_date.as_deref(), Some("D:20240101000000Z"));
 }
 

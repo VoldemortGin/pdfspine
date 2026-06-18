@@ -3,8 +3,8 @@
 
 Companion to ``born_digital.py``: same objective ground-truth philosophy, but the
 document body is neutral, self-contained Simplified-Chinese prose (NOT fetched
-from any network source). This validates oxide-pdf's CJK CMap (CID->Unicode)
-support — does oxide extract Chinese characters correctly, on par with fitz?
+from any network source). This validates pdfspine's CJK CMap (CID->Unicode)
+support — does pdfspine extract Chinese characters correctly, on par with fitz?
 
 Why the ground truth is trustworthy (identical reasoning to born_digital.py):
     Paragraphs are laid out with CSS multi-column (``column-count: N``,
@@ -98,7 +98,7 @@ def _build_html(paragraphs: list[str], *, columns: int, gap_px: int = 24) -> str
     """Build a Letter-size, zero-margin, multi-column CJK HTML document.
 
     Horizontal writing mode. A CJK-capable serif font stack is requested so the
-    glyphs render; the embedded font's CMap is what oxide must invert back to
+    glyphs render; the embedded font's CMap is what pdfspine must invert back to
     Unicode during extraction.
     """
     paras_html = "\n".join(
@@ -241,7 +241,7 @@ def generate(out_dir: Path, variants: list[str] | None = None) -> list[dict]:
 # --------------------------------------------------------------------------- #
 def _self_test() -> int:
     variants = ["zh-2col"]
-    with tempfile.TemporaryDirectory(prefix="oxide-gt-cjk-selftest-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="pdfspine-gt-cjk-selftest-") as tmp:
         out = Path(tmp) / "corpus-cjk"
         entries = generate(out, variants=variants)
 

@@ -2,8 +2,8 @@
 handles (PRD §9.2 / §9.4 / §9.5).
 
 These thin wrappers add PyMuPDF-compatible names and return geometry value types
-(:class:`~oxide_pdf.geometry.Rect`) instead of raw tuples. Known-but-unimplemented
-PyMuPDF methods raise :class:`~oxide_pdf._core.PdfUnsupportedError` (never
+(:class:`~pdfspine.geometry.Rect`) instead of raw tuples. Known-but-unimplemented
+PyMuPDF methods raise :class:`~pdfspine._core.PdfUnsupportedError` (never
 ``AttributeError``), per PRD §9.5.
 """
 
@@ -404,14 +404,14 @@ class Annot:
 
     def get_textbox(self, *args, **kwargs) -> str:
         """DEFERRED — PyMuPDF ``annot.get_textbox`` reads the annotation's OWN
-        appearance textpage and requires a ``rect`` argument; oxide has no
+        appearance textpage and requires a ``rect`` argument; pdfspine has no
         annotation-appearance textpage yet, and delegating to the page region
         would be semantically opposite. Use :meth:`Page.get_textbox` instead.
         """
         raise PdfUnsupportedError(
             "Annot.get_textbox is not implemented yet: it needs the annotation's "
             "own appearance textpage (fitz semantics), which differs from page "
-            "region text. Use Page.get_textbox. See the oxide_pdf parity matrix."
+            "region text. Use Page.get_textbox. See the pdfspine parity matrix."
         )
 
     # --- setters / mutators ---
@@ -502,7 +502,7 @@ class Annot:
 
     def __repr__(self) -> str:
         t = self._annot.type_string
-        return f"<oxide_pdf.Annot {t!r} xref={self._annot.xref}>"
+        return f"<pdfspine.Annot {t!r} xref={self._annot.xref}>"
 
 
 class Widget:
@@ -674,7 +674,7 @@ class Widget:
             self._widget.update()
 
     def __repr__(self) -> str:
-        return f"<oxide_pdf.Widget {self._widget.field_name!r} xref={self._widget.xref}>"
+        return f"<pdfspine.Widget {self._widget.field_name!r} xref={self._widget.xref}>"
 
 
 class Shape:
@@ -753,7 +753,7 @@ class Shape:
         """Draws a (closed) quadrilateral (PyMuPDF ``shape.draw_quad``).
 
         Mirrors PyMuPDF exactly: emits ``draw_polyline([ul, ll, lr, ur, ul])``.
-        Accepts an :class:`~oxide_pdf.geometry.Quad` (uses its named corners) or
+        Accepts an :class:`~pdfspine.geometry.Quad` (uses its named corners) or
         a 4-sequence of points in PyMuPDF ``(ul, ur, lr, ll)`` order.
         """
         if all(hasattr(quad, c) for c in ("ul", "ur", "ll", "lr")):
@@ -764,7 +764,7 @@ class Shape:
 
     def draw_curve3(self, p1, p2, p3) -> Point:
         """PyMuPDF's 3-point ``draw_curve``: a cubic through ``p1`` and ``p3``
-        with single control point ``p2``. (oxide's public ``draw_curve`` takes a
+        with single control point ``p2``. (pdfspine's public ``draw_curve`` takes a
         point list, so this private helper preserves the exact PyMuPDF math used
         by :meth:`draw_squiggle`.)"""
         a = Point(*_pt(p1))
@@ -916,7 +916,7 @@ class Shape:
 
     # --- text (PyMuPDF Shape.insert_text / insert_textbox) ---
     #
-    # PyMuPDF buffers Shape text until ``commit``; oxide writes it onto the
+    # PyMuPDF buffers Shape text until ``commit``; pdfspine writes it onto the
     # owning page immediately. The page is the same object, so the on-page
     # result and the return values (line count / leftover height) are identical.
     def insert_text(
@@ -1061,7 +1061,7 @@ class Shape:
         self.update_rect(x)
 
     def __repr__(self) -> str:
-        return "<oxide_pdf.Shape>"
+        return "<pdfspine.Shape>"
 
 
 class TextPage:
@@ -1224,7 +1224,7 @@ class Table:
         return self._table.to_markdown()
 
     def to_html(self) -> str:
-        """The table as an HTML ``<table>`` string (oxide_pdf extra)."""
+        """The table as an HTML ``<table>`` string (pdfspine extra)."""
         return self._table.to_html()
 
     # PyMuPDF deprecated camelCase aliases.
@@ -1232,7 +1232,7 @@ class Table:
         return self.to_markdown()
 
     def __repr__(self) -> str:
-        return f"<oxide_pdf.Table {self.row_count}x{self.col_count}>"
+        return f"<pdfspine.Table {self.row_count}x{self.col_count}>"
 
 
 class TableFinder:
@@ -1263,7 +1263,7 @@ class TableFinder:
             yield Table(t)
 
     def __repr__(self) -> str:
-        return f"<oxide_pdf.TableFinder tables={len(self)}>"
+        return f"<pdfspine.TableFinder tables={len(self)}>"
 
 
 # ``Pixmap`` is the Rust ``_core.Pixmap`` directly (PyMuPDF ``fitz.Pixmap``,
@@ -1415,7 +1415,7 @@ class Page:
 
         ``engine`` selects the backend: ``"tesseract"`` (default; the system
         Tesseract CLI, using ``language`` / ``tessdata``, kept for PyMuPDF
-        compatibility) or ``"paddle"`` (oxide's pure-Rust PaddleOCR — stronger on
+        compatibility) or ``"paddle"`` (pdfspine's pure-Rust PaddleOCR — stronger on
         mixed CJK+Latin text, needs no external binary; ``tessdata`` is ignored,
         and it requires the default-on ``paddle-ocr`` build feature). Raises
         ``PdfUnsupportedError`` if the selected engine is unavailable.
@@ -1681,7 +1681,7 @@ class Page:
         native-raster path; vector / text / mixed pages are rasterized full-page
         (text, fills, strokes, images, clips, axial/radial shadings).
 
-        ``matrix`` (a :class:`~oxide_pdf.Matrix` / 6-sequence) or ``dpi`` set the
+        ``matrix`` (a :class:`~pdfspine.Matrix` / 6-sequence) or ``dpi`` set the
         output resolution; ``colorspace`` selects Gray/RGB/CMYK; ``alpha`` adds
         an alpha channel; ``clip`` is a device-space sub-rectangle.
         """
@@ -2267,14 +2267,14 @@ class Page:
         return self.first_widget
 
     def __repr__(self) -> str:
-        return f"<oxide_pdf.Page number={self.number}>"
+        return f"<pdfspine.Page number={self.number}>"
 
     def __getattr__(self, name: str):
         hint = _UNIMPLEMENTED_PAGE.get(name)
         if hint is not None:
             raise PdfUnsupportedError(
                 f"Page.{name} is not implemented yet: {hint}. "
-                "See the oxide_pdf parity matrix."
+                "See the pdfspine parity matrix."
             )
         raise AttributeError(f"'Page' object has no attribute {name!r}")
 
@@ -2407,7 +2407,7 @@ class Link:
         return Link(core, self._page) if core is not None else None
 
     def __repr__(self) -> str:
-        return f"<oxide_pdf.Link kind={self._link.kind} xref={self._link.xref}>"
+        return f"<pdfspine.Link kind={self._link.kind} xref={self._link.xref}>"
 
 
 class Outline:
@@ -2480,7 +2480,7 @@ class Outline:
         return Outline(core) if core is not None else None
 
     def __repr__(self) -> str:
-        return f"<oxide_pdf.Outline title={self._node.title!r}>"
+        return f"<pdfspine.Outline title={self._node.title!r}>"
 
 
 class _OutlineDest:
@@ -2659,7 +2659,7 @@ class TextWriter:
         return text
 
     def __repr__(self) -> str:
-        return f"<oxide_pdf.TextWriter segments={len(self._segments)}>"
+        return f"<pdfspine.TextWriter segments={len(self._segments)}>"
 
 
 def _font_name(font) -> str:
@@ -3132,11 +3132,11 @@ class Document:
 
         Each page is rendered, OCR'd via the selected ``engine``, and rebuilt
         with the page image plus an invisible OCR text layer, so the result is
-        selectable / searchable. ``dpi`` (an oxide extension) tunes the
+        selectable / searchable. ``dpi`` (an pdfspine extension) tunes the
         recognition resolution.
 
         ``engine`` selects the backend: ``"tesseract"`` (default; the system
-        Tesseract CLI, kept for PyMuPDF compatibility) or ``"paddle"`` (oxide's
+        Tesseract CLI, kept for PyMuPDF compatibility) or ``"paddle"`` (pdfspine's
         pure-Rust PaddleOCR — stronger on CJK; ``tessdata`` is ignored, and it
         requires the default-on ``paddle-ocr`` build feature). Raises
         ``PdfUnsupportedError`` if the selected engine is unavailable.
@@ -3693,14 +3693,14 @@ class Document:
         self.close()
 
     def __repr__(self) -> str:
-        return f"<oxide_pdf.Document page_count={self.page_count}>"
+        return f"<pdfspine.Document page_count={self.page_count}>"
 
     def __getattr__(self, name: str):
         hint = _UNIMPLEMENTED_DOC.get(name)
         if hint is not None:
             raise PdfUnsupportedError(
                 f"Document.{name} is not implemented yet: {hint}. "
-                "See the oxide_pdf parity matrix."
+                "See the pdfspine parity matrix."
             )
         raise AttributeError(f"'Document' object has no attribute {name!r}")
 

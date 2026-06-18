@@ -1,8 +1,8 @@
-# oxide-pdf — Objective Ground-Truth Accuracy Report
+# pdfspine — Objective Ground-Truth Accuracy Report
 
 _Generated: 2026-06-16T15:36:03.365186+00:00 • oracle (PyMuPDF/pdfminer) available: True_
 
-Each extractor — **oxide_pdf**, **pymupdf** (fitz), and **pdfminer** — is scored against the SAME objective ground truth (`gt_text` or JATS `nxml` fulltext), not against another extractor. Cells show **mean / median**. Metrics: `lev` (edit similarity), `f1` (token F1), `jaccard` (word-set overlap), `order` (reading-order similarity). No PyMuPDF output is committed — only scores.
+Each extractor — **pdfspine**, **pymupdf** (fitz), and **pdfminer** — is scored against the SAME objective ground truth (`gt_text` or JATS `nxml` fulltext), not against another extractor. Cells show **mean / median**. Metrics: `lev` (edit similarity), `f1` (token F1), `jaccard` (word-set overlap), `order` (reading-order similarity). No PyMuPDF output is committed — only scores.
 
 ## 1. Headline — all docs
 
@@ -10,30 +10,30 @@ Corpus: **58** documents (58 with at least one extractor scored, 0 skipped).
 
 | extractor | docs | lev | f1 | jaccard | order |
 |---|---|---|---|---|---|
-| **oxide_pdf** | 58 | 0.834 / 0.930 | 0.868 / 0.972 | 0.834 / 0.953 | 0.975 / 0.982 |
+| **pdfspine** | 58 | 0.834 / 0.930 | 0.868 / 0.972 | 0.834 / 0.953 | 0.975 / 0.982 |
 | pymupdf | 58 | 0.848 / 0.944 | 0.879 / 0.977 | 0.836 / 0.955 | 0.983 / 0.990 |
 | pdfminer | 58 | 0.784 / 0.856 | 0.869 / 0.973 | 0.834 / 0.946 | 0.918 / 0.951 |
 
 ## 2. Objective match/exceed vs fitz (reading order)
 
-Over **58** documents scored by both oxide_pdf and fitz against ground truth, on the `order` (reading-order) metric:
+Over **58** documents scored by both pdfspine and fitz against ground truth, on the `order` (reading-order) metric:
 
-- **oxide ≥ fitz (match or exceed): 13/58 (22.4%)**
-- oxide strictly beats fitz: 4
-- fitz strictly beats oxide: 45
+- **pdfspine ≥ fitz (match or exceed): 13/58 (22.4%)**
+- pdfspine strictly beats fitz: 4
+- fitz strictly beats pdfspine: 45
 
-**Where oxide beats fitz vs ground truth:**
+**Where pdfspine beats fitz vs ground truth:**
 
-| doc | oxide order | fitz order | Δ |
+| doc | pdfspine order | fitz order | Δ |
 |---|---|---|---|
 | `32018R1725_FR.pdf` | 0.983 | 0.982 | +0.000 |
 | `32018R1725_ES.pdf` | 0.980 | 0.980 | +0.000 |
 | `32018R1725_BG.pdf` | 0.981 | 0.981 | +0.000 |
 | `32018R1725_IT.pdf` | 0.981 | 0.981 | +0.000 |
 
-**Where oxide loses to fitz vs ground truth (fix targets):**
+**Where pdfspine loses to fitz vs ground truth (fix targets):**
 
-| doc | oxide order | fitz order | Δ |
+| doc | pdfspine order | fitz order | Δ |
 |---|---|---|---|
 | `PMC212689.pdf` | 0.646 | 0.749 | -0.103 |
 | `32011L0083_PL.pdf` | 0.967 | 0.989 | -0.022 |
@@ -48,7 +48,7 @@ Over **58** documents scored by both oxide_pdf and fitz against ground truth, on
 
 ## 3. Per-document scores
 
-`lev` shown per extractor (o=oxide_pdf, f=fitz, p=pdfminer); `ord` = order metric.
+`lev` shown per extractor (o=pdfspine, f=fitz, p=pdfminer); `ord` = order metric.
 
 | doc | subset | gt chars | o lev | f lev | p lev | o ord | f ord | p ord | notes |
 |---|---|---|---|---|---|---|---|---|---|
@@ -113,4 +113,4 @@ Over **58** documents scored by both oxide_pdf and fitz against ground truth, on
 
 ---
 
-_Methodology: oxide_pdf extracted in an isolated subprocess (project venv) under a wall-clock timeout so a Rust panic cannot crash the run; fitz + pdfminer extracted via conformance/oracle_extract.py under the oracle venv. All three scored vs the same ground truth by conformance/gt/score.py. Multi-column reading order is the known weak spot; the `order` head-to-head is the objective match/exceed signal._
+_Methodology: pdfspine extracted in an isolated subprocess (project venv) under a wall-clock timeout so a Rust panic cannot crash the run; fitz + pdfminer extracted via conformance/oracle_extract.py under the oracle venv. All three scored vs the same ground truth by conformance/gt/score.py. Multi-column reading order is the known weak spot; the `order` head-to-head is the objective match/exceed signal._

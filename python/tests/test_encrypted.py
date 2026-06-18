@@ -2,7 +2,7 @@
 
 Builds a self-generated RC4 (V2/R3, 128-bit) encrypted PDF entirely in pure
 Python (RC4 + the Standard Security Handler R3 key derivation), then drives the
-``needs_pass`` → ``authenticate`` → load-pages flow through both ``oxide_pdf`` and
+``needs_pass`` → ``authenticate`` → load-pages flow through both ``pdfspine`` and
 ``fitz``. No external files (PRD §10).
 """
 
@@ -11,7 +11,7 @@ from __future__ import annotations
 import hashlib
 import struct
 
-import oxide_pdf
+import pdfspine
 import pytest
 
 # The 32-byte padding string from ISO 32000-1 §7.6.3.3 (Algorithm 2).
@@ -181,7 +181,7 @@ def test_pyfitz_002_encrypted_flow(encrypted_path):
 
 
 def test_encrypted_wrong_password(encrypted_path):
-    doc = oxide_pdf.open(encrypted_path)
+    doc = pdfspine.open(encrypted_path)
     assert doc.needs_pass is True
     assert doc.authenticate("definitely-wrong") is False
     assert doc.needs_pass is True

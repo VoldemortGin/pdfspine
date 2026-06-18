@@ -1,8 +1,8 @@
-# oxide-pdf
+# pdfspine
 
 **An Apache-2.0-licensed, pure-Rust reimplementation of [PyMuPDF](https://pymupdf.readthedocs.io/) (`fitz`), with PyO3 Python bindings.**
 
-> **Status: alpha / pre-1.0, but the core is feature-complete.** oxide-pdf can
+> **Status: alpha / pre-1.0, but the core is feature-complete.** pdfspine can
 > already parse/repair/decrypt PDFs, extract text & tables, search, edit / merge /
 > split / save (incl. byte-exact incremental), encrypt, annotate, fill & flatten
 > forms, redact (destructively), open image files as documents, and **render
@@ -13,13 +13,13 @@
 
 ---
 
-## Why oxide-pdf?
+## Why pdfspine?
 
 PyMuPDF is excellent, but it is **AGPL-3.0** (or a commercial license from
 Artifex) — a non-starter for many closed-source products, SaaS backends, and
 permissively-licensed open-source projects.
 
-oxide-pdf is a **drop-in-shaped, permissively-licensed (Apache-2.0)** alternative:
+pdfspine is a **drop-in-shaped, permissively-licensed (Apache-2.0)** alternative:
 
 - **Apache-2.0 throughout** — permissive, with an explicit patent grant. The
   dependency graph is gated by `cargo-deny` to **exclude GPL / AGPL / LGPL / MPL /
@@ -46,7 +46,7 @@ oxide-pdf is a **drop-in-shaped, permissively-licensed (Apache-2.0)** alternativ
 | **Render** | `get_pixmap` (vector + text + image + shadings via a tiny-skia rasterizer), `Pixmap` (buffer-protocol/numpy), `DisplayList`, **`get_svg_image`** |
 | **Images** | open PNG/JPEG/TIFF/GIF/BMP/WEBP as documents, `convert_to_pdf`, image-XObject decode (DCT/CCITT/JBIG2/JPX), `extract_image` |
 | **Layers** | Optional Content Groups read/write (`get_ocgs` / `add_ocg` / `set_layer`) |
-| **CLI** | `oxide-pdf info / text / render / merge / split / pages / images / toc` |
+| **CLI** | `pdfspine info / text / render / merge / split / pages / images / toc` |
 
 Planned next: OCR (pluggable engine, Tesseract default), reading-order accuracy
 improvements, Type1/Type3 glyph rendering, broader CJK. See [`PRD.md`](PRD.md) /
@@ -55,9 +55,9 @@ improvements, Type1/Type3 glyph rendering, broader CJK. See [`PRD.md`](PRD.md) /
 ## Quick start
 
 ```python
-import oxide_pdf
+import pdfspine
 
-doc = oxide_pdf.open("input.pdf")
+doc = pdfspine.open("input.pdf")
 print(len(doc), "pages", doc.metadata)
 
 page = doc[0]
@@ -75,7 +75,7 @@ doc.save("output.pdf", garbage=4, deflate=True)
 Existing PyMuPDF code often runs unchanged via the compat shim:
 
 ```python
-import fitz                                   # -> oxide-pdf's fitz shim
+import fitz                                   # -> pdfspine's fitz shim
 doc = fitz.open("input.pdf")
 text = doc[0].get_text("dict")
 ```
@@ -83,10 +83,10 @@ text = doc[0].get_text("dict")
 Command line:
 
 ```bash
-oxide-pdf info report.pdf
-oxide-pdf text report.pdf --pages 1-3 --format json -o out.json
-oxide-pdf render report.pdf --dpi 200 -o images/
-oxide-pdf merge a.pdf b.pdf -o merged.pdf
+pdfspine info report.pdf
+pdfspine text report.pdf --pages 1-3 --format json -o out.json
+pdfspine render report.pdf --dpi 200 -o images/
+pdfspine merge a.pdf b.pdf -o merged.pdf
 ```
 
 ## Accuracy
@@ -111,7 +111,7 @@ recommended.
 ```bash
 uv venv .venv && source .venv/bin/activate
 maturin develop                 # build + install the extension in-place
-python -c "import oxide_pdf; print(oxide_pdf.__version__)"
+python -c "import pdfspine; print(pdfspine.__version__)"
 # redistributable wheel:
 maturin build --release         # -> target/wheels/
 ```
@@ -122,7 +122,7 @@ A Cargo workspace with a strict dependency DAG; the Python bindings touch exactl
 one façade crate, and core logic is split into independently testable units.
 
 ```
-                  py-bindings   (PyO3 cdylib -> oxide_pdf._core, abi3-py311)
+                  py-bindings   (PyO3 cdylib -> pdfspine._core, abi3-py311)
                        │
                        ▼
                     pdf-api      facade / re-exports
@@ -159,7 +159,7 @@ maturin develop && pytest python/tests       # Python tests
 python conformance/run_validation.py …       # real-corpus accuracy harness
 ```
 
-oxide-pdf is built strictly **test-first** (red → green → refactor → harden); the
+pdfspine is built strictly **test-first** (red → green → refactor → harden); the
 per-function test plan is in [`docs/test-case-catalog.md`](docs/test-case-catalog.md).
 
 ## Documentation

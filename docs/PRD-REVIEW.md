@@ -1,4 +1,4 @@
-# oxide-pdf PRD — Pre-Finalization Critique (applied)
+# pdfspine PRD — Pre-Finalization Critique (applied)
 
 *(The 25-item audit that the final PRD addresses. Kept for traceability.)*
 

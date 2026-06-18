@@ -317,8 +317,8 @@ fn char_overlaps_clip(c: &Rect, clip: &Rect) -> bool {
 struct SelChar<'a> {
     c: &'a crate::model::Char,
     line_id: (usize, usize),
-    /// The char's baseline Y (device space) — identical between oxide and fitz,
-    /// unlike the bbox Y (oxide uses a tighter glyph box).
+    /// The char's baseline Y (device space) — identical between pdfspine and fitz,
+    /// unlike the bbox Y (pdfspine uses a tighter glyph box).
     baseline: f64,
     /// The owning span's font size (em), for the baseline-relative line band.
     size: f64,
@@ -334,7 +334,7 @@ struct SelChar<'a> {
 /// char by horizontal position; the inclusive char range `[lo ..= hi]` is emitted
 /// with a `\n` at every line boundary (matching MuPDF's selection text). Because
 /// the line band is baseline-relative (not bbox-relative), the rule reproduces
-/// fitz's behavior despite oxide's tighter glyph box.
+/// fitz's behavior despite pdfspine's tighter glyph box.
 #[must_use]
 pub fn extract_selection(tp: &TextPage, a: Point, b: Point) -> String {
     // Flatten all text chars in reading order.
@@ -885,7 +885,7 @@ fn base64_encode(data: &[u8]) -> String {
     out
 }
 
-// === html / xhtml / xml (oxide-pdf-defined; Tier-B, PRD §6.1) ===============
+// === html / xhtml / xml (pdfspine-defined; Tier-B, PRD §6.1) ===============
 
 /// Serializes a [`TextPage`] to **HTML** (`get_text("html")`), shaped to match
 /// PyMuPDF's `extractHTML`.
@@ -992,7 +992,7 @@ fn css_font(font: &str) -> String {
     font.replace(['"', ';', '{', '}'], "")
 }
 
-/// Serializes a [`TextPage`] to oxide-pdf-defined **XML** (`get_text("xml")`):
+/// Serializes a [`TextPage`] to pdfspine-defined **XML** (`get_text("xml")`):
 /// the char-level structural dump — `<page>` → `<block>` → `<line>` → `<font>`
 /// (span) → `<char>` with bbox attributes. Well-formed; Tier-B (PRD §6.1).
 #[must_use]

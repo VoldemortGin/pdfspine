@@ -1,6 +1,6 @@
 # Text extraction
 
-oxide-pdf implements PyMuPDF's full `get_text` family, page search, the reusable
+pdfspine implements PyMuPDF's full `get_text` family, page search, the reusable
 `TextPage` handle, and table detection.
 
 ## `get_text` variants
@@ -41,7 +41,7 @@ xml = page.get_text("xml")
   re-parsing the page.
 
 ```python
-clip = oxide_pdf.Rect(0, 0, 300, 400)
+clip = pdfspine.Rect(0, 0, 300, 400)
 snippet = page.get_text("text", clip=clip, sort=True)
 ```
 
@@ -61,7 +61,7 @@ rects = page.search_for("Total")             # list[Rect]
 quads = page.search_for("Total", quads=True)  # list[Quad] (handles rotation)
 
 # Cap the number of hits and restrict to a region:
-hits = page.search_for("Total", hit_max=5, clip=oxide_pdf.Rect(0, 0, 595, 200))
+hits = page.search_for("Total", hit_max=5, clip=pdfspine.Rect(0, 0, 595, 200))
 ```
 
 Returning `Quad` geometry is the right choice when text may be rotated or

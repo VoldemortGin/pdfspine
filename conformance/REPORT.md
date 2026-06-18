@@ -1,4 +1,4 @@
-# oxide-pdf — Real-Corpus Validation Report
+# pdfspine — Real-Corpus Validation Report
 
 _Generated: 2026-06-16T15:53:22.905482+00:00 • qpdf: qpdf version 12.3.2 • oracle (PyMuPDF/pdfminer) available: True_
 
@@ -41,7 +41,7 @@ Tier-1 provenance: all files are US-federal-government works (public domain, 17 
 
 ## 5. Differential text accuracy vs PyMuPDF (headline) & pdfminer
 
-Per-document similarity of `oxide_pdf` `get_text("text")` vs each oracle, on whitespace-normalized full-document text. Levenshtein = normalized edit similarity (sequence-level); Jaccard = word-set overlap (vocabulary-level).
+Per-document similarity of `pdfspine` `get_text("text")` vs each oracle, on whitespace-normalized full-document text. Levenshtein = normalized edit similarity (sequence-level); Jaccard = word-set overlap (vocabulary-level).
 
 | oracle | docs | Levenshtein mean | Lev. median | Jaccard mean | Jacc. median | ≥0.95 | ≥0.80 | <0.50 |
 |---|---|---|---|---|---|---|---|---|

@@ -5,10 +5,10 @@ that exist but raise `PdfUnsupportedError` are marked; anything not listed here
 is either deferred or out of scope (see
 [Migrating from PyMuPDF](../guide/migrating-from-pymupdf.md)).
 
-## Top-level (`oxide_pdf`)
+## Top-level (`pdfspine`)
 
 ```python
-import oxide_pdf
+import pdfspine
 ```
 
 | Name | Kind | Description |

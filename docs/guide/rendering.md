@@ -1,6 +1,6 @@
 # Rendering
 
-oxide-pdf rasterizes any page to a `Pixmap` — text, vector fills and strokes,
+pdfspine rasterizes any page to a `Pixmap` — text, vector fills and strokes,
 images, clips, and axial/radial shadings. It can also record a `DisplayList` for
 repeated rendering and export a page to SVG.
 
@@ -10,22 +10,22 @@ repeated rendering and export a page to SVG.
 renders the page and returns a [`Pixmap`](#pixmap):
 
 ```python
-import oxide_pdf
+import pdfspine
 
-doc = oxide_pdf.open("input.pdf")
+doc = pdfspine.open("input.pdf")
 page = doc[0]
 
 # Resolution via DPI:
 pix = page.get_pixmap(dpi=150)
 
 # Resolution via a Matrix (2x scale ≈ 144 DPI):
-pix = page.get_pixmap(matrix=oxide_pdf.Matrix(2, 2))
+pix = page.get_pixmap(matrix=pdfspine.Matrix(2, 2))
 
 # Grayscale with alpha:
 pix = page.get_pixmap(colorspace="gray", alpha=True)
 
 # Render only a sub-rectangle (device space):
-pix = page.get_pixmap(dpi=150, clip=oxide_pdf.Rect(0, 0, 300, 400))
+pix = page.get_pixmap(dpi=150, clip=pdfspine.Rect(0, 0, 300, 400))
 ```
 
 Parameters:
@@ -101,8 +101,8 @@ mv = memoryview(pix)                            # also zero-copy
 ```python
 # Pixmap(colorspace, irect, alpha=False)
 # colorspace is a component count (1/3/4) or a name string.
-pix = oxide_pdf.Pixmap(3, (0, 0, 200, 100))      # blank RGB 200x100
-pix = oxide_pdf.Pixmap("DeviceGray", (0, 0, 64, 64), alpha=True)
+pix = pdfspine.Pixmap(3, (0, 0, 200, 100))      # blank RGB 200x100
+pix = pdfspine.Pixmap("DeviceGray", (0, 0, 64, 64), alpha=True)
 ```
 
 ## DisplayList
@@ -122,7 +122,7 @@ full = dl.get_pixmap(dpi=300)
 
 ```python
 svg = page.get_svg_image()                       # standalone SVG document string
-svg = page.get_svg_image(matrix=oxide_pdf.Matrix(2, 2))
+svg = page.get_svg_image(matrix=pdfspine.Matrix(2, 2))
 
 with open("page.svg", "w", encoding="utf-8") as fh:
     fh.write(svg)

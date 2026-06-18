@@ -697,7 +697,7 @@ impl<'a> Annot<'a> {
 
     /// The `/Lang` language identifier, or empty (PyMuPDF `Annot.language`).
     ///
-    /// DEVIATION (oxide is more faithful): oxide returns the `/Lang` tag verbatim
+    /// DEVIATION (pdfspine is more faithful): pdfspine returns the `/Lang` tag verbatim
     /// and `""` for an absent key. PyMuPDF normalizes via MuPDF `fz_text_language`
     /// (a lossy table: `en-US -> en`, `zh-CN -> zh-Hans`) and leaks the *system
     /// locale* for an absent key. We keep the verbatim/deterministic behavior.
@@ -794,7 +794,7 @@ impl<'a> Annot<'a> {
     /// content wrapped in a balanced `q … Q` graphics-state guard (PyMuPDF
     /// `Annot.clean_contents`). A no-op when there is no appearance stream.
     ///
-    /// DEVIATION (kept): oxide produces valid, sanitized output (drops `/Filter`,
+    /// DEVIATION (kept): pdfspine produces valid, sanitized output (drops `/Filter`,
     /// balances `q … Q`) but does NOT run MuPDF's token-level minifier/reorderer,
     /// so the bytes differ from mupdf's minimized stream while remaining
     /// equivalently renderable.

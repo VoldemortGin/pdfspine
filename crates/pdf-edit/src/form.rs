@@ -860,8 +860,8 @@ impl<'a> Widget<'a> {
     /// The text color parsed from `/DA`, as raw components, defaulting to
     /// `[0,0,0]` (PyMuPDF `Widget.text_color`).
     ///
-    /// DEVIATION (oxide is more correct): for a CMYK `/DA` (the `k` operator)
-    /// oxide returns the 4 CMYK components, whereas MuPDF/PyMuPDF's `/DA` parser
+    /// DEVIATION (pdfspine is more correct): for a CMYK `/DA` (the `k` operator)
+    /// pdfspine returns the 4 CMYK components, whereas MuPDF/PyMuPDF's `/DA` parser
     /// only handles `g`/`rg` and returns `(0,0,0)` for `k`. Kept intentionally.
     #[must_use]
     pub fn text_color(&self) -> Vec<f64> {
@@ -892,7 +892,7 @@ impl<'a> Widget<'a> {
     /// The text quadding `/Q` (inherited): 0 left, 1 center, 2 right (PyMuPDF
     /// `Widget.text_format`).
     ///
-    /// DEVIATION (oxide is more correct): oxide reads the spec-correct `/Q`,
+    /// DEVIATION (pdfspine is more correct): pdfspine reads the spec-correct `/Q`,
     /// whereas PyMuPDF 1.27's getter is broken — its `pdf_text_widget_format`
     /// never reads `/Q`, so it always returns 0. Kept intentionally.
     #[must_use]

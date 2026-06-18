@@ -1,6 +1,6 @@
 //! The pluggable OCR engine seam (PRD §3.2 #3, post-v1 design).
 //!
-//! There is no formal OCR API standard, so oxide-pdf follows the agreed pattern:
+//! There is no formal OCR API standard, so pdfspine follows the agreed pattern:
 //! a small engine trait ([`OcrEngine`]) that any backend can implement, with
 //! [`crate::tesseract::TesseractCli`] as the default adapter. A cloud OCR
 //! service or an in-process engine can be dropped in later by implementing this

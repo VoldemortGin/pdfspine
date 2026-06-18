@@ -6,7 +6,7 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 rust-version.workspace = true
-description = "Unified ergonomic facade and re-exports for oxide-pdf; the only crate py-bindings touches."
+description = "Unified ergonomic facade and re-exports for pdfspine; the only crate py-bindings touches."
 
 [dependencies]
 pdf-core.workspace = true
@@ -26,7 +26,7 @@ bytes.workspace = true
 # Encryption is ON by default so the shipped wheel can open encrypted PDFs from
 # Python (PRD §8.4 / M1f). Threads through to `pdf-core`'s `encryption` feature
 # and surfaces `pdf-crypto`'s encryption-authoring types for `save(encryption=…)`.
-# `paddle-ocr` is ON by default so the shipped wheel can OCR with oxide's
+# `paddle-ocr` is ON by default so the shipped wheel can OCR with pdfspine's
 # pure-Rust PaddleOCR engine (PRD §3.2 #3); it forwards to `pdf-ocr`'s
 # `paddle-ocr` feature. Disable both with `--no-default-features`.
 default = ["encryption", "paddle-ocr"]

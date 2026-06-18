@@ -300,7 +300,7 @@ fn ocr_sandwich_qpdf_clean() {
     let bytes = pdf_ocr::pdfocr_bytes(&arc, &engine, &opts).expect("pdfocr_bytes ok");
 
     let mut path = std::env::temp_dir();
-    path.push(format!("oxide_ocr_sandwich_{}.pdf", std::process::id()));
+    path.push(format!("pdfspine_ocr_sandwich_{}.pdf", std::process::id()));
     std::fs::write(&path, &bytes).expect("write temp sandwich");
 
     let status = Command::new("qpdf")

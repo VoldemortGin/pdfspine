@@ -147,7 +147,7 @@ impl Table {
     }
 
     /// The table as an HTML `<table>` string, with `colspan`/`rowspan` for
-    /// merged cells (oxide-pdf extra; PyMuPDF has no `to_html`).
+    /// merged cells (pdfspine extra; PyMuPDF has no `to_html`).
     #[must_use]
     pub fn to_html(&self) -> String {
         self.inner.to_html(&self.words)

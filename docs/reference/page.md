@@ -1,6 +1,6 @@
 # Page
 
-`oxide_pdf.Page` (PyMuPDF `fitz.Page`) is one page of a `Document`. Obtain one
+`pdfspine.Page` (PyMuPDF `fitz.Page`) is one page of a `Document`. Obtain one
 with `doc[i]` or `doc.load_page(i)`.
 
 ## Geometry

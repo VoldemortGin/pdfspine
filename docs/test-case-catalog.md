@@ -790,11 +790,11 @@ Spec source: PRD §7 (M1 rows), §8.6.1 (rotation), §9.2 (`Page` shape), §9.4
 | `DOC-CRYPT-002` | `authenticate("")` → `needs_pass` false; pages load | PRD §8.4 | green |
 | `DOC-CRYPT-003` | wrong password → `authenticate` false, no panic | PRD §8.4 | green |
 
-### Python wheel (`oxide_pdf` / `fitz`) — `PYDOC-*` / `PYFITZ-*`
+### Python wheel (`pdfspine` / `fitz`) — `PYDOC-*` / `PYFITZ-*`
 
 | ID | feature | spec ref | status |
 |---|---|---|---|
-| `PYDOC-001` | `oxide_pdf.open(path)`: `page_count`/`len`/index/`load_page` | PRD §9.4 | green |
+| `PYDOC-001` | `pdfspine.open(path)`: `page_count`/`len`/index/`load_page` | PRD §9.4 | green |
 | `PYDOC-002` | `page.rect`/`rotation`/`number`/`bound()`/`mediabox`/`cropbox` | PRD §9.2 | green |
 | `PYDOC-003` | `doc.metadata` dict has all PyMuPDF keys | PRD §9.5 | green |
 | `PYDOC-004` | unimplemented known method raises `PdfUnsupportedError` | PRD §9.5 | green |
@@ -1108,7 +1108,7 @@ Serializes a `&TextPage` into every PyMuPDF `get_text` output (text / blocks /
 words / dict / rawdict / json / rawjson / html / xhtml / xml + `get_textbox`)
 and pins the per-method `TEXTFLAGS_*` default flag sets (PRD §8.6.2, §10.7).
 dict/rawdict/blocks/words/json shapes match PyMuPDF's **documented** shape
-(Tier-A, §6.1); html/xhtml/xml are **oxide-pdf-defined** valid serializations with
+(Tier-A, §6.1); html/xhtml/xml are **pdfspine-defined** valid serializations with
 their own inline goldens (Tier-B, §6.1). TextPages are built from self-made
 glyph lists via `textpage_from_glyphs` (no PyMuPDF files). Tests live in
 `crates/pdf-text/tests/serialize_*.rs`.
@@ -1188,13 +1188,13 @@ glyph lists via `textpage_from_glyphs` (no PyMuPDF files). Tests live in
 
 ### html / xhtml / xml goldens (`serialize_golden.rs`) — `HTML-*` / `XHTML-*` / `XML-*`
 
-oxide-pdf-defined valid serializations (Tier-B, §6.1); inline goldens human-validated.
+pdfspine-defined valid serializations (Tier-B, §6.1); inline goldens human-validated.
 
 | ID | feature | spec ref | status |
 |---|---|---|---|
-| `HTML-001` | positioned-block html golden (well-formed, oxide-pdf-defined) | PRD §6.1 | green |
-| `XHTML-001` | semantic xhtml golden (well-formed, oxide-pdf-defined) | PRD §6.1 | green |
-| `XML-001` | char-level xml golden (well-formed, oxide-pdf-defined) | PRD §6.1 | green |
+| `HTML-001` | positioned-block html golden (well-formed, pdfspine-defined) | PRD §6.1 | green |
+| `XHTML-001` | semantic xhtml golden (well-formed, pdfspine-defined) | PRD §6.1 | green |
+| `XML-001` | char-level xml golden (well-formed, pdfspine-defined) | PRD §6.1 | green |
 | `XML-002` | xml escapes `<`/`>`/`&`/quotes in char data and attrs | PRD §6.1 | green |
 
 ### Properties (`serialize_property.rs`) — `SERIAL-PROP-*`
@@ -1693,7 +1693,7 @@ full save by mutating the catalog dict via `update_object(root, …)`.
 
 | ID | feature | spec ref | status |
 |---|---|---|---|
-| `PYSAVE-001` | `Document.save(path)` then `oxide_pdf.open(path)` reopens with same page_count + text | PRD §8.9 | green |
+| `PYSAVE-001` | `Document.save(path)` then `pdfspine.open(path)` reopens with same page_count + text | PRD §8.9 | green |
 | `PYSAVE-002` | `Document.tobytes()` → `open(stream=…)` round-trips | PRD §8.9 | green |
 | `PYSAVE-003` | `Document.save(incremental=True)` / `saveIncr()` appends; both revisions reopen | PRD §8.9 | green |
 | `PYSAVE-004` | `garbage`/`deflate` kwargs accepted; saved file reparses | PRD §8.9 | green |
@@ -2071,7 +2071,7 @@ live in `crates/pdf-edit/tests/embfile_e2e.rs`.
 Spec source of truth: PRD §9.4 (PyO3 handle/GIL), §9.5 (fitz shim), §8.8 (annot
 / redaction / forms / drawings / embfile / scrub), and §12 M4 exit (Python
 redaction gone-after-reopen; annot `/AP` portability). These exercise the native
-`oxide_pdf` package and the `fitz` deprecated-alias shim end-to-end (build →
+`pdfspine` package and the `fitz` deprecated-alias shim end-to-end (build →
 edit → `tobytes`/`save` → reopen → assert). All fixtures self-generated in-test
 (PRD §10); the secret-bearing fixture uses a font with explicit `/Widths` so the
 interpreter can measure glyph advances (same convention as the Rust harness).
@@ -2121,7 +2121,7 @@ Tests live in `python/tests/test_m4.py`.
 | ID | feature | spec ref | status |
 |---|---|---|---|
 | `PYM4-FITZ-001` | `page.addHighlightAnnot`/`applyRedactions`/`getDrawings`/`insertText`/`newShape`/`firstAnnot` resolve and behave as the snake_case methods | PRD §9.5 | green |
-| `PYM4-FITZ-002` | `Annot`/`Widget`/`Shape` are exposed as `fitz` classes (identity with `oxide_pdf`) | PRD §9.5 | green |
+| `PYM4-FITZ-002` | `Annot`/`Widget`/`Shape` are exposed as `fitz` classes (identity with `pdfspine`) | PRD §9.5 | green |
 
 ---
 
@@ -2281,7 +2281,7 @@ and `python/tests/test_pixmap.py`.
 | `PYPIXMAP-SCALE` | `dpi=144` and `matrix=2` both double the output dims; `alpha=True` opaque | PRD §9.4 | green |
 | `PYPIXMAP-BLANK` | `Pixmap` constructor + `pixel`/`set_pixel` | PRD §9.4 | green |
 | `PYEXTRACT-IMAGE-001` | `doc.extract_image(xref)` → dict (ext/width/height/bpc/colorspace/n/image) | PRD §9.4 | green |
-| `PYFITZ-PIXMAP` | `fitz.Pixmap is oxide_pdf.Pixmap`; `get_pixmap`/`getPixmap` + `extract_image`/`extractImage` parity | PRD §9.5 | green |
+| `PYFITZ-PIXMAP` | `fitz.Pixmap is pdfspine.Pixmap`; `get_pixmap`/`getPixmap` + `extract_image`/`extractImage` parity | PRD §9.5 | green |
 
 ### M6d — full-page render (`render_page` / `DisplayList`) — `RENDER-PAGE-*` / `DISPLAYLIST-*`
 
@@ -2433,7 +2433,7 @@ Tests live in `python/tests/test_m7.py`.
 | `PYTABLE-001` | `page.find_tables()` → `TableFinder` (`len`/`.tables`), `bbox` is a `Rect` | PRD §9.5 | green |
 | `PYTABLE-002` | `Table.extract()` returns the cell-string grid | PRD §9.5 | green |
 | `PYTABLE-003` | `Table.to_markdown()` pipe-delimited shape | PRD §9.5 | green |
-| `PYTABLE-004` | `Table.to_html()` has `<table>`/`<td>` (oxide_pdf extra) | PRD §9.5 | green |
+| `PYTABLE-004` | `Table.to_html()` has `<table>`/`<td>` (pdfspine extra) | PRD §9.5 | green |
 | `PYTABLE-005` | merged-header table → `to_html` carries `colspan` | PRD §9.5 | green |
 | `PYTABLE-006` | `TableFinder` is iterable + indexable | PRD §9.5 | green |
 | `PYTABLE-007` | `strategy="text"` returns a `TableFinder` (never raises) | PRD §9.5 | green |

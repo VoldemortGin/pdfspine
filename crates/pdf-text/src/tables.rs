@@ -242,7 +242,7 @@ impl Table {
 
     /// Renders the table as a high-fidelity HTML `<table>`.
     ///
-    /// Output shape (oxide-defined, own goldens): a `<table>` wrapping one
+    /// Output shape (pdfspine-defined, own goldens): a `<table>` wrapping one
     /// `<tr>` per grid row. Each *originating* cell is emitted once as a `<td>`
     /// (or `<th>` in the detected header row) with `colspan`/`rowspan`
     /// attributes when it spans more than one grid slot; continuation slots

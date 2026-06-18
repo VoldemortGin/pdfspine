@@ -1,5 +1,5 @@
 #![forbid(unsafe_code)]
-//! `pdf-ocr` — pluggable OCR for oxide-pdf (M8, PRD §3.2 #3 post-v1).
+//! `pdf-ocr` — pluggable OCR for pdfspine (M8, PRD §3.2 #3 post-v1).
 //!
 //! Two surfaces, both PyMuPDF-compatible:
 //!

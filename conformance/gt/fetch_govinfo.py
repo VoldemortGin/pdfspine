@@ -2,8 +2,8 @@
 """Fetch domain-diverse, public-domain US government PDFs from GovInfo (US GPO).
 
 This is a FETCH-ONLY tool. It downloads real public-domain PDFs published by the
-US Government Publishing Office so the oxide-pdf harness can run an
-oxide-vs-fitz *differential* extraction across document DOMAINS that our other
+US Government Publishing Office so the pdfspine harness can run an
+pdfspine-vs-fitz *differential* extraction across document DOMAINS that our other
 corpora (forms / scientific / legal-EU / multilingual) under-represent:
 
   * ``USCOURTS``   -- US federal court opinions (legal prose, varied typesetting)
@@ -14,7 +14,7 @@ corpora (forms / scientific / legal-EU / multilingual) under-represent:
 
 All GovInfo content is a US-federal-government work and therefore public domain
 in the US (17 U.S.C. 105). NO ground truth is produced here -- the manifest is
-``gt_text``-free; scoring is the oxide-vs-fitz/pdfminer differential run by the
+``gt_text``-free; scoring is the pdfspine-vs-fitz/pdfminer differential run by the
 existing ``conformance/run_validation.py`` harness (which globs ``*.pdf`` from
 the corpus dir; the manifest is metadata only).
 

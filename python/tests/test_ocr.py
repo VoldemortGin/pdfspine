@@ -15,7 +15,7 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-import oxide_pdf
+import pdfspine
 import pytest
 
 
@@ -102,7 +102,7 @@ if not _FONT_PATH.exists():  # pragma: no cover
 
 @pytest.mark.skipif(not _HAS_TESS, reason="tesseract not installed")
 def test_ocr_py_get_textpage_ocr():
-    doc = oxide_pdf.open(stream=_text_pdf())
+    doc = pdfspine.open(stream=_text_pdf())
     tp = doc[0].get_textpage_ocr(dpi=150)
     t = tp.extractText().lower()
     assert "hello" in t
@@ -114,7 +114,7 @@ def test_ocr_py_get_textpage_ocr():
 
 @pytest.mark.skipif(not _HAS_TESS, reason="tesseract not installed")
 def test_ocr_py_camelcase_alias():
-    doc = oxide_pdf.open(stream=_text_pdf())
+    doc = pdfspine.open(stream=_text_pdf())
     t = doc[0].getTextPageOCR(dpi=150).extractText().lower()
     assert "hello" in t
 
@@ -124,11 +124,11 @@ def test_ocr_py_camelcase_alias():
 
 @pytest.mark.skipif(not _HAS_TESS, reason="tesseract not installed")
 def test_ocr_py_pdfocr_tobytes_searchable():
-    doc = oxide_pdf.open(stream=_text_pdf())
+    doc = pdfspine.open(stream=_text_pdf())
     sb = doc.pdfocr_tobytes(dpi=150)
     assert len(sb) > 1000
     assert sb[:5] == b"%PDF-"
-    d2 = oxide_pdf.open(stream=sb)
+    d2 = pdfspine.open(stream=sb)
     assert len(d2) == 1
     txt = d2[0].get_text("text").lower()
     flat = txt.replace(" ", "").replace("\n", "")
@@ -141,13 +141,13 @@ def test_ocr_py_pdfocr_tobytes_searchable():
 
 @pytest.mark.skipif(not _HAS_TESS, reason="tesseract not installed")
 def test_ocr_py_pdfocr_save_file(tmp_path):
-    doc = oxide_pdf.open(stream=_text_pdf())
+    doc = pdfspine.open(stream=_text_pdf())
     out = tmp_path / "out.pdf"
     doc.pdfocr_save(str(out), dpi=150)
     assert out.exists()
     data = out.read_bytes()
     assert data[:5] == b"%PDF-"
-    d2 = oxide_pdf.open(stream=data)
+    d2 = pdfspine.open(stream=data)
     assert len(d2) == 1
     flat = d2[0].get_text("text").lower().replace(" ", "").replace("\n", "")
     assert "hello" in flat
@@ -158,9 +158,9 @@ def test_ocr_py_pdfocr_save_file(tmp_path):
 
 @pytest.mark.skipif(not _HAS_TESS, reason="tesseract not installed")
 def test_ocr_py_search_in_sandwich():
-    doc = oxide_pdf.open(stream=_text_pdf())
+    doc = pdfspine.open(stream=_text_pdf())
     sb = doc.pdfocr_tobytes(dpi=150)
-    d2 = oxide_pdf.open(stream=sb)
+    d2 = pdfspine.open(stream=sb)
     assert len(d2[0].search_for("HELLO")) >= 1
 
 
@@ -169,11 +169,11 @@ def test_ocr_py_search_in_sandwich():
 
 def test_ocr_py_absent_engine_raises(monkeypatch):
     monkeypatch.setenv("OXIDE_TESSERACT", "/nonexistent/tesseract-xyz")
-    doc = oxide_pdf.open(stream=_text_pdf())
-    with pytest.raises(oxide_pdf.PdfUnsupportedError):
+    doc = pdfspine.open(stream=_text_pdf())
+    with pytest.raises(pdfspine.PdfUnsupportedError):
         doc[0].get_textpage_ocr(dpi=72)
-    doc2 = oxide_pdf.open(stream=_text_pdf())
-    with pytest.raises(oxide_pdf.PdfUnsupportedError):
+    doc2 = pdfspine.open(stream=_text_pdf())
+    with pytest.raises(pdfspine.PdfUnsupportedError):
         doc2.pdfocr_tobytes(dpi=72)
 
 

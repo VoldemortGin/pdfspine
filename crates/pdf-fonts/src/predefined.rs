@@ -7,7 +7,7 @@
 //!   CIDFontType2 uses Identity-H).
 //! - **A bundled predefined CJK CMap name** — the four Adobe *UCS2* families
 //!   (`UniGB-UCS2-{H,V}`, `UniCNS-UCS2-{H,V}`, `UniJIS-UCS2-{H,V}`,
-//!   `UniKS-UCS2-{H,V}`). For these oxide-pdf bundles the Adobe encoding CMap
+//!   `UniKS-UCS2-{H,V}`). For these pdfspine bundles the Adobe encoding CMap
 //!   (code → CID) and derives the matching ToUnicode table (CID → Unicode) by
 //!   inverting it, so a CJK PDF with no embedded `/ToUnicode` still extracts
 //!   Unicode. See [`cid_to_unicode`] / [`encoding_cmap`].
@@ -24,7 +24,7 @@ use smol_str::SmolStr;
 
 use crate::cmap::{CMap, CidUnicode};
 
-/// The names of the predefined CMaps that oxide-pdf bundles in full.
+/// The names of the predefined CMaps that pdfspine bundles in full.
 ///
 /// **Bundled:** `Identity-H`, `Identity-V` (2-byte identity, `CID == code`) plus
 /// the four Adobe UCS2 families and their vertical variants (see

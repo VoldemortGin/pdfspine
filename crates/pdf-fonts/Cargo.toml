@@ -6,7 +6,7 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 rust-version.workspace = true
-description = "Font parsing for mapping (encodings/ToUnicode/CMap/widths/glyph->Unicode) for oxide-pdf. No rasterization."
+description = "Font parsing for mapping (encodings/ToUnicode/CMap/widths/glyph->Unicode) for pdfspine. No rasterization."
 
 [dependencies]
 pdf-core.workspace = true

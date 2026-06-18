@@ -1,26 +1,26 @@
 # License
 
-oxide-pdf is licensed under the **Apache License, Version 2.0** — a permissive
+pdfspine is licensed under the **Apache License, Version 2.0** — a permissive
 license with an explicit patent grant. This is the project's core reason to
 exist: a PyMuPDF-shaped PDF toolkit you can use in closed-source products, SaaS
 backends, and permissively-licensed open-source software without an AGPL
 obligation or a commercial license.
 
-See the repository's [`LICENSE`](https://github.com/VoldemortGin/oxide-pdf/blob/main/LICENSE)
-and [`NOTICE`](https://github.com/VoldemortGin/oxide-pdf/blob/main/NOTICE) files
+See the repository's [`LICENSE`](https://github.com/VoldemortGin/pdfspine/blob/main/LICENSE)
+and [`NOTICE`](https://github.com/VoldemortGin/pdfspine/blob/main/NOTICE) files
 for the authoritative text.
 
 ## Apache-2.0, end to end
 
 - **Every first-party crate is Apache-2.0.** There is no copyleft anywhere in the
-  code oxide-pdf ships.
+  code pdfspine ships.
 - **The dependency graph is gated by `cargo-deny`** to exclude
   GPL / AGPL / LGPL / MPL / SSPL from the shipped wheel. License cleanliness is a
   **tested, CI-enforced property** — not just a statement of intent.
 
 ## Clean-room
 
-oxide-pdf is an **independent, clean-room reimplementation**. No code, tests, or
+pdfspine is an **independent, clean-room reimplementation**. No code, tests, or
 fixtures are derived from MuPDF, PyMuPDF, or any AGPL source. The API surface is
 designed for *compatibility* with PyMuPDF (so existing `import fitz` code runs),
 but the implementation underneath is original.
@@ -49,5 +49,5 @@ repository under `crates/pdf-fonts/data/` (see that directory's `NOTICE` and
 ## Relationship to PyMuPDF
 
 PyMuPDF and MuPDF are projects of [Artifex](https://artifex.com/), licensed under
-AGPL-3.0 or a commercial license. oxide-pdf is **not affiliated with or endorsed
+AGPL-3.0 or a commercial license. pdfspine is **not affiliated with or endorsed
 by** Artifex. PyMuPDF is referenced here only to describe API compatibility.

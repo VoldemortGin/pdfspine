@@ -12,7 +12,7 @@ Covers the newly-implemented surface:
     mupdf_version / store_shrink / store_size / store_maxsize / fitz_config /
     glyph_cache_empty / set_small_glyph_heights / mupdf_display_*
 
-Both the native ``oxide_pdf`` API and the ``fitz`` shim are exercised. Most
+Both the native ``pdfspine`` API and the ``fitz`` shim are exercised. Most
 fixtures are self-generated; the image tests use a bundled JPEG asset.
 """
 
@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import pathlib
 
-import oxide_pdf
+import pdfspine
 import fitz
 import pytest
 
@@ -35,19 +35,19 @@ _JPEG_PATH = (
 )
 
 
-def _doc_with_text() -> oxide_pdf.Document:
-    d = oxide_pdf.open()
+def _doc_with_text() -> pdfspine.Document:
+    d = pdfspine.open()
     p = d.new_page()
     p.insert_text((72, 100), "Hello", fontsize=20)
     return d
 
 
-def _doc_with_image() -> tuple[oxide_pdf.Document, str, int]:
+def _doc_with_image() -> tuple[pdfspine.Document, str, int]:
     """A one-page doc carrying one JPEG image; returns (doc, resname, xref)."""
     jpeg = _JPEG_PATH.read_bytes()
-    d = oxide_pdf.open()
+    d = pdfspine.open()
     p = d.new_page()
-    p.insert_image(oxide_pdf.Rect(0, 0, 100, 100), stream=jpeg)
+    p.insert_image(pdfspine.Rect(0, 0, 100, 100), stream=jpeg)
     imgs = p.get_images(full=True)
     return d, imgs[0][7], imgs[0][0]
 
@@ -73,7 +73,7 @@ def test_wrap_contents_brackets_and_roundtrips() -> None:
     assert body.startswith(b"q")
     assert body.rstrip().endswith(b"Q")
     # Still saveable / reopenable.
-    d2 = oxide_pdf.open(stream=d.tobytes())
+    d2 = pdfspine.open(stream=d.tobytes())
     assert d2.page_count == 1
 
 
@@ -96,7 +96,7 @@ def test_delete_image() -> None:
     # The XObject is now a 1x1 stub.
     assert d.xref_get_key(xref, "Width") == "1"
     # Document still valid.
-    assert oxide_pdf.open(stream=d.tobytes()).page_count == 1
+    assert pdfspine.open(stream=d.tobytes()).page_count == 1
 
 
 @pytest.mark.skipif(not _JPEG_PATH.exists(), reason="JPEG asset missing")
@@ -107,7 +107,7 @@ def test_replace_image_by_name_and_xref() -> None:
     assert d.xref_is_image(xref)
     # Replace by xref string too.
     d[0].replace_image(str(xref), stream=jpeg)
-    assert oxide_pdf.open(stream=d.tobytes()).page_count == 1
+    assert pdfspine.open(stream=d.tobytes()).page_count == 1
 
 
 def test_replace_image_requires_stream() -> None:
@@ -213,7 +213,7 @@ def test_subset_fonts_reports_count() -> None:
 
 
 def test_font_metrics() -> None:
-    f = oxide_pdf.Font("helv")
+    f = pdfspine.Font("helv")
     assert f.name == "Helvetica"
     assert f.ascender > 0.0
     assert f.descender < 0.0
@@ -226,16 +226,16 @@ def test_font_metrics() -> None:
 
 
 def test_font_aliases() -> None:
-    assert oxide_pdf.Font("tiro").name == "Times-Roman"
-    assert oxide_pdf.Font("cour").name == "Courier"
-    assert oxide_pdf.Font("Times-Bold").name == "Times-Bold"
-    assert oxide_pdf.Font("cour").is_monospaced == 1
+    assert pdfspine.Font("tiro").name == "Times-Roman"
+    assert pdfspine.Font("cour").name == "Courier"
+    assert pdfspine.Font("Times-Bold").name == "Times-Bold"
+    assert pdfspine.Font("cour").is_monospaced == 1
     # Unknown falls back, never raises.
-    assert oxide_pdf.Font("nonesuch").name == "Helvetica"
+    assert pdfspine.Font("nonesuch").name == "Helvetica"
 
 
 def test_font_advances_and_lengths() -> None:
-    f = oxide_pdf.Font("helv")
+    f = pdfspine.Font("helv")
     # Helvetica 'A' is 667/1000.
     assert abs(f.glyph_advance(ord("A")) - 0.667) < 1e-6
     assert abs(f.text_length("AB", fontsize=10.0) - (0.667 + 0.667) * 10.0) < 1e-4
@@ -245,7 +245,7 @@ def test_font_advances_and_lengths() -> None:
 
 
 def test_font_glyph_name_mappings() -> None:
-    f = oxide_pdf.Font("helv")
+    f = pdfspine.Font("helv")
     assert f.glyph_name_to_unicode("A") == ord("A")
     assert f.glyph_name_to_unicode(".notdef") == 0xFFFD
     assert f.unicode_to_glyph_name(ord("A")) == "A"
@@ -263,8 +263,8 @@ def test_font_via_fitz_shim() -> None:
 
 
 def test_tools_singleton() -> None:
-    t = oxide_pdf.TOOLS
-    assert isinstance(t, oxide_pdf.Tools)
+    t = pdfspine.TOOLS
+    assert isinstance(t, pdfspine.Tools)
     # gen_id is monotonically increasing and positive.
     a = t.gen_id()
     b = t.gen_id()
@@ -272,7 +272,7 @@ def test_tools_singleton() -> None:
 
 
 def test_tools_diagnostics() -> None:
-    t = oxide_pdf.TOOLS
+    t = pdfspine.TOOLS
     assert t.mupdf_warnings() == ""
     t.reset_mupdf_warnings()
     assert isinstance(t.mupdf_version(), str) and t.mupdf_version()
@@ -288,5 +288,5 @@ def test_tools_diagnostics() -> None:
 
 
 def test_tools_via_fitz_shim() -> None:
-    assert fitz.TOOLS.mupdf_version() == oxide_pdf.TOOLS.mupdf_version()
+    assert fitz.TOOLS.mupdf_version() == pdfspine.TOOLS.mupdf_version()
     assert isinstance(fitz.Tools, type)

@@ -1,4 +1,4 @@
-"""``oxide-pdf`` — a command-line front-end for :mod:`oxide_pdf`.
+"""``pdfspine`` — a command-line front-end for :mod:`pdfspine`.
 
 A small, dependency-free (stdlib ``argparse`` only) CLI that mirrors the spirit
 of PyMuPDF's ``python -m fitz`` tool. Subcommands:
@@ -18,7 +18,7 @@ either end may be omitted (``-3`` = pages 1..3, ``8-`` = page 8 to the last).
 They are converted to 0-based indices internally.
 
 Errors (file-not-found, malformed PDF, out-of-range pages, unsupported features)
-are reported as a single ``oxide-pdf: <message>`` line on stderr with a non-zero
+are reported as a single ``pdfspine: <message>`` line on stderr with a non-zero
 exit code — never a raw traceback.
 """
 
@@ -28,8 +28,8 @@ import argparse
 import sys
 from typing import Sequence
 
-import oxide_pdf
-from oxide_pdf import PdfError
+import pdfspine
+from pdfspine import PdfError
 
 
 class CLIError(Exception):
@@ -84,10 +84,10 @@ def parse_page_range(spec: str | None, page_count: int) -> list[int]:
     return [p - 1 for p in sorted(set(pages))]
 
 
-def _open(filename: str) -> "oxide_pdf.Document":
+def _open(filename: str) -> "pdfspine.Document":
     """Opens ``filename`` as a :class:`Document`, mapping failures to CLIError."""
     try:
-        return oxide_pdf.open(filename)
+        return pdfspine.open(filename)
     except FileNotFoundError:
         raise CLIError(f"file not found: {filename}")
     except OSError as exc:
@@ -171,7 +171,7 @@ def _cmd_render(args: argparse.Namespace) -> int:
     matrix = None
     dpi = None
     if args.zoom is not None:
-        matrix = oxide_pdf.Matrix(args.zoom, args.zoom)
+        matrix = pdfspine.Matrix(args.zoom, args.zoom)
     elif args.dpi is not None:
         dpi = args.dpi
 
@@ -190,7 +190,7 @@ def _cmd_render(args: argparse.Namespace) -> int:
 
 
 def _cmd_merge(args: argparse.Namespace) -> int:
-    out = oxide_pdf.open()
+    out = pdfspine.open()
     for src_path in args.files:
         src = _open(src_path)
         try:
@@ -224,7 +224,7 @@ def _cmd_split(args: argparse.Namespace) -> int:
     for n, indices in enumerate(groups, start=1):
         if not indices:
             continue
-        part = oxide_pdf.open()
+        part = pdfspine.open()
         try:
             for i in indices:
                 part.insert_pdf(doc, from_page=i, to_page=i)
@@ -315,13 +315,13 @@ def _cmd_toc(args: argparse.Namespace) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="oxide-pdf",
+        prog="pdfspine",
         description="A pure-Rust PyMuPDF-compatible PDF toolkit.",
     )
     parser.add_argument(
         "--version",
         action="store_true",
-        help="show the oxide_pdf version and exit",
+        help="show the pdfspine version and exit",
     )
     sub = parser.add_subparsers(dest="command", metavar="<command>")
 
@@ -396,7 +396,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if getattr(args, "version", False):
-        print(f"oxide-pdf {oxide_pdf.__version__}")
+        print(f"pdfspine {pdfspine.__version__}")
         return 0
 
     if not getattr(args, "command", None):
@@ -406,13 +406,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         return args.func(args)
     except CLIError as exc:
-        print(f"oxide-pdf: {exc}", file=sys.stderr)
+        print(f"pdfspine: {exc}", file=sys.stderr)
         return 1
     except PdfError as exc:
-        print(f"oxide-pdf: {exc}", file=sys.stderr)
+        print(f"pdfspine: {exc}", file=sys.stderr)
         return 1
     except (FileNotFoundError, OSError) as exc:
-        print(f"oxide-pdf: {exc}", file=sys.stderr)
+        print(f"pdfspine: {exc}", file=sys.stderr)
         return 1
 
 

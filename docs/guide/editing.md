@@ -1,6 +1,6 @@
 # Editing & saving
 
-oxide-pdf supports a broad slice of PyMuPDF's editing surface: page operations
+pdfspine supports a broad slice of PyMuPDF's editing surface: page operations
 and merging, content and vector insertion, annotations, AcroForm forms,
 redaction, metadata, table-of-contents, links, embedded files, and full or
 incremental saving.
@@ -8,9 +8,9 @@ incremental saving.
 ## Page operations & merging
 
 ```python
-import oxide_pdf
+import pdfspine
 
-doc = oxide_pdf.open("input.pdf")
+doc = pdfspine.open("input.pdf")
 
 # Insert a blank page (pno=-1 appends; returns the new Page):
 page = doc.new_page(width=595, height=842)   # A4 in points
@@ -25,8 +25,8 @@ doc.select([2, 0, 1])
 ### Merging two PDFs
 
 ```python
-dst = oxide_pdf.open("a.pdf")
-src = oxide_pdf.open("b.pdf")
+dst = pdfspine.open("a.pdf")
+src = pdfspine.open("b.pdf")
 
 # Append all of src after dst's pages:
 dst.insert_pdf(src)
@@ -42,9 +42,9 @@ dst.save("merged.pdf")
 To split, build new documents and copy ranges in with `insert_pdf`:
 
 ```python
-src = oxide_pdf.open("input.pdf")
+src = pdfspine.open("input.pdf")
 
-first_half = oxide_pdf.open()                 # empty PDF
+first_half = pdfspine.open()                 # empty PDF
 first_half.insert_pdf(src, from_page=0, to_page=4)
 first_half.save("part1.pdf")
 ```
@@ -71,7 +71,7 @@ data = doc.tobytes(garbage=3, deflate=True)
 ```python
 doc.save(
     "secure.pdf",
-    encryption=oxide_pdf.PDF_ENCRYPT_AES_256,   # AES-256 (authored as R6)
+    encryption=pdfspine.PDF_ENCRYPT_AES_256,   # AES-256 (authored as R6)
     owner_pw="owner-secret",
     user_pw="open-sesame",
     permissions=-1,                              # all permissions
@@ -84,7 +84,7 @@ Available constants: `PDF_ENCRYPT_NONE`, `PDF_ENCRYPT_RC4_128`,
 To open an encrypted document, authenticate first:
 
 ```python
-doc = oxide_pdf.open("secure.pdf")
+doc = pdfspine.open("secure.pdf")
 if doc.needs_pass:
     doc.authenticate("open-sesame")
 ```
@@ -122,7 +122,7 @@ links = page.get_links()                # list of dicts (each "from" is a Rect)
 # Add a URI link:
 page.insert_link({
     "kind": 2,                          # 1 = goto, 2 = uri
-    "from": oxide_pdf.Rect(72, 72, 200, 90),
+    "from": pdfspine.Rect(72, 72, 200, 90),
     "uri": "https://example.com",
 })
 
@@ -148,12 +148,12 @@ page.add_strikeout_annot(quads)
 page.add_squiggly_annot(quads)
 
 # Shapes & notes:
-page.add_rect_annot(oxide_pdf.Rect(72, 72, 200, 120), color=(1, 0, 0))
-page.add_circle_annot(oxide_pdf.Rect(72, 72, 200, 120))
+page.add_rect_annot(pdfspine.Rect(72, 72, 200, 120), color=(1, 0, 0))
+page.add_circle_annot(pdfspine.Rect(72, 72, 200, 120))
 page.add_line_annot((72, 72), (200, 120))
 page.add_text_annot((72, 72), "A sticky note", icon="Note")
-page.add_freetext_annot(oxide_pdf.Rect(72, 72, 300, 120), "Free text")
-page.add_stamp_annot(oxide_pdf.Rect(72, 72, 200, 120), stamp="Approved")
+page.add_freetext_annot(pdfspine.Rect(72, 72, 300, 120), "Free text")
+page.add_stamp_annot(pdfspine.Rect(72, 72, 200, 120), stamp="Approved")
 page.add_ink_annot([[(10, 10), (20, 30), (40, 20)]])
 
 # Inspect & remove:
@@ -167,20 +167,20 @@ page.delete_annot(annot)
 ```python
 # Text:
 page.insert_text((72, 72), "Hello", fontname="helv", fontsize=12, color=(0, 0, 0))
-page.insert_textbox(oxide_pdf.Rect(72, 72, 300, 200), "Wrapped paragraph...")
+page.insert_textbox(pdfspine.Rect(72, 72, 300, 200), "Wrapped paragraph...")
 
 # Images (provide stream= bytes or filename=):
-page.insert_image(oxide_pdf.Rect(72, 72, 200, 200), filename="logo.png")
+page.insert_image(pdfspine.Rect(72, 72, 200, 200), filename="logo.png")
 
 # Vectors:
 page.draw_line((72, 72), (200, 72), color=(0, 0, 0), width=1.0)
-page.draw_rect(oxide_pdf.Rect(72, 90, 200, 140), color=(0, 0, 1), fill=(0.9, 0.9, 1))
+page.draw_rect(pdfspine.Rect(72, 90, 200, 140), color=(0, 0, 1), fill=(0.9, 0.9, 1))
 page.draw_circle((140, 200), 40, color=(0, 0.5, 0))
 
 # Or accumulate a reusable Shape, then commit once:
 shape = page.new_shape()
 shape.draw_line((10, 10), (100, 10))
-shape.draw_rect(oxide_pdf.Rect(10, 20, 100, 60))
+shape.draw_rect(pdfspine.Rect(10, 20, 100, 60))
 shape.finish(color=(0, 0, 0), width=2)
 shape.commit()
 ```

@@ -11,11 +11,11 @@ structured-text model (blocks → lines → spans, with bbox / font / size / col
 
 The text content, hit-rect X coordinates, textbox, and selection results below are
 the GROUND TRUTH captured from REAL PyMuPDF 1.27 (``.venv-oracle``) reading the
-EXACT SAME fixture bytes (the in-repo ``.venv`` ``fitz`` is the oxide shim). The
+EXACT SAME fixture bytes (the in-repo ``.venv`` ``fitz`` is the pdfspine shim). The
 oracle values are embedded here as literals.
 
 DEVIATIONS from fitz (documented):
-  - Hit-rect / char-bbox Y coordinates: oxide uses a tighter glyph box
+  - Hit-rect / char-bbox Y coordinates: pdfspine uses a tighter glyph box
     (ascender/descender) than MuPDF's line box, so hit-rect Y differs by a few
     points. X coordinates and all text are an exact match; the tests assert X
     tightly (~1px) and Y loosely (~5px). This is a pre-existing text-model trait,
@@ -34,7 +34,7 @@ DEVIATIONS from fitz (documented):
     baseline-relative line box ``[baseline - 0.875*size, baseline + 0.125*size]``
     and within that line by char position; an end point at/below the last line
     keeps it in full. Text matches the oracle exactly (Y of the box is derived
-    from the shared baseline, which is identical between oxide and fitz).
+    from the shared baseline, which is identical between pdfspine and fitz).
   - HTML/XHTML/XML are structurally fitz-shaped (tag nesting, key attributes,
     coordinates) and valid/parseable, but not byte-exact: the CSS ``font-family``
     is the raw PDF font name (fitz substitutes ``Arial,sans-serif``); ``<p>`` is
@@ -46,7 +46,7 @@ DEVIATIONS from fitz (documented):
 
 FONT deviations / deferrals (documented):
   - ``Font.glyph_bbox`` and ``Font.buffer`` are DEFERRED (raise
-    ``PdfUnsupportedError``): oxide's ``Font`` is a Core-14 metrics-only handle
+    ``PdfUnsupportedError``): pdfspine's ``Font`` is a Core-14 metrics-only handle
     (built from a font name; no embedded ``/FontFile*`` program, no per-glyph
     outlines). A constant font-level bbox / empty buffer would be misleading, so
     both honestly raise until embedded-font programs are wired up.
@@ -64,11 +64,11 @@ import base64
 import xml.dom.minidom as minidom
 
 import fitz
-import oxide_pdf
+import pdfspine
 import pytest
 
 
-# === fixture (deterministic raw PDF; same bytes oxide AND the oracle read) ====
+# === fixture (deterministic raw PDF; same bytes pdfspine AND the oracle read) ====
 
 # Three text lines on a 400x300 page, Helvetica:
 #   "Hello World"          @ 14pt, baseline y=220 (PDF) → top-origin top≈68.8
@@ -90,7 +90,7 @@ _PDF_B64 = (
 
 @pytest.fixture()
 def tp():
-    doc = oxide_pdf.open(stream=base64.b64decode(_PDF_B64), filetype="pdf")
+    doc = pdfspine.open(stream=base64.b64decode(_PDF_B64), filetype="pdf")
     return doc[0].get_textpage()
 
 
@@ -105,7 +105,7 @@ _GT_SEL_CROSS = "ello World\nSecond Lin"
 _GT_SEL_MID = "ll"
 _GT_SEL_ALL = "Hello World\nSecond Line here\nThird paragraph text"
 
-# X within ~1px of fitz; Y looser (tighter oxide glyph box — see module docstring).
+# X within ~1px of fitz; Y looser (tighter pdfspine glyph box — see module docstring).
 _X_TOL = 1.0
 _Y_TOL = 5.0
 
@@ -143,14 +143,14 @@ def test_search_default_is_rect(tp):
     # Batch-4 spec: default quads=False → list of Rect.
     hits = tp.search("Line")
     assert len(hits) == 1
-    assert isinstance(hits[0], oxide_pdf.Rect)
+    assert isinstance(hits[0], pdfspine.Rect)
 
 
 def test_search_quads(tp):
     quads = tp.search("Line", quads=True)
     assert len(quads) == 1
     q = quads[0]
-    assert isinstance(q, oxide_pdf.Quad)
+    assert isinstance(q, pdfspine.Quad)
     # The quad's enclosing rect equals the rect-mode hit.
     _assert_rect_matches(q.rect, _GT_SEARCH_LINE)
     # A horizontal hit: ul/ur share y, ul/ll share x.
@@ -190,7 +190,7 @@ _GT_XLINE_FRAG2_X = (45.0, 78.34)
 
 @pytest.fixture()
 def xtp():
-    doc = oxide_pdf.open(stream=base64.b64decode(_XLINE_PDF_B64), filetype="pdf")
+    doc = pdfspine.open(stream=base64.b64decode(_XLINE_PDF_B64), filetype="pdf")
     return doc[0].get_textpage()
 
 
@@ -232,7 +232,7 @@ def test_textbox_all(tp):
 
 
 def test_textbox_accepts_rect(tp):
-    assert tp.extractTextbox(oxide_pdf.Rect(40, 108, 400, 124)) == _GT_TEXTBOX_LINE2
+    assert tp.extractTextbox(pdfspine.Rect(40, 108, 400, 124)) == _GT_TEXTBOX_LINE2
 
 
 def test_textbox_empty_region(tp):
@@ -255,8 +255,8 @@ def test_selection_whole_page(tp):
 
 
 def test_selection_accepts_points(tp):
-    a = oxide_pdf.Point(65, 80)
-    b = oxide_pdf.Point(75, 80)
+    a = pdfspine.Point(65, 80)
+    b = pdfspine.Point(75, 80)
     assert tp.extractSelection(a, b) == _GT_SEL_MID
 
 
@@ -325,7 +325,7 @@ def test_xml_escapes_special_chars():
         b"5 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj\n"
         b"trailer<</Root 1 0 R/Size 6>>\n%%EOF"
     )
-    doc = oxide_pdf.open(stream=pdf, filetype="pdf")
+    doc = pdfspine.open(stream=pdf, filetype="pdf")
     xml = doc[0].get_textpage().extractXML()
     # Well-formed despite the literal '<' in content.
     minidom.parseString(xml)
@@ -357,7 +357,7 @@ def test_imginfo_with_image():
         b"endstream endobj\n"
         b"trailer<</Root 1 0 R/Size 6>>\n%%EOF"
     )
-    doc = oxide_pdf.open(stream=pdf, filetype="pdf")
+    doc = pdfspine.open(stream=pdf, filetype="pdf")
     info = doc[0].get_textpage().extractIMGINFO()
     assert len(info) == 1
     d = info[0]
@@ -394,7 +394,7 @@ def test_poolsize_positive_and_scales(tp):
         b"3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 400 300]>>endobj\n"
         b"trailer<</Root 1 0 R/Size 4>>\n%%EOF"
     )
-    empty = oxide_pdf.open(stream=empty_pdf, filetype="pdf")[0].get_textpage()
+    empty = pdfspine.open(stream=empty_pdf, filetype="pdf")[0].get_textpage()
     assert empty.poolsize() < size
 
 
@@ -410,13 +410,13 @@ def test_text_matches_oracle(tp):
 # ``Base14_fontnames``, ``is_writable`` (match fitz exactly) and
 # ``valid_codepoints`` (honest encoding-derived subset). ``buffer`` and
 # ``glyph_bbox`` are DEFERRED. Ground-truth facts below were captured from REAL
-# PyMuPDF 1.27 (``.venv-oracle``); the in-repo ``fitz`` is the oxide shim.
+# PyMuPDF 1.27 (``.venv-oracle``); the in-repo ``fitz`` is the pdfspine shim.
 #
 # DEVIATIONS / DEFERRALS from fitz (documented, inherent to a metrics-only
 # Core-14 handle — built from a font NAME, with no embedded /FontFile* program
 # and no per-glyph outlines):
 #   - ``buffer``: DEFERRED → raises ``PdfUnsupportedError``. PyMuPDF substitutes
-#     a bundled NimbusSans/Type1 TTF and returns its bytes; the oxide handle has
+#     a bundled NimbusSans/Type1 TTF and returns its bytes; the pdfspine handle has
 #     no program to expose, and empty bytes would be a misleading
 #     non-implementation, so it honestly raises.
 #   - ``glyph_bbox``: DEFERRED → raises ``PdfUnsupportedError``. The handle has
@@ -424,10 +424,10 @@ def test_text_matches_oracle(tp):
 #     would be a misleading constant (a wrong per-glyph value is worse than an
 #     honest error), so it raises until per-glyph outlines are available.
 #   - ``valid_codepoints``: KEPT. PyMuPDF reads the bundled font's full cmap (653
-#     for the text fonts, 195/203 for Symbol/ZapfDingbats); the oxide handle
+#     for the text fonts, 195/203 for Symbol/ZapfDingbats); the pdfspine handle
 #     reports the codepoints of its built-in PDF encoding (WinAnsi for text
 #     fonts; the font's own encoding for the two pictographic families). The
-#     oxide set is a STRICT SUBSET of fitz's (verified below): every codepoint it
+#     pdfspine set is a STRICT SUBSET of fitz's (verified below): every codepoint it
 #     reports is genuinely covered by fitz — no false positives. For an embedded
 #     font the real cmap would be preferred.
 
@@ -451,35 +451,35 @@ _GT_BASE14 = (
 )
 
 # Per-font ``len(valid_codepoints())`` from REAL PyMuPDF 1.27 (the bundled-cmap
-# count) and the oxide encoding-derived count (a documented subset).
+# count) and the pdfspine encoding-derived count (a documented subset).
 _GT_FITZ_VC_LEN = {"helv": 653, "tiro": 653, "cour": 653, "symb": 195, "zadb": 203}
 _OXIDE_VC_LEN = {"helv": 216, "tiro": 216, "cour": 216, "symb": 98, "zadb": 95}
 
 
 def test_font_base14_fontnames_matches_fitz():
     # Module-level constant, exact tuple, in PyMuPDF's order.
-    assert oxide_pdf.Base14_fontnames == _GT_BASE14
+    assert pdfspine.Base14_fontnames == _GT_BASE14
     # Reachable through the fitz shim too.
     assert tuple(fitz.Base14_fontnames) == _GT_BASE14
-    assert len(oxide_pdf.Base14_fontnames) == 14
+    assert len(pdfspine.Base14_fontnames) == 14
 
 
 def test_font_is_writable_matches_fitz():
-    # Real PyMuPDF reports True for every standard font; so does oxide.
+    # Real PyMuPDF reports True for every standard font; so does pdfspine.
     for nm in ("helv", "tiro", "cour", "symb", "zadb"):
-        assert oxide_pdf.Font(nm).is_writable is True
+        assert pdfspine.Font(nm).is_writable is True
 
 
 def test_font_buffer_deferred():
     # DEFERRED: the metrics-only Core-14 handle carries no embedded /FontFile*
     # program, so buffer honestly raises rather than returning misleading bytes.
-    f = oxide_pdf.Font("helv")
-    with pytest.raises(oxide_pdf.PdfUnsupportedError):
+    f = pdfspine.Font("helv")
+    with pytest.raises(pdfspine.PdfUnsupportedError):
         _ = f.buffer
 
 
 def test_font_valid_codepoints_type_and_contents():
-    f = oxide_pdf.Font("helv")
+    f = pdfspine.Font("helv")
     vc = f.valid_codepoints()
     assert isinstance(vc, list)
     assert all(isinstance(c, int) for c in vc)
@@ -494,11 +494,11 @@ def test_font_valid_codepoints_type_and_contents():
 
 def test_font_valid_codepoints_len():
     for nm, n in _OXIDE_VC_LEN.items():
-        assert len(oxide_pdf.Font(nm).valid_codepoints()) == n
+        assert len(pdfspine.Font(nm).valid_codepoints()) == n
 
 
 def test_font_valid_codepoints_subset_of_fitz():
-    # Cross-check vs REAL PyMuPDF (.venv-oracle) embedded as literals: oxide's
+    # Cross-check vs REAL PyMuPDF (.venv-oracle) embedded as literals: pdfspine's
     # set must be a strict subset of fitz's (no false positives), and smaller.
     import subprocess
     import sys
@@ -521,10 +521,10 @@ def test_font_valid_codepoints_subset_of_fitz():
 
     fitz_vc = json.loads(out)
     for nm in ("helv", "tiro", "cour", "symb", "zadb"):
-        ovc = set(oxide_pdf.Font(nm).valid_codepoints())
+        ovc = set(pdfspine.Font(nm).valid_codepoints())
         fvc = set(fitz_vc[nm])
         assert len(fvc) == _GT_FITZ_VC_LEN[nm]
-        assert ovc.issubset(fvc), f"{nm}: oxide reports codepoints fitz lacks"
+        assert ovc.issubset(fvc), f"{nm}: pdfspine reports codepoints fitz lacks"
         assert len(ovc) < len(fvc)
 
 
@@ -534,14 +534,14 @@ def test_font_glyph_bbox_deferred():
     # font-level bbox for every glyph would be a misleading constant, so
     # glyph_bbox honestly raises (a wrong per-glyph value is worse than an
     # honest PdfUnsupportedError).
-    f = oxide_pdf.Font("helv")
+    f = pdfspine.Font("helv")
     for cp in (ord("A"), ord("g"), ord("i"), ord("z"), 0x1F600):
-        with pytest.raises(oxide_pdf.PdfUnsupportedError):
+        with pytest.raises(pdfspine.PdfUnsupportedError):
             f.glyph_bbox(cp)
 
 
 def test_font_glyph_bbox_deferred_via_fitz_shim():
     # The deferral is consistent through the fitz shim.
     f = fitz.Font("helv")
-    with pytest.raises(oxide_pdf.PdfUnsupportedError):
+    with pytest.raises(pdfspine.PdfUnsupportedError):
         f.glyph_bbox(ord("A"))

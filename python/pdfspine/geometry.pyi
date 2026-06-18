@@ -1,4 +1,4 @@
-"""Type stubs for :mod:`oxide_pdf.geometry` (PyMuPDF-compatible value types)."""
+"""Type stubs for :mod:`pdfspine.geometry` (PyMuPDF-compatible value types)."""
 
 from typing import Iterator, Sequence, Union
 

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Rendering differential harness — oxide-pdf vs fitz (PyMuPDF) page rasters.
+"""Rendering differential harness — pdfspine vs fitz (PyMuPDF) page rasters.
 
-oxide-pdf has a tiny-skia renderer (``Page.get_pixmap``); its *visual* output had
+pdfspine has a tiny-skia renderer (``Page.get_pixmap``); its *visual* output had
 never been compared to fitz. This harness renders the same page(s) at the same
 geometry (fixed DPI) with both engines and measures perceptual similarity
-(SSIM + MAE) so we know objectively how close oxide's renderer is to fitz.
+(SSIM + MAE) so we know objectively how close pdfspine's renderer is to fitz.
 
 Design notes
 ------------
@@ -17,7 +17,7 @@ Design notes
 
 * **License + crash isolation.** fitz (AGPL) must never share our interpreter,
   so it is rendered by a ``--render-oracle`` worker invoked via
-  ``.venv-oracle``. oxide is itself rendered in a ``--render-oxide`` subprocess
+  ``.venv-oracle``. pdfspine is itself rendered in a ``--render-pdfspine`` subprocess
   so a Rust panic/abort/hang surfaces as a non-zero exit or timeout instead of
   killing the run. This mirrors ``conformance/run_validation.py`` /
   ``conformance/oracle_extract.py``.
@@ -28,7 +28,7 @@ Design notes
 
 Usage
 -----
-    # orchestrator (run in the project venv, which can import oxide_pdf):
+    # orchestrator (run in the project venv, which can import pdfspine):
     python conformance/gt/render_diff.py \
         --manifest conformance/gt/corpus-born/manifest.json \
         --manifest conformance/gt/corpus-eurlex/manifest.json \
@@ -38,7 +38,7 @@ Usage
         --json   conformance/gt/render-results.json
 
     # internal worker modes (invoked by the orchestrator, not by hand):
-    python      conformance/gt/render_diff.py --render-oxide  <pdf> <page> <dpi> <out> [png]
+    python      conformance/gt/render_diff.py --render-pdfspine  <pdf> <page> <dpi> <out> [png]
     .venv-oracle/bin/python conformance/gt/render_diff.py --render-oracle <pdf> <page> <dpi> <out> [png]
 """
 
@@ -80,14 +80,14 @@ def _read_raster(path: str) -> tuple[int, int, int, bytes]:
 
 
 # --------------------------------------------------------------------------- #
-# Worker: oxide-pdf renderer (runs in THIS venv)
+# Worker: pdfspine renderer (runs in THIS venv)
 # --------------------------------------------------------------------------- #
 
 
-def _render_oxide(pdf: str, page_idx: int, dpi: float, out: str, png: str | None) -> int:
-    import oxide_pdf
+def _render_pdfspine(pdf: str, page_idx: int, dpi: float, out: str, png: str | None) -> int:
+    import pdfspine
 
-    doc = oxide_pdf.open(pdf)
+    doc = pdfspine.open(pdf)
     if page_idx >= len(doc):
         sys.stderr.write(f"no such page {page_idx} (len={len(doc)})")
         return 3
@@ -96,7 +96,7 @@ def _render_oxide(pdf: str, page_idx: int, dpi: float, out: str, png: str | None
         pm = page.get_pixmap(dpi=dpi)
     except TypeError:
         # dpi kwarg unsupported on this build — fall back to an explicit matrix.
-        from oxide_pdf import Matrix  # type: ignore
+        from pdfspine import Matrix  # type: ignore
 
         s = dpi / 72.0
         pm = page.get_pixmap(matrix=Matrix(s, 0, 0, s, 0, 0))
@@ -325,7 +325,7 @@ def compare_one(
     corpus: str,
     page: int,
     dpi: float,
-    py_oxide: str,
+    py_pdfspine: str,
     py_oracle: str,
     cache_dir: Path,
     timeout: float,
@@ -337,17 +337,17 @@ def compare_one(
         return rec
 
     tag = f"{corpus}__{name}__p{page}"
-    ox_raw = cache_dir / f"{tag}.oxide.bin"
+    ox_raw = cache_dir / f"{tag}.pdfspine.bin"
     or_raw = cache_dir / f"{tag}.fitz.bin"
-    ox_png = str(cache_dir / f"{tag}.oxide.png") if save_png else None
+    ox_png = str(cache_dir / f"{tag}.pdfspine.png") if save_png else None
     or_png = str(cache_dir / f"{tag}.fitz.png") if save_png else None
 
-    ok_ox, err_ox = _run_worker(py_oxide, "--render-oxide", pdf, page, dpi, str(ox_raw), ox_png, timeout)
+    ok_ox, err_ox = _run_worker(py_pdfspine, "--render-pdfspine", pdf, page, dpi, str(ox_raw), ox_png, timeout)
     ok_or, err_or = _run_worker(py_oracle, "--render-oracle", pdf, page, dpi, str(or_raw), or_png, timeout)
 
     if not ok_ox:
-        rec["error"] = f"oxide: {err_ox}"
-        rec["oxide_failed"] = True
+        rec["error"] = f"pdfspine: {err_ox}"
+        rec["pdfspine_failed"] = True
     if not ok_or:
         rec["error"] = (rec.get("error", "") + f" | fitz: {err_or}").strip(" |")
         rec["fitz_failed"] = True
@@ -361,7 +361,7 @@ def compare_one(
         rec["error"] = f"raster-read: {type(exc).__name__}: {exc}"
         return rec
 
-    rec["oxide_size"] = [ow, oh]
+    rec["pdfspine_size"] = [ow, oh]
     rec["fitz_size"] = [fw, fh]
     rec["size_dw"] = ow - fw
     rec["size_dh"] = oh - fh
@@ -378,25 +378,25 @@ def compare_one(
     rec["ssim"] = round(s, 4)
     rec["mae"] = round(mae, 2)
     rec["mae_sim"] = round(mae_sim, 4)
-    rec["oxide_mean_gray"] = round(_mean(opx), 1)
+    rec["pdfspine_mean_gray"] = round(_mean(opx), 1)
     rec["fitz_mean_gray"] = round(_mean(fpx), 1)
-    rec["oxide_near_blank"] = _near_blank(opx)
+    rec["pdfspine_near_blank"] = _near_blank(opx)
     rec["fitz_near_blank"] = _near_blank(fpx)
 
     # Heuristic cause guess for divergences.
-    # ink_gap > 0 means oxide is LIGHTER than fitz (drew less ink); a large gap
+    # ink_gap > 0 means pdfspine is LIGHTER than fitz (drew less ink); a large gap
     # on a matching-size page is the signature of missing glyphs / body text.
-    ink_gap = rec["oxide_mean_gray"] - rec["fitz_mean_gray"]
+    ink_gap = rec["pdfspine_mean_gray"] - rec["fitz_mean_gray"]
     rec["ink_gap"] = round(ink_gap, 1)
     size_off = abs(rec["size_dw"]) + abs(rec["size_dh"])
-    if rec["oxide_near_blank"] and not rec["fitz_near_blank"]:
-        rec["cause"] = "oxide near-blank — renderer drew (almost) nothing"
+    if rec["pdfspine_near_blank"] and not rec["fitz_near_blank"]:
+        rec["cause"] = "pdfspine near-blank — renderer drew (almost) nothing"
     elif size_off > 6:
         rec["cause"] = f"page-box mismatch — size delta {rec['size_dw']}x{rec['size_dh']}px"
     elif s < 0.7 and ink_gap > 6:
-        rec["cause"] = f"oxide drew much less ink (+{ink_gap:.0f} gray) — missing glyphs / body text not rendered"
+        rec["cause"] = f"pdfspine drew much less ink (+{ink_gap:.0f} gray) — missing glyphs / body text not rendered"
     elif s < 0.7 and ink_gap < -6:
-        rec["cause"] = f"oxide drew much more ink ({ink_gap:.0f} gray) — over-dark / fill or color差异"
+        rec["cause"] = f"pdfspine drew much more ink ({ink_gap:.0f} gray) — over-dark / fill or color差异"
     elif s < 0.7:
         rec["cause"] = "low SSIM at matching size — glyph positioning / vector ops / color差异"
     elif s < 0.9:
@@ -435,17 +435,17 @@ def _sample(entries: list[dict], k: int | None, seed: int) -> list[dict]:
 
 def main(argv: list[str]) -> int:
     # ---- internal worker dispatch (must come first) ----
-    if argv and argv[0] in ("--render-oxide", "--render-oracle"):
+    if argv and argv[0] in ("--render-pdfspine", "--render-oracle"):
         mode = argv[0]
         pdf, page_s, dpi_s, out = argv[1], argv[2], argv[3], argv[4]
         png = argv[5] if len(argv) > 5 else None
         page = int(page_s)
         dpi = float(dpi_s)
-        if mode == "--render-oxide":
-            return _render_oxide(pdf, page, dpi, out, png)
+        if mode == "--render-pdfspine":
+            return _render_pdfspine(pdf, page, dpi, out, png)
         return _render_oracle(pdf, page, dpi, out, png)
 
-    ap = argparse.ArgumentParser(description="oxide-vs-fitz rendering differential harness")
+    ap = argparse.ArgumentParser(description="pdfspine-vs-fitz rendering differential harness")
     ap.add_argument("--manifest", action="append", default=[], help="manifest.json (entries with a 'pdf' path)")
     ap.add_argument("--corpus", action="append", default=[], help="directory of bare PDFs")
     ap.add_argument("--dpi", type=float, default=150.0)
@@ -453,7 +453,7 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--sample", type=int, default=0, help="cap docs per corpus (0 = all)")
     ap.add_argument("--seed", type=int, default=1234)
     ap.add_argument("--timeout", type=float, default=120.0, help="per-render wall-clock timeout (s)")
-    ap.add_argument("--python", default=sys.executable, help="interpreter that can import oxide_pdf")
+    ap.add_argument("--python", default=sys.executable, help="interpreter that can import pdfspine")
     ap.add_argument(
         "--oracle-python",
         default=str(ROOT / ".venv-oracle" / "bin" / "python"),
@@ -557,8 +557,8 @@ def main(argv: list[str]) -> int:
 def _verdict(overall: dict, per_corpus: dict, records: list[dict]) -> str:
     m = overall.get("ssim_mean")
     if m is None:
-        return "No documents could be scored (no successful oxide+fitz render pairs)."
-    blanks = sum(1 for r in records if r.get("oxide_near_blank") and not r.get("fitz_near_blank"))
+        return "No documents could be scored (no successful pdfspine+fitz render pairs)."
+    blanks = sum(1 for r in records if r.get("pdfspine_near_blank") and not r.get("fitz_near_blank"))
     boxbug = sum(1 for r in records if abs(r.get("size_dw", 0)) + abs(r.get("size_dh", 0)) > 6)
     parts = []
     if m >= 0.95:
@@ -570,7 +570,7 @@ def _verdict(overall: dict, per_corpus: dict, records: list[dict]) -> str:
     else:
         parts.append(f"DIVERGENT — mean SSIM {m:.3f}. Substantial rendering differences.")
     if blanks:
-        parts.append(f"{blanks} doc(s) render near-blank in oxide while fitz draws content (renderer failure).")
+        parts.append(f"{blanks} doc(s) render near-blank in pdfspine while fitz draws content (renderer failure).")
     if boxbug:
         parts.append(f"{boxbug} doc(s) have a page-box / size mismatch (>6px).")
     return " ".join(parts)
@@ -578,7 +578,7 @@ def _verdict(overall: dict, per_corpus: dict, records: list[dict]) -> str:
 
 def _write_report(path: Path, p: dict) -> None:
     a = []
-    a.append("# oxide-pdf vs fitz — Rendering Differential\n")
+    a.append("# pdfspine vs fitz — Rendering Differential\n")
     a.append(f"_Generated {p['generated']} · DPI {p['dpi']:.0f} · {p['pages_per_doc']} page(s)/doc · "
              f"oracle_available={p['oracle_available']} · {p['elapsed_s']:.0f}s_\n")
     a.append(f"**Method:** {p['method']}\n")
@@ -606,12 +606,12 @@ def _write_report(path: Path, p: dict) -> None:
     a.append("")
 
     a.append("## Worst ~10 divergences (lowest SSIM)\n")
-    a.append("| corpus/doc | page | SSIM | MAE | oxide size | fitz size | Δw×Δh | cause guess |")
+    a.append("| corpus/doc | page | SSIM | MAE | pdfspine size | fitz size | Δw×Δh | cause guess |")
     a.append("|---|---|---|---|---|---|---|---|")
     for r in p["worst"]:
         a.append(
             f"| {r['corpus']}/{r['name']} | {r['page']} | {r['ssim']} | {r['mae']} | "
-            f"{r['oxide_size'][0]}×{r['oxide_size'][1]} | {r['fitz_size'][0]}×{r['fitz_size'][1]} | "
+            f"{r['pdfspine_size'][0]}×{r['pdfspine_size'][1]} | {r['fitz_size'][0]}×{r['fitz_size'][1]} | "
             f"{r['size_dw']}×{r['size_dh']} | {r['cause']} |"
         )
     a.append("")

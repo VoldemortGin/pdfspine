@@ -6,7 +6,7 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 rust-version.workspace = true
-description = "Image-document support, image-XObject decode/encode, Pixmap for oxide-pdf (M5)."
+description = "Image-document support, image-XObject decode/encode, Pixmap for pdfspine (M5)."
 
 [dependencies]
 pdf-core.workspace = true

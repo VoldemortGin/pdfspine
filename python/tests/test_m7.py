@@ -11,7 +11,7 @@ external/PyMuPDF files (PRD §10).
 
 from __future__ import annotations
 
-import oxide_pdf
+import pdfspine
 import pytest
 
 
@@ -129,7 +129,7 @@ _BLANK_PDF = (
 
 
 def test_pytable_001_find_tables_detects_grid():
-    doc = oxide_pdf.open(stream=_ruled_table_pdf())
+    doc = pdfspine.open(stream=_ruled_table_pdf())
     page = doc.load_page(0)
     finder = page.find_tables()
     assert len(finder) == 1
@@ -137,24 +137,24 @@ def test_pytable_001_find_tables_detects_grid():
     table = finder.tables[0]
     assert table.row_count == 2
     assert table.col_count == 3
-    assert isinstance(table.bbox, oxide_pdf.Rect)
+    assert isinstance(table.bbox, pdfspine.Rect)
 
 
 def test_pytable_002_extract_returns_cell_strings():
-    doc = oxide_pdf.open(stream=_ruled_table_pdf())
+    doc = pdfspine.open(stream=_ruled_table_pdf())
     grid = doc.load_page(0).find_tables().tables[0].extract()
     assert grid == [["A1", "B1", "C1"], ["A2", "B2", "C2"]]
 
 
 def test_pytable_003_to_markdown_shape():
-    doc = oxide_pdf.open(stream=_ruled_table_pdf())
+    doc = pdfspine.open(stream=_ruled_table_pdf())
     md = doc.load_page(0).find_tables().tables[0].to_markdown()
     assert "A1" in md and "C2" in md
     assert "|" in md  # pipe-delimited GFM
 
 
 def test_pytable_004_to_html_shape():
-    doc = oxide_pdf.open(stream=_ruled_table_pdf())
+    doc = pdfspine.open(stream=_ruled_table_pdf())
     html = doc.load_page(0).find_tables().tables[0].to_html()
     assert "<table" in html
     assert "<td" in html or "<th" in html
@@ -162,7 +162,7 @@ def test_pytable_004_to_html_shape():
 
 
 def test_pytable_005_merged_header_colspan():
-    doc = oxide_pdf.open(stream=_merged_header_pdf())
+    doc = pdfspine.open(stream=_merged_header_pdf())
     finder = doc.load_page(0).find_tables()
     assert len(finder) == 1
     table = finder.tables[0]
@@ -171,7 +171,7 @@ def test_pytable_005_merged_header_colspan():
 
 
 def test_pytable_006_finder_iterable_and_indexable():
-    doc = oxide_pdf.open(stream=_ruled_table_pdf())
+    doc = pdfspine.open(stream=_ruled_table_pdf())
     finder = doc.load_page(0).find_tables()
     tables_iter = list(finder)
     assert len(tables_iter) == 1
@@ -180,18 +180,18 @@ def test_pytable_006_finder_iterable_and_indexable():
 
 
 def test_pytable_007_text_strategy():
-    doc = oxide_pdf.open(stream=_ruled_table_pdf())
+    doc = pdfspine.open(stream=_ruled_table_pdf())
     finder = doc.load_page(0).find_tables(strategy="text")
     # text strategy may or may not match the same grid, but must never raise and
     # must return a TableFinder.
-    assert isinstance(finder, oxide_pdf.TableFinder)
+    assert isinstance(finder, pdfspine.TableFinder)
 
 
 # === PYOCG — optional content / layers ====================================
 
 
 def test_pyocg_001_add_save_reopen_roundtrip(tmp_path):
-    doc = oxide_pdf.open(stream=_BLANK_PDF)
+    doc = pdfspine.open(stream=_BLANK_PDF)
     assert doc.get_ocgs() == {}
     xref = doc.add_ocg("Layer1")
     assert isinstance(xref, int)
@@ -199,7 +199,7 @@ def test_pyocg_001_add_save_reopen_roundtrip(tmp_path):
     out = tmp_path / "ocg.pdf"
     doc.save(out, garbage=1)
 
-    re = oxide_pdf.open(out)
+    re = pdfspine.open(out)
     ocgs = re.get_ocgs()
     assert len(ocgs) == 1
     assert ocgs[xref]["name"] == "Layer1"
@@ -210,7 +210,7 @@ def test_pyocg_001_add_save_reopen_roundtrip(tmp_path):
 
 
 def test_pyocg_002_set_layer_off():
-    doc = oxide_pdf.open(stream=_BLANK_PDF)
+    doc = pdfspine.open(stream=_BLANK_PDF)
     xref = doc.add_ocg("Layer1")
     assert doc.ocg_state(xref) is True
     doc.set_layer(off=[xref])
@@ -222,7 +222,7 @@ def test_pyocg_002_set_layer_off():
 
 
 def test_pyocg_003_add_off_initial():
-    doc = oxide_pdf.open(stream=_BLANK_PDF)
+    doc = pdfspine.open(stream=_BLANK_PDF)
     xref = doc.add_ocg("Hidden", on=False)
     assert doc.ocg_state(xref) is False
 
@@ -231,7 +231,7 @@ def test_pyocg_003_add_off_initial():
 
 
 def test_pysvg_001_wellformed():
-    doc = oxide_pdf.open(stream=_BLANK_PDF)
+    doc = pdfspine.open(stream=_BLANK_PDF)
     svg = doc.load_page(0).get_svg_image()
     assert svg.startswith("<?xml") or svg.startswith("<svg")
     assert "<svg" in svg
@@ -239,8 +239,8 @@ def test_pysvg_001_wellformed():
 
 
 def test_pysvg_002_matrix_arg():
-    doc = oxide_pdf.open(stream=_ruled_table_pdf())
-    svg = doc.load_page(0).get_svg_image(matrix=oxide_pdf.Matrix(2, 0, 0, 2, 0, 0))
+    doc = pdfspine.open(stream=_ruled_table_pdf())
+    svg = doc.load_page(0).get_svg_image(matrix=pdfspine.Matrix(2, 0, 0, 2, 0, 0))
     assert "<svg" in svg
 
 

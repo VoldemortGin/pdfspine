@@ -1,6 +1,6 @@
 # PRD-NEXT — Remaining Work Roadmap
 
-> Live to-do list for resuming the oxide-pdf build. Updated 2026-06-18. **This file tracks ONLY what
+> Live to-do list for resuming the pdfspine build. Updated 2026-06-18. **This file tracks ONLY what
 > is LEFT** — completed work is intentionally not listed here. The record of DONE work lives in:
 > git history + commit messages, `docs/BENCHMARKS.md` (accuracy), `COMPAT.toml` / `PARITY.md` (API
 > parity), and `conformance/gt/*-REPORT.md` (machine metrics: GT-REPORT, RENDER-REPORT, tables).
@@ -19,14 +19,14 @@
 
 Objective ground-truth + differential harness in `conformance/gt/` (scripts committed;
 corpora/cache/`*-results.json` gitignored, regenerable):
-- `run_gt.py` — scores oxide vs fitz vs pdfminer vs SAME ground truth → `GT-REPORT.md`.
+- `run_gt.py` — scores pdfspine vs fitz vs pdfminer vs SAME ground truth → `GT-REPORT.md`.
 - `score.py` — decomposed metrics (lev/f1/jaccard/order), CJK-aware, NFKC.
 - Fetchers: `born_digital.py`, `born_cjk.py`, `pmc_fetch.py`, `fetch_eurlex.py` (8 langs),
   `fetch_govinfo.py`, `fetch_robustness.py` (GovDocs1/SafeDocs).
 - `tables_diff.py` — find_tables vs fitz. `render_diff.py` — get_pixmap vs fitz (SSIM).
 - Real-corpus differential: `conformance/run_validation.py` + `fetch_corpus.py`.
-- Venvs: `.venv` (oxide wheel) is the engine under test; `.venv-oracle` (real fitz 1.27 + pdfminer +
-  pypdfium2 + rapidocr) is the GROUND-TRUTH oracle. **In `.venv`, `import fitz` is the oxide SHIM** —
+- Venvs: `.venv` (pdfspine wheel) is the engine under test; `.venv-oracle` (real fitz 1.27 + pdfminer +
+  pypdfium2 + rapidocr) is the GROUND-TRUTH oracle. **In `.venv`, `import fitz` is the pdfspine SHIM** —
   for true correctness always cross-check against `.venv-oracle`. No oracle output is ever committed.
 
 ## 3. Remaining work (priority order)
@@ -52,7 +52,7 @@ Remaining OCR polish (LOWER priority):
   git-LFS for the repo and/or optional download-on-first-use (via `directories`) to slim the base wheel.
 
 ### B. API parity coverage — 78.9% → higher (96 deferred)
-The monoliths `python/oxide_pdf/document.py` + `crates/py-bindings/src/lib.rs` mean batches that both
+The monoliths `python/pdfspine/document.py` + `crates/py-bindings/src/lib.rs` mean batches that both
 touch them run SEQUENTIALLY. New pytest → next `python/tests/test_longtail11.py`. **Always** change
 dispositions in `scripts/_compat_catalog.py` then regenerate (`python3 scripts/_compat_catalog.py`) —
 **never hand-edit `COMPAT.toml`** — and confirm coverage rises with zero regressions (diff implemented
@@ -103,7 +103,7 @@ Renderer: `crates/pdf-render`; glyph plumbing in `crates/pdf-text` (`interp.rs`,
   GovDocs1/SafeDocs for stronger never-panic + differential evidence.
 - **More domains/langs** — DocLayNet (per-cell text GT; official 7.5GB zip ships real PDFs — HF
   mirrors strip them; needs zip64 range-extraction), more EUR-Lex, Japanese.
-- **Kangxi-radical fold (CJK polish)** — oxide raw CJK uses radical codepoints (U+2F09 ⼉) where fitz
+- **Kangxi-radical fold (CJK polish)** — pdfspine raw CJK uses radical codepoints (U+2F09 ⼉) where fitz
   folds to canonical ideographs (U+513F 儿). NFKC-equivalent/cosmetic. Small `pdf-fonts` CID→Unicode fix.
 - **CI gate** — wire a born-digital `order ≥ 0.95` (+ tables count-agreement) regression gate into CI.
 
@@ -116,7 +116,7 @@ PyMuPDF and pypdfium2, but this is unproven. Tasks:
   avoiding redundant content-stream re-parse, font-program caching across pages.
 
 ### F. Polish / known deviations (LOW — fix when a consumer needs it)
-- **Font handle carrying the embedded program** — oxide's `pdf_fonts::Font` is metrics+encoding only;
+- **Font handle carrying the embedded program** — pdfspine's `pdf_fonts::Font` is metrics+encoding only;
   carrying the `/FontFile*` bytes would unlock `glyph_bbox` (real per-glyph ink boxes), `buffer`
   (program bytes), and richer `valid_codepoints` (real cmap), AND feed the renderer. A medium refactor
   worth doing once (helps both §3.B Font and §3.C std-14).
@@ -125,7 +125,7 @@ PyMuPDF and pypdfium2, but this is unproven. Tasks:
   promotion; `<img>` has no data-URI src). Polish only if a consumer needs MuPDF-identical markup.
 - **Annot.get_textbox** — deferred (annot-appearance textpage semantics).
 - **Page.remove_rotation** — deferred (needs content-stream rewriting).
-- **xref_get_keys / pdf_trailer key ORDER** — oxide returns dict keys SORTED (Dict = `BTreeMap`) vs
+- **xref_get_keys / pdf_trailer key ORDER** — pdfspine returns dict keys SORTED (Dict = `BTreeMap`) vs
   fitz's PDF stored order; same keys, benign. A project-wide `BTreeMap`→`IndexMap` swap would match
   fitz exactly but isn't worth it unless required.
 
@@ -145,7 +145,7 @@ an API error, check the working tree — it usually left coherent, compiling wor
 rather than re-running from scratch.
 
 ## 5. Pre-public chores + docs upkeep (do last, before going public)
-- Folder rename `~/workspace/pypdf` → `oxide-pdf` + recreate `.venv` (FINAL step).
+- Folder rename `~/workspace/pypdf` → `pdfspine` + recreate `.venv` (FINAL step).
 - Reword any historical commit messages with backticks.
 - **Keep `PARITY.md` + `docs/BENCHMARKS.md` current** (they drift as batches land — refresh after each).
 - Docs site (`docs/guide`, `docs/reference`, `index.md`) completeness pass.

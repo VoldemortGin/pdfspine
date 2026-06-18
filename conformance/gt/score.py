@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Decomposed, ground-truth text scorer for oxide-pdf conformance.
+"""Decomposed, ground-truth text scorer for pdfspine conformance.
 
 PURE stdlib. No network, no PDF libraries, no I/O. This is the shared scoring
 core used by ``run_gt.py`` to score an extractor's output (``hyp``) against TRUE

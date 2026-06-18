@@ -1,7 +1,7 @@
 # Command-line interface
 
 !!! warning "Coming soon — not yet implemented"
-    The `oxide-pdf` command-line tool is **planned but not yet shipped**. There
+    The `pdfspine` command-line tool is **planned but not yet shipped**. There
     is no console-script entry point in the current build, so the commands below
     describe the *intended* CLI and are not yet runnable. This page will be
     updated to match the implementation when it lands. For now, use the Python
@@ -10,7 +10,7 @@
 ## Planned usage
 
 ```bash
-oxide-pdf <command> [options] <file.pdf>
+pdfspine <command> [options] <file.pdf>
 ```
 
 ## Planned subcommands
@@ -30,28 +30,28 @@ oxide-pdf <command> [options] <file.pdf>
 
 ```bash
 # Document facts.
-oxide-pdf info input.pdf
+pdfspine info input.pdf
 
 # Extract text from pages 1-3 to stdout.
-oxide-pdf text --pages 1-3 input.pdf
+pdfspine text --pages 1-3 input.pdf
 
 # Render every page to PNG at 150 DPI into ./out/.
-oxide-pdf render --dpi 150 --out out/ input.pdf
+pdfspine render --dpi 150 --out out/ input.pdf
 
 # Merge several PDFs.
-oxide-pdf merge a.pdf b.pdf c.pdf --out merged.pdf
+pdfspine merge a.pdf b.pdf c.pdf --out merged.pdf
 
 # Split into one file per page.
-oxide-pdf split input.pdf --out parts/
+pdfspine split input.pdf --out parts/
 
 # Keep only pages 3, 1, 2 (reorder) into a new file.
-oxide-pdf pages --select 3,1,2 input.pdf --out reordered.pdf
+pdfspine pages --select 3,1,2 input.pdf --out reordered.pdf
 
 # Dump embedded images.
-oxide-pdf images input.pdf --out images/
+pdfspine images input.pdf --out images/
 
 # Print the table of contents.
-oxide-pdf toc input.pdf
+pdfspine toc input.pdf
 ```
 
 Until the CLI ships, each of these can be scripted against the Python API — see

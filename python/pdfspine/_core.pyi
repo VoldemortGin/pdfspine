@@ -1,7 +1,7 @@
-"""Type stubs for the native ``oxide_pdf._core`` extension module (PyO3).
+"""Type stubs for the native ``pdfspine._core`` extension module (PyO3).
 
 These describe the raw Rust-backed surface. Most user code uses the
-:mod:`oxide_pdf.document` wrappers instead; the ``Pixmap`` and ``DisplayList``
+:mod:`pdfspine.document` wrappers instead; the ``Pixmap`` and ``DisplayList``
 classes below are, however, re-exported unwrapped as the public types.
 """
 

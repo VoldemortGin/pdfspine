@@ -83,7 +83,7 @@ fn insert_prop_003_qpdf_check() {
     };
     let bytes = build_mixed();
     let mut tmp = std::env::temp_dir();
-    tmp.push(format!("oxide-pdf_m4a_qpdf_{}.pdf", std::process::id()));
+    tmp.push(format!("pdfspine_m4a_qpdf_{}.pdf", std::process::id()));
     {
         let mut f = std::fs::File::create(&tmp).expect("create temp");
         f.write_all(&bytes).expect("write temp");

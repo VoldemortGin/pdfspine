@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Born-digital multi-column PDF generator with PERFECT reading-order ground truth.
 
-Part of the OBJECTIVE ground-truth accuracy subsystem for oxide-pdf. The existing
+Part of the OBJECTIVE ground-truth accuracy subsystem for pdfspine. The existing
 ``conformance/run_validation.py`` scores our text extraction against PyMuPDF as a
 *pseudo*-oracle (fitz is not truth). This module manufactures PDFs whose true
-reading order is known by construction, so oxide_pdf / fitz / pdfminer can all be
+reading order is known by construction, so pdfspine / fitz / pdfminer can all be
 scored against the SAME objective truth — the known weak spot being multi-column
 reading order.
 
@@ -63,7 +63,7 @@ CHROME_CANDIDATES = [
     "chromium",
 ]
 
-_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) oxide-pdf-gt/1.0"
+_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) pdfspine-gt/1.0"
 
 # Project Gutenberg plain-text books (public domain). (id, label).
 PG_BOOKS = [
@@ -408,7 +408,7 @@ def _render_pdf(chrome: str, html_path: Path, pdf_path: Path,
         pdf_path.unlink()
     # Throwaway profile dir per render keeps runs hermetic and avoids clobbering a
     # live Chrome session.
-    profile = tempfile.mkdtemp(prefix="oxide-gt-chrome-")
+    profile = tempfile.mkdtemp(prefix="pdfspine-gt-chrome-")
     cmd = _chrome_cmd(chrome, profile, html_path, pdf_path)
     proc = subprocess.Popen(
         cmd,
@@ -562,7 +562,7 @@ def generate(out_dir: Path, variants: list[str] | None = None) -> list[dict]:
 # --------------------------------------------------------------------------- #
 def _self_test() -> int:
     variants = ["2col", "2col-with-header"]
-    with tempfile.TemporaryDirectory(prefix="oxide-gt-selftest-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="pdfspine-gt-selftest-") as tmp:
         out = Path(tmp) / "corpus"
         entries = generate(out, variants=variants)
 

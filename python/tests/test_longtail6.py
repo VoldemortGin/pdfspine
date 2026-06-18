@@ -12,32 +12,32 @@ Covers the newly-implemented Document surface:
     move_page (reorder), with PyMuPDF "insert in front of page ``to``"
     semantics, round-tripped via page count + content order.
 
-Both the native ``oxide_pdf`` API and the ``fitz`` shim are exercised; all
+Both the native ``pdfspine`` API and the ``fitz`` shim are exercised; all
 fixtures are self-generated.
 """
 
 from __future__ import annotations
 
 import fitz
-import oxide_pdf
+import pdfspine
 import pytest
-from oxide_pdf.geometry import Quad, Rect
+from pdfspine.geometry import Quad, Rect
 
 
-def _doc(n: int = 1) -> oxide_pdf.Document:
+def _doc(n: int = 1) -> pdfspine.Document:
     """A fresh n-page document, each page tagged with its index as text."""
-    d = oxide_pdf.open()
+    d = pdfspine.open()
     for i in range(n):
         p = d.new_page(width=300, height=400)
         p.insert_text((50, 100), f"PAGE-{i}", fontsize=14)
     return d
 
 
-def _page_text(doc: oxide_pdf.Document, pno: int) -> str:
+def _page_text(doc: pdfspine.Document, pno: int) -> str:
     return doc[pno].get_text().strip()
 
 
-def _order(doc: oxide_pdf.Document) -> list[str]:
+def _order(doc: pdfspine.Document) -> list[str]:
     return [_page_text(doc, i) for i in range(doc.page_count)]
 
 
@@ -92,7 +92,7 @@ def test_lt6_fitz_shim_delegations_agree():
 # === Page labels: get_page_labels / get_page_numbers / get_label ===========
 
 
-def _labelled() -> oxide_pdf.Document:
+def _labelled() -> pdfspine.Document:
     """A 6-page doc: pages 0-2 lowercase roman (i, ii, iii), pages 3-5 decimal
     with an 'A-' prefix starting at 1 (A-1, A-2, A-3)."""
     d = _doc(6)

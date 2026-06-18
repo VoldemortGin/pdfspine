@@ -547,7 +547,7 @@ pub fn qpdf_check(bytes: &[u8]) -> Option<bool> {
     .find(|c| Command::new(c).arg("--version").output().is_ok())?;
     let mut tmp = std::env::temp_dir();
     tmp.push(format!(
-        "oxide-pdf_m4b_qpdf_{}_{}.pdf",
+        "pdfspine_m4b_qpdf_{}_{}.pdf",
         std::process::id(),
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)

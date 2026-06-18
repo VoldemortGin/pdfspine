@@ -1,9 +1,9 @@
-"""``fitz`` compatibility shim for oxide_pdf (PRD §9.5).
+"""``fitz`` compatibility shim for pdfspine (PRD §9.5).
 
 PyMuPDF is imported as ``import fitz``; this package maps PyMuPDF's exact names
-onto oxide_pdf so existing code runs unchanged. It re-exports :func:`oxide_pdf.open`,
-the :class:`~oxide_pdf.Document`/:class:`~oxide_pdf.Page` classes and the geometry value
-types, and aliases PyMuPDF's exception names onto oxide_pdf's typed hierarchy.
+onto pdfspine so existing code runs unchanged. It re-exports :func:`pdfspine.open`,
+the :class:`~pdfspine.Document`/:class:`~pdfspine.Page` classes and the geometry value
+types, and aliases PyMuPDF's exception names onto pdfspine's typed hierarchy.
 
 The full PyMuPDF surface (text/image/edit) is built out in later milestones; the
 read surface (open, page_count, indexing, metadata, geometry, encryption) is
@@ -12,8 +12,8 @@ M1f-complete.
 
 from __future__ import annotations
 
-import oxide_pdf
-from oxide_pdf import (
+import pdfspine
+from pdfspine import (
     CS_CMYK,
     CS_GRAY,
     CS_RGB,
@@ -60,10 +60,10 @@ from oxide_pdf import (
 )
 
 # The PyMuPDF baseline this shim targets (PRD §1129).
-pymupdf_version = "1.24.x (oxide_pdf shim)"
+pymupdf_version = "1.24.x (pdfspine shim)"
 
 # --- PyMuPDF exception-name aliases (PRD §9.3) ---
-# PyMuPDF raises these names; map them onto oxide_pdf's typed hierarchy so
+# PyMuPDF raises these names; map them onto pdfspine's typed hierarchy so
 # `except fitz.FileDataError` keeps working.
 FileDataError = PdfSyntaxError
 FileNotFoundError = FileNotFoundError  # built-in; PyMuPDF re-exports it
@@ -124,10 +124,10 @@ def __getattr__(name: str):
     """Surface PyMuPDF's huge namespace lazily — anything not yet implemented
     raises :class:`PdfUnsupportedError` with a hint, never ``AttributeError``
     (PRD §9.5)."""
-    # Defer to oxide_pdf for anything it defines.
-    if hasattr(oxide_pdf, name):
-        return getattr(oxide_pdf, name)
+    # Defer to pdfspine for anything it defines.
+    if hasattr(pdfspine, name):
+        return getattr(pdfspine, name)
     raise PdfUnsupportedError(
-        f"fitz.{name} is not implemented in the oxide_pdf shim yet. "
-        "See the oxide_pdf parity matrix."
+        f"fitz.{name} is not implemented in the pdfspine shim yet. "
+        "See the pdfspine parity matrix."
     )

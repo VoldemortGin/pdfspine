@@ -8,13 +8,13 @@ Covers the newly-implemented Document/Page/Pixmap getters and ops:
     show_pdf_page
   - Pixmap.copy / set_rect / shrink / pil_tobytes / pil_save
 
-Both the native ``oxide_pdf`` API and the ``fitz`` shim are exercised. All
+Both the native ``pdfspine`` API and the ``fitz`` shim are exercised. All
 fixtures are self-generated (raw PDF bytes via ``stream=``) — no external files.
 """
 
 from __future__ import annotations
 
-import oxide_pdf
+import pdfspine
 import fitz
 import pytest
 
@@ -142,7 +142,7 @@ def multi_page_pdf(markers: list[str]) -> bytes:
 
 
 def test_lt1_page_get_xobjects():
-    doc = oxide_pdf.open(stream=xobject_pdf())
+    doc = pdfspine.open(stream=xobject_pdf())
     xobjs = doc[0].get_xobjects()
     by_name = {x[1]: x for x in xobjs}
     assert set(by_name) == {"Fm0", "Im0"}
@@ -157,7 +157,7 @@ def test_lt1_page_get_xobjects():
 
 
 def test_lt1_document_get_page_xobjects_matches_page():
-    doc = oxide_pdf.open(stream=xobject_pdf())
+    doc = pdfspine.open(stream=xobject_pdf())
     doc_view = {x[1] for x in doc.get_page_xobjects(0)}
     page_view = {x[1] for x in doc[0].get_xobjects()}
     assert doc_view == page_view == {"Fm0", "Im0"}
@@ -173,7 +173,7 @@ def test_lt1_fitz_get_xobjects():
 
 
 def test_lt1_page_get_image_rects():
-    doc = oxide_pdf.open(stream=xobject_pdf())
+    doc = pdfspine.open(stream=xobject_pdf())
     rects = doc[0].get_image_rects()
     assert len(rects) >= 1
     # Each rect is a non-degenerate Rect.
@@ -185,13 +185,13 @@ def test_lt1_page_get_image_rects():
 
 
 def test_lt1_page_get_contents_xref():
-    doc = oxide_pdf.open(stream=xobject_pdf())
+    doc = pdfspine.open(stream=xobject_pdf())
     contents = doc[0].get_contents()
     assert contents == [4]
 
 
 def test_lt1_page_read_contents_bytes():
-    doc = oxide_pdf.open(stream=xobject_pdf())
+    doc = pdfspine.open(stream=xobject_pdf())
     raw = doc[0].read_contents()
     assert isinstance(raw, bytes)
     assert b"/Fm0 Do" in raw
@@ -207,8 +207,8 @@ def test_lt1_fitz_read_contents():
 
 
 def test_lt1_show_pdf_page_places_form():
-    dst = oxide_pdf.open(stream=multi_page_pdf(["DST"]))
-    src = oxide_pdf.open(stream=multi_page_pdf(["SRC"]))
+    dst = pdfspine.open(stream=multi_page_pdf(["DST"]))
+    src = pdfspine.open(stream=multi_page_pdf(["SRC"]))
     name = dst[0].show_pdf_page((10, 10, 110, 110), src, 0)
     assert name.startswith("Fm")
     # The destination page now references a Form XObject.
@@ -219,18 +219,18 @@ def test_lt1_show_pdf_page_places_form():
 
 
 def test_lt1_show_pdf_page_roundtrips():
-    dst = oxide_pdf.open(stream=multi_page_pdf(["DST"]))
-    src = oxide_pdf.open(stream=multi_page_pdf(["SRC"]))
+    dst = pdfspine.open(stream=multi_page_pdf(["DST"]))
+    src = pdfspine.open(stream=multi_page_pdf(["SRC"]))
     dst[0].show_pdf_page((10, 10, 110, 110), src, 0)
-    re = oxide_pdf.open(stream=dst.tobytes())
+    re = pdfspine.open(stream=dst.tobytes())
     assert re.page_count == 1
     # The grafted form is intact after a full save/reopen.
     assert any(x[2] == "Form" for x in re[0].get_xobjects())
 
 
 def test_lt1_show_pdf_page_out_of_range():
-    dst = oxide_pdf.open(stream=multi_page_pdf(["DST"]))
-    src = oxide_pdf.open(stream=multi_page_pdf(["SRC"]))
+    dst = pdfspine.open(stream=multi_page_pdf(["DST"]))
+    src = pdfspine.open(stream=multi_page_pdf(["SRC"]))
     with pytest.raises(Exception):
         dst[0].show_pdf_page((0, 0, 50, 50), src, 9)
 
@@ -239,13 +239,13 @@ def test_lt1_show_pdf_page_out_of_range():
 
 
 def test_lt1_document_pages_iterator():
-    doc = oxide_pdf.open(stream=multi_page_pdf(["A", "B", "C"]))
+    doc = pdfspine.open(stream=multi_page_pdf(["A", "B", "C"]))
     nums = [p.number for p in doc.pages()]
     assert nums == [0, 1, 2]
 
 
 def test_lt1_document_reload_page():
-    doc = oxide_pdf.open(stream=multi_page_pdf(["A", "B"]))
+    doc = pdfspine.open(stream=multi_page_pdf(["A", "B"]))
     page = doc[0]
     reloaded = doc.reload_page(page)
     assert reloaded.number == 0
@@ -254,7 +254,7 @@ def test_lt1_document_reload_page():
 
 
 def test_lt1_document_page_xref():
-    doc = oxide_pdf.open(stream=multi_page_pdf(["A", "B"]))
+    doc = pdfspine.open(stream=multi_page_pdf(["A", "B"]))
     assert doc.page_xref(0) == 4
     assert doc.page_xref(1) == 6
     assert doc.page_xref(-1) == 6
@@ -270,13 +270,13 @@ def test_lt1_fitz_pages_and_page_xref():
 
 
 def test_lt1_resolve_link_named_dest():
-    doc = oxide_pdf.open(stream=named_dest_pdf())
+    doc = pdfspine.open(stream=named_dest_pdf())
     assert doc.resolve_link("Chapter2") == 1
     assert doc.resolve_link("Missing") is None
 
 
 def test_lt1_resolve_link_page_fragment():
-    doc = oxide_pdf.open(stream=multi_page_pdf(["A", "B", "C"]))
+    doc = pdfspine.open(stream=multi_page_pdf(["A", "B", "C"]))
     assert doc.resolve_link("file.pdf#page=2") == 1
     assert doc.resolve_link("#3") == 2
     assert doc.resolve_link("#page=99") is None
@@ -286,18 +286,18 @@ def test_lt1_resolve_link_page_fragment():
 
 
 def test_lt1_fullcopy_page_appends_independent():
-    doc = oxide_pdf.open(stream=multi_page_pdf(["AAA", "BBB"]))
+    doc = pdfspine.open(stream=multi_page_pdf(["AAA", "BBB"]))
     assert doc.page_count == 2
     doc.fullcopy_page(0)
     assert doc.page_count == 3
-    re = oxide_pdf.open(stream=doc.tobytes())
+    re = pdfspine.open(stream=doc.tobytes())
     assert re.page_count == 3
     assert "AAA" in re[2].get_text()
 
 
 def test_lt1_fullcopy_page_to_position():
     # fullcopy_page now supports an explicit insert position (long-tail batch 2).
-    doc = oxide_pdf.open(stream=multi_page_pdf(["A", "B"]))
+    doc = pdfspine.open(stream=multi_page_pdf(["A", "B"]))
     doc.fullcopy_page(0, to=1)
     assert doc.page_count == 3
 
@@ -306,7 +306,7 @@ def test_lt1_fullcopy_page_to_position():
 
 
 def test_lt1_chapter_location_model():
-    doc = oxide_pdf.open(stream=multi_page_pdf(["A", "B", "C"]))
+    doc = pdfspine.open(stream=multi_page_pdf(["A", "B", "C"]))
     assert doc.chapter_count == 1
     assert doc.chapter_page_count(0) == 3
     assert doc.chapter_page_count(1) == 0
@@ -323,7 +323,7 @@ def test_lt1_fitz_chapter_location():
 
 
 def _blank_pixmap(w: int = 8, h: int = 8):
-    return oxide_pdf.Pixmap(3, (0, 0, w, h))
+    return pdfspine.Pixmap(3, (0, 0, w, h))
 
 
 def test_lt1_pixmap_copy_independent():

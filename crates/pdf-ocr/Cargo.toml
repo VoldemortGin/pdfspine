@@ -6,7 +6,7 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 rust-version.workspace = true
-description = "Pluggable OCR (Tesseract default) -> OCR TextPage + searchable sandwich PDF for oxide-pdf (M8)."
+description = "Pluggable OCR (Tesseract default) -> OCR TextPage + searchable sandwich PDF for pdfspine (M8)."
 
 [dependencies]
 # Objects + geometry (Matrix/Point/Rect) + the typed Error this crate wraps.

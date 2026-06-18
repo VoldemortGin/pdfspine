@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Performance benchmark harness: oxide_pdf vs pypdf vs pypdfium2.
+"""Performance benchmark harness: pdfspine vs pypdf vs pypdfium2.
 
 Times three operations over the public-domain corpus in ``fixtures/corpus/*.pdf``
 for each PDF library and emits an honest comparison table to
@@ -11,13 +11,13 @@ Operations (warm, median of N runs per document):
 * ``text``   -- extract text over the *whole* document.
 * ``render`` -- rasterize page 1 at 150 dpi (pypdf has no renderer -> skipped).
 
-Architecture (mirrors ``oracle_extract.py`` / ``oxide_worker.py``):
+Architecture (mirrors ``oracle_extract.py`` / ``pdfspine_worker.py``):
 
 The competitors (pypdf MIT, pypdfium2 BSD/Apache) are bench-only and live in a
 separate, gitignored ``.venv-bench``. They must never be imported into the same
 interpreter as our Apache-2.0 build, so every measurement runs in a SUBPROCESS:
 
-* ``oxide``     -> the current project interpreter (``sys.executable``, in .venv)
+* ``pdfspine``     -> the current project interpreter (``sys.executable``, in .venv)
 * ``pypdf``     -> ``.venv-bench/bin/python``
 * ``pypdfium2`` -> ``.venv-bench/bin/python``
 
@@ -52,7 +52,7 @@ BENCH_VENV = ROOT / ".venv-bench"
 OUT_MD = ROOT / "conformance" / "BENCH.md"
 OUT_JSON = ROOT / "conformance" / "bench-results.json"
 
-LIBS = ("oxide", "pypdf", "pypdfium2")
+LIBS = ("pdfspine", "pypdf", "pypdfium2")
 OPS = ("open", "text", "render")
 DEFAULT_RUNS = 5
 DEFAULT_DPI = 150
@@ -75,13 +75,13 @@ def _median_time(fn, runs: int) -> tuple[float, object]:
     return statistics.median(samples), result
 
 
-def _bench_oxide(path: str, runs: int, dpi: int) -> dict:
-    import oxide_pdf
+def _bench_pdfspine(path: str, runs: int, dpi: int) -> dict:
+    import pdfspine
 
     out: dict = {"ops": {}, "page_count": None, "text_chars": None}
 
     def _open():
-        doc = oxide_pdf.open(path)
+        doc = pdfspine.open(path)
         n = doc.page_count
         doc.close()
         return n
@@ -91,7 +91,7 @@ def _bench_oxide(path: str, runs: int, dpi: int) -> dict:
     out["page_count"] = int(n)
 
     def _text():
-        doc = oxide_pdf.open(path)
+        doc = pdfspine.open(path)
         try:
             if getattr(doc, "needs_pass", False):
                 try:
@@ -110,7 +110,7 @@ def _bench_oxide(path: str, runs: int, dpi: int) -> dict:
     out["text_chars"] = int(chars)
 
     def _render():
-        doc = oxide_pdf.open(path)
+        doc = pdfspine.open(path)
         try:
             pm = doc.load_page(0).get_pixmap(dpi=dpi)
             return (pm.width, pm.height)
@@ -211,7 +211,7 @@ def _bench_pypdfium2(path: str, runs: int, dpi: int) -> dict:
 
 
 _WORKERS = {
-    "oxide": _bench_oxide,
+    "pdfspine": _bench_pdfspine,
     "pypdf": _bench_pypdf,
     "pypdfium2": _bench_pypdfium2,
 }
@@ -234,12 +234,12 @@ def _run_worker(lib: str, path: str, runs: int, dpi: int) -> int:
 def _probe_versions() -> int:
     info: dict = {"python": platform.python_version()}
     try:
-        import oxide_pdf
+        import pdfspine
 
         try:
-            info["oxide"] = oxide_pdf.version()
+            info["pdfspine"] = pdfspine.version()
         except Exception:  # noqa: BLE001
-            info["oxide"] = "0.0.0"
+            info["pdfspine"] = "0.0.0"
     except Exception:  # noqa: BLE001
         pass
     import importlib.metadata as _md
@@ -268,7 +268,7 @@ def _probe_versions() -> int:
 # Orchestrator side.
 # --------------------------------------------------------------------------- #
 def _interpreter_for(lib: str) -> str:
-    if lib == "oxide":
+    if lib == "pdfspine":
         return sys.executable
     bench_py = BENCH_VENV / "bin" / "python"
     if not bench_py.exists():
@@ -329,13 +329,13 @@ def _probe_bench_versions() -> dict:
     return info
 
 
-def _ratio_text(oxide_v: float | None, other_v: float | None) -> str:
-    """Return 'Nx faster'/'Nx slower' describing oxide relative to ``other``."""
-    if not oxide_v or not other_v:
+def _ratio_text(pdfspine_v: float | None, other_v: float | None) -> str:
+    """Return 'Nx faster'/'Nx slower' describing pdfspine relative to ``other``."""
+    if not pdfspine_v or not other_v:
         return "n/a"
-    if oxide_v <= other_v:
-        return f"{other_v / oxide_v:.2f}x faster"
-    return f"{oxide_v / other_v:.2f}x slower"
+    if pdfspine_v <= other_v:
+        return f"{other_v / pdfspine_v:.2f}x faster"
+    return f"{pdfspine_v / other_v:.2f}x slower"
 
 
 def _fmt_sec(v: float | None) -> str:
@@ -447,10 +447,10 @@ def write_report(data: dict) -> None:
     }
 
     lines: list[str] = []
-    lines.append("# oxide-pdf performance benchmark")
+    lines.append("# pdfspine performance benchmark")
     lines.append("")
     lines.append(
-        "Honest, reproducible comparison of **oxide_pdf** against two popular "
+        "Honest, reproducible comparison of **pdfspine** against two popular "
         "Python PDF libraries on a shared public-domain corpus. Generated by "
         "`conformance/bench.py`."
     )
@@ -461,14 +461,14 @@ def write_report(data: dict) -> None:
     lines.append("")
     summary_bits: list[str] = []
     for op, label in (("open", "open"), ("text", "text extraction"), ("render", "render @150dpi")):
-        ox = op_med[op]["oxide"]
+        ox = op_med[op]["pdfspine"]
         pf = op_med[op]["pypdf"]
         pm = op_med[op]["pypdfium2"]
         parts = []
         if ox is not None and pf is not None:
-            parts.append(f"vs pypdf: oxide {_ratio_text(ox, pf)}")
+            parts.append(f"vs pypdf: pdfspine {_ratio_text(ox, pf)}")
         if ox is not None and pm is not None:
-            parts.append(f"vs pypdfium2: oxide {_ratio_text(ox, pm)}")
+            parts.append(f"vs pypdfium2: pdfspine {_ratio_text(ox, pm)}")
         if op == "render" and pf is None:
             parts.append("pypdf: unsupported")
         if parts:
@@ -476,8 +476,8 @@ def write_report(data: dict) -> None:
     lines.extend(summary_bits)
     lines.append("")
     lines.append(
-        "Read the ratios as *oxide relative to the competitor*: \"faster\" means "
-        "oxide took less wall-clock time per document. All numbers are warm "
+        "Read the ratios as *pdfspine relative to the competitor*: \"faster\" means "
+        "pdfspine took less wall-clock time per document. All numbers are warm "
         "medians (see Methodology)."
     )
     lines.append("")
@@ -487,13 +487,13 @@ def write_report(data: dict) -> None:
     lines.append("")
     lines.append(f"- **CPU**: {mach.get('processor', 'unknown')} ({mach.get('cpu_count')} cores)")
     lines.append(f"- **OS / arch**: {mach.get('platform')} / {mach.get('machine')}")
-    lines.append(f"- **Python (orchestrator/oxide)**: {mach.get('python_orchestrator')}")
+    lines.append(f"- **Python (orchestrator/pdfspine)**: {mach.get('python_orchestrator')}")
     if "python" in ver:
         lines.append(f"- **Python (.venv-bench / competitors)**: {ver.get('python')}")
     lines.append("")
     lines.append("Library versions:")
     lines.append("")
-    lines.append(f"- **oxide_pdf**: {ver.get('oxide', 'unknown')} (pure Rust, Apache-2.0)")
+    lines.append(f"- **pdfspine**: {ver.get('pdfspine', 'unknown')} (pure Rust, Apache-2.0)")
     lines.append(f"- **pypdf**: {ver.get('pypdf', 'unknown')} (pure Python, MIT)")
     pdfium_core = f", PDFium {ver['pdfium']}" if "pdfium" in ver else ""
     lines.append(
@@ -511,7 +511,7 @@ def write_report(data: dict) -> None:
     lines.append("## Results (median seconds per document)")
     lines.append("")
     lines.append(
-        "| Operation | oxide_pdf | pypdf | pypdfium2 | oxide vs pypdf | oxide vs pypdfium2 |"
+        "| Operation | pdfspine | pypdf | pypdfium2 | pdfspine vs pypdf | pdfspine vs pypdfium2 |"
     )
     lines.append("|---|---|---|---|---|---|")
     op_titles = {
@@ -520,13 +520,13 @@ def write_report(data: dict) -> None:
         "render": f"render page 1 @ {cfg['dpi']}dpi",
     }
     for op in OPS:
-        ox = op_med[op]["oxide"]
+        ox = op_med[op]["pdfspine"]
         pf = op_med[op]["pypdf"]
         pm = op_med[op]["pypdfium2"]
         pf_cell = _fmt_sec(pf) if pf is not None else "n/a (unsupported)"
         lines.append(
             f"| {op_titles[op]} | {_fmt_sec(ox)} | {pf_cell} | {_fmt_sec(pm)} "
-            f"| oxide {_ratio_text(ox, pf)} | oxide {_ratio_text(ox, pm)} |"
+            f"| pdfspine {_ratio_text(ox, pf)} | pdfspine {_ratio_text(ox, pm)} |"
         )
     lines.append("")
     lines.append(
@@ -538,13 +538,13 @@ def write_report(data: dict) -> None:
     # ---- Per-op totals ----------------------------------------------------- #
     lines.append("## Totals across corpus (sum of per-doc medians)")
     lines.append("")
-    lines.append("| Operation | oxide_pdf | pypdf | pypdfium2 | #docs (oxide) |")
+    lines.append("| Operation | pdfspine | pypdf | pypdfium2 | #docs (pdfspine) |")
     lines.append("|---|---|---|---|---|")
     for op in OPS:
         sums = {lib: (sum(per_op[op][lib]) if per_op[op][lib] else None) for lib in LIBS}
-        n_ox = len(per_op[op]["oxide"])
+        n_ox = len(per_op[op]["pdfspine"])
         lines.append(
-            f"| {op_titles[op]} | {_fmt_sec(sums['oxide'])} | "
+            f"| {op_titles[op]} | {_fmt_sec(sums['pdfspine'])} | "
             f"{_fmt_sec(sums['pypdf']) if sums['pypdf'] is not None else 'n/a'} | "
             f"{_fmt_sec(sums['pypdfium2'])} | {n_ox} |"
         )
@@ -578,16 +578,16 @@ def write_report(data: dict) -> None:
     )
     lines.append(
         "- **Subprocess isolation.** Every measurement runs in a fresh worker "
-        "process via the correct interpreter — oxide in the project `.venv`, "
+        "process via the correct interpreter — pdfspine in the project `.venv`, "
         "pypdf/pypdfium2 in a separate gitignored `.venv-bench`. This keeps the "
         "AGPL/3rd-party deps out of our build's interpreter and contains "
         "crashes/hangs (a per-document wall-clock timeout marks a cell failed)."
     )
     lines.append(
         "- **Operations.** `open` = open + read `page_count`; `text` = extract "
-        "text over the *whole* document (oxide `page.get_text()`, pypdf "
+        "text over the *whole* document (pdfspine `page.get_text()`, pypdf "
         "`page.extract_text()`, pypdfium2 `textpage.get_text_bounded()`); "
-        f"`render` = rasterize page 1 at {cfg['dpi']} dpi (oxide "
+        f"`render` = rasterize page 1 at {cfg['dpi']} dpi (pdfspine "
         f"`page.get_pixmap(dpi={cfg['dpi']})`, pypdfium2 "
         f"`page.render(scale={cfg['dpi']}/72)`)."
     )
@@ -604,12 +604,12 @@ def write_report(data: dict) -> None:
     lines.append(
         "- **Apples to different things.** pypdf is **pure Python** (no native "
         "code, no rasterizer); pypdfium2 wraps **PDFium**, the mature C/C++ "
-        "engine from Chromium. oxide_pdf is **pure Rust**. A pure-Rust library "
+        "engine from Chromium. pdfspine is **pure Rust**. A pure-Rust library "
         "beating a hand-tuned C engine is not the expectation — where pypdfium2 "
         "wins, that is the C engine's maturity showing."
     )
     lines.append(
-        "- **oxide's rasterizer is young.** The `render` path is a from-scratch "
+        "- **pdfspine's rasterizer is young.** The `render` path is a from-scratch "
         "Rust rasterizer; treat its render numbers as a snapshot of an evolving "
         "component, not a final state."
     )

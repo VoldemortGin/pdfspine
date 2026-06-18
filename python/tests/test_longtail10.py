@@ -29,41 +29,41 @@ It also covers the Document state/meta surface (PRD §C batch-5 state/meta half)
 
 The expected values below are the GROUND TRUTH captured from REAL PyMuPDF 1.27
 (``.venv-oracle``) reading the EXACT SAME bytes (the in-repo ``.venv`` ``fitz`` is
-the oxide shim). For the writer methods the round-trip (write → read back → save →
+the pdfspine shim). For the writer methods the round-trip (write → read back → save →
 reopen → confirm persisted) was also cross-checked against real fitz performing
 the same operations.
 
 DEVIATIONS from fitz (documented):
   - ``xref_get_keys`` returns keys in the backing dictionary's order, which is
-    SORTED (oxide stores dicts in a ``BTreeMap``); fitz returns source order.
+    SORTED (pdfspine stores dicts in a ``BTreeMap``); fitz returns source order.
     The KEY SET is identical — the tests compare sorted key lists. (This is a
-    pre-existing oxide model trait, shared by ``xref_object`` serialization.)
+    pre-existing pdfspine model trait, shared by ``xref_object`` serialization.)
   - ``xref_is_xobject`` keys on ``/Subtype /Form`` exactly like fitz, so an image
     XObject is False here (use ``xref_is_image`` for those) — matches fitz.
   - ``update_object`` on a stream replaces the DICTIONARY verbatim and preserves
     the underlying stream body bytes; ``/Length`` is recomputed by the writer on
-    save (fitz semantics). oxide keeps the body's RAW bytes; fitz may re-encode
+    save (fitz semantics). pdfspine keeps the body's RAW bytes; fitz may re-encode
     them. Either way the dictionary keys and stream identity match.
-  - ``update_stream`` with ``new=True`` is slightly MORE lenient than fitz: oxide
+  - ``update_stream`` with ``new=True`` is slightly MORE lenient than fitz: pdfspine
     can promote a ``null`` slot straight to a stream, whereas fitz requires the
     slot to already be a dict (``update_object`` first). The fitz-canonical
     sequence (``update_object`` then ``update_stream``) is exercised and matches
     fitz byte-for-byte through a save/reopen round-trip.
   - ``is_dirty``: a freshly *created* document (``fitz.open()`` with no source)
-    is reported dirty-from-creation by fitz, whereas oxide treats opening the
+    is reported dirty-from-creation by fitz, whereas pdfspine treats opening the
     blank seed bytes as a clean parse (dirty only after a real edit). Both engines
     agree for a *file*-opened document: clean on open, dirty after an edit — which
     is what the test asserts.
   - ``page_annot_xrefs`` returns ``(xref, type-code, id)`` tuples like fitz; the
-    type-code uses oxide's ``_ANNOT_TYPE_INT`` (the 1.24 baseline). For the
+    type-code uses pdfspine's ``_ANNOT_TYPE_INT`` (the 1.24 baseline). For the
     subtypes whose codes are stable across PyMuPDF 1.24/1.27 (Text=0, Square=4,
     Highlight=8, …) the oracle (1.27) match is exact; only ``Widget`` (1.24=20,
     1.27=21) and ``Redact`` (1.24=25, 1.27=12) were renumbered in 1.27, so those
-    are cross-checked against oxide's own ``Annot.type`` rather than the oracle.
+    are cross-checked against pdfspine's own ``Annot.type`` rather than the oracle.
     Unlike annotation *iteration* (``page.annots()``), this includes ``/Popup``
     annotations — fitz's ``page_annot_xrefs`` dumps the raw ``/Annots`` array.
 
-DEFERRED (does not map cleanly to oxide's model — an honest deferral beats a
+DEFERRED (does not map cleanly to pdfspine's model — an honest deferral beats a
 wrong value):
   - ``version_count`` (incremental-update generations). MuPDF's count is an
     engine-internal artifact of how it lazily layers xref revisions: it is
@@ -82,7 +82,7 @@ import tempfile
 from pathlib import Path
 
 import fitz
-import oxide_pdf
+import pdfspine
 import pytest
 
 
@@ -93,7 +93,7 @@ _IRS_P15 = _CORPUS / "irs-p15.pdf"
 
 # A deterministic 2-page PDF carrying BOTH a catalog ``/Dests`` dict entry
 # ("direct") and a ``/Names /Dests`` name-tree entry ("treekey"), each an
-# explicit ``/XYZ`` destination. (Built by hand; the same bytes oxide AND the
+# explicit ``/XYZ`` destination. (Built by hand; the same bytes pdfspine AND the
 # oracle read.)
 _DESTS_PDF = base64.b64decode(
     "JVBERi0xLjcKMSAwIG9iajw8L1R5cGUvQ2F0YWxvZy9QYWdlcyAyIDAgUi9OYW1lczw8L0Rlc3Rz"
@@ -216,7 +216,7 @@ def test_xref_get_keys_missing_is_empty(gov):
 
 # A 1-page PDF with three annotations carrying explicit ``/NM`` ids whose
 # subtypes have STABLE PyMuPDF type-codes across 1.24/1.27: Highlight=8, Text=0,
-# Square=4. (The same bytes oxide AND the oracle read.)
+# Square=4. (The same bytes pdfspine AND the oracle read.)
 _ANNOTS_PDF = base64.b64decode(
     "JVBERi0xLjcKMSAwIG9iajw8L1R5cGUvQ2F0YWxvZy9QYWdlcyAyIDAgUj4+ZW5kb2JqCjIgMCBv"
     "Ymo8PC9UeXBlL1BhZ2VzL0NvdW50IDEvS2lkc1szIDAgUl0+PmVuZG9iagozIDAgb2JqPDwvVHlw"
@@ -233,7 +233,7 @@ _GT_ANNOT_XREFS = [(4, 8, "h-1"), (5, 0, "t-2"), (6, 4, "s-3")]
 
 
 def test_page_annot_xrefs_tuple_shape_matches_fitz():
-    # The FIX: oxide returns (xref, type-code, id) tuples like fitz, not bare
+    # The FIX: pdfspine returns (xref, type-code, id) tuples like fitz, not bare
     # xref ints. Cross-checked against the real-fitz oracle in
     # test_oracle.py-style harnessing; here the shim must reproduce the GT.
     doc = fitz.open(stream=_ANNOTS_PDF, filetype="pdf")
@@ -257,7 +257,7 @@ def test_page_annot_xrefs_empty_page(gov):
 
 
 def test_resolve_names_dests_dict_and_name_tree():
-    doc = oxide_pdf.open(stream=_DESTS_PDF, filetype="pdf")
+    doc = pdfspine.open(stream=_DESTS_PDF, filetype="pdf")
     rn = doc.resolve_names()
     assert rn["direct"] == {"page": 0, "to": (20.0, 280.0), "zoom": 0.0}
     assert rn["treekey"] == {"page": 1, "to": (10.0, 250.0), "zoom": 0.0}
@@ -265,7 +265,7 @@ def test_resolve_names_dests_dict_and_name_tree():
 
 
 def test_resolve_names_non_xyz_dest_fallback():
-    doc = oxide_pdf.open(stream=_FIT_PDF, filetype="pdf")
+    doc = pdfspine.open(stream=_FIT_PDF, filetype="pdf")
     rn = doc.resolve_names()
     assert rn["fith"] == {"page": 0, "dest": "/FitH 222"}
     assert rn["fit"] == {"page": 0, "dest": "/Fit"}
@@ -380,7 +380,7 @@ def test_writer_roundtrip_persists():
 def test_update_object_roundtrip_persists():
     doc = fitz.open(str(_GOVINFO))
     nx = doc.get_new_xref()
-    doc.update_object(nx, "<< /Type /Marker /Tag (oxide) >>")
+    doc.update_object(nx, "<< /Type /Marker /Tag (pdfspine) >>")
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as fh:
         out = fh.name
     try:
@@ -712,9 +712,9 @@ def test_get_page_label_delegates(gov):
 
 
 def test_xref_get_keys_order_is_sorted_same_set_as_fitz(gov):
-    # oxide returns catalog keys SORTED (Dict = BTreeMap); fitz preserves the
+    # pdfspine returns catalog keys SORTED (Dict = BTreeMap); fitz preserves the
     # PDF's stored order. The KEY SET is identical — assert the SET, not order.
     keys = gov.xref_get_keys(gov.pdf_catalog())
     assert set(keys) == set(_GT_GOVINFO_CATKEYS)
-    # oxide's own output is sorted (the documented model trait).
+    # pdfspine's own output is sorted (the documented model trait).
     assert list(keys) == sorted(keys)

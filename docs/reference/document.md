@@ -1,7 +1,7 @@
 # Document
 
-`oxide_pdf.Document` (PyMuPDF `fitz.Document`) is a parsed PDF. Obtain one with
-`oxide_pdf.open(...)`. It is a context manager, iterable, indexable, and
+`pdfspine.Document` (PyMuPDF `fitz.Document`) is a parsed PDF. Obtain one with
+`pdfspine.open(...)`. It is a context manager, iterable, indexable, and
 `len(doc)` is the page count.
 
 ## Opening
@@ -12,9 +12,9 @@ Module-level function. Pass a path positionally, in-memory bytes via `stream=`,
 or no arguments to create a new empty PDF.
 
 ```python
-doc = oxide_pdf.open("input.pdf")
-doc = oxide_pdf.open(stream=raw_bytes)
-doc = oxide_pdf.open()                      # new empty PDF
+doc = pdfspine.open("input.pdf")
+doc = pdfspine.open(stream=raw_bytes)
+doc = pdfspine.open()                      # new empty PDF
 ```
 
 ## Pages
@@ -133,7 +133,7 @@ See [Page.get_text](page.md#text-extraction) for the `option` values.
 | Member | Description |
 |---|---|
 | `close()` | Release the document (drops the Rust handle). |
-| `with oxide_pdf.open(...) as doc:` | Context-manager usage; auto-closes. |
+| `with pdfspine.open(...) as doc:` | Context-manager usage; auto-closes. |
 
 ## Not yet implemented
 

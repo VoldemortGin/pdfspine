@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Isolated oxide_pdf worker — run inside the project venv (with our built wheel).
+"""Isolated pdfspine worker — run inside the project venv (with our built wheel).
 
 Invoked as a SUBPROCESS by ``run_validation.py`` so that a Rust panic/abort or a
 hang on one input cannot take down the whole harness: the parent applies a wall
@@ -43,16 +43,16 @@ def main(argv: list[str] | None = None) -> int:
     }
 
     try:
-        import oxide_pdf
+        import pdfspine
     except Exception as exc:  # noqa: BLE001
-        out["error"] = f"import oxide_pdf failed: {exc}"
+        out["error"] = f"import pdfspine failed: {exc}"
         out["error_type"] = type(exc).__name__
         sys.stdout.write(json.dumps(out))
         return 0
 
     doc = None
     try:
-        doc = oxide_pdf.open(args.path)
+        doc = pdfspine.open(args.path)
         out["opened"] = True
         try:
             out["repaired"] = bool(doc.is_repaired)

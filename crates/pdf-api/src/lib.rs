@@ -1,5 +1,5 @@
 #![forbid(unsafe_code)]
-//! `pdf-api` — the unified ergonomic facade over the oxide-pdf core crates and the
+//! `pdf-api` — the unified ergonomic facade over the pdfspine core crates and the
 //! only crate `py-bindings` depends on (PRD §9.1).
 //!
 //! M1f adds the [`Document`] / [`Page`] read surface (PRD §7): `open`/`open_bytes`,
@@ -89,7 +89,7 @@ pub use svg::page_get_svg_image;
 pub use ocr::{document_pdfocr_bytes, page_textpage_ocr, tesseract_available};
 
 /// The crate version string (the workspace version), surfaced to Python as
-/// `oxide_pdf.__version__`.
+/// `pdfspine.__version__`.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Geometry value types, re-exported from `pdf-core` (PRD §7 / M0).

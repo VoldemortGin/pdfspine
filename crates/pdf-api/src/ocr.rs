@@ -10,7 +10,7 @@
 //!
 //! - `"tesseract"` (default) — the system Tesseract CLI adapter (PyMuPDF
 //!   compatible; `tessdata` applies here).
-//! - `"paddle"` — oxide's pure-Rust PaddleOCR (PP-OCRv4) engine, stronger on
+//! - `"paddle"` — pdfspine's pure-Rust PaddleOCR (PP-OCRv4) engine, stronger on
 //!   mixed CJK+Latin text. Available only when the (default-on) `paddle-ocr`
 //!   feature is compiled in; `tessdata` is irrelevant to it.
 //!

@@ -1,28 +1,28 @@
-# oxide-pdf
+# pdfspine
 
-**A permissively-licensed, pure-Rust reimplementation of [PyMuPDF](https://pymupdf.readthedocs.io/) (`fitz`) — with a Python API, an `import fitz` compatibility shim, and an `oxide-pdf` command-line tool.**
+**A permissively-licensed, pure-Rust reimplementation of [PyMuPDF](https://pymupdf.readthedocs.io/) (`fitz`) — with a Python API, an `import fitz` compatibility shim, and an `pdfspine` command-line tool.**
 
-oxide-pdf lets you read, search, extract, edit, and render PDFs from Python with
+pdfspine lets you read, search, extract, edit, and render PDFs from Python with
 a PyMuPDF-shaped API — but the entire engine is written in safe Rust and shipped
 under **Apache-2.0**. Existing code that does `import fitz` can run unmodified on
-the supported subset, while new code can use the idiomatic `import oxide_pdf`
+the supported subset, while new code can use the idiomatic `import pdfspine`
 package directly.
 
 !!! warning "Alpha / work-in-progress"
-    oxide-pdf is **pre-1.0** (`Development Status :: 2 - Pre-Alpha`, version
+    pdfspine is **pre-1.0** (`Development Status :: 2 - Pre-Alpha`, version
     `0.0.0`). A large surface of the API is implemented and tested
     (see the [PyMuPDF coverage](#status) below), but real-corpus accuracy
     validation against PyMuPDF is **still in progress**, and the package is
     **not yet published to PyPI**. APIs may change before 1.0. Treat output as
     "verify before you trust it" for production workloads.
 
-## Why oxide-pdf?
+## Why pdfspine?
 
 PyMuPDF is excellent, but it is **AGPL-3.0** (or a paid commercial license from
 Artifex). That licensing is a non-starter for many closed-source products, SaaS
 backends, and permissively-licensed open-source projects.
 
-oxide-pdf exists to be the **permissively-licensed, drop-in-shaped** alternative:
+pdfspine exists to be the **permissively-licensed, drop-in-shaped** alternative:
 
 - **Apache-2.0 throughout.** Every first-party crate is Apache-2.0 — a permissive
   license with an explicit patent grant. The dependency graph is gated by
@@ -75,9 +75,9 @@ signal — see [Migrating from PyMuPDF](guide/migrating-from-pymupdf.md).
 ## Quick example
 
 ```python
-import oxide_pdf  # or: import fitz
+import pdfspine  # or: import fitz
 
-doc = oxide_pdf.open("input.pdf")
+doc = pdfspine.open("input.pdf")
 print(f"{doc.page_count} pages")
 
 page = doc[0]

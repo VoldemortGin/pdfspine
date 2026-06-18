@@ -1,4 +1,4 @@
-"""OCR-PADDLE-* — end-to-end proof of oxide's pure-Rust PaddleOCR engine
+"""OCR-PADDLE-* — end-to-end proof of pdfspine's pure-Rust PaddleOCR engine
 (``engine="paddle"``) through the full Python pipeline.
 
 The pipeline under test, with NO external binary and NO network (the PP-OCRv4
@@ -24,7 +24,7 @@ import struct
 import zlib
 from pathlib import Path
 
-import oxide_pdf
+import pdfspine
 import pytest
 
 
@@ -35,7 +35,7 @@ _SAMPLE_PNG = _REPO_ROOT / "crates" / "pdf-ocr" / "tests" / "fixtures" / "ocr_sa
 
 # The three lines printed in the OCR sample raster (CJK must match exactly;
 # Latin lines allow minor whitespace differences).
-_LINE_LATIN_1 = "oxide-pdf OCR test 2026"
+_LINE_LATIN_1 = "pdfspine OCR test 2026"
 _LINE_CJK = "纯Rust实现的PDF文字识别"
 _LINE_LATIN_2 = "PaddleOCR via tract"
 
@@ -115,11 +115,11 @@ def _png_to_rgb(data: bytes) -> tuple[int, int, bytes]:
     return width, height, bytes(out)
 
 
-def _scanned_pdf() -> oxide_pdf.Document:
+def _scanned_pdf() -> pdfspine.Document:
     """A 1-page image-only "scanned" doc: the OCR sample raster fills the page,
     with no text layer at all."""
     w, h, rgb = _png_to_rgb(_SAMPLE_PNG.read_bytes())
-    doc = oxide_pdf.open()  # empty document
+    doc = pdfspine.open()  # empty document
     page = doc.new_page(width=float(w), height=float(h))
     page.insert_image((0, 0, float(w), float(h)), stream=rgb, width=w, height=h)
     # Sanity: this is an image-only page — no text layer yet.
@@ -154,7 +154,7 @@ def test_paddle_pdfocr_tobytes_searchable():
     assert sandwich[:5] == b"%PDF-"
     assert len(sandwich) > 1000
 
-    reopened = oxide_pdf.open(stream=sandwich)
+    reopened = pdfspine.open(stream=sandwich)
     assert len(reopened) == 1
     text = reopened[0].get_text("text")
     # The three lines are now SEARCHABLE in the invisible OCR text layer.
@@ -175,14 +175,17 @@ def test_default_engine_unchanged():
     if not _HAS_TESS:
         # No tesseract binary: the DEFAULT path must raise the unified
         # unsupported error (proving the default is still Tesseract, not paddle).
-        with pytest.raises(oxide_pdf.PdfUnsupportedError):
+        with pytest.raises(pdfspine.PdfUnsupportedError):
             doc[0].get_textpage_ocr(dpi=150)
         pytest.skip("tesseract not installed; default-path recognition not asserted")
 
-    # Tesseract present: the default path recognizes the Latin lines (Tesseract
-    # has no CJK pack by default, so only the Latin content is asserted).
+    # Tesseract present: the default path recognizes the Latin content (Tesseract
+    # has no CJK pack by default, and may garble the made-up word "pdfspine" — it
+    # reads it as "odfspine"). The point of this test is that the default path
+    # ROUTES to Tesseract and returns recognized text, so assert on the tokens
+    # Tesseract reads reliably, not the fragile coined word.
     text = doc[0].get_textpage_ocr(dpi=150).extractText().lower()
-    assert "oxide" in text and "ocr" in text
+    assert "ocr" in text and "2026" in text
 
 
 # --- OCR-PADDLE-004: an unknown engine raises the unified unsupported error -
@@ -190,5 +193,5 @@ def test_default_engine_unchanged():
 
 def test_unknown_engine_raises():
     doc = _scanned_pdf()
-    with pytest.raises(oxide_pdf.PdfUnsupportedError):
+    with pytest.raises(pdfspine.PdfUnsupportedError):
         doc[0].get_textpage_ocr(dpi=72, engine="nope")

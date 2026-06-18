@@ -2,7 +2,7 @@
 """Single source of truth for the PyMuPDF 1.24.x compatibility catalog.
 
 This module enumerates the pinned PyMuPDF **public baseline** symbol set (one
-entry per symbol) and each symbol's **disposition** for ``oxide-pdf``:
+entry per symbol) and each symbol's **disposition** for ``pdfspine``:
 
     implemented   — present in ``python/`` and does not raise PdfUnsupportedError
     deferred      — known, planned for a later milestone (M3–M6 / post-v1)
@@ -21,7 +21,7 @@ Regenerate both with::
     python3 scripts/_compat_catalog.py
 
 The symbol list + statuses are derived from ``PARITY.md`` (the 437-item catalog)
-cross-checked against the real ``python/oxide_pdf`` + ``python/fitz`` source: a
+cross-checked against the real ``python/pdfspine`` + ``python/fitz`` source: a
 PARITY tick **and** a non-stub implementation in source → ``implemented``;
 deferred milestones → ``deferred``; out-of-scope / post-v1 → ``out-of-scope``.
 
@@ -59,7 +59,7 @@ def add_many(group: str, disp: str, milestone: str, members: list[str], note: st
 
 
 # ---------------------------------------------------------------------------
-# 1. Geometry (M0) — pure value types, PARITY-ticked, present in oxide_pdf.geometry
+# 1. Geometry (M0) — pure value types, PARITY-ticked, present in pdfspine.geometry
 # ---------------------------------------------------------------------------
 add_many("Matrix", IMPLEMENTED, "M0", [
     "Matrix", "concat", "invert", "norm", "prerotate", "prescale", "preshear",
@@ -333,7 +333,7 @@ add_many("Pixmap", DEFERRED, "M5", [
 add_many("Pixmap", IMPLEMENTED, "M5", [
     "pil_save", "pil_tobytes",
 ], "PNG/PPM/PAM bytes under the PyMuPDF Pillow-bridge names")
-# OCR sandwich export (M8). PyMuPDF catalogs these under `Pixmap`; oxide-pdf
+# OCR sandwich export (M8). PyMuPDF catalogs these under `Pixmap`; pdfspine
 # exposes them on `Document` (the whole-document sandwich), with the baseline
 # `Pixmap.*` names kept implemented so the search/save surface is covered.
 add_many("Pixmap", IMPLEMENTED, "M8", [
@@ -520,13 +520,13 @@ add("Tools.mupdf_raw_access", "Tools", OUT_OF_SCOPE, "out-of-scope", "raw mupdf.
 add_many("constants", IMPLEMENTED, "M1", [
     "PDF_ENCRYPT_NONE", "PDF_ENCRYPT_RC4_128", "PDF_ENCRYPT_AES_128",
     "PDF_ENCRYPT_AES_256",
-], "encryption-method constants exposed in oxide-pdf + fitz")
+], "encryption-method constants exposed in pdfspine + fitz")
 # Implemented exceptions (exposed today)
 add_many("exceptions", IMPLEMENTED, "M1", [
     "PdfUnsupportedError", "PdfDecodeError", "PdfRedactionError", "PdfError",
     "PdfSyntaxError", "PdfPasswordError", "PdfLimitError", "FileDataError",
     "EmptyFileError", "FileNotFoundError",
-], "oxide-pdf-typed hierarchy + PyMuPDF exception-name aliases")
+], "pdfspine-typed hierarchy + PyMuPDF exception-name aliases")
 # Deferred constant families
 add_many("constants", DEFERRED, "M2", [
     "TEXT_flags", "TEXTFLAGS_bundles", "TEXT_FONT_flags",
@@ -567,7 +567,7 @@ _BATCH34_IMPLEMENTED = {
     "Font.is_serif", "Font.name", "Font.text_length", "Font.unicode_to_glyph_name",
     "Font.Base14_fontnames", "Font.is_writable",
     "Font.valid_codepoints",
-    # Font.buffer and Font.glyph_bbox stay DEFERRED: the oxide Font is a
+    # Font.buffer and Font.glyph_bbox stay DEFERRED: the pdfspine Font is a
     # metrics-only Core-14 handle (built from a name; no embedded /FontFile*
     # program, no per-glyph outlines). Shipping empty bytes / a constant
     # font-level bbox would be misleading, so both raise PdfUnsupportedError
@@ -634,7 +634,7 @@ def render_toml() -> str:
     cov = 100.0 * counts[IMPLEMENTED] / total if total else 0.0
 
     lines: list[str] = []
-    lines.append("# COMPAT.toml — oxide-pdf ↔ PyMuPDF compatibility map")
+    lines.append("# COMPAT.toml — pdfspine ↔ PyMuPDF compatibility map")
     lines.append("#")
     lines.append("# WHAT THIS IS")
     lines.append("#   The machine-readable disposition matrix for every public symbol in the")

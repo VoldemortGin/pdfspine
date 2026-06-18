@@ -1,8 +1,8 @@
-"""Type stubs for the ``fitz`` compatibility shim (re-exports oxide_pdf)."""
+"""Type stubs for the ``fitz`` compatibility shim (re-exports pdfspine)."""
 
 from typing import Any
 
-from oxide_pdf import (
+from pdfspine import (
     CS_CMYK as CS_CMYK,
     CS_GRAY as CS_GRAY,
     CS_RGB as CS_RGB,
@@ -46,7 +46,7 @@ from oxide_pdf import (
 
 pymupdf_version: str
 
-# PyMuPDF exception-name aliases mapped onto oxide_pdf's typed hierarchy.
+# PyMuPDF exception-name aliases mapped onto pdfspine's typed hierarchy.
 FileDataError = PdfSyntaxError
 EmptyFileError = PdfSyntaxError
 mupdf_display_errors = PdfError

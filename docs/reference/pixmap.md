@@ -2,7 +2,7 @@
 
 ## Pixmap
 
-`oxide_pdf.Pixmap` (PyMuPDF `fitz.Pixmap`) is a native raster buffer. Obtain one
+`pdfspine.Pixmap` (PyMuPDF `fitz.Pixmap`) is a native raster buffer. Obtain one
 from `Page.get_pixmap(...)`, `DisplayList.get_pixmap(...)`, or construct a blank
 one directly.
 
@@ -12,8 +12,8 @@ one directly.
 # Pixmap(colorspace, irect, alpha=False)
 #   colorspace: component count (1=gray, 3=rgb, 4=cmyk) or a name string
 #   irect:      (x0, y0, x1, y1) bounds
-pix = oxide_pdf.Pixmap(3, (0, 0, 200, 100))
-pix = oxide_pdf.Pixmap("DeviceGray", (0, 0, 64, 64), alpha=True)
+pix = pdfspine.Pixmap(3, (0, 0, 200, 100))
+pix = pdfspine.Pixmap("DeviceGray", (0, 0, 64, 64), alpha=True)
 ```
 
 ### Properties
@@ -60,7 +60,7 @@ or use-after-free.
 
 ## DisplayList
 
-`oxide_pdf.DisplayList` (PyMuPDF `fitz.DisplayList`) is a recorded, replayable
+`pdfspine.DisplayList` (PyMuPDF `fitz.DisplayList`) is a recorded, replayable
 page render. Obtain one from `Page.get_displaylist()`.
 
 | Member | Returns | Description |

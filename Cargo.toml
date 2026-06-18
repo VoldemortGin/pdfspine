@@ -24,8 +24,8 @@ exclude = ["fuzz"]
 version = "0.0.0"
 edition = "2021"
 license = "Apache-2.0"
-repository = "https://github.com/oxide-pdf/oxide-pdf"
-authors = ["oxide-pdf contributors"]
+repository = "https://github.com/pdfspine/pdfspine"
+authors = ["pdfspine contributors"]
 rust-version = "1.96"
 
 [workspace.dependencies]

@@ -1,4 +1,4 @@
-"""``python -m oxide_pdf`` entry point — delegates to :func:`oxide_pdf.cli.main`."""
+"""``python -m pdfspine`` entry point — delegates to :func:`pdfspine.cli.main`."""
 
 from __future__ import annotations
 

@@ -5,7 +5,7 @@ Part of the OBJECTIVE ground-truth accuracy subsystem: we need *real* PDFs whose
 true text is independently knowable. PMC Open Access articles ship both a PDF and
 the publisher's JATS XML (``.nxml``); the XML gives us ground-truth body text
 (resolved separately by ``jats_text``), and the PDF is what every extractor
-(oxide_pdf, fitz, pdfminer) is scored against.
+(pdfspine, fitz, pdfminer) is scored against.
 
 Only CC0 / CC BY articles are collected (excluding CC BY-NC*, CC BY-ND, and
 "Other") so the corpus is permissively licensed.
@@ -68,7 +68,7 @@ PACKAGE_BASE = "https://ftp.ncbi.nlm.nih.gov/pub/pmc/deprecated/"
 # OA Web Service (per-article download links).
 OA_FCGI = "https://www.ncbi.nlm.nih.gov/pmc/utils/oa/oa.fcgi?id="
 
-_UA = "oxide-pdf-conformance/1.0 (+ground-truth corpus; pubmedcentral OA subset)"
+_UA = "pdfspine-conformance/1.0 (+ground-truth corpus; pubmedcentral OA subset)"
 
 # Permissive licenses we accept (exact match against the CSV License column).
 DEFAULT_LICENSES: tuple[str, ...] = ("CC0", "CC BY")

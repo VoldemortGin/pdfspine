@@ -6,24 +6,24 @@ search it, render a page to PNG, and save. Every snippet uses the real API.
 ## Open a document
 
 ```python
-import oxide_pdf
+import pdfspine
 
 # From a file path:
-doc = oxide_pdf.open("input.pdf")
+doc = pdfspine.open("input.pdf")
 
 # Or from in-memory bytes:
 with open("input.pdf", "rb") as fh:
-    doc = oxide_pdf.open(stream=fh.read())
+    doc = pdfspine.open(stream=fh.read())
 
 # Or create a new, empty PDF (no arguments):
-new_doc = oxide_pdf.open()
+new_doc = pdfspine.open()
 ```
 
 `Document` is a context manager and is iterable / indexable like a sequence of
 pages:
 
 ```python
-with oxide_pdf.open("input.pdf") as doc:
+with pdfspine.open("input.pdf") as doc:
     print(f"{doc.page_count} pages, is_pdf={doc.is_pdf}")
     for page in doc:
         print(page.number, page.rect)
@@ -66,14 +66,14 @@ for r in rects:
 and shadings. Control resolution with `dpi=` or a `Matrix`:
 
 ```python
-import oxide_pdf
+import pdfspine
 
 # 150 DPI render.
 pix = page.get_pixmap(dpi=150)
 pix.save("page-0.png")
 
 # Equivalent scale via a Matrix (2x = ~144 DPI):
-mat = oxide_pdf.Matrix(2, 2)
+mat = pdfspine.Matrix(2, 2)
 pix = page.get_pixmap(matrix=mat)
 
 # Grayscale, with an alpha channel:
@@ -102,5 +102,5 @@ data = doc.tobytes(garbage=3, deflate=True)   # alias: doc.write(...)
 ## Close
 
 ```python
-doc.close()                # or use `with oxide_pdf.open(...) as doc:`
+doc.close()                # or use `with pdfspine.open(...) as doc:`
 ```

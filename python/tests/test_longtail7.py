@@ -14,8 +14,8 @@ Covers the newly-implemented ``fitz.Shape`` surface:
     origin, rect = drawn-geometry bbox).
 
 Correctness is anchored to the real-PyMuPDF GROUND TRUTH embedded below (the
-project ``.venv`` ``fitz`` is the oxide shim, so a live fitz-vs-native compare
-there is shim-vs-native only). Both the native ``oxide_pdf`` API and the ``fitz``
+project ``.venv`` ``fitz`` is the pdfspine shim, so a live fitz-vs-native compare
+there is shim-vs-native only). Both the native ``pdfspine`` API and the ``fitz``
 shim are still exercised for shim coverage; all fixtures are self-generated.
 """
 
@@ -24,7 +24,7 @@ from __future__ import annotations
 import math
 
 import fitz
-import oxide_pdf
+import pdfspine
 import pytest
 
 
@@ -51,13 +51,13 @@ _GT_SQUIGGLE_OPCOUNT = 51  # 1 'm' + 50 'c' (last 'l' from oracle close excluded
 _GT_ZIGZAG_HEAD = ["50 50 m", "52 52 l", "56 48 l"]
 
 
-def _doc(w: float = 300, h: float = 400) -> tuple[oxide_pdf.Document, oxide_pdf.Page]:
-    d = oxide_pdf.open()
+def _doc(w: float = 300, h: float = 400) -> tuple[pdfspine.Document, pdfspine.Page]:
+    d = pdfspine.open()
     p = d.new_page(width=w, height=h)
     return d, p
 
 
-def _path_ops(page: oxide_pdf.Page) -> list[str]:
+def _path_ops(page: pdfspine.Page) -> list[str]:
     """The path-construction operators in the page content stream, each number
     rounded to 3 decimals for float-format tolerance."""
     raw = page.read_contents().decode("latin-1")
@@ -312,7 +312,7 @@ def test_shape_update_rect_point_and_rect():
     ],
 )
 def test_horizontal_angle(c, pt, expected):
-    got = oxide_pdf.Shape.horizontal_angle(c, pt)
+    got = pdfspine.Shape.horizontal_angle(c, pt)
     assert abs(got - expected) < 1e-9
 
 

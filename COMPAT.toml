@@ -1,4 +1,4 @@
-# COMPAT.toml — oxide-pdf ↔ PyMuPDF compatibility map
+# COMPAT.toml — pdfspine ↔ PyMuPDF compatibility map
 #
 # WHAT THIS IS
 #   The machine-readable disposition matrix for every public symbol in the
@@ -937,28 +937,28 @@ name = "PDF_ENCRYPT_NONE"
 group = "constants"
 disposition = "implemented"
 milestone = "M1"
-note = "encryption-method constants exposed in oxide-pdf + fitz"
+note = "encryption-method constants exposed in pdfspine + fitz"
 
 [[symbol]]
 name = "PDF_ENCRYPT_RC4_128"
 group = "constants"
 disposition = "implemented"
 milestone = "M1"
-note = "encryption-method constants exposed in oxide-pdf + fitz"
+note = "encryption-method constants exposed in pdfspine + fitz"
 
 [[symbol]]
 name = "PDF_ENCRYPT_AES_128"
 group = "constants"
 disposition = "implemented"
 milestone = "M1"
-note = "encryption-method constants exposed in oxide-pdf + fitz"
+note = "encryption-method constants exposed in pdfspine + fitz"
 
 [[symbol]]
 name = "PDF_ENCRYPT_AES_256"
 group = "constants"
 disposition = "implemented"
 milestone = "M1"
-note = "encryption-method constants exposed in oxide-pdf + fitz"
+note = "encryption-method constants exposed in pdfspine + fitz"
 
 [[symbol]]
 name = "TEXT_flags"
@@ -4807,67 +4807,67 @@ name = "exceptions.PdfUnsupportedError"
 group = "exceptions"
 disposition = "implemented"
 milestone = "M1"
-note = "oxide-pdf-typed hierarchy + PyMuPDF exception-name aliases"
+note = "pdfspine-typed hierarchy + PyMuPDF exception-name aliases"
 
 [[symbol]]
 name = "exceptions.PdfDecodeError"
 group = "exceptions"
 disposition = "implemented"
 milestone = "M1"
-note = "oxide-pdf-typed hierarchy + PyMuPDF exception-name aliases"
+note = "pdfspine-typed hierarchy + PyMuPDF exception-name aliases"
 
 [[symbol]]
 name = "exceptions.PdfRedactionError"
 group = "exceptions"
 disposition = "implemented"
 milestone = "M1"
-note = "oxide-pdf-typed hierarchy + PyMuPDF exception-name aliases"
+note = "pdfspine-typed hierarchy + PyMuPDF exception-name aliases"
 
 [[symbol]]
 name = "exceptions.PdfError"
 group = "exceptions"
 disposition = "implemented"
 milestone = "M1"
-note = "oxide-pdf-typed hierarchy + PyMuPDF exception-name aliases"
+note = "pdfspine-typed hierarchy + PyMuPDF exception-name aliases"
 
 [[symbol]]
 name = "exceptions.PdfSyntaxError"
 group = "exceptions"
 disposition = "implemented"
 milestone = "M1"
-note = "oxide-pdf-typed hierarchy + PyMuPDF exception-name aliases"
+note = "pdfspine-typed hierarchy + PyMuPDF exception-name aliases"
 
 [[symbol]]
 name = "exceptions.PdfPasswordError"
 group = "exceptions"
 disposition = "implemented"
 milestone = "M1"
-note = "oxide-pdf-typed hierarchy + PyMuPDF exception-name aliases"
+note = "pdfspine-typed hierarchy + PyMuPDF exception-name aliases"
 
 [[symbol]]
 name = "exceptions.PdfLimitError"
 group = "exceptions"
 disposition = "implemented"
 milestone = "M1"
-note = "oxide-pdf-typed hierarchy + PyMuPDF exception-name aliases"
+note = "pdfspine-typed hierarchy + PyMuPDF exception-name aliases"
 
 [[symbol]]
 name = "exceptions.FileDataError"
 group = "exceptions"
 disposition = "implemented"
 milestone = "M1"
-note = "oxide-pdf-typed hierarchy + PyMuPDF exception-name aliases"
+note = "pdfspine-typed hierarchy + PyMuPDF exception-name aliases"
 
 [[symbol]]
 name = "exceptions.EmptyFileError"
 group = "exceptions"
 disposition = "implemented"
 milestone = "M1"
-note = "oxide-pdf-typed hierarchy + PyMuPDF exception-name aliases"
+note = "pdfspine-typed hierarchy + PyMuPDF exception-name aliases"
 
 [[symbol]]
 name = "exceptions.FileNotFoundError"
 group = "exceptions"
 disposition = "implemented"
 milestone = "M1"
-note = "oxide-pdf-typed hierarchy + PyMuPDF exception-name aliases"
+note = "pdfspine-typed hierarchy + PyMuPDF exception-name aliases"

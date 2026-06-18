@@ -1,4 +1,4 @@
-"""Type stubs for :mod:`oxide_pdf.document` (PyMuPDF-compatible wrappers)."""
+"""Type stubs for :mod:`pdfspine.document` (PyMuPDF-compatible wrappers)."""
 
 import os
 from typing import Any, Iterator, Sequence

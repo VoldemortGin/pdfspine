@@ -161,7 +161,7 @@ pub fn build_aes256(
     };
 
     // Deterministic-but-distinct salts derived from a seed (no rng dependency).
-    let salts = sha256(b"oxide-pdf-test-aes256-salt-seed");
+    let salts = sha256(b"pdfspine-test-aes256-salt-seed");
     let u_vsalt = &salts[0..8];
     let u_ksalt = &salts[8..16];
     let o_vsalt = &salts[16..24];

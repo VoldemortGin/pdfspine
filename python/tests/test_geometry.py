@@ -11,7 +11,7 @@ import math
 
 import pytest
 
-from oxide_pdf.geometry import (
+from pdfspine.geometry import (
     Identity,
     IRect,
     Matrix,
@@ -19,7 +19,7 @@ from oxide_pdf.geometry import (
     Quad,
     Rect,
 )
-import oxide_pdf.geometry as geom
+import pdfspine.geometry as geom
 
 
 EPS = 1e-9

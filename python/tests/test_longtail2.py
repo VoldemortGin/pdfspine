@@ -10,13 +10,13 @@ Covers the newly-implemented surface:
   - Document.set_page_labels / get_char_widths / page_cropbox / page_mediabox /
     fullcopy_page (arbitrary position) / journal_* (enable/undo/redo/can_do)
 
-Both the native ``oxide_pdf`` API and the ``fitz`` shim are exercised. All
+Both the native ``pdfspine`` API and the ``fitz`` shim are exercised. All
 fixtures are self-generated (raw PDF bytes via ``stream=``) — no external files.
 """
 
 from __future__ import annotations
 
-import oxide_pdf
+import pdfspine
 import fitz
 import pytest
 
@@ -123,7 +123,7 @@ def multi_page_pdf(n: int) -> bytes:
 
 
 def test_lt2_get_image_info():
-    doc = oxide_pdf.open(stream=image_pdf())
+    doc = pdfspine.open(stream=image_pdf())
     info = doc[0].get_image_info()
     assert len(info) == 1
     e = info[0]
@@ -136,7 +136,7 @@ def test_lt2_get_image_info():
 
 
 def test_lt2_get_image_bbox_by_name_and_xref():
-    doc = oxide_pdf.open(stream=image_pdf())
+    doc = pdfspine.open(stream=image_pdf())
     by_name = doc[0].get_image_bbox("Im0")
     by_xref = doc[0].get_image_bbox(6)
     assert by_name.x1 > by_name.x0
@@ -156,7 +156,7 @@ def test_lt2_fitz_get_image_info():
 
 
 def test_lt2_pixmap_origin_dpi():
-    pix = oxide_pdf.Pixmap("rgb", (0, 0, 4, 4))
+    pix = pdfspine.Pixmap("rgb", (0, 0, 4, 4))
     assert (pix.x, pix.y) == (0, 0)
     pix.set_origin(5, 7)
     assert (pix.x, pix.y) == (5, 7)
@@ -168,7 +168,7 @@ def test_lt2_pixmap_origin_dpi():
 
 
 def test_lt2_pixmap_tint_with():
-    pix = oxide_pdf.Pixmap("rgb", (0, 0, 2, 2))
+    pix = pdfspine.Pixmap("rgb", (0, 0, 2, 2))
     pix.clear_with(128)
     before = pix.samples
     # black=0 white=0xffffff is the identity tint.
@@ -180,7 +180,7 @@ def test_lt2_pixmap_tint_with():
 
 
 def test_lt2_pixmap_gamma_with_identity_noop():
-    pix = oxide_pdf.Pixmap("rgb", (0, 0, 2, 2))
+    pix = pdfspine.Pixmap("rgb", (0, 0, 2, 2))
     pix.clear_with(100)
     before = pix.samples
     pix.gamma_with(1.0)
@@ -193,7 +193,7 @@ def test_lt2_pixmap_gamma_with_identity_noop():
 
 
 def test_lt2_pixmap_color_count_and_topusage():
-    pix = oxide_pdf.Pixmap("rgb", (0, 0, 2, 2))
+    pix = pdfspine.Pixmap("rgb", (0, 0, 2, 2))
     pix.clear_with(0)  # all black → one color
     assert pix.color_count() == 1
     ratio, pixel = pix.color_topusage()
@@ -208,7 +208,7 @@ def test_lt2_pixmap_color_count_and_topusage():
 
 
 def test_lt2_pixmap_is_unicolor_monochrome():
-    pix = oxide_pdf.Pixmap("rgb", (0, 0, 2, 2))
+    pix = pdfspine.Pixmap("rgb", (0, 0, 2, 2))
     pix.clear_with(0)
     assert pix.is_unicolor
     assert pix.is_monochrome  # all black
@@ -220,9 +220,9 @@ def test_lt2_pixmap_is_unicolor_monochrome():
 
 
 def test_lt2_pixmap_digest_determinism():
-    a = oxide_pdf.Pixmap("rgb", (0, 0, 2, 2))
+    a = pdfspine.Pixmap("rgb", (0, 0, 2, 2))
     a.clear_with(50)
-    b = oxide_pdf.Pixmap("rgb", (0, 0, 2, 2))
+    b = pdfspine.Pixmap("rgb", (0, 0, 2, 2))
     b.clear_with(50)
     assert a.digest() == b.digest()
     assert len(a.digest()) == 16
@@ -231,7 +231,7 @@ def test_lt2_pixmap_digest_determinism():
 
 
 def test_lt2_pixmap_invert_irect():
-    pix = oxide_pdf.Pixmap("rgb", (0, 0, 2, 2))
+    pix = pdfspine.Pixmap("rgb", (0, 0, 2, 2))
     pix.clear_with(0)
     pix.invert_irect()
     assert pix.pixel(0, 0) == (255, 255, 255)
@@ -241,7 +241,7 @@ def test_lt2_pixmap_invert_irect():
 
 
 def _annot_doc():
-    doc = oxide_pdf.open(stream=multi_page_pdf(1))
+    doc = pdfspine.open(stream=multi_page_pdf(1))
     page = doc[0]
     annot = page.add_line_annot((20, 20), (80, 80))
     return doc, page, annot
@@ -281,7 +281,7 @@ def test_lt2_annot_border_dict():
 
 
 def test_lt2_get_char_widths():
-    doc = oxide_pdf.open(stream=font_pdf())
+    doc = pdfspine.open(stream=font_pdf())
     widths = doc.get_char_widths(5)
     assert len(widths) == 3
     assert widths[0] == (65, pytest.approx(0.5))
@@ -293,7 +293,7 @@ def test_lt2_get_char_widths():
 
 
 def test_lt2_page_boxes():
-    doc = oxide_pdf.open(stream=image_pdf())
+    doc = pdfspine.open(stream=image_pdf())
     mb = doc.page_mediabox(0)
     cb = doc.page_cropbox(0)
     assert tuple(mb) == (0.0, 0.0, 200.0, 200.0)
@@ -304,7 +304,7 @@ def test_lt2_page_boxes():
 
 
 def test_lt2_set_page_labels_roundtrip():
-    doc = oxide_pdf.open(stream=multi_page_pdf(5))
+    doc = pdfspine.open(stream=multi_page_pdf(5))
     doc.set_page_labels(
         [
             {"startpage": 0, "style": "r", "prefix": "", "firstpagenum": 1},
@@ -331,7 +331,7 @@ def test_lt2_fitz_set_page_labels():
 
 
 def test_lt2_fullcopy_page_insert_position():
-    doc = oxide_pdf.open(stream=multi_page_pdf(3))
+    doc = pdfspine.open(stream=multi_page_pdf(3))
     assert doc.page_count == 3
     # Copy page 0 and insert it at position 1.
     doc.fullcopy_page(0, to=1)
@@ -339,7 +339,7 @@ def test_lt2_fullcopy_page_insert_position():
 
 
 def test_lt2_fullcopy_page_append_default():
-    doc = oxide_pdf.open(stream=multi_page_pdf(2))
+    doc = pdfspine.open(stream=multi_page_pdf(2))
     doc.fullcopy_page(0)  # default to=-1 appends
     assert doc.page_count == 3
 
@@ -348,7 +348,7 @@ def test_lt2_fullcopy_page_append_default():
 
 
 def test_lt2_journal_undo_redo():
-    doc = oxide_pdf.open(stream=multi_page_pdf(2))
+    doc = pdfspine.open(stream=multi_page_pdf(2))
     assert doc.journal_is_enabled() is False
     doc.journal_enable()
     assert doc.journal_is_enabled() is True
@@ -370,7 +370,7 @@ def test_lt2_journal_undo_redo():
 
 
 def test_lt2_journal_can_do_dict():
-    doc = oxide_pdf.open(stream=multi_page_pdf(2))
+    doc = pdfspine.open(stream=multi_page_pdf(2))
     doc.journal_enable()
     cando = doc.journal_can_do()
     assert cando == {"undo": False, "redo": False}

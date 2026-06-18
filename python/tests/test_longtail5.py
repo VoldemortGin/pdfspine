@@ -10,20 +10,20 @@ Covers the newly-implemented Page surface:
   - Box setters: set_mediabox / set_cropbox / set_artbox / set_bleedbox /
     set_trimbox
 
-Both the native ``oxide_pdf`` API and the ``fitz`` shim are exercised; all
+Both the native ``pdfspine`` API and the ``fitz`` shim are exercised; all
 fixtures are self-generated.
 """
 
 from __future__ import annotations
 
 import fitz
-import oxide_pdf
+import pdfspine
 import pytest
-from oxide_pdf.geometry import Matrix, Point
+from pdfspine.geometry import Matrix, Point
 
 
-def _letter() -> oxide_pdf.Document:
-    d = oxide_pdf.open()
+def _letter() -> pdfspine.Document:
+    d = pdfspine.open()
     d.new_page(width=612, height=792)
     return d
 
@@ -183,7 +183,7 @@ def test_lt5_set_cropbox_clipped_to_mediabox():
 
 
 def test_lt5_set_boxes_accept_rect():
-    from oxide_pdf.geometry import Rect
+    from pdfspine.geometry import Rect
 
     doc = _letter()
     p = doc[0]

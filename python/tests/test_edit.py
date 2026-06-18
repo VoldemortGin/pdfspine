@@ -1,14 +1,14 @@
 """M3d Python edit/save surface tests (PRD §8.7 / §8.9 / §8.4).
 
 `PYSAVE-*`/`PYMETA-*`/`PYTOC-*`/`PYMERGE-*`/`PYEDIT-*`/`PYLINK-*`/`PYLABEL-*`/
-`PYENC-*` exercise the native ``oxide_pdf`` package; the deprecated PyMuPDF aliases
+`PYENC-*` exercise the native ``pdfspine`` package; the deprecated PyMuPDF aliases
 (`saveIncr`/`setMetadata`/`getToC`/`setToC`/`insertPDF`/`newPage`) are checked too.
 All fixtures are self-generated in-test (PRD §10).
 """
 
 from __future__ import annotations
 
-import oxide_pdf
+import pdfspine
 import pytest
 
 
@@ -71,8 +71,8 @@ def multi_page_pdf(markers: list[str]) -> bytes:
     return _build_pdf(objects, root=1)
 
 
-def _open(markers: list[str]) -> "oxide_pdf.Document":
-    return oxide_pdf.open(stream=multi_page_pdf(markers))
+def _open(markers: list[str]) -> "pdfspine.Document":
+    return pdfspine.open(stream=multi_page_pdf(markers))
 
 
 # --- save ----------------------------------------------------------------
@@ -82,7 +82,7 @@ def test_pysave_001_save_path_reopen(tmp_path):
     doc = _open(["AAA", "BBB"])
     p = tmp_path / "out.pdf"
     doc.save(str(p))
-    re = oxide_pdf.open(str(p))
+    re = pdfspine.open(str(p))
     assert re.page_count == 2
     assert "AAA" in re[0].get_text()
 
@@ -90,7 +90,7 @@ def test_pysave_001_save_path_reopen(tmp_path):
 def test_pysave_002_tobytes_roundtrip():
     doc = _open(["AAA", "BBB", "CCC"])
     data = doc.tobytes()
-    re = oxide_pdf.open(stream=data)
+    re = pdfspine.open(stream=data)
     assert re.page_count == 3
     assert "CCC" in re[2].get_text()
 
@@ -99,20 +99,20 @@ def test_pysave_003_incremental(tmp_path):
     doc = _open(["AAA"])
     p = tmp_path / "incr.pdf"
     doc.save(str(p))  # full save first (clean parse for incremental)
-    re = oxide_pdf.open(str(p))
+    re = pdfspine.open(str(p))
     re.set_metadata({"title": "Incremental"})
     orig = p.read_bytes()
     re.saveIncr(str(p))
     after = p.read_bytes()
     assert after[: len(orig)] == orig  # byte-exact prefix (append-only)
-    re2 = oxide_pdf.open(str(p))
+    re2 = pdfspine.open(str(p))
     assert re2.metadata["title"] == "Incremental"
 
 
 def test_pysave_004_garbage_deflate():
     doc = _open(["AAA", "BBB"])
     data = doc.tobytes(garbage=3, deflate=True)
-    re = oxide_pdf.open(stream=data)
+    re = pdfspine.open(stream=data)
     assert re.page_count == 2
 
 
@@ -122,7 +122,7 @@ def test_pysave_004_garbage_deflate():
 def test_pymeta_001_roundtrip():
     doc = _open(["AAA"])
     doc.set_metadata({"title": "My Doc", "author": "Me", "subject": "S"})
-    re = oxide_pdf.open(stream=doc.tobytes())
+    re = pdfspine.open(stream=doc.tobytes())
     assert re.metadata["title"] == "My Doc"
     assert re.metadata["author"] == "Me"
     assert re.metadata["subject"] == "S"
@@ -131,7 +131,7 @@ def test_pymeta_001_roundtrip():
 def test_pymeta_002_deprecated_alias():
     doc = _open(["AAA"])
     doc.setMetadata({"title": "Via Alias"})
-    re = oxide_pdf.open(stream=doc.tobytes())
+    re = pdfspine.open(stream=doc.tobytes())
     assert re.metadata["title"] == "Via Alias"
 
 
@@ -140,7 +140,7 @@ def test_pymeta_003_xml():
     assert doc.get_xml_metadata() == ""
     xmp = "<?xpacket begin='﻿'?><x:xmpmeta>data</x:xmpmeta>"
     doc.set_xml_metadata(xmp)
-    re = oxide_pdf.open(stream=doc.tobytes())
+    re = pdfspine.open(stream=doc.tobytes())
     assert re.get_xml_metadata() == xmp
 
 
@@ -151,7 +151,7 @@ def test_pytoc_001_roundtrip():
     doc = _open(["AAA", "BBB", "CCC"])
     toc = [[1, "Chapter 1", 0], [2, "Section 1.1", 1], [1, "Chapter 2", 2]]
     doc.set_toc(toc)
-    re = oxide_pdf.open(stream=doc.tobytes())
+    re = pdfspine.open(stream=doc.tobytes())
     assert re.get_toc() == toc
 
 
@@ -163,7 +163,7 @@ def test_pytoc_002_deprecated_aliases():
 
 def test_pytoc_003_level_jump_raises():
     doc = _open(["AAA", "BBB"])
-    with pytest.raises(oxide_pdf.PdfError):
+    with pytest.raises(pdfspine.PdfError):
         doc.set_toc([[1, "A", 0], [3, "C", 1]])
 
 
@@ -175,7 +175,7 @@ def test_pymerge_001_insert_pdf():
     src = _open(["XXX", "YYY"])
     dst.insert_pdf(src)
     assert dst.page_count == 4
-    re = oxide_pdf.open(stream=dst.tobytes())
+    re = pdfspine.open(stream=dst.tobytes())
     assert re.page_count == 4
     texts = [re[i].get_text() for i in range(4)]
     joined = " ".join(texts)
@@ -192,13 +192,13 @@ def test_pymerge_002_deprecated_alias():
 def test_pyedit_001_delete_select_reopen():
     doc = _open(["AAA", "BBB", "CCC"])
     doc.delete_page(1)
-    re = oxide_pdf.open(stream=doc.tobytes())
+    re = pdfspine.open(stream=doc.tobytes())
     assert re.page_count == 2
     assert "BBB" not in " ".join(re[i].get_text() for i in range(2))
 
     doc2 = _open(["AAA", "BBB", "CCC"])
     doc2.select([2, 0])
-    re2 = oxide_pdf.open(stream=doc2.tobytes())
+    re2 = pdfspine.open(stream=doc2.tobytes())
     assert re2.page_count == 2
     assert "CCC" in re2[0].get_text()
     assert "AAA" in re2[1].get_text()
@@ -208,7 +208,7 @@ def test_pyedit_002_new_page():
     doc = _open(["AAA"])
     doc.new_page(-1, 100, 100)
     assert doc.page_count == 2
-    re = oxide_pdf.open(stream=doc.tobytes())
+    re = pdfspine.open(stream=doc.tobytes())
     assert re.page_count == 2
 
     doc2 = _open(["AAA"])
@@ -222,13 +222,13 @@ def test_pyedit_002_new_page():
 def test_pylink_001_get_and_insert():
     doc = _open(["AAA", "BBB"])
     page = doc[0]
-    page.insert_link({"kind": 2, "from": (10, 10, 100, 30), "uri": "https://oxide_pdf.dev"})
-    re = oxide_pdf.open(stream=doc.tobytes())
+    page.insert_link({"kind": 2, "from": (10, 10, 100, 30), "uri": "https://pdfspine.dev"})
+    re = pdfspine.open(stream=doc.tobytes())
     links = re[0].get_links()
     assert len(links) == 1
     assert links[0]["kind"] == 2
-    assert links[0]["uri"] == "https://oxide_pdf.dev"
-    assert isinstance(links[0]["from"], oxide_pdf.Rect)
+    assert links[0]["uri"] == "https://pdfspine.dev"
+    assert isinstance(links[0]["from"], pdfspine.Rect)
     assert tuple(links[0]["from"]) == (10.0, 10.0, 100.0, 30.0)
 
 
@@ -241,7 +241,7 @@ def test_pylabel_001_get_label():
         (4, b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] >>"),
         (5, b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] >>"),
     ]
-    doc = oxide_pdf.open(stream=_build_pdf(objects, root=1))
+    doc = pdfspine.open(stream=_build_pdf(objects, root=1))
     assert doc[0].get_label() == "A-1"
     assert doc[1].get_label() == "A-2"
 
@@ -252,8 +252,8 @@ def test_pylabel_001_get_label():
 def test_pyenc_001_aes256_roundtrip():
     doc = _open(["AAA", "BBB"])
     doc.set_metadata({"title": "Secret"})
-    data = doc.tobytes(encryption=oxide_pdf.PDF_ENCRYPT_AES_256, user_pw="")
-    re = oxide_pdf.open(stream=data)
+    data = doc.tobytes(encryption=pdfspine.PDF_ENCRYPT_AES_256, user_pw="")
+    re = pdfspine.open(stream=data)
     assert re.is_encrypted
     assert re.authenticate("") is True
     assert re.metadata["title"] == "Secret"
@@ -263,12 +263,12 @@ def test_pyenc_001_aes256_roundtrip():
 def test_pyenc_002_owner_wrong_user():
     doc = _open(["AAA"])
     data = doc.tobytes(
-        encryption=oxide_pdf.PDF_ENCRYPT_RC4_128, user_pw="theuser", owner_pw="theowner"
+        encryption=pdfspine.PDF_ENCRYPT_RC4_128, user_pw="theuser", owner_pw="theowner"
     )
-    re = oxide_pdf.open(stream=data)
+    re = pdfspine.open(stream=data)
     assert re.is_encrypted
     assert re.authenticate("wrong") is False
-    re2 = oxide_pdf.open(stream=data)
+    re2 = pdfspine.open(stream=data)
     assert re2.authenticate("theowner") is True
 
 
@@ -286,4 +286,4 @@ def test_pyfitz_edit_aliases():
     assert re.metadata["title"] == "Shim"
     assert re.get_toc() == [[1, "Top", 0]]
     # Encryption constants surface through the shim.
-    assert fitz.PDF_ENCRYPT_AES_256 == oxide_pdf.PDF_ENCRYPT_AES_256
+    assert fitz.PDF_ENCRYPT_AES_256 == pdfspine.PDF_ENCRYPT_AES_256

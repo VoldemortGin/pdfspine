@@ -6,7 +6,7 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 rust-version.workspace = true
-description = "Vector/text/image page rasterizer (page -> Pixmap) for oxide-pdf (M6, PRD §8.11)."
+description = "Vector/text/image page rasterizer (page -> Pixmap) for pdfspine (M6, PRD §8.11)."
 
 [dependencies]
 # Objects + geometry (Matrix/Point/Rect/IRect) + the typed Error this crate

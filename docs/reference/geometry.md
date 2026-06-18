@@ -13,7 +13,7 @@ PyMuPDF's coordinate space is top-left origin, y-down. Distances are in points
 `Point(x, y)` — a 2-D point.
 
 ```python
-p = oxide_pdf.Point(72, 100)
+p = pdfspine.Point(72, 100)
 p.x, p.y                        # components
 abs(p)                          # vector length (alias: p.norm())
 p.unit, p.abs_unit              # unit vectors
@@ -71,11 +71,11 @@ re-round. `rect` converts to a float `Rect`; `round()` / `irect` return self.
 Constructors:
 
 ```python
-oxide_pdf.Matrix()              # identity
-oxide_pdf.Matrix(degree)        # anti-clockwise rotation by `degree`
-oxide_pdf.Matrix(sx, sy)        # scaling
-oxide_pdf.Matrix(a, b, c, d, e, f)
-oxide_pdf.Matrix(seq6)          # from a 6-sequence
+pdfspine.Matrix()              # identity
+pdfspine.Matrix(degree)        # anti-clockwise rotation by `degree`
+pdfspine.Matrix(sx, sy)        # scaling
+pdfspine.Matrix(a, b, c, d, e, f)
+pdfspine.Matrix(seq6)          # from a 6-sequence
 ```
 
 | Member | Description |
@@ -92,7 +92,7 @@ oxide_pdf.Matrix(seq6)          # from a 6-sequence
 | `~m` | Inverse (new Matrix). |
 | `*`, `/`, `+`, `-` | Products / sums (scalars or matrices). |
 
-`oxide_pdf.Matrix` also has the read-only singleton `Identity`
+`pdfspine.Matrix` also has the read-only singleton `Identity`
 (`IdentityMatrix`).
 
 ## Quad

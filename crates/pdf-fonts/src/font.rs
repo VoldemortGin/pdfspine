@@ -336,7 +336,7 @@ impl Font {
     /// The Core-14 handle is metrics-only — it carries no glyph-outline program
     /// (PyMuPDF substitutes a bundled NimbusSans/Type1 TTF and returns its
     /// bytes). With no program to expose, this returns an empty buffer. This is
-    /// a documented deviation: oxide's Core-14 handle has no font file.
+    /// a documented deviation: pdfspine's Core-14 handle has no font file.
     #[must_use]
     pub fn buffer(&self) -> Vec<u8> {
         Vec::new()

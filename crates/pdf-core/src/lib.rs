@@ -1,5 +1,5 @@
 #![forbid(unsafe_code)]
-//! `pdf-core` — oxide-pdf core: object model, lexer/parser, xref (table + stream),
+//! `pdf-core` — pdfspine core: object model, lexer/parser, xref (table + stream),
 //! trailer, repair, filters, writer, `DocumentStore`. No domain logic.
 //!
 //! M0 implemented the [`geom`] module (PyMuPDF-compatible geometry value types).

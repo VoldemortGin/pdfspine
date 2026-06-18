@@ -1,13 +1,13 @@
 """M1f Python read-surface tests (PRD §7 / §9.2 / §9.4 / §9.5).
 
-`PYDOC-*` exercise the native ``oxide_pdf`` package; `PYFITZ-*` the ``fitz`` shim.
+`PYDOC-*` exercise the native ``pdfspine`` package; `PYFITZ-*` the ``fitz`` shim.
 All fixtures are self-generated in-test (raw PDF bytes written to a tmp file or
 passed via ``stream=``) — no external/PyMuPDF files (PRD §10).
 """
 
 from __future__ import annotations
 
-import oxide_pdf
+import pdfspine
 import pytest
 
 
@@ -56,7 +56,7 @@ def two_page_pdf() -> bytes:
             (
                 5,
                 b"<< /Title (Hello Title) /Author (Jane Doe) "
-                b"/Producer (oxide_pdf-test) /CreationDate (D:20240101000000Z) >>",
+                b"/Producer (pdfspine-test) /CreationDate (D:20240101000000Z) >>",
             ),
         ],
         root=1,
@@ -71,12 +71,12 @@ def two_page_path(tmp_path):
     return str(p)
 
 
-# --- PYDOC-* (native oxide_pdf) ----------------------------------------------
+# --- PYDOC-* (native pdfspine) ----------------------------------------------
 
 
 def test_pydoc_001_open_and_pages(two_page_path):
     # PYDOC-001
-    doc = oxide_pdf.open(two_page_path)
+    doc = pdfspine.open(two_page_path)
     assert doc.page_count == 2
     assert len(doc) == 2
     page = doc.load_page(0)
@@ -89,13 +89,13 @@ def test_pydoc_001_open_and_pages(two_page_path):
 
 def test_pydoc_001_open_stream():
     # PYDOC-001 (stream= variant)
-    doc = oxide_pdf.open(stream=two_page_pdf())
+    doc = pdfspine.open(stream=two_page_pdf())
     assert doc.page_count == 2
 
 
 def test_pydoc_002_page_geometry(two_page_path):
     # PYDOC-002
-    doc = oxide_pdf.open(two_page_path)
+    doc = pdfspine.open(two_page_path)
     p0 = doc[0]
     assert tuple(p0.rect) == (0.0, 0.0, 200.0, 300.0)
     assert tuple(p0.bound()) == (0.0, 0.0, 200.0, 300.0)
@@ -112,7 +112,7 @@ def test_pydoc_002_page_geometry(two_page_path):
 
 def test_pydoc_003_metadata_keys(two_page_path):
     # PYDOC-003
-    doc = oxide_pdf.open(two_page_path)
+    doc = pdfspine.open(two_page_path)
     md = doc.metadata
     for key in (
         "format",
@@ -131,7 +131,7 @@ def test_pydoc_003_metadata_keys(two_page_path):
     assert md["format"] == "PDF 1.7"
     assert md["title"] == "Hello Title"
     assert md["author"] == "Jane Doe"
-    assert md["producer"] == "oxide_pdf-test"
+    assert md["producer"] == "pdfspine-test"
     assert md["subject"] == ""  # absent → empty (PyMuPDF)
     assert md["encryption"] == ""
 
@@ -140,11 +140,11 @@ def test_pydoc_004_unimplemented_raises(two_page_path):
     # PYDOC-004: a known-but-unimplemented method raises PdfUnsupportedError.
     # `get_pixmap` is implemented in M6d (it renders the page), so the
     # unimplemented example here is `convert_to_pdf`.
-    doc = oxide_pdf.open(two_page_path)
+    doc = pdfspine.open(two_page_path)
     page = doc[0]
     pix = page.get_pixmap()
     assert pix.width > 0 and pix.height > 0
-    with pytest.raises(oxide_pdf.PdfUnsupportedError):
+    with pytest.raises(pdfspine.PdfUnsupportedError):
         doc.convert_to_pdf()
     # get_toc is now implemented (M3d): a doc with no /Outlines returns [].
     assert doc.get_toc() == []
@@ -154,7 +154,7 @@ def test_pydoc_004_unimplemented_raises(two_page_path):
 
 
 def test_pydoc_xref_api(two_page_path):
-    doc = oxide_pdf.open(two_page_path)
+    doc = pdfspine.open(two_page_path)
     assert doc.xref_length() == 6  # max obj 5 + 1
     assert "/Catalog" in doc.xref_object(1)
     assert doc.xref_get_key(3, "Type") == "/Page"
@@ -167,7 +167,7 @@ def test_pydoc_repaired(tmp_path):
     bytes_ = bytes_[: bytes_.rfind(b"startxref")]
     p = tmp_path / "broken.pdf"
     p.write_bytes(bytes_)
-    doc = oxide_pdf.open(str(p))
+    doc = pdfspine.open(str(p))
     assert doc.is_repaired is True
     assert doc.page_count == 2
 
@@ -212,4 +212,4 @@ def test_pymupdf_alias(two_page_path):
 
     doc = pymupdf.open(two_page_path)
     assert doc.page_count == 2
-    assert pymupdf.__version__ == oxide_pdf.__version__
+    assert pymupdf.__version__ == pdfspine.__version__

@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
-"""Ground-truth accuracy orchestrator — score oxide_pdf vs fitz vs pdfminer.
+"""Ground-truth accuracy orchestrator — score pdfspine vs fitz vs pdfminer.
 
 Unlike ``conformance/run_validation.py`` (which scores our extraction against
-PyMuPDF as a *pseudo*-oracle), this scores THREE extractors — ``oxide_pdf``,
+PyMuPDF as a *pseudo*-oracle), this scores THREE extractors — ``pdfspine``,
 ``pymupdf``/fitz, and ``pdfminer.six`` — against an OBJECTIVE ground truth
 (``gt_text`` shipped with the corpus, or text derived from a JATS ``nxml``
 fulltext). That makes "match or exceed fitz" an objective claim: for every
-document we can count where oxide's reading-order score meets or beats fitz's
+document we can count where pdfspine's reading-order score meets or beats fitz's
 *against the same truth*.
 
 Pipeline per manifest entry:
   1. Resolve ground truth: ``gt_text`` if present, else ``nxml`` -> jats_text.
-  2. Extract oxide_pdf text in an isolated subprocess (project ``.venv``,
-     reusing ``conformance/oxide_worker.py``) under a wall-clock timeout — a
+  2. Extract pdfspine text in an isolated subprocess (project ``.venv``,
+     reusing ``conformance/pdfspine_worker.py``) under a wall-clock timeout — a
      Rust panic cannot kill the run.
   3. Extract fitz + pdfminer via ``conformance/oracle_extract.py`` under the
      oracle venv (``.venv-oracle``); PyMuPDF is never imported into this
@@ -53,7 +53,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CONFORMANCE = REPO_ROOT / "conformance"
 GT_DIR = CONFORMANCE / "gt"
-WORKER = CONFORMANCE / "oxide_worker.py"
+WORKER = CONFORMANCE / "pdfspine_worker.py"
 ORACLE = CONFORMANCE / "oracle_extract.py"
 
 # Make sibling modules (score.py, jats_text.py) importable when run as a script.
@@ -63,8 +63,8 @@ if str(GT_DIR) not in sys.path:
 # The metrics we surface for every extractor, in display order. score_all() is
 # expected to return at least these keys; missing keys degrade to None.
 METRICS = ("lev", "f1", "jaccard", "order")
-# The three extractors we score, in display order. "oxide_pdf" is ours.
-EXTRACTORS = ("oxide_pdf", "pymupdf", "pdfminer")
+# The three extractors we score, in display order. "pdfspine" is ours.
+EXTRACTORS = ("pdfspine", "pymupdf", "pdfminer")
 
 
 # --------------------------------------------------------------------------- #
@@ -126,8 +126,8 @@ def normalize_scores(raw: dict | None) -> dict:
 # --------------------------------------------------------------------------- #
 # Extraction (subprocess-isolated, mirrors run_validation.py)
 # --------------------------------------------------------------------------- #
-def extract_oxide(py: str, pdf: Path, timeout: float) -> tuple[str | None, str | None]:
-    """Run the isolated oxide worker; return (joined_text, error).
+def extract_pdfspine(py: str, pdf: Path, timeout: float) -> tuple[str | None, str | None]:
+    """Run the isolated pdfspine worker; return (joined_text, error).
 
     A Rust panic/abort/hang surfaces as a non-zero exit or timeout and is
     reported as an error rather than crashing the harness.
@@ -136,10 +136,10 @@ def extract_oxide(py: str, pdf: Path, timeout: float) -> tuple[str | None, str |
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired:
-        return None, f"oxide timeout after {timeout}s"
+        return None, f"pdfspine timeout after {timeout}s"
     if proc.returncode != 0:
         sig = -proc.returncode if proc.returncode < 0 else None
-        msg = f"oxide worker exited {proc.returncode}"
+        msg = f"pdfspine worker exited {proc.returncode}"
         if sig:
             msg += f" (signal {sig})"
         if proc.stderr.strip():
@@ -148,9 +148,9 @@ def extract_oxide(py: str, pdf: Path, timeout: float) -> tuple[str | None, str |
     try:
         data = json.loads(proc.stdout)
     except json.JSONDecodeError:
-        return None, f"oxide unparseable output: {proc.stdout[:200]!r}"
+        return None, f"pdfspine unparseable output: {proc.stdout[:200]!r}"
     if not data.get("opened"):
-        return None, f"oxide could not open: {data.get('error')}"
+        return None, f"pdfspine could not open: {data.get('error')}"
     pages = data.get("pages") or []
     return "\n".join(pages), data.get("error")
 
@@ -262,10 +262,10 @@ def process_entry(
 
     # Extract all three.
     texts: dict[str, str | None] = {}
-    ox_text, ox_err = extract_oxide(py, pdf, timeout)
-    texts["oxide_pdf"] = ox_text
+    ox_text, ox_err = extract_pdfspine(py, pdf, timeout)
+    texts["pdfspine"] = ox_text
     if ox_err:
-        rec["errors"]["oxide_pdf"] = ox_err
+        rec["errors"]["pdfspine"] = ox_err
     oracles = extract_oracles(oracle_py, pdf, timeout)
     for name in ("pymupdf", "pdfminer"):
         t, e = oracles[name]
@@ -315,15 +315,15 @@ def aggregate(records: list[dict]) -> dict:
 
 
 def head_to_head(records: list[dict], metric: str = "order") -> dict:
-    """Objective match/exceed: oxide vs fitz on `metric` vs the same ground truth.
+    """Objective match/exceed: pdfspine vs fitz on `metric` vs the same ground truth.
 
-    Returns counts over docs where BOTH oxide and fitz produced a score.
+    Returns counts over docs where BOTH pdfspine and fitz produced a score.
     """
-    oxide_ge = oxide_gt = fitz_gt = comparable = 0
+    pdfspine_ge = pdfspine_gt = fitz_gt = comparable = 0
     wins: list[dict] = []
     losses: list[dict] = []
     for r in records:
-        os_ = (r.get("scores") or {}).get("oxide_pdf")
+        os_ = (r.get("scores") or {}).get("pdfspine")
         fs_ = (r.get("scores") or {}).get("pymupdf")
         if not (os_ and fs_):
             continue
@@ -332,21 +332,21 @@ def head_to_head(records: list[dict], metric: str = "order") -> dict:
             continue
         comparable += 1
         if ov >= fv:
-            oxide_ge += 1
+            pdfspine_ge += 1
         if ov > fv:
-            oxide_gt += 1
-            wins.append({"id": r["id"], "oxide": ov, "fitz": fv, "delta": round(ov - fv, 4)})
+            pdfspine_gt += 1
+            wins.append({"id": r["id"], "pdfspine": ov, "fitz": fv, "delta": round(ov - fv, 4)})
         if fv > ov:
             fitz_gt += 1
-            losses.append({"id": r["id"], "oxide": ov, "fitz": fv, "delta": round(ov - fv, 4)})
+            losses.append({"id": r["id"], "pdfspine": ov, "fitz": fv, "delta": round(ov - fv, 4)})
     wins.sort(key=lambda d: d["delta"], reverse=True)
     losses.sort(key=lambda d: d["delta"])
     return {
         "metric": metric,
         "comparable": comparable,
-        "oxide_ge_fitz": oxide_ge,  # match-or-exceed
-        "oxide_gt_fitz": oxide_gt,  # strictly beats
-        "fitz_gt_oxide": fitz_gt,
+        "pdfspine_ge_fitz": pdfspine_ge,  # match-or-exceed
+        "pdfspine_gt_fitz": pdfspine_gt,  # strictly beats
+        "fitz_gt_pdfspine": fitz_gt,
         "wins": wins,
         "losses": losses,
     }
@@ -368,7 +368,7 @@ def _headline_table(agg: dict) -> list[str]:
         for m in METRICS:
             mm = d["metrics"][m]
             cells.append(f"{_fmt(mm['mean'])} / {_fmt(mm['median'])}")
-        label = "**oxide_pdf**" if ex == "oxide_pdf" else ex
+        label = "**pdfspine**" if ex == "pdfspine" else ex
         lines.append(f"| {label} | {d['n']} | " + " | ".join(cells) + " |")
     return lines
 
@@ -376,12 +376,12 @@ def _headline_table(agg: dict) -> list[str]:
 def render_report(payload: dict) -> str:
     L: list[str] = []
     a = L.append
-    a("# oxide-pdf — Objective Ground-Truth Accuracy Report")
+    a("# pdfspine — Objective Ground-Truth Accuracy Report")
     a("")
     a(f"_Generated: {payload['generated']} • oracle (PyMuPDF/pdfminer) available: "
       f"{payload['oracle_available']}_")
     a("")
-    a("Each extractor — **oxide_pdf**, **pymupdf** (fitz), and **pdfminer** — is scored "
+    a("Each extractor — **pdfspine**, **pymupdf** (fitz), and **pdfminer** — is scored "
       "against the SAME objective ground truth (`gt_text` or JATS `nxml` fulltext), not "
       "against another extractor. Cells show **mean / median**. Metrics: `lev` (edit "
       "similarity), `f1` (token F1), `jaccard` (word-set overlap), `order` (reading-order "
@@ -418,39 +418,39 @@ def render_report(payload: dict) -> str:
     a(f"## {sect}. Objective match/exceed vs fitz (reading order)")
     a("")
     if h["comparable"] == 0:
-        a("- No documents where both oxide_pdf and fitz produced a comparable score.")
+        a("- No documents where both pdfspine and fitz produced a comparable score.")
     else:
-        pct = h["oxide_ge_fitz"] / h["comparable"]
-        a(f"Over **{h['comparable']}** documents scored by both oxide_pdf and fitz against "
+        pct = h["pdfspine_ge_fitz"] / h["comparable"]
+        a(f"Over **{h['comparable']}** documents scored by both pdfspine and fitz against "
           f"ground truth, on the `{h['metric']}` (reading-order) metric:")
         a("")
-        a(f"- **oxide ≥ fitz (match or exceed): {h['oxide_ge_fitz']}/{h['comparable']} "
+        a(f"- **pdfspine ≥ fitz (match or exceed): {h['pdfspine_ge_fitz']}/{h['comparable']} "
           f"({pct:.1%})**")
-        a(f"- oxide strictly beats fitz: {h['oxide_gt_fitz']}")
-        a(f"- fitz strictly beats oxide: {h['fitz_gt_oxide']}")
+        a(f"- pdfspine strictly beats fitz: {h['pdfspine_gt_fitz']}")
+        a(f"- fitz strictly beats pdfspine: {h['fitz_gt_pdfspine']}")
         a("")
         if h["wins"]:
-            a("**Where oxide beats fitz vs ground truth:**")
+            a("**Where pdfspine beats fitz vs ground truth:**")
             a("")
-            a("| doc | oxide order | fitz order | Δ |")
+            a("| doc | pdfspine order | fitz order | Δ |")
             a("|---|---|---|---|")
             for w in h["wins"][:10]:
-                a(f"| `{w['id']}` | {w['oxide']:.3f} | {w['fitz']:.3f} | +{w['delta']:.3f} |")
+                a(f"| `{w['id']}` | {w['pdfspine']:.3f} | {w['fitz']:.3f} | +{w['delta']:.3f} |")
             a("")
         if h["losses"]:
-            a("**Where oxide loses to fitz vs ground truth (fix targets):**")
+            a("**Where pdfspine loses to fitz vs ground truth (fix targets):**")
             a("")
-            a("| doc | oxide order | fitz order | Δ |")
+            a("| doc | pdfspine order | fitz order | Δ |")
             a("|---|---|---|---|")
             for w in h["losses"][:10]:
-                a(f"| `{w['id']}` | {w['oxide']:.3f} | {w['fitz']:.3f} | {w['delta']:.3f} |")
+                a(f"| `{w['id']}` | {w['pdfspine']:.3f} | {w['fitz']:.3f} | {w['delta']:.3f} |")
             a("")
     sect += 1
 
     # Per-document table
     a(f"## {sect}. Per-document scores")
     a("")
-    a("`lev` shown per extractor (o=oxide_pdf, f=fitz, p=pdfminer); `ord` = order metric.")
+    a("`lev` shown per extractor (o=pdfspine, f=fitz, p=pdfminer); `ord` = order metric.")
     a("")
     a("| doc | subset | gt chars | o lev | f lev | p lev | o ord | f ord | p ord | notes |")
     a("|---|---|---|---|---|---|---|---|---|---|")
@@ -468,13 +468,13 @@ def render_report(payload: dict) -> str:
             notes = "; ".join(f"{k}: {v}" for k, v in r["errors"].items())
         notes = notes[:120]
         a(f"| `{r['id']}` | {r['subset']} | {r.get('gt_chars') if r.get('gt_chars') is not None else '—'} "
-          f"| {cell('oxide_pdf','lev')} | {cell('pymupdf','lev')} | {cell('pdfminer','lev')} "
-          f"| {cell('oxide_pdf','order')} | {cell('pymupdf','order')} | {cell('pdfminer','order')} "
+          f"| {cell('pdfspine','lev')} | {cell('pymupdf','lev')} | {cell('pdfminer','lev')} "
+          f"| {cell('pdfspine','order')} | {cell('pymupdf','order')} | {cell('pdfminer','order')} "
           f"| {notes} |")
     a("")
     a("---")
     a("")
-    a("_Methodology: oxide_pdf extracted in an isolated subprocess (project venv) under a "
+    a("_Methodology: pdfspine extracted in an isolated subprocess (project venv) under a "
       "wall-clock timeout so a Rust panic cannot crash the run; fitz + pdfminer extracted "
       "via conformance/oracle_extract.py under the oracle venv. All three scored vs the same "
       "ground truth by conformance/gt/score.py. Multi-column reading order is the known weak "
@@ -575,18 +575,18 @@ def _selftest() -> int:
     gt1 = "the quick brown fox jumps over the lazy dog"
     gt2 = "left column text right column text continues here"
 
-    # Doc 1: oxide perfect, fitz slightly worse order, pdfminer worse.
-    # Doc 2: oxide better order than fitz (multi-column win), pdfminer worst.
+    # Doc 1: pdfspine perfect, fitz slightly worse order, pdfminer worse.
+    # Doc 2: pdfspine better order than fitz (multi-column win), pdfminer worst.
     fake = {
         "doc1": {
             "gt": gt1,
-            "oxide_pdf": gt1,  # perfect
+            "pdfspine": gt1,  # perfect
             "pymupdf": "the quick brown fox jumps the over lazy dog",  # reorder
             "pdfminer": "quick brown fox the lazy dog",  # dropped words
         },
         "doc2": {
             "gt": gt2,
-            "oxide_pdf": gt2,  # perfect reading order
+            "pdfspine": gt2,  # perfect reading order
             "pymupdf": "left right column column text text continues here",  # column-mixed
             "pdfminer": "right column text left column text continues here",  # swapped
         },
@@ -618,10 +618,10 @@ def _selftest() -> int:
             mm = agg[ex]["metrics"][m]
             assert mm["mean"] is not None and mm["median"] is not None, (ex, m, mm)
 
-    # oxide is perfect on both docs -> mean lev/order == 1.0
-    assert agg["oxide_pdf"]["metrics"]["lev"]["mean"] == 1.0, agg["oxide_pdf"]
-    assert agg["oxide_pdf"]["metrics"]["order"]["mean"] == 1.0, agg["oxide_pdf"]
-    # fitz strictly worse order than oxide on both docs
+    # pdfspine is perfect on both docs -> mean lev/order == 1.0
+    assert agg["pdfspine"]["metrics"]["lev"]["mean"] == 1.0, agg["pdfspine"]
+    assert agg["pdfspine"]["metrics"]["order"]["mean"] == 1.0, agg["pdfspine"]
+    # fitz strictly worse order than pdfspine on both docs
     assert agg["pymupdf"]["metrics"]["order"]["mean"] < 1.0, agg["pymupdf"]
 
     # mean check: recompute one cell by hand
@@ -639,9 +639,9 @@ def _selftest() -> int:
     # --- head-to-head ---
     h = payload["head_to_head"]
     assert h["comparable"] == 2, h
-    assert h["oxide_ge_fitz"] == 2, h  # oxide matches-or-exceeds fitz on both
-    assert h["oxide_gt_fitz"] == 2, h  # strictly beats on both
-    assert h["fitz_gt_oxide"] == 0, h
+    assert h["pdfspine_ge_fitz"] == 2, h  # pdfspine matches-or-exceeds fitz on both
+    assert h["pdfspine_gt_fitz"] == 2, h  # strictly beats on both
+    assert h["fitz_gt_pdfspine"] == 0, h
     assert len(h["wins"]) == 2 and not h["losses"], h
 
     # --- by_subset present ---
@@ -652,7 +652,7 @@ def _selftest() -> int:
     md = render_report(payload)
     assert "Objective Ground-Truth Accuracy Report" in md
     assert "Objective match/exceed vs fitz" in md
-    assert "**oxide_pdf**" in md
+    assert "**pdfspine**" in md
     assert "pymupdf" in md and "pdfminer" in md
     assert "doc1" in md and "doc2" in md
 
@@ -665,7 +665,7 @@ def _selftest() -> int:
         assert report_path.exists() and report_path.stat().st_size > 0
         assert json_path.exists() and json_path.stat().st_size > 0
         reloaded = json.loads(json_path.read_text(encoding="utf-8"))
-        assert reloaded["head_to_head"]["oxide_ge_fitz"] == 2
+        assert reloaded["head_to_head"]["pdfspine_ge_fitz"] == 2
 
     print("run_gt.py self-test OK")
     return 0
@@ -681,7 +681,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--report", type=Path, help="output markdown report path")
     ap.add_argument("--json", dest="json_out", type=Path, help="output JSON path")
     ap.add_argument("--python", default=sys.executable,
-                    help="project venv python (with built oxide_pdf wheel)")
+                    help="project venv python (with built pdfspine wheel)")
     ap.add_argument("--oracle-python", default=str(REPO_ROOT / ".venv-oracle" / "bin" / "python"))
     ap.add_argument("--timeout", type=float, default=120.0, help="per-PDF wall-clock timeout (s)")
     ap.add_argument("--limit", type=int, default=None, help="cap entries per manifest")
@@ -715,10 +715,10 @@ def main(argv: list[str] | None = None) -> int:
     # Console one-liner.
     h = payload["head_to_head"]
     if h["comparable"]:
-        print(f"oxide ≥ fitz (order): {h['oxide_ge_fitz']}/{h['comparable']} "
-              f"({h['oxide_ge_fitz'] / h['comparable']:.1%})")
+        print(f"pdfspine ≥ fitz (order): {h['pdfspine_ge_fitz']}/{h['comparable']} "
+              f"({h['pdfspine_ge_fitz'] / h['comparable']:.1%})")
     else:
-        print("no comparable oxide-vs-fitz docs")
+        print("no comparable pdfspine-vs-fitz docs")
     return 0
 
 

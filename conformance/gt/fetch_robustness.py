@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Fetch a large, diverse real-world PDF robustness corpus for oxide-pdf.
+"""Fetch a large, diverse real-world PDF robustness corpus for pdfspine.
 
 This is a FETCH-ONLY tool. It downloads a broad, heterogeneous set of
 real-world PDFs (varied producers, eras, encodings, malformities) so the
 harness can later (a) stress never-panic robustness and (b) run an
-oxide-vs-fitz differential extraction. NO ground truth is produced here --
+pdfspine-vs-fitz differential extraction. NO ground truth is produced here --
 the scoring happens elsewhere in the main loop.
 
 Sources

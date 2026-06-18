@@ -1,8 +1,8 @@
-# oxide-pdf — Objective Ground-Truth Accuracy Report
+# pdfspine — Objective Ground-Truth Accuracy Report
 
 _Generated: 2026-06-16T03:32:25.872111+00:00 • oracle (PyMuPDF/pdfminer) available: True_
 
-Each extractor — **oxide_pdf**, **pymupdf** (fitz), and **pdfminer** — is scored against the SAME objective ground truth (`gt_text` or JATS `nxml` fulltext), not against another extractor. Cells show **mean / median**. Metrics: `lev` (edit similarity), `f1` (token F1), `jaccard` (word-set overlap), `order` (reading-order similarity). No PyMuPDF output is committed — only scores.
+Each extractor — **pdfspine**, **pymupdf** (fitz), and **pdfminer** — is scored against the SAME objective ground truth (`gt_text` or JATS `nxml` fulltext), not against another extractor. Cells show **mean / median**. Metrics: `lev` (edit similarity), `f1` (token F1), `jaccard` (word-set overlap), `order` (reading-order similarity). No PyMuPDF output is committed — only scores.
 
 ## 1. Headline — all docs
 
@@ -10,21 +10,21 @@ Corpus: **6** documents (6 with at least one extractor scored, 0 skipped).
 
 | extractor | docs | lev | f1 | jaccard | order |
 |---|---|---|---|---|---|
-| **oxide_pdf** | 6 | 0.530 / 0.487 | 0.854 / 0.883 | 0.717 / 0.744 | 0.610 / 0.551 |
+| **pdfspine** | 6 | 0.530 / 0.487 | 0.854 / 0.883 | 0.717 / 0.744 | 0.610 / 0.551 |
 | pymupdf | 6 | 0.980 / 0.991 | 0.980 / 0.991 | 0.965 / 0.982 | 1.000 / 1.000 |
 | pdfminer | 6 | 0.763 / 0.696 | 0.980 / 0.991 | 0.965 / 0.982 | 0.781 / 0.702 |
 
 ## 2. Objective match/exceed vs fitz (reading order)
 
-Over **6** documents scored by both oxide_pdf and fitz against ground truth, on the `order` (reading-order) metric:
+Over **6** documents scored by both pdfspine and fitz against ground truth, on the `order` (reading-order) metric:
 
-- **oxide ≥ fitz (match or exceed): 0/6 (0.0%)**
-- oxide strictly beats fitz: 0
-- fitz strictly beats oxide: 6
+- **pdfspine ≥ fitz (match or exceed): 0/6 (0.0%)**
+- pdfspine strictly beats fitz: 0
+- fitz strictly beats pdfspine: 6
 
-**Where oxide loses to fitz vs ground truth (fix targets):**
+**Where pdfspine loses to fitz vs ground truth (fix targets):**
 
-| doc | oxide order | fitz order | Δ |
+| doc | pdfspine order | fitz order | Δ |
 |---|---|---|---|
 | `3col.pdf` | 0.409 | 1.000 | -0.591 |
 | `2col.pdf` | 0.549 | 1.000 | -0.451 |
@@ -35,7 +35,7 @@ Over **6** documents scored by both oxide_pdf and fitz against ground truth, on 
 
 ## 3. Per-document scores
 
-`lev` shown per extractor (o=oxide_pdf, f=fitz, p=pdfminer); `ord` = order metric.
+`lev` shown per extractor (o=pdfspine, f=fitz, p=pdfminer); `ord` = order metric.
 
 | doc | subset | gt chars | o lev | f lev | p lev | o ord | f ord | p ord | notes |
 |---|---|---|---|---|---|---|---|---|---|
@@ -48,4 +48,4 @@ Over **6** documents scored by both oxide_pdf and fitz against ground truth, on 
 
 ---
 
-_Methodology: oxide_pdf extracted in an isolated subprocess (project venv) under a wall-clock timeout so a Rust panic cannot crash the run; fitz + pdfminer extracted via conformance/oracle_extract.py under the oracle venv. All three scored vs the same ground truth by conformance/gt/score.py. Multi-column reading order is the known weak spot; the `order` head-to-head is the objective match/exceed signal._
+_Methodology: pdfspine extracted in an isolated subprocess (project venv) under a wall-clock timeout so a Rust panic cannot crash the run; fitz + pdfminer extracted via conformance/oracle_extract.py under the oracle venv. All three scored vs the same ground truth by conformance/gt/score.py. Multi-column reading order is the known weak spot; the `order` head-to-head is the objective match/exceed signal._

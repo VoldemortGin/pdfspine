@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Ad-hoc diagnostic: side-by-side oxide vs fitz text for one PDF page.
+"""Ad-hoc diagnostic: side-by-side pdfspine vs fitz text for one PDF page.
 
-Run with the PROJECT venv python (has oxide_pdf). Calls the oracle venv as a
+Run with the PROJECT venv python (has pdfspine). Calls the oracle venv as a
 subprocess for fitz output. Prints, for a chosen page:
-  - first N lines of oxide get_text("text")
+  - first N lines of pdfspine get_text("text")
   - first N lines of fitz  get_text("text")
-  - block bboxes + first text snippet from oxide get_text("blocks") and fitz
+  - block bboxes + first text snippet from pdfspine get_text("blocks") and fitz
 Usage:
   env -u CONDA_PREFIX .venv/bin/python conformance/diag.py <pdf> [page] [mode]
 mode: lines (default) | blocks | cropbox
@@ -43,19 +43,19 @@ def main() -> int:
     mode = sys.argv[3] if len(sys.argv) > 3 else "lines"
     n = int(sys.argv[4]) if len(sys.argv) > 4 else 40
 
-    import oxide_pdf
-    d = oxide_pdf.open(pdf)
+    import pdfspine
+    d = pdfspine.open(pdf)
     p = d.load_page(page)
     ox_text = p.get_text("text")
     ox_blocks = p.get_text("blocks")
 
     f = fitz_blocks(pdf, page)
 
-    print(f"=== page {page}  oxide_rect=? fitz rect={f['rect']} cropbox={f['cropbox']} mediabox={f['mediabox']} rot={f['rot']}")
+    print(f"=== page {page}  pdfspine_rect=? fitz rect={f['rect']} cropbox={f['cropbox']} mediabox={f['mediabox']} rot={f['rot']}")
     if mode == "cropbox":
-        # show oxide blocks whose bbox is outside fitz cropbox
+        # show pdfspine blocks whose bbox is outside fitz cropbox
         cb = f["cropbox"]
-        print("--- oxide blocks possibly outside cropbox ---")
+        print("--- pdfspine blocks possibly outside cropbox ---")
         for b in ox_blocks:
             x0, y0, x1, y1 = b[0], b[1], b[2], b[3]
             outside = x1 < cb[0] or x0 > cb[2] or y1 < cb[1] or y0 > cb[3]

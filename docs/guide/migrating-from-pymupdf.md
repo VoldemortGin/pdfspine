@@ -1,16 +1,16 @@
 # Migrating from PyMuPDF
 
-oxide-pdf is designed so that existing PyMuPDF code can run unmodified for the
+pdfspine is designed so that existing PyMuPDF code can run unmodified for the
 supported subset. This page is the honest, no-marketing account of what works,
 what differs, and what isn't there yet.
 
 ## `import fitz` just works
 
-The compatibility shim maps PyMuPDF's exact names onto oxide-pdf. In most cases
+The compatibility shim maps PyMuPDF's exact names onto pdfspine. In most cases
 the only change you need is… nothing:
 
 ```python
-import fitz                       # resolves to the oxide-pdf shim
+import fitz                       # resolves to the pdfspine shim
 
 doc = fitz.open("input.pdf")
 page = doc[0]
@@ -24,8 +24,8 @@ doc.save("out.pdf")
 package:
 
 ```python
-import oxide_pdf
-doc = oxide_pdf.open("input.pdf")
+import pdfspine
+doc = pdfspine.open("input.pdf")
 ```
 
 Both expose the identical `open`, `Document`, `Page`, `Pixmap`, `DisplayList`,
@@ -52,23 +52,23 @@ repository tracks the disposition of every public PyMuPDF symbol:
 ## How gaps behave
 
 Anything not yet implemented raises a typed, catchable
-`oxide_pdf.PdfUnsupportedError` (aliased as `fitz.PdfUnsupportedError`) **with a
+`pdfspine.PdfUnsupportedError` (aliased as `fitz.PdfUnsupportedError`) **with a
 hint** — never a bare `AttributeError`. That means you can detect and handle gaps
 cleanly:
 
 ```python
-import oxide_pdf
+import pdfspine
 
 try:
     doc.some_unimplemented_method()
-except oxide_pdf.PdfUnsupportedError as e:
+except pdfspine.PdfUnsupportedError as e:
     print("not yet:", e)
 ```
 
 PyMuPDF exception names are aliased onto the typed hierarchy, so existing
 `except` clauses keep working:
 
-| PyMuPDF name | oxide-pdf type |
+| PyMuPDF name | pdfspine type |
 |---|---|
 | `fitz.FileDataError` | `PdfSyntaxError` |
 | `fitz.EmptyFileError` | `PdfSyntaxError` |
@@ -84,7 +84,7 @@ also sequences, so `r[0]`, `tuple(r)`, and unpacking all behave like PyMuPDF.
 
 ## Feature mapping
 
-| Area | PyMuPDF | oxide-pdf | Status |
+| Area | PyMuPDF | pdfspine | Status |
 |---|---|---|---|
 | Open / pages | `fitz.open`, `doc[i]`, `page_count` | same | ✅ Implemented |
 | Metadata | `doc.metadata`, `set_metadata` | same | ✅ Implemented |
@@ -122,7 +122,7 @@ also sequences, so `r[0]`, `tuple(r)`, and unpacking all behave like PyMuPDF.
 - **Deprecated camelCase aliases** — PyMuPDF's old `getText` / `getPixmap` /
   `setMetadata` style names are provided as aliases where they existed, so legacy
   code keeps working.
-- **`to_html()` on tables** — an oxide-pdf extra beyond PyMuPDF.
+- **`to_html()` on tables** — an pdfspine extra beyond PyMuPDF.
 
 ## What is not yet implemented
 

@@ -4,7 +4,7 @@
 //! bit first), starting at 9 bits and growing to a maximum of 12 bits as the
 //! code table fills, with reserved codes 256 (`ClearTable`) and 257
 //! (`EndOfData`). This wraps the pure-Rust `weezl` backend
-//! (`BitOrder::Msb`, code size 8) and layers the oxide-pdf decode policies on top.
+//! (`BitOrder::Msb`, code size 8) and layers the pdfspine decode policies on top.
 //!
 //! # EarlyChange — the #1 LZW bug
 //!

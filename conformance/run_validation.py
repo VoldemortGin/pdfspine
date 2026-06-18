@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-"""Real-corpus validation harness for oxide-pdf.
+"""Real-corpus validation harness for pdfspine.
 
-Given a directory of PDFs, measures — honestly — how oxide_pdf behaves on
+Given a directory of PDFs, measures — honestly — how pdfspine behaves on
 real-world files and how close its text extraction is to PyMuPDF (the "fitz"
 reference) and pdfminer.six (secondary):
 
-1. Open/repair rate     — oxide_pdf.open(path): opened-ok / repaired / failed.
+1. Open/repair rate     — pdfspine.open(path): opened-ok / repaired / failed.
 2. Never-panic / robustness — each open+extract runs in an isolated subprocess
    under a wall-clock timeout; a Rust panic surfaces as a Python exception, and
    a Rust abort / hang surfaces as a non-zero subprocess exit or a timeout. Any
    such event is flagged (an ABORT is the serious one).
 3. Structural validity  — for a sample, doc.save() -> ``qpdf --check`` pass rate.
-4. Differential text accuracy — per page, oxide_pdf get_text("text") vs the
+4. Differential text accuracy — per page, pdfspine get_text("text") vs the
    oracles. Per-document similarity = normalized Levenshtein ratio AND token
    Jaccard, computed on whitespace-normalized text. Reports mean/median and the
    worst cases with a short reason.
@@ -46,7 +46,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CONFORMANCE = REPO_ROOT / "conformance"
-WORKER = CONFORMANCE / "oxide_worker.py"
+WORKER = CONFORMANCE / "pdfspine_worker.py"
 ORACLE = CONFORMANCE / "oracle_extract.py"
 
 
@@ -111,25 +111,25 @@ def diff_reason(ours: str, theirs: str) -> str:
     if tlen == 0 and olen == 0:
         return "both extracted empty text"
     if tlen == 0:
-        return "oracle empty, oxide non-empty (oracle could not extract)"
+        return "oracle empty, pdfspine non-empty (oracle could not extract)"
     if olen == 0:
-        return "oxide extracted empty text while oracle got content (likely scanned/image-only or unsupported font program)"
+        return "pdfspine extracted empty text while oracle got content (likely scanned/image-only or unsupported font program)"
     ratio = olen / tlen if tlen else 0.0
     reasons: list[str] = []
     if ratio < 0.5:
-        reasons.append(f"oxide text much shorter ({olen} vs {tlen} chars, {ratio:.0%}) — missing content")
+        reasons.append(f"pdfspine text much shorter ({olen} vs {tlen} chars, {ratio:.0%}) — missing content")
     elif ratio > 1.8:
-        reasons.append(f"oxide text much longer ({olen} vs {tlen} chars) — duplicated/extra content")
+        reasons.append(f"pdfspine text much longer ({olen} vs {tlen} chars) — duplicated/extra content")
     ot = set(_TOKEN.findall(on.lower()))
     tt = set(_TOKEN.findall(tn.lower()))
     only_theirs = len(tt - ot)
     only_ours = len(ot - tt)
     if tt:
         if only_theirs / len(tt) > 0.3:
-            reasons.append(f"{only_theirs}/{len(tt)} oracle tokens absent from oxide (dropped glyphs/words)")
+            reasons.append(f"{only_theirs}/{len(tt)} oracle tokens absent from pdfspine (dropped glyphs/words)")
     if ot:
         if only_ours / len(ot) > 0.3:
-            reasons.append(f"{only_ours}/{len(ot)} oxide tokens absent from oracle (spurious/mis-decoded)")
+            reasons.append(f"{only_ours}/{len(ot)} pdfspine tokens absent from oracle (spurious/mis-decoded)")
     # word-order / spacing: high jaccard but low levenshtein => layout/order diff
     lev = levenshtein_ratio(on, tn)
     jac = jaccard(on, tn)
@@ -143,8 +143,8 @@ def diff_reason(ours: str, theirs: str) -> str:
 # --------------------------------------------------------------------------- #
 # Subprocess runners
 # --------------------------------------------------------------------------- #
-def run_oxide(py: str, pdf: Path, timeout: float, save_path: Path | None) -> dict:
-    """Run the isolated oxide worker. Returns a result dict with robustness flags."""
+def run_pdfspine(py: str, pdf: Path, timeout: float, save_path: Path | None) -> dict:
+    """Run the isolated pdfspine worker. Returns a result dict with robustness flags."""
     cmd = [py, str(WORKER), str(pdf)]
     if save_path is not None:
         cmd += ["--save", str(save_path)]
@@ -229,7 +229,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--qpdf-sample", type=int, default=12, help="how many opened PDFs to re-save+qpdf-check")
     ap.add_argument("--json-out", type=Path, default=CONFORMANCE / "results.json")
     ap.add_argument("--report-out", type=Path, default=CONFORMANCE / "REPORT.md")
-    ap.add_argument("--tmp", type=Path, default=Path("/tmp/oxide-conformance"))
+    ap.add_argument("--tmp", type=Path, default=Path("/tmp/pdfspine-conformance"))
     args = ap.parse_args(argv)
 
     args.tmp.mkdir(parents=True, exist_ok=True)
@@ -260,7 +260,7 @@ def main(argv: list[str] | None = None) -> int:
         if do_qpdf:
             save_path = args.tmp / (pdf.stem + ".resaved.pdf")
 
-        ox = run_oxide(args.python, pdf, args.timeout, save_path if do_qpdf else None)
+        ox = run_pdfspine(args.python, pdf, args.timeout, save_path if do_qpdf else None)
 
         rec: dict = {
             "file": pdf.name,
@@ -417,7 +417,7 @@ def _render_report(payload: dict) -> str:
     s = payload["summary"]
     L: list[str] = []
     a = L.append
-    a("# oxide-pdf — Real-Corpus Validation Report")
+    a("# pdfspine — Real-Corpus Validation Report")
     a("")
     a(f"_Generated: {payload['generated']} • qpdf: {payload['qpdf_version']} • "
       f"oracle (PyMuPDF/pdfminer) available: {payload['oracle_available']}_")
@@ -503,7 +503,7 @@ def _render_report(payload: dict) -> str:
     if not sim:
         a("- Oracle not available; no differential text comparison performed.")
     else:
-        a("Per-document similarity of `oxide_pdf` `get_text(\"text\")` vs each oracle, "
+        a("Per-document similarity of `pdfspine` `get_text(\"text\")` vs each oracle, "
           "on whitespace-normalized full-document text. Levenshtein = normalized edit "
           "similarity (sequence-level); Jaccard = word-set overlap (vocabulary-level).")
         a("")
@@ -570,10 +570,10 @@ def _aggregate_causes(records: list[dict]) -> list[tuple[str, int, list[str]]]:
         reason = s.get("reason") or ""
         if "empty text while oracle" in reason:
             key = "Empty extraction where fitz has text (scanned/image-only pages or unsupported font program)"
-        elif "much shorter" in reason or "absent from oxide" in reason:
-            key = "Missing content — oxide drops glyphs/words fitz extracts (CMap/ToUnicode, ligatures, or embedded-font decoding gaps)"
+        elif "much shorter" in reason or "absent from pdfspine" in reason:
+            key = "Missing content — pdfspine drops glyphs/words fitz extracts (CMap/ToUnicode, ligatures, or embedded-font decoding gaps)"
         elif "much longer" in reason or "absent from oracle" in reason:
-            key = "Extra/spurious content — oxide emits text fitz does not (mis-decoded glyphs or duplicated content)"
+            key = "Extra/spurious content — pdfspine emits text fitz does not (mis-decoded glyphs or duplicated content)"
         elif "ordering/spacing" in reason or "reading-order" in reason:
             key = "Reading-order / word-spacing differences (column/line segmentation vs fitz)"
         else:

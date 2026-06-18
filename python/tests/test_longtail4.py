@@ -13,7 +13,7 @@ Covers the newly-implemented surface:
   - Text helpers: Page.get_text_blocks / get_text_words / get_textbox /
     get_text_selection; TextPage.extractRAWJSON
 
-Both the native ``oxide_pdf`` API and the ``fitz`` shim are exercised; all
+Both the native ``pdfspine`` API and the ``fitz`` shim are exercised; all
 fixtures are self-generated.
 """
 
@@ -22,19 +22,19 @@ from __future__ import annotations
 import json
 
 import fitz
-import oxide_pdf
+import pdfspine
 import pytest
 
 
-def _doc_with_text() -> oxide_pdf.Document:
-    d = oxide_pdf.open()
+def _doc_with_text() -> pdfspine.Document:
+    d = pdfspine.open()
     p = d.new_page()
     p.insert_text((72, 100), "Hello world here", fontsize=12)
     return d
 
 
-def _doc_with_pages(n: int = 3) -> oxide_pdf.Document:
-    d = oxide_pdf.open()
+def _doc_with_pages(n: int = 3) -> pdfspine.Document:
+    d = pdfspine.open()
     for _ in range(n):
         d.new_page()
     return d
@@ -116,8 +116,8 @@ def test_no_links() -> None:
 
 
 def test_fitz_link_alias() -> None:
-    assert fitz.Link is oxide_pdf.Link
-    assert fitz.linkDest is oxide_pdf.linkDest
+    assert fitz.Link is pdfspine.Link
+    assert fitz.linkDest is pdfspine.linkDest
 
 
 # === Outline =============================================================
@@ -166,34 +166,34 @@ def test_outline_dest() -> None:
 
 
 def test_fitz_outline_alias() -> None:
-    assert fitz.Outline is oxide_pdf.Outline
+    assert fitz.Outline is pdfspine.Outline
 
 
 # === Colorspace ==========================================================
 
 
 def test_colorspace_singletons() -> None:
-    assert oxide_pdf.csGRAY.n == 1
-    assert oxide_pdf.csRGB.n == 3
-    assert oxide_pdf.csCMYK.n == 4
-    assert oxide_pdf.csRGB.name == "DeviceRGB"
-    assert oxide_pdf.csGRAY.name == "DeviceGray"
-    assert oxide_pdf.csCMYK.name == "DeviceCMYK"
-    assert oxide_pdf.csGRAY.is_gray is True
-    assert oxide_pdf.csRGB.is_gray is False
+    assert pdfspine.csGRAY.n == 1
+    assert pdfspine.csRGB.n == 3
+    assert pdfspine.csCMYK.n == 4
+    assert pdfspine.csRGB.name == "DeviceRGB"
+    assert pdfspine.csGRAY.name == "DeviceGray"
+    assert pdfspine.csCMYK.name == "DeviceCMYK"
+    assert pdfspine.csGRAY.is_gray is True
+    assert pdfspine.csRGB.is_gray is False
 
 
 def test_colorspace_ctor() -> None:
-    assert oxide_pdf.Colorspace(oxide_pdf.CS_RGB).name == "DeviceRGB"
-    assert oxide_pdf.Colorspace(oxide_pdf.CS_GRAY).n == 1
-    assert oxide_pdf.Colorspace(oxide_pdf.CS_CMYK).n == 4
+    assert pdfspine.Colorspace(pdfspine.CS_RGB).name == "DeviceRGB"
+    assert pdfspine.Colorspace(pdfspine.CS_GRAY).n == 1
+    assert pdfspine.Colorspace(pdfspine.CS_CMYK).n == 4
     with pytest.raises(ValueError):
-        oxide_pdf.Colorspace(99)
+        pdfspine.Colorspace(99)
 
 
 def test_colorspace_equality() -> None:
-    assert oxide_pdf.Colorspace(oxide_pdf.CS_RGB) == oxide_pdf.csRGB
-    assert oxide_pdf.csRGB != oxide_pdf.csGRAY
+    assert pdfspine.Colorspace(pdfspine.CS_RGB) == pdfspine.csRGB
+    assert pdfspine.csRGB != pdfspine.csGRAY
 
 
 def test_fitz_colorspace_constants() -> None:
@@ -204,11 +204,11 @@ def test_fitz_colorspace_constants() -> None:
 
 
 def test_pixmap_with_colorspace_object() -> None:
-    pm = oxide_pdf.Pixmap(oxide_pdf.csRGB, (0, 0, 4, 4))
+    pm = pdfspine.Pixmap(pdfspine.csRGB, (0, 0, 4, 4))
     assert pm.width == 4 and pm.height == 4
     assert pm.n == 3
     assert pm.colorspace == "DeviceRGB"
-    pmg = oxide_pdf.Pixmap(oxide_pdf.csGRAY, (0, 0, 4, 4))
+    pmg = pdfspine.Pixmap(pdfspine.csGRAY, (0, 0, 4, 4))
     assert pmg.n == 1
 
 
@@ -216,7 +216,7 @@ def test_pixmap_with_colorspace_object() -> None:
 
 
 def test_textwriter_append_metrics() -> None:
-    tw = oxide_pdf.TextWriter((0, 0, 400, 400))
+    tw = pdfspine.TextWriter((0, 0, 400, 400))
     tw.append((50, 50), "Hello")
     assert tw.last_point.x > 50
     assert tw.last_point.y == 50
@@ -226,16 +226,16 @@ def test_textwriter_append_metrics() -> None:
 
 
 def test_textwriter_write_renders_into_page() -> None:
-    d = oxide_pdf.open()
+    d = pdfspine.open()
     p = d.new_page()
-    tw = oxide_pdf.TextWriter(p.rect)
+    tw = pdfspine.TextWriter(p.rect)
     tw.append((72, 100), "Rendered Text")
     tw.write_text(p)
     assert "Rendered" in p.get_text()
 
 
 def test_textwriter_fill_textbox_wraps() -> None:
-    tw = oxide_pdf.TextWriter((0, 0, 200, 200))
+    tw = pdfspine.TextWriter((0, 0, 200, 200))
     overflow = tw.fill_textbox(
         (0, 0, 60, 200), "one two three four five six seven", fontsize=10
     )
@@ -245,7 +245,7 @@ def test_textwriter_fill_textbox_wraps() -> None:
 
 
 def test_textwriter_fill_textbox_overflow() -> None:
-    tw = oxide_pdf.TextWriter((0, 0, 200, 200))
+    tw = pdfspine.TextWriter((0, 0, 200, 200))
     # A very short box forces overflow lines.
     overflow = tw.fill_textbox(
         (0, 0, 30, 12), "aaa bbb ccc ddd eee fff", fontsize=10
@@ -254,19 +254,19 @@ def test_textwriter_fill_textbox_overflow() -> None:
 
 
 def test_textwriter_appendv() -> None:
-    tw = oxide_pdf.TextWriter((0, 0, 200, 200))
+    tw = pdfspine.TextWriter((0, 0, 200, 200))
     tw.appendv((10, 10), "abc", fontsize=10)
     assert len(tw._segments) == 3
     assert tw.last_point.y > 10
 
 
 def test_textwriter_color() -> None:
-    tw = oxide_pdf.TextWriter((0, 0, 200, 200), color=(1, 0, 0))
+    tw = pdfspine.TextWriter((0, 0, 200, 200), color=(1, 0, 0))
     assert tw.color == (1.0, 0.0, 0.0)
 
 
 def test_fitz_textwriter() -> None:
-    assert fitz.TextWriter is oxide_pdf.TextWriter
+    assert fitz.TextWriter is pdfspine.TextWriter
     d = fitz.open()
     p = d.new_page()
     tw = fitz.TextWriter(p.rect)
@@ -291,7 +291,7 @@ def test_annot_get_textpage() -> None:
     p = d[0]
     a = p.add_rect_annot((60, 85, 320, 110))
     tp = a.get_textpage()
-    assert isinstance(tp, oxide_pdf.TextPage)
+    assert isinstance(tp, pdfspine.TextPage)
 
 
 def test_annot_next() -> None:

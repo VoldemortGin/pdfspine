@@ -2,7 +2,7 @@
 //!
 //! Tesseract is **not bundled** (it is GPL/Apache C++ with large language data);
 //! exactly like PyMuPDF, the user is expected to have `tesseract` installed. The
-//! adapter keeps the oxide-pdf wheel pure-Rust and clean.
+//! adapter keeps the pdfspine wheel pure-Rust and clean.
 //!
 //! Pipeline: the input [`Pixmap`] is encoded to a temporary PNG, then
 //! `tesseract <png> stdout --psm <psm> -l <lang> tsv` is run. The TSV output
@@ -219,7 +219,7 @@ impl TempPng {
         static COUNTER: AtomicU64 = AtomicU64::new(0);
         let n = COUNTER.fetch_add(1, Ordering::Relaxed);
         let mut path = std::env::temp_dir();
-        path.push(format!("oxide_ocr_{}_{}.png", std::process::id(), n));
+        path.push(format!("pdfspine_ocr_{}_{}.png", std::process::id(), n));
         let mut file = std::fs::File::create(&path)?;
         file.write_all(png)?;
         file.flush()?;

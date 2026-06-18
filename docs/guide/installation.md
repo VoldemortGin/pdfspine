@@ -1,8 +1,8 @@
 # Installation
 
 !!! warning "Not yet on PyPI"
-    oxide-pdf is pre-1.0 and is **not yet published to PyPI**. The
-    `pip install oxide-pdf` command below is the *planned* path once the first
+    pdfspine is pre-1.0 and is **not yet published to PyPI**. The
+    `pip install pdfspine` command below is the *planned* path once the first
     release ships. For now, build from source with
     [maturin](https://www.maturin.rs/).
 
@@ -21,10 +21,10 @@
 Once published, installation will be the usual:
 
 ```bash
-pip install oxide-pdf
+pip install pdfspine
 ```
 
-This will provide three importable packages — `oxide_pdf` (native), and the
+This will provide three importable packages — `pdfspine` (native), and the
 `fitz` / `pymupdf` compatibility shims — from one wheel.
 
 ## Build from source (today)
@@ -43,23 +43,23 @@ maturin develop --release
 Then smoke-test the import:
 
 ```bash
-python -c "import oxide_pdf; print(oxide_pdf.__version__)"
+python -c "import pdfspine; print(pdfspine.__version__)"
 ```
 
 To build a redistributable wheel instead of installing in place:
 
 ```bash
 maturin build --release            # wheel lands in target/wheels/
-pip install target/wheels/oxide_pdf-*.whl
+pip install target/wheels/pdfspine-*.whl
 ```
 
 ## Verify
 
 ```python
-import oxide_pdf
+import pdfspine
 
-print(oxide_pdf.__version__)
-print(oxide_pdf.version)           # version tuple from the Rust core
+print(pdfspine.__version__)
+print(pdfspine.version)           # version tuple from the Rust core
 
 # The fitz compat shim works too:
 import fitz

@@ -1,4 +1,4 @@
-# PARITY.md — PyMuPDF (`fitz`) Parity Dashboard for `oxide-pdf`
+# PARITY.md — PyMuPDF (`fitz`) Parity Dashboard for `pdfspine`
 
 > **What this file is.** The human-readable **progress dashboard** for the hard goal:
 > **"whatever PyMuPDF has, we want."** It rolls up the machine-readable per-symbol disposition matrix in
@@ -102,7 +102,7 @@ per-symbol truth (every name, disposition, milestone, note) is in [`COMPAT.toml`
 - [x] **`Matrix` / `Point` / `Rect` / `IRect` / `Quad`** — all geometry math, constructors, operators,
   properties, and the geometry constants/aliases (`EMPTY_*`, `INFINITE_*`, `Identity`, `EPSILON`,
   `rect_like` …) — **M0 · implemented**
-- [x] **`exceptions`** — full oxide-pdf-typed hierarchy + PyMuPDF exception-name aliases
+- [x] **`exceptions`** — full pdfspine-typed hierarchy + PyMuPDF exception-name aliases
   (`PdfError`, `PdfSyntaxError`, `PdfPasswordError`, `PdfUnsupportedError`, `PdfDecodeError`, `PdfLimitError`,
   `PdfRedactionError`, `FileDataError`, `EmptyFileError`, `FileNotFoundError`) — **M1 · implemented**
 
@@ -156,7 +156,7 @@ per-symbol truth (every name, disposition, milestone, note) is in [`COMPAT.toml`
 - [x] **`Link` (14/14)**, **`Outline` (11/11)**, **`TextWriter` (10/10)**, **`Colorspace` (6/6)** — the
   value-object / writer / colorspace surfaces are now fully implemented.
 - [x] **`Font` (20/23)** — metrics object (`text_length`/`char_lengths`/`glyph_advance`/`has_glyph`/
-  `valid_codepoints`/`is_writable`/`Base14_fontnames`/…). Only `glyph_bbox`/`buffer` deferred (oxide's
+  `valid_codepoints`/`is_writable`/`Base14_fontnames`/…). Only `glyph_bbox`/`buffer` deferred (pdfspine's
   Font is a metrics-only handle with no embedded program); `css_for_pymupdf_font` is out-of-scope.
 - [x] **`Tools` / `TOOLS` (12/22)** — diagnostics/tuning singleton headline paths landed; 3 deferred,
   7 out-of-scope (render-era knobs, raw `mupdf.*` access).

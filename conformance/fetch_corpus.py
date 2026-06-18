@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fetch a small, license-clean Tier-1 corpus for the oxide-pdf validation harness.
+"""Fetch a small, license-clean Tier-1 corpus for the pdfspine validation harness.
 
 Tier-1 (committable) — ONLY public-domain / CC0 / permissive sources. Everything
 here is a US-federal-government work (public domain in the US under 17 U.S.C. 105):

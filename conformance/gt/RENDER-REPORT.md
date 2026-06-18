@@ -1,4 +1,4 @@
-# oxide-pdf vs fitz — Rendering Differential
+# pdfspine vs fitz — Rendering Differential
 
 _Generated 2026-06-17T16:05:33+0800 · DPI 150 · 1 page(s)/doc · oracle_available=True · 218s_
 
@@ -28,11 +28,11 @@ CLOSE — mean SSIM 0.945. Broadly faithful with localized differences.
 
 ## Worst ~10 divergences (lowest SSIM)
 
-| corpus/doc | page | SSIM | MAE | oxide size | fitz size | Δw×Δh | cause guess |
+| corpus/doc | page | SSIM | MAE | pdfspine size | fitz size | Δw×Δh | cause guess |
 |---|---|---|---|---|---|---|---|
-| corpus-eurlex/32006L0112_ES | 0 | 0.5271 | 11.68 | 1240×1754 | 1241×1754 | -1×0 | oxide drew much less ink (+12 gray) — missing glyphs / body text not rendered |
-| corpus-robustness/govdocs1-00000 | 0 | 0.5407 | 11.48 | 1275×1650 | 1275×1650 | 0×0 | oxide drew much less ink (+9 gray) — missing glyphs / body text not rendered |
-| corpus-robustness/govdocs1-00019 | 0 | 0.5583 | 17.47 | 1275×1650 | 1275×1650 | 0×0 | oxide drew much less ink (+17 gray) — missing glyphs / body text not rendered |
+| corpus-eurlex/32006L0112_ES | 0 | 0.5271 | 11.68 | 1240×1754 | 1241×1754 | -1×0 | pdfspine drew much less ink (+12 gray) — missing glyphs / body text not rendered |
+| corpus-robustness/govdocs1-00000 | 0 | 0.5407 | 11.48 | 1275×1650 | 1275×1650 | 0×0 | pdfspine drew much less ink (+9 gray) — missing glyphs / body text not rendered |
+| corpus-robustness/govdocs1-00019 | 0 | 0.5583 | 17.47 | 1275×1650 | 1275×1650 | 0×0 | pdfspine drew much less ink (+17 gray) — missing glyphs / body text not rendered |
 | corpus-robustness/govdocs1-00003 | 0 | 0.7131 | 10.27 | 1650×1275 | 1650×1275 | 0×0 | moderate divergence — partial glyph/vector/AA differences |
 | corpus-robustness/govdocs1-00014 | 0 | 0.8249 | 6.27 | 2550×1650 | 2550×1650 | 0×0 | moderate divergence — partial glyph/vector/AA differences |
 | corpus-robustness/govdocs1-00012 | 0 | 0.8891 | 4.52 | 1275×1650 | 1275×1650 | 0×0 | moderate divergence — partial glyph/vector/AA differences |
