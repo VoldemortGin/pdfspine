@@ -13,7 +13,10 @@ def test_version_is_string() -> None:
 
 
 def test_version_function_matches_dunder() -> None:
-    assert pdfspine.version() == pdfspine.__version__
+    # _core.version() is the engine version string; pdfspine.version is the
+    # fitz-shaped (VersionBind, VersionFitz, timestamp) tuple.
+    assert pdfspine._core.version() == pdfspine.__version__
+    assert pdfspine.version == (pdfspine.__version__, pdfspine.__version__, None)
 
 
 def test_identity_matrix() -> None:

@@ -479,17 +479,24 @@ add_many("Colorspace", DEFERRED, "M5", [
 # ---------------------------------------------------------------------------
 add_many("module", IMPLEMENTED, "M1", ["open", "version", "identity_matrix"])
 add_many("module", IMPLEMENTED, "M0", ["paper_size", "paper_rect", "paper_sizes"])
-add_many("module", DEFERRED, "M2", [
+# Module-level helper functions — Task 1 (pdfspine.helpers). Pure-Python ports of
+# fitz's util functions; every value/return-shape cross-checked vs real PyMuPDF
+# 1.27 (.venv-oracle; see test_longtail11.py). Symbol/ZapfDingbats text widths
+# bundled for exact get_text_length parity; recover_* reproduce fitz's quad
+# geometry exactly (incl. rotated quadrants); the message/log shims port fitz's
+# _make_output destination handling.
+add_many("module", IMPLEMENTED, "M2", [
     "get_text_length", "sRGB_to_rgb", "sRGB_to_pdf", "glyph_name_to_unicode",
     "unicode_to_glyph_name", "recover_quad", "recover_char_quad",
     "recover_line_quad", "recover_span_quad", "recover_bbox_quad",
     "planish_line", "ConversionHeader", "ConversionTrailer",
-])
-add_many("module", DEFERRED, "M3", ["get_pdf_now", "get_pdf_str"])
+], "fitz util helpers, exact 1.27 parity")
+add_many("module", IMPLEMENTED, "M3", ["get_pdf_now", "get_pdf_str"], "PDF date/string formatting, fitz-exact")
 add_many("module", DEFERRED, "M5", ["image_profile"])
-add_many("module", DEFERRED, "M1", [
-    "set_messages", "message", "set_log", "log", "Tools", "TOOLS",
-])
+add_many("module", IMPLEMENTED, "M1", [
+    "set_messages", "message", "set_log", "log",
+], "message/log output shims (fitz _make_output destinations)")
+add_many("module", DEFERRED, "M1", ["Tools", "TOOLS"])
 add("module.css_for_pymupdf_font", "module", OUT_OF_SCOPE, "post-v1", "Story-only")
 add_many("module", IMPLEMENTED, "M7", ["find_tables"], "table detection via Page.find_tables (M7)")
 add_many("module", OUT_OF_SCOPE, "post-v1", [
@@ -521,27 +528,31 @@ add_many("constants", IMPLEMENTED, "M1", [
     "PDF_ENCRYPT_NONE", "PDF_ENCRYPT_RC4_128", "PDF_ENCRYPT_AES_128",
     "PDF_ENCRYPT_AES_256",
 ], "encryption-method constants exposed in pdfspine + fitz")
+# Module-level constant families — Task 1 (pdfspine.constants). Every real
+# PyMuPDF 1.27 name in each family is implemented with the EXACT fitz value
+# (cross-checked vs a real PyMuPDF 1.27 install; see test_longtail11.py).
+add_many("constants", IMPLEMENTED, "M2", [
+    "TEXT_flags", "TEXTFLAGS_bundles", "TEXT_FONT_flags",
+], "fitz TEXT_*/TEXTFLAGS_*/TEXT_FONT_* flags, exact 1.27 values")
+add_many("constants", IMPLEMENTED, "M4", [
+    "TEXT_ALIGN", "PDF_ANNOT_types", "PDF_ANNOT_IS_flags", "PDF_ANNOT_LE",
+    "PDF_WIDGET_TYPE", "PDF_WIDGET_TX_FORMAT", "PDF_FIELD_IS_flags",
+    "PDF_BM_blendmodes", "PDF_REDACT_options", "STAMP_icons",
+    "PDF_BORDER_STYLE", "PDF_SIGNATURE_flags",
+], "fitz annot/widget/blend/redact/stamp/border/signature constants, exact 1.27 values")
+add_many("constants", IMPLEMENTED, "M3", [
+    "ENCRYPT_methods", "PERM_flags", "PDF_PAGE_LABEL",
+], "fitz PDF_ENCRYPT_*/PDF_PERM_*/PDF_PAGE_LABEL_* constants, exact 1.27 values")
+add_many("constants", IMPLEMENTED, "M5", ["CS_colorspace"],
+         "fitz CS_RGB/CS_GRAY/CS_CMYK, exact 1.27 values")
+add_many("constants", IMPLEMENTED, "M1", ["version_info", "PDF_TOK_objects"],
+         "fitz version/VersionBind/VersionFitz tuple + PDF_TOK_* token constants")
 # Implemented exceptions (exposed today)
 add_many("exceptions", IMPLEMENTED, "M1", [
     "PdfUnsupportedError", "PdfDecodeError", "PdfRedactionError", "PdfError",
     "PdfSyntaxError", "PdfPasswordError", "PdfLimitError", "FileDataError",
     "EmptyFileError", "FileNotFoundError",
 ], "pdfspine-typed hierarchy + PyMuPDF exception-name aliases")
-# Deferred constant families
-add_many("constants", DEFERRED, "M2", [
-    "TEXT_flags", "TEXTFLAGS_bundles", "TEXT_FONT_flags",
-])
-add_many("constants", DEFERRED, "M4", [
-    "TEXT_ALIGN", "PDF_ANNOT_types", "PDF_ANNOT_IS_flags", "PDF_ANNOT_LE",
-    "PDF_WIDGET_TYPE", "PDF_WIDGET_TX_FORMAT", "PDF_FIELD_IS_flags",
-    "PDF_BM_blendmodes", "PDF_REDACT_options", "STAMP_icons",
-    "PDF_BORDER_STYLE", "PDF_SIGNATURE_flags",
-])
-add_many("constants", DEFERRED, "M3", [
-    "ENCRYPT_methods", "PERM_flags", "PDF_PAGE_LABEL",
-])
-add_many("constants", DEFERRED, "M5", ["CS_colorspace"])
-add_many("constants", DEFERRED, "M1", ["version_info", "PDF_TOK_objects"])
 add("constants.UCDN_SCRIPT", "constants", OUT_OF_SCOPE, "M6", "full shaping out of scope (PRD §3.2 #10)")
 add("constants.PdfUnsupportedError_catchall", "constants", OUT_OF_SCOPE, "M1",
     "every unlisted PyMuPDF symbol raises PdfUnsupportedError (PRD §7 catch-all + §17.2)")

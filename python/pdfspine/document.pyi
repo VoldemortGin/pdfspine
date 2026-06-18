@@ -14,10 +14,13 @@ Base14_fontnames: tuple[str, ...]
 Tools = _core.Tools
 TOOLS: _core.Tools
 
+PDF_ENCRYPT_KEEP: int
 PDF_ENCRYPT_NONE: int
+PDF_ENCRYPT_RC4_40: int
 PDF_ENCRYPT_RC4_128: int
 PDF_ENCRYPT_AES_128: int
 PDF_ENCRYPT_AES_256: int
+PDF_ENCRYPT_UNKNOWN: int
 PDF_PERM_ACCESSIBILITY: int
 
 CS_GRAY: int

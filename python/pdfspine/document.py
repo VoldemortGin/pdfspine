@@ -16,6 +16,19 @@ from typing import Iterator
 
 from . import _core
 from ._core import PdfError, PdfRedactionError, PdfUnsupportedError
+from .constants import CS_CMYK, CS_GRAY, CS_RGB
+
+# Back-compat re-exports: these constants historically lived in this module; keep
+# them importable as ``pdfspine.document.PDF_ENCRYPT_*`` (canonical home is now
+# pdfspine.constants).
+from .constants import PDF_ENCRYPT_AES_128 as PDF_ENCRYPT_AES_128  # noqa: F401,PLC0414
+from .constants import PDF_ENCRYPT_AES_256 as PDF_ENCRYPT_AES_256  # noqa: F401,PLC0414
+from .constants import PDF_ENCRYPT_KEEP as PDF_ENCRYPT_KEEP  # noqa: F401,PLC0414
+from .constants import PDF_ENCRYPT_NONE as PDF_ENCRYPT_NONE  # noqa: F401,PLC0414
+from .constants import PDF_ENCRYPT_RC4_40 as PDF_ENCRYPT_RC4_40  # noqa: F401,PLC0414
+from .constants import PDF_ENCRYPT_RC4_128 as PDF_ENCRYPT_RC4_128  # noqa: F401,PLC0414
+from .constants import PDF_ENCRYPT_UNKNOWN as PDF_ENCRYPT_UNKNOWN  # noqa: F401,PLC0414
+from .constants import PDF_PERM_ACCESSIBILITY as PDF_PERM_ACCESSIBILITY  # noqa: F401,PLC0414
 from .geometry import FZ_MAX_INF_RECT, FZ_MIN_INF_RECT, Matrix, Point, Quad, Rect
 
 # PyMuPDF methods/properties that exist on the real API but land in later
@@ -28,15 +41,6 @@ _UNIMPLEMENTED_PAGE = {
 _UNIMPLEMENTED_DOC = {
     "convert_to_pdf": "image documents (M5)",
 }
-
-# PyMuPDF encryption-method constants (PRD §8.4). AES-256 is always authored as
-# R6 (never R5).
-PDF_ENCRYPT_NONE = 0
-PDF_ENCRYPT_RC4_128 = 1
-PDF_ENCRYPT_AES_128 = 2
-PDF_ENCRYPT_AES_256 = 4
-# PyMuPDF permission flags (advisory). All-permissions sentinel.
-PDF_PERM_ACCESSIBILITY = 1 << 9
 
 
 def _rect(t: tuple[float, float, float, float]) -> Rect:
@@ -2509,7 +2513,7 @@ class Colorspace:
     __slots__ = ("n", "_name")
 
     def __init__(self, type_: int) -> None:
-        """``type_`` is the PyMuPDF ``CS_*`` constant (1=GRAY, 2=RGB, 3=CMYK)."""
+        """``type_`` is the PyMuPDF ``CS_*`` constant (1=RGB, 2=GRAY, 3=CMYK)."""
         if type_ == CS_GRAY:
             self.n, self._name = 1, "DeviceGray"
         elif type_ == CS_RGB:
@@ -2539,10 +2543,8 @@ class Colorspace:
         return hash((self.n, self._name))
 
 
-# PyMuPDF colorspace-type constants + the three device-colorspace singletons.
-CS_GRAY = 1
-CS_RGB = 2
-CS_CMYK = 3
+# The three device-colorspace singletons (CS_* constants live in .constants and
+# are imported at module top; values match PyMuPDF 1.27 exactly).
 csGRAY = Colorspace(CS_GRAY)  # noqa: N816 — PyMuPDF spelling
 csRGB = Colorspace(CS_RGB)  # noqa: N816
 csCMYK = Colorspace(CS_CMYK)  # noqa: N816

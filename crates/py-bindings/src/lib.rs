@@ -65,8 +65,9 @@ fn map_err(e: ApiError) -> PyErr {
 }
 
 /// Maps a PyMuPDF `encryption` constant + passwords/permissions to an
-/// [`pdf_api::EncryptSpec`] (PRD §8.4). `encryption` values mirror PyMuPDF:
-/// `1` = RC4-128, `2` = AES-128, `3`/`4`/`6` = AES-256 (always authored as R6).
+/// [`pdf_api::EncryptSpec`] (PRD §8.4). `encryption` values mirror PyMuPDF
+/// 1.27 (== MuPDF `pdf_encrypt_method`): `3` = RC4-128, `4` = AES-128,
+/// `5` = AES-256 (always authored as R6). RC4-40 (`2`) is upgraded to RC4-128.
 fn encrypt_spec(
     encryption: i32,
     user_pw: Option<&str>,
@@ -74,9 +75,9 @@ fn encrypt_spec(
     permissions: i32,
 ) -> PyResult<pdf_api::EncryptSpec> {
     let method = match encryption {
-        1 => pdf_api::EncryptMethod::Rc4_128,
-        2 => pdf_api::EncryptMethod::Aes128,
-        3..=6 => pdf_api::EncryptMethod::Aes256R6,
+        2 | 3 => pdf_api::EncryptMethod::Rc4_128,
+        4 => pdf_api::EncryptMethod::Aes128,
+        5 => pdf_api::EncryptMethod::Aes256R6,
         other => {
             return Err(PdfUnsupportedError::new_err(format!(
                 "unsupported encryption method: {other}"
@@ -104,7 +105,9 @@ fn build_save_opts(
         .with_garbage(garbage)
         .with_deflate(deflate);
     if let Some(enc) = encryption {
-        if enc != 0 {
+        // 0 = PDF_ENCRYPT_KEEP, 1 = PDF_ENCRYPT_NONE — both mean "do not author
+        // a new encryption dict" (match PyMuPDF 1.27 / MuPDF pdf_encrypt_method).
+        if enc > 1 {
             let spec = encrypt_spec(enc, user_pw, owner_pw, permissions)?;
             opts = opts.with_encrypt(spec);
         }
@@ -2899,8 +2902,8 @@ impl PyDocument {
     // --- save (PRD §8.7 / §8.4) ------------------------------------------
 
     /// Full-saves to `path` (PyMuPDF `Document.save`). Heavy work runs with the
-    /// GIL released. `encryption`: PyMuPDF method constant (`1`=RC4-128,
-    /// `2`=AES-128, `3..=6`=AES-256-R6); `incremental=True` appends in place.
+    /// GIL released. `encryption`: PyMuPDF method constant (`3`=RC4-128,
+    /// `4`=AES-128, `5`=AES-256-R6); `incremental=True` appends in place.
     #[pyo3(signature = (
         path, *, garbage=0, deflate=false, incremental=false,
         encryption=None, owner_pw=None, user_pw=None, permissions=-1

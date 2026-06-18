@@ -29,10 +29,10 @@
 baseline = "1.24.x"
 baseline_detail = "PyMuPDF 1.24.14 / MuPDF 1.24.11"
 total = 769
-implemented = 607
-deferred = 96
+implemented = 647
+deferred = 56
 out_of_scope = 66
-coverage_pct = 78.9
+coverage_pct = 84.1
 
 # ── Matrix ──
 [[symbol]]
@@ -963,128 +963,149 @@ note = "encryption-method constants exposed in pdfspine + fitz"
 [[symbol]]
 name = "TEXT_flags"
 group = "constants"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M2"
+note = "fitz TEXT_*/TEXTFLAGS_*/TEXT_FONT_* flags, exact 1.27 values"
 
 [[symbol]]
 name = "TEXTFLAGS_bundles"
 group = "constants"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M2"
+note = "fitz TEXT_*/TEXTFLAGS_*/TEXT_FONT_* flags, exact 1.27 values"
 
 [[symbol]]
 name = "TEXT_FONT_flags"
 group = "constants"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M2"
+note = "fitz TEXT_*/TEXTFLAGS_*/TEXT_FONT_* flags, exact 1.27 values"
 
 [[symbol]]
 name = "TEXT_ALIGN"
 group = "constants"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
+note = "fitz annot/widget/blend/redact/stamp/border/signature constants, exact 1.27 values"
 
 [[symbol]]
 name = "PDF_ANNOT_types"
 group = "constants"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
+note = "fitz annot/widget/blend/redact/stamp/border/signature constants, exact 1.27 values"
 
 [[symbol]]
 name = "PDF_ANNOT_IS_flags"
 group = "constants"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
+note = "fitz annot/widget/blend/redact/stamp/border/signature constants, exact 1.27 values"
 
 [[symbol]]
 name = "PDF_ANNOT_LE"
 group = "constants"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
+note = "fitz annot/widget/blend/redact/stamp/border/signature constants, exact 1.27 values"
 
 [[symbol]]
 name = "PDF_WIDGET_TYPE"
 group = "constants"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
+note = "fitz annot/widget/blend/redact/stamp/border/signature constants, exact 1.27 values"
 
 [[symbol]]
 name = "PDF_WIDGET_TX_FORMAT"
 group = "constants"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
+note = "fitz annot/widget/blend/redact/stamp/border/signature constants, exact 1.27 values"
 
 [[symbol]]
 name = "PDF_FIELD_IS_flags"
 group = "constants"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
+note = "fitz annot/widget/blend/redact/stamp/border/signature constants, exact 1.27 values"
 
 [[symbol]]
 name = "PDF_BM_blendmodes"
 group = "constants"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
+note = "fitz annot/widget/blend/redact/stamp/border/signature constants, exact 1.27 values"
 
 [[symbol]]
 name = "PDF_REDACT_options"
 group = "constants"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
+note = "fitz annot/widget/blend/redact/stamp/border/signature constants, exact 1.27 values"
 
 [[symbol]]
 name = "STAMP_icons"
 group = "constants"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
+note = "fitz annot/widget/blend/redact/stamp/border/signature constants, exact 1.27 values"
 
 [[symbol]]
 name = "PDF_BORDER_STYLE"
 group = "constants"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
+note = "fitz annot/widget/blend/redact/stamp/border/signature constants, exact 1.27 values"
 
 [[symbol]]
 name = "PDF_SIGNATURE_flags"
 group = "constants"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
+note = "fitz annot/widget/blend/redact/stamp/border/signature constants, exact 1.27 values"
 
 [[symbol]]
 name = "ENCRYPT_methods"
 group = "constants"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M3"
+note = "fitz PDF_ENCRYPT_*/PDF_PERM_*/PDF_PAGE_LABEL_* constants, exact 1.27 values"
 
 [[symbol]]
 name = "PERM_flags"
 group = "constants"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M3"
+note = "fitz PDF_ENCRYPT_*/PDF_PERM_*/PDF_PAGE_LABEL_* constants, exact 1.27 values"
 
 [[symbol]]
 name = "PDF_PAGE_LABEL"
 group = "constants"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M3"
+note = "fitz PDF_ENCRYPT_*/PDF_PERM_*/PDF_PAGE_LABEL_* constants, exact 1.27 values"
 
 [[symbol]]
 name = "CS_colorspace"
 group = "constants"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M5"
+note = "fitz CS_RGB/CS_GRAY/CS_CMYK, exact 1.27 values"
 
 [[symbol]]
 name = "version_info"
 group = "constants"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M1"
+note = "fitz version/VersionBind/VersionFitz tuple + PDF_TOK_* token constants"
 
 [[symbol]]
 name = "PDF_TOK_objects"
 group = "constants"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M1"
+note = "fitz version/VersionBind/VersionFitz tuple + PDF_TOK_* token constants"
 
 [[symbol]]
 name = "constants.UCDN_SCRIPT"
@@ -4503,92 +4524,107 @@ milestone = "M0"
 [[symbol]]
 name = "get_text_length"
 group = "module"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M2"
+note = "fitz util helpers, exact 1.27 parity"
 
 [[symbol]]
 name = "sRGB_to_rgb"
 group = "module"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M2"
+note = "fitz util helpers, exact 1.27 parity"
 
 [[symbol]]
 name = "sRGB_to_pdf"
 group = "module"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M2"
+note = "fitz util helpers, exact 1.27 parity"
 
 [[symbol]]
 name = "glyph_name_to_unicode"
 group = "module"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M2"
+note = "fitz util helpers, exact 1.27 parity"
 
 [[symbol]]
 name = "unicode_to_glyph_name"
 group = "module"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M2"
+note = "fitz util helpers, exact 1.27 parity"
 
 [[symbol]]
 name = "recover_quad"
 group = "module"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M2"
+note = "fitz util helpers, exact 1.27 parity"
 
 [[symbol]]
 name = "recover_char_quad"
 group = "module"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M2"
+note = "fitz util helpers, exact 1.27 parity"
 
 [[symbol]]
 name = "recover_line_quad"
 group = "module"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M2"
+note = "fitz util helpers, exact 1.27 parity"
 
 [[symbol]]
 name = "recover_span_quad"
 group = "module"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M2"
+note = "fitz util helpers, exact 1.27 parity"
 
 [[symbol]]
 name = "recover_bbox_quad"
 group = "module"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M2"
+note = "fitz util helpers, exact 1.27 parity"
 
 [[symbol]]
 name = "planish_line"
 group = "module"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M2"
+note = "fitz util helpers, exact 1.27 parity"
 
 [[symbol]]
 name = "ConversionHeader"
 group = "module"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M2"
+note = "fitz util helpers, exact 1.27 parity"
 
 [[symbol]]
 name = "ConversionTrailer"
 group = "module"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M2"
+note = "fitz util helpers, exact 1.27 parity"
 
 [[symbol]]
 name = "get_pdf_now"
 group = "module"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M3"
+note = "PDF date/string formatting, fitz-exact"
 
 [[symbol]]
 name = "get_pdf_str"
 group = "module"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M3"
+note = "PDF date/string formatting, fitz-exact"
 
 [[symbol]]
 name = "image_profile"
@@ -4599,26 +4635,30 @@ milestone = "M5"
 [[symbol]]
 name = "set_messages"
 group = "module"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M1"
+note = "message/log output shims (fitz _make_output destinations)"
 
 [[symbol]]
 name = "message"
 group = "module"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M1"
+note = "message/log output shims (fitz _make_output destinations)"
 
 [[symbol]]
 name = "set_log"
 group = "module"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M1"
+note = "message/log output shims (fitz _make_output destinations)"
 
 [[symbol]]
 name = "log"
 group = "module"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M1"
+note = "message/log output shims (fitz _make_output destinations)"
 
 [[symbol]]
 name = "Tools"

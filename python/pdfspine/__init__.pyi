@@ -1,6 +1,7 @@
 """Type stubs for the :mod:`pdfspine` package."""
 
 from . import _core as _core
+from . import constants as constants
 from ._core import (
     PdfDecodeError as PdfDecodeError,
     PdfError as PdfError,
@@ -10,16 +11,9 @@ from ._core import (
     PdfSyntaxError as PdfSyntaxError,
     PdfUnsupportedError as PdfUnsupportedError,
     identity_matrix as identity_matrix,
-    version as version,
 )
+from .constants import *  # noqa: F403
 from .document import (
-    CS_CMYK as CS_CMYK,
-    CS_GRAY as CS_GRAY,
-    CS_RGB as CS_RGB,
-    PDF_ENCRYPT_AES_128 as PDF_ENCRYPT_AES_128,
-    PDF_ENCRYPT_AES_256 as PDF_ENCRYPT_AES_256,
-    PDF_ENCRYPT_NONE as PDF_ENCRYPT_NONE,
-    PDF_ENCRYPT_RC4_128 as PDF_ENCRYPT_RC4_128,
     Annot as Annot,
     Colorspace as Colorspace,
     DisplayList as DisplayList,
@@ -47,12 +41,33 @@ from .geometry import (
     Quad as Quad,
     Rect as Rect,
 )
+from .helpers import (
+    Base14_fontdict as Base14_fontdict,
+    ConversionHeader as ConversionHeader,
+    ConversionTrailer as ConversionTrailer,
+    get_pdf_now as get_pdf_now,
+    get_pdf_str as get_pdf_str,
+    get_text_length as get_text_length,
+    glyph_name_to_unicode as glyph_name_to_unicode,
+    log as log,
+    message as message,
+    planish_line as planish_line,
+    recover_bbox_quad as recover_bbox_quad,
+    recover_char_quad as recover_char_quad,
+    recover_line_quad as recover_line_quad,
+    recover_quad as recover_quad,
+    recover_span_quad as recover_span_quad,
+    sRGB_to_pdf as sRGB_to_pdf,
+    sRGB_to_rgb as sRGB_to_rgb,
+    set_log as set_log,
+    set_messages as set_messages,
+    unicode_to_glyph_name as unicode_to_glyph_name,
+)
 
 __version__: str
 
 __all__ = [
     "__version__",
-    "version",
     "identity_matrix",
     "open",
     "Document",
@@ -73,18 +88,11 @@ __all__ = [
     "csGRAY",
     "csRGB",
     "csCMYK",
-    "CS_GRAY",
-    "CS_RGB",
-    "CS_CMYK",
     "Rect",
     "IRect",
     "Point",
     "Matrix",
     "Quad",
-    "PDF_ENCRYPT_NONE",
-    "PDF_ENCRYPT_RC4_128",
-    "PDF_ENCRYPT_AES_128",
-    "PDF_ENCRYPT_AES_256",
     "PdfError",
     "PdfSyntaxError",
     "PdfPasswordError",
@@ -92,4 +100,25 @@ __all__ = [
     "PdfDecodeError",
     "PdfLimitError",
     "PdfRedactionError",
+    "constants",
+    "Base14_fontdict",
+    "ConversionHeader",
+    "ConversionTrailer",
+    "get_pdf_now",
+    "get_pdf_str",
+    "get_text_length",
+    "glyph_name_to_unicode",
+    "log",
+    "message",
+    "planish_line",
+    "recover_bbox_quad",
+    "recover_char_quad",
+    "recover_line_quad",
+    "recover_quad",
+    "recover_span_quad",
+    "sRGB_to_pdf",
+    "sRGB_to_rgb",
+    "set_log",
+    "set_messages",
+    "unicode_to_glyph_name",
 ]
