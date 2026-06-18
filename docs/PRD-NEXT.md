@@ -10,10 +10,10 @@
 - **Text extraction:** at fitz parity across born-digital, PMC, EUR-Lex (8 langs), CJK, GovInfo,
   robustness — see `docs/BENCHMARKS.md`.
 - **Rendering (`get_pixmap`):** SSIM **0.945 mean / 0.986 median** vs fitz (`conformance/gt/RENDER-REPORT.md`).
-- **API parity:** **78.9%** (607/769 in `COMPAT.toml`); **96 symbols still deferred** (§3.B).
+- **API parity:** **84.1%** (647/769 in `COMPAT.toml`); **56 symbols still deferred** (§3.B).
 - **OCR:** Tesseract adapter + **pure-Rust PaddleOCR (PP-OCRv4 via `tract`)** both shipped; PaddleOCR
   selectable from Python, scanned-PDF→searchable proven end-to-end — beats fitz (Tesseract-only) on CJK (§3.A).
-- **Gate:** 1343 Rust + 589 pytest green; clippy `-D warnings` clean.
+- **Gate:** 1344 Rust + 618 pytest green; clippy `-D warnings` clean.
 
 ## 2. Harness (reuse, don't rebuild)
 
@@ -51,9 +51,15 @@ Remaining OCR polish (LOWER priority):
 - **Model distribution** — models are committed + `include_bytes!` (16MB in repo + wheel). Consider
   git-LFS for the repo and/or optional download-on-first-use (via `directories`) to slim the base wheel.
 
-### B. API parity coverage — 78.9% → higher (96 deferred)
+### B. API parity coverage — 84.1% → higher (56 deferred)
+~~Constants (21 families) + module helpers (19)~~ **DONE (Task 1, 2026-06-19, +40 → 84.1%):** all
+module-level constants (now full-family complete vs fitz 1.27) in python/pdfspine/constants.py +
+helpers (recover_*_quad, planish_line, glyph-name maps, sRGB, get_pdf_now/str, get_text_length,
+ConversionHeader/Trailer, logging) in python/pdfspine/helpers.py. Fixed 2 real divergences: PDF_ENCRYPT
+values + CS_GRAY/CS_RGB swap. Tests in test_longtail11.py.
+
 The monoliths `python/pdfspine/document.py` + `crates/py-bindings/src/lib.rs` mean batches that both
-touch them run SEQUENTIALLY. New pytest → next `python/tests/test_longtail11.py`. **Always** change
+touch them run SEQUENTIALLY. New pytest → next `python/tests/test_longtail12.py`. **Always** change
 dispositions in `scripts/_compat_catalog.py` then regenerate (`python3 scripts/_compat_catalog.py`) —
 **never hand-edit `COMPAT.toml`** — and confirm coverage rises with zero regressions (diff implemented
 set vs HEAD) + `compat-symbol-guard.py` exit 0. Adversarially cross-check every symbol vs `.venv-oracle`.
@@ -67,15 +73,6 @@ Remaining, by group (largest first):
   get_ocmd, set_ocmd); TOC (set_toc_item, del_toc_item, outline, get_outline_xrefs); heavy ops
   (convert_to_pdf, subset, insert_file, embfile_upd, extract_font, extract_image); FormFonts;
   version_count.
-- **Constants (~21):** TEXT_flags, TEXTFLAGS_bundles, TEXT_FONT_flags, TEXT_ALIGN, PDF_ANNOT_types,
-  PDF_ANNOT_IS_flags, PDF_ANNOT_LE, PDF_WIDGET_TYPE, PDF_WIDGET_TX_FORMAT, PDF_FIELD_IS_flags,
-  PDF_BM_blendmodes, PDF_REDACT_options, STAMP_icons, PDF_BORDER_STYLE, PDF_SIGNATURE_flags,
-  ENCRYPT_methods, PERM_flags, PDF_PAGE_LABEL, CS_colorspace, version_info, PDF_TOK_objects.
-  → **quick wins** (just expose the enum/dict tables).
-- **Module helpers (~15):** recover_quad/recover_char_quad/recover_line_quad/recover_span_quad/
-  recover_bbox_quad, planish_line, glyph_name_to_unicode, unicode_to_glyph_name, sRGB_to_rgb,
-  sRGB_to_pdf, get_pdf_now, get_pdf_str, get_text_length, ConversionHeader, ConversionTrailer,
-  set_messages/message/set_log/log. → mostly **quick wins** (geometry/table helpers).
 - **Font (2):** glyph_bbox, buffer — blocked on the Font handle carrying the embedded `/FontFile*`
   program (see §3.F; would also help rendering). **valid_codepoints already shipped (encoding-derived).**
 - **Pixmap (3):** __array_interface__, samples_ptr, warp. **Tools (3):** image_profile,
