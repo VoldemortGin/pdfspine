@@ -31,21 +31,15 @@ corpora/cache/`*-results.json` gitignored, regenerable):
 
 ## 3. Remaining work (priority order)
 
-### A. OCR — pure-Rust PaddleOCR (CORE DONE 2026-06-18; remaining = polish)
+### A. OCR — pure-Rust PaddleOCR (DONE + polished; only optional extras remain)
 **DONE:** `PaddleOcr` (PP-OCRv4 det+cls+rec via `tract`, pure Rust, models embedded, default-on
-`paddle-ocr` feature) is implemented, generalises (verified on two independent CJK+Latin images vs
-RapidOCR), and is selectable from Python (`get_textpage_ocr`/`pdfocr_*` `engine="paddle"`) with the
-full scanned-PDF→searchable-text pipeline proven end-to-end (`test_ocr_paddle.py`). This BEATS fitz
-(Tesseract-only) on CJK. See the `ocr-upgrade-plan` memory.
+`paddle-ocr` feature), Python-selectable (`engine="paddle"`), full scanned-PDF→searchable end-to-end.
+**Task-2 polish DONE (2026-06-19):** (a) CJK-scan accuracy **benchmark** (conformance/ocr/ + BENCHMARKS
+§6) proving PaddleOCR CJK 1.000 vs Tesseract/fitz 0.000 over 16 docs; (b) **rotated/skewed text** (min-area
+rotated rect + de-rotate crop — a 20° line now recognized); (c) **speed** profiled + rec width bucket
+32→64 (better tract-cache reuse). See the `ocr-upgrade-plan` memory.
 
-Remaining OCR polish (LOWER priority):
-- **OCR accuracy benchmark** — quantify "beats fitz/Tesseract on CJK": score PaddleOCR vs Tesseract
-  (+ fitz's Tesseract path) on a CJK + Latin SCAN corpus, record in `docs/BENCHMARKS.md`. (Currently
-  validated by exact-match on 2 synthetic images only.)
-- **Rotated / skewed text** — det post-process uses axis-aligned bboxes (v1); add min-area rotated
-  rectangles (rotating calipers) for rotated scans.
-- **Speed** — `tract` `into_optimized()` is ~2s per distinct shape (cached after) + det/rec per page;
-  profile + tune for many-page docs (shape bucketing, batch rec).
+Remaining OCR extras (OPTIONAL, low priority):
 - **More languages** — the bundled `ch` model covers CJK+Latin; optionally add other PaddleOCR lang
   rec models (each ~10MB) selectable by `lang`.
 - **Model distribution** — models are committed + `include_bytes!` (16MB in repo + wheel). Consider
