@@ -127,6 +127,18 @@ hayro-jpeg2000 = "0.4"
 # acceptable for the M6 scaffold and first rendering pass (PRD §8.11).
 tiny-skia = { version = "0.11", default-features = false, features = ["std", "simd"] }
 
+# --- pdf-ocr: pure-Rust PaddleOCR (PP-OCRv4) engine (M8+, `paddle-ocr` feature).
+#
+# `tract-onnx` is Sonos' pure-Rust ONNX inference engine (Apache-2.0 OR MIT, no
+# C/C++, no `ort`/onnxruntime). It loads + optimizes the shipped PP-OCRv4 det/rec
+# and PP-OCRv2 cls models and runs them on CPU. Pinned to 0.21 (the 0.21 line
+# resolves cleanly on toolchain 1.96 and exposes the stable
+# `onnx().model_for_read(..).with_input_fact(..).into_optimized().into_runnable()`
+# API used here). `image` (already pinned above) provides the pure-Rust resize
+# used for det/cls/rec preprocessing; the small morphology/connected-components
+# in detection are hand-rolled to avoid the heavy `imageproc`/`nalgebra` graph.
+tract-onnx = "0.21"
+
 # --- shared dev-deps ---
 proptest = "1"
 

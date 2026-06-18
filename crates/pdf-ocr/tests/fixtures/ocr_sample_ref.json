@@ -1,0 +1,32 @@
+[
+  {
+    "text": "oxide-pdf OCR test 2026",
+    "conf": 0.98,
+    "bbox": [
+      42,
+      31,
+      504,
+      68
+    ]
+  },
+  {
+    "text": "纯Rust实现的PDF文字识别",
+    "conf": 0.989,
+    "bbox": [
+      40,
+      116,
+      509,
+      155
+    ]
+  },
+  {
+    "text": "PaddleOCR via tract",
+    "conf": 0.972,
+    "bbox": [
+      42,
+      203,
+      443,
+      236
+    ]
+  }
+]

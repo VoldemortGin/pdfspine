@@ -25,5 +25,20 @@ pdf-edit.workspace = true
 # Typed error wrapping (`From` impls for the upstream crate errors).
 thiserror.workspace = true
 
+# --- `paddle-ocr` feature: pure-Rust PaddleOCR (PP-OCRv4) engine ---
+# Optional heavy deps, gated behind the (default-on) `paddle-ocr` feature so the
+# base crate stays lean and the engine can be compiled out with
+# `--no-default-features`.
+# `tract-onnx`: pure-Rust ONNX inference (det/rec/cls). `image`: pure-Rust resize.
+tract-onnx = { workspace = true, optional = true }
+image = { workspace = true, optional = true }
+
+[features]
+# On by default so the wheel (py-bindings -> pdf-api -> pdf-ocr, all default
+# features) ships the PaddleOCR engine. Disable with `--no-default-features`.
+default = ["paddle-ocr"]
+# Gates the whole `paddle` module + its tract-onnx/image dependencies.
+paddle-ocr = ["dep:tract-onnx", "dep:image"]
+
 [dev-dependencies]
 proptest.workspace = true

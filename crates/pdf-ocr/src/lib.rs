@@ -27,9 +27,13 @@
 pub mod engine;
 pub mod error;
 pub mod integration;
+#[cfg(feature = "paddle-ocr")]
+pub mod paddle;
 pub mod tesseract;
 
 pub use engine::{OcrEngine, OcrWord};
 pub use error::{Error, Result};
 pub use integration::{pdfocr_bytes, textpage_ocr, OcrOptions};
+#[cfg(feature = "paddle-ocr")]
+pub use paddle::PaddleOcr;
 pub use tesseract::TesseractCli;
