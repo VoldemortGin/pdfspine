@@ -1403,18 +1403,25 @@ class Page:
         dpi: int = 72,
         full: bool = True,
         tessdata: str | None = None,
+        engine: str = "tesseract",
     ) -> TextPage:
-        """Builds an OCR :class:`TextPage` via the system Tesseract (PyMuPDF
+        """Builds an OCR :class:`TextPage` from the selected engine (PyMuPDF
         ``page.get_textpage_ocr``).
 
-        Rasterizes the page at ``dpi``, recognizes it with Tesseract
-        (``language``), and returns a :class:`TextPage` whose ``get_text`` /
-        ``search_for`` work on the OCR result. ``full=False`` (image-region-only
-        OCR) is not yet implemented and falls back to full-page OCR. Raises
-        ``PdfUnsupportedError`` if Tesseract is not installed.
+        Rasterizes the page at ``dpi``, recognizes it, and returns a
+        :class:`TextPage` whose ``get_text`` / ``search_for`` work on the OCR
+        result. ``full=False`` (image-region-only OCR) is not yet implemented and
+        falls back to full-page OCR.
+
+        ``engine`` selects the backend: ``"tesseract"`` (default; the system
+        Tesseract CLI, using ``language`` / ``tessdata``, kept for PyMuPDF
+        compatibility) or ``"paddle"`` (oxide's pure-Rust PaddleOCR — stronger on
+        mixed CJK+Latin text, needs no external binary; ``tessdata`` is ignored,
+        and it requires the default-on ``paddle-ocr`` build feature). Raises
+        ``PdfUnsupportedError`` if the selected engine is unavailable.
         """
         return TextPage(
-            self._page.get_textpage_ocr(flags, language, dpi, full, tessdata)
+            self._page.get_textpage_ocr(flags, language, dpi, full, tessdata, engine)
         )
 
     def get_text(
@@ -3118,18 +3125,24 @@ class Document:
         language: str = "eng",
         tessdata: str | None = None,
         dpi: int = 300,
+        engine: str = "tesseract",
     ) -> bytes:
         """Produces a searchable OCR "sandwich" PDF as bytes (PyMuPDF
         ``doc.pdfocr_tobytes``).
 
-        Each page is rendered, OCR'd via the system Tesseract (``language``), and
-        rebuilt with the page image plus an invisible OCR text layer, so the
-        result is selectable / searchable. ``dpi`` (an oxide extension) tunes the
-        recognition resolution. Raises ``PdfUnsupportedError`` if Tesseract is
-        not installed.
+        Each page is rendered, OCR'd via the selected ``engine``, and rebuilt
+        with the page image plus an invisible OCR text layer, so the result is
+        selectable / searchable. ``dpi`` (an oxide extension) tunes the
+        recognition resolution.
+
+        ``engine`` selects the backend: ``"tesseract"`` (default; the system
+        Tesseract CLI, kept for PyMuPDF compatibility) or ``"paddle"`` (oxide's
+        pure-Rust PaddleOCR — stronger on CJK; ``tessdata`` is ignored, and it
+        requires the default-on ``paddle-ocr`` build feature). Raises
+        ``PdfUnsupportedError`` if the selected engine is unavailable.
         """
         return self._doc.pdfocr_tobytes(
-            compress=compress, language=language, tessdata=tessdata, dpi=dpi
+            compress=compress, language=language, tessdata=tessdata, dpi=dpi, engine=engine
         )
 
     def pdfocr_save(
@@ -3140,15 +3153,17 @@ class Document:
         language: str = "eng",
         tessdata: str | None = None,
         dpi: int = 300,
+        engine: str = "tesseract",
     ) -> None:
         """Writes a searchable OCR "sandwich" PDF to ``filename`` (PyMuPDF
-        ``doc.pdfocr_save``). See :meth:`pdfocr_tobytes`."""
+        ``doc.pdfocr_save``). See :meth:`pdfocr_tobytes` for ``engine``."""
         self._doc.pdfocr_save(
             os.fspath(filename),
             compress=compress,
             language=language,
             tessdata=tessdata,
             dpi=dpi,
+            engine=engine,
         )
 
     def ez_save(self, filename: str | os.PathLike[str], **kwargs) -> None:

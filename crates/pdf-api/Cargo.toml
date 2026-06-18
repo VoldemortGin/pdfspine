@@ -15,7 +15,10 @@ pdf-edit.workspace = true
 pdf-fonts.workspace = true
 pdf-image.workspace = true
 pdf-render.workspace = true
-pdf-ocr.workspace = true
+# `default-features = false` so pdf-api's own (default-on) `paddle-ocr` feature
+# is the single switch that turns the PaddleOCR engine on/off — building pdf-api
+# with `--no-default-features` then truly compiles the engine out.
+pdf-ocr = { workspace = true, default-features = false }
 pdf-crypto = { workspace = true, optional = true }
 bytes.workspace = true
 
@@ -23,8 +26,12 @@ bytes.workspace = true
 # Encryption is ON by default so the shipped wheel can open encrypted PDFs from
 # Python (PRD §8.4 / M1f). Threads through to `pdf-core`'s `encryption` feature
 # and surfaces `pdf-crypto`'s encryption-authoring types for `save(encryption=…)`.
-default = ["encryption"]
+# `paddle-ocr` is ON by default so the shipped wheel can OCR with oxide's
+# pure-Rust PaddleOCR engine (PRD §3.2 #3); it forwards to `pdf-ocr`'s
+# `paddle-ocr` feature. Disable both with `--no-default-features`.
+default = ["encryption", "paddle-ocr"]
 encryption = ["pdf-core/encryption", "dep:pdf-crypto"]
+paddle-ocr = ["pdf-ocr/paddle-ocr"]
 
 [dev-dependencies]
 # Encrypted-document integration fixtures are generated via `pdf-crypto`'s

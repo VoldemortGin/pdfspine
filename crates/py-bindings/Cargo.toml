@@ -15,7 +15,11 @@ name = "_core"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-pdf-api.workspace = true
+# Default features (incl. `encryption` and `paddle-ocr`) are on, so the shipped
+# wheel gets oxide's pure-Rust PaddleOCR engine (`engine="paddle"`); `paddle-ocr`
+# is named explicitly to make the dependency intentional and survive any future
+# change to pdf-api's default set.
+pdf-api = { workspace = true, features = ["paddle-ocr"] }
 # abi3-py311 (not py310): the buffer-protocol slots (`bf_getbuffer` /
 # `bf_releasebuffer`) used by `Pixmap` (PRD §9.4) entered the stable ABI in
 # CPython 3.11, so a single abi3 wheel that ships the zero-copy buffer protocol

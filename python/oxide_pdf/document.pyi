@@ -458,6 +458,7 @@ class Page:
         dpi: int = ...,
         full: bool = ...,
         tessdata: str | None = ...,
+        engine: str = ...,
     ) -> TextPage: ...
     def get_text(
         self,
@@ -890,6 +891,7 @@ class Document:
         language: str = ...,
         tessdata: str | None = ...,
         dpi: int = ...,
+        engine: str = ...,
     ) -> bytes: ...
     def pdfocr_save(
         self,
@@ -899,6 +901,7 @@ class Document:
         language: str = ...,
         tessdata: str | None = ...,
         dpi: int = ...,
+        engine: str = ...,
     ) -> None: ...
     def ez_save(self, filename: str | os.PathLike[str], **kwargs: Any) -> None: ...
     def saveIncr(self, filename: str | os.PathLike[str] | None = ...) -> None: ...

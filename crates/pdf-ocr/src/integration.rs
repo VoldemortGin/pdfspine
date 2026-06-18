@@ -213,10 +213,17 @@ fn sandwich_page(page: &Page, engine: &dyn OcrEngine, opts: &OcrOptions) -> Resu
     let img_pdf = imagedoc::convert_to_pdf(&png, None)?;
     let single = DocumentStore::from_bytes(img_pdf, Limits::default())?;
 
+    // Collect the full set of Unicode characters across all OCR words and assign
+    // each a stable 2-byte code (the invisible text layer is a Type0/Identity-H
+    // font whose `/ToUnicode` maps code -> the real character, so `get_text`
+    // recovers arbitrary Unicode — incl. CJK — not just WinAnsi).
+    let codes = CodeTable::build(&words);
+
     // Invisible text layer on page 0 of the freshly-built single-page doc.
     let pc = PageContent::new(&single, 0)?;
-    let font_name = pc.add_resource("Font", "F", glyphless_font())?;
-    let chunk = invisible_text_chunk(&pc, &font_name, &words, s);
+    let font = unicode_font(&single, &codes)?;
+    let font_name = pc.add_resource("Font", "F", font)?;
+    let chunk = invisible_text_chunk(&pc, &font_name, &words, s, &codes);
     if !chunk.is_empty() {
         pc.append_content(&chunk)?;
     }
@@ -226,11 +233,55 @@ fn sandwich_page(page: &Page, engine: &dyn OcrEngine, opts: &OcrOptions) -> Resu
         .map_err(Error::from)
 }
 
+/// Assigns each distinct character across the OCR words a stable 2-byte code for
+/// the Identity-H invisible-text font. Code `0` is reserved (`/notdef`), so codes
+/// run `1..=n`; the count never exceeds the number of distinct characters on a
+/// page, well under the 16-bit limit.
+struct CodeTable {
+    /// `char` -> assigned 2-byte code.
+    map: std::collections::HashMap<char, u16>,
+    /// Codes in assignment order, paired with their character (for `/ToUnicode`).
+    entries: Vec<(u16, char)>,
+}
+
+impl CodeTable {
+    fn build(words: &[OcrWord]) -> Self {
+        let mut map = std::collections::HashMap::new();
+        let mut entries = Vec::new();
+        let mut next: u16 = 1;
+        for w in words {
+            for c in w.text.chars() {
+                map.entry(c).or_insert_with(|| {
+                    let code = next;
+                    next = next.saturating_add(1);
+                    entries.push((code, c));
+                    code
+                });
+            }
+        }
+        CodeTable { map, entries }
+    }
+
+    /// The 2-byte code assigned to `c` (every char in a word is registered at
+    /// build time, so this is always `Some` for chars drawn from the same words).
+    fn code(&self, c: char) -> u16 {
+        self.map.get(&c).copied().unwrap_or(0)
+    }
+}
+
 /// Emits one `BT … ET` chunk drawing every OCR word in **render mode 3**
 /// (invisible). Each word is positioned at its page-point top-left and scaled so
 /// the (single-line) text roughly fills the word box width — extraction / search
 /// only needs the text present and positioned, not pixel-perfect glyph metrics.
-fn invisible_text_chunk(pc: &PageContent, font_name: &str, words: &[OcrWord], s: f64) -> Vec<u8> {
+/// Text is written as 2-byte Identity-H hex codes so `get_text` recovers the
+/// real Unicode via the font's `/ToUnicode` CMap.
+fn invisible_text_chunk(
+    pc: &PageContent,
+    font_name: &str,
+    words: &[OcrWord],
+    s: f64,
+    codes: &CodeTable,
+) -> Vec<u8> {
     let mut out = Vec::new();
     out.extend_from_slice(b"BT\n");
     out.extend_from_slice(b"3 Tr\n"); // invisible text render mode (Tr 3)
@@ -245,9 +296,9 @@ fn invisible_text_chunk(pc: &PageContent, font_name: &str, words: &[OcrWord], s:
         // user-space, then drop to the box bottom for the baseline.
         let origin = pc.to_user_space(Point::new(bbox.x0, bbox.y1));
         // Horizontal scale (Tz, percent) so the rendered glyph run ≈ box width.
-        // Approximate the glyphless advance as `0.6 em` per char.
+        // Approximate the advance as `1.0 em` per char (the descendant `/DW`).
         let n = w.text.chars().count().max(1) as f64;
-        let nominal = 0.6 * size * n;
+        let nominal = size * n;
         let tz = if nominal > 0.0 {
             (bbox.width() / nominal * 100.0).clamp(1.0, 1000.0)
         } else {
@@ -258,46 +309,135 @@ fn invisible_text_chunk(pc: &PageContent, font_name: &str, words: &[OcrWord], s:
         out.extend_from_slice(
             format!("1 0 0 1 {} {} Tm\n", fmt_num(origin.x), fmt_num(origin.y)).as_bytes(),
         );
-        let mut operand = vec![b'('];
-        operand.extend_from_slice(&escape_pdf_literal(&winansi_bytes(&w.text)));
-        operand.push(b')');
-        out.extend_from_slice(&operand);
-        out.extend_from_slice(b" Tj\n");
+        // Identity-H operand: a hex string of 2-byte big-endian codes.
+        out.push(b'<');
+        for c in w.text.chars() {
+            out.extend_from_slice(format!("{:04X}", codes.code(c)).as_bytes());
+        }
+        out.extend_from_slice(b"> Tj\n");
     }
     out.extend_from_slice(b"ET\n");
     out
 }
 
-/// A standard Helvetica Base-14 font object for the invisible text layer. The
-/// glyphs are never painted (Tr 3), so the visible shapes are irrelevant — only
-/// the WinAnsi character codes matter, so `get_text` recovers the words.
-fn glyphless_font() -> pdf_core::object::Object {
-    use pdf_core::object::{Name, Object};
-    let mut d = pdf_core::object::Dict::new();
-    d.insert(Name::new("Type"), Object::Name(Name::new("Font")));
-    d.insert(Name::new("Subtype"), Object::Name(Name::new("Type1")));
-    d.insert(Name::new("BaseFont"), Object::Name(Name::new("Helvetica")));
-    d.insert(
-        Name::new("Encoding"),
-        Object::Name(Name::new("WinAnsiEncoding")),
+/// Builds the invisible-text-layer font: a Type0 / Identity-H font over a
+/// non-embedded CIDFontType2 descendant, with a `/ToUnicode` CMap mapping each
+/// assigned 2-byte code back to its real Unicode character. The glyphs are never
+/// painted (render mode 3), so no glyph program is needed — only the code ->
+/// Unicode mapping matters, which lets `get_text` recover arbitrary Unicode
+/// (incl. CJK), unlike a WinAnsi Base-14 font.
+fn unicode_font(doc: &DocumentStore, codes: &CodeTable) -> Result<pdf_core::object::Object> {
+    use pdf_core::object::{Dict, Name, Object, StreamObj};
+
+    // FontDescriptor (no FontFile — glyphs are invisible). The flags/bbox are
+    // nominal; nothing renders from them.
+    let mut desc = Dict::new();
+    desc.insert(Name::new("Type"), Object::Name(Name::new("FontDescriptor")));
+    desc.insert(Name::new("FontName"), Object::Name(Name::new("OXOCR")));
+    desc.insert(Name::new("Flags"), Object::Integer(4)); // Symbolic
+    desc.insert(
+        Name::new("FontBBox"),
+        Object::Array(vec![
+            Object::Integer(0),
+            Object::Integer(0),
+            Object::Integer(1000),
+            Object::Integer(1000),
+        ]),
     );
-    Object::Dictionary(d)
+    desc.insert(Name::new("ItalicAngle"), Object::Integer(0));
+    desc.insert(Name::new("Ascent"), Object::Integer(1000));
+    desc.insert(Name::new("Descent"), Object::Integer(0));
+    desc.insert(Name::new("CapHeight"), Object::Integer(1000));
+    desc.insert(Name::new("StemV"), Object::Integer(80));
+    let desc_ref = doc.add_object(Object::Dictionary(desc))?;
+
+    // CIDSystemInfo (Adobe Identity 0 for an Identity-H font).
+    let mut csi = Dict::new();
+    csi.insert(
+        Name::new("Registry"),
+        Object::String(pdf_core::object::PdfString::literal("Adobe")),
+    );
+    csi.insert(
+        Name::new("Ordering"),
+        Object::String(pdf_core::object::PdfString::literal("Identity")),
+    );
+    csi.insert(Name::new("Supplement"), Object::Integer(0));
+
+    // Descendant CIDFontType2 (Identity CID->GID; uniform `/DW` advance).
+    let mut cid = Dict::new();
+    cid.insert(Name::new("Type"), Object::Name(Name::new("Font")));
+    cid.insert(
+        Name::new("Subtype"),
+        Object::Name(Name::new("CIDFontType2")),
+    );
+    cid.insert(Name::new("BaseFont"), Object::Name(Name::new("OXOCR")));
+    cid.insert(Name::new("CIDSystemInfo"), Object::Dictionary(csi));
+    cid.insert(Name::new("FontDescriptor"), Object::Reference(desc_ref));
+    cid.insert(Name::new("DW"), Object::Integer(1000));
+    cid.insert(
+        Name::new("CIDToGIDMap"),
+        Object::Name(Name::new("Identity")),
+    );
+    let cid_ref = doc.add_object(Object::Dictionary(cid))?;
+
+    // ToUnicode CMap stream: code (2-byte) -> the character (UTF-16BE).
+    let cmap = to_unicode_cmap(codes);
+    let mut tdict = Dict::new();
+    tdict.insert(Name::new("Length"), Object::Integer(cmap.len() as i64));
+    let tu_ref = doc.add_object(Object::Stream(StreamObj::new_encoded(tdict, cmap)))?;
+
+    // The composite Type0 font.
+    let mut f = Dict::new();
+    f.insert(Name::new("Type"), Object::Name(Name::new("Font")));
+    f.insert(Name::new("Subtype"), Object::Name(Name::new("Type0")));
+    f.insert(Name::new("BaseFont"), Object::Name(Name::new("OXOCR")));
+    f.insert(Name::new("Encoding"), Object::Name(Name::new("Identity-H")));
+    f.insert(
+        Name::new("DescendantFonts"),
+        Object::Array(vec![Object::Reference(cid_ref)]),
+    );
+    f.insert(Name::new("ToUnicode"), Object::Reference(tu_ref));
+    Ok(Object::Dictionary(f))
 }
 
-/// Encodes a string to WinAnsi bytes for a literal-string operand (ASCII passes
-/// through; non-mappable characters become `?`). Mirrors the conservative
-/// behavior of `pdf_edit`'s text path for the Base-14 route.
-fn winansi_bytes(s: &str) -> Vec<u8> {
-    s.chars()
-        .map(|c| {
-            let u = c as u32;
-            if u < 0x100 {
-                u as u8
-            } else {
-                b'?'
+/// Builds a `/ToUnicode` CMap mapping each assigned 2-byte code to its character
+/// (as a UTF-16BE value), so a PDF reader / `get_text` recovers the real text.
+fn to_unicode_cmap(codes: &CodeTable) -> Vec<u8> {
+    let mut out = String::new();
+    out.push_str(
+        "/CIDInit /ProcSet findresource begin\n\
+12 dict begin\n\
+begincmap\n\
+/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def\n\
+/CMapName /Adobe-Identity-UCS def\n\
+/CMapType 2 def\n\
+1 begincodespacerange\n\
+<0000> <FFFF>\n\
+endcodespacerange\n",
+    );
+
+    // `beginbfchar` blocks are capped at 100 entries each (PDF spec).
+    for chunk in codes.entries.chunks(100) {
+        out.push_str(&format!("{} beginbfchar\n", chunk.len()));
+        for &(code, ch) in chunk {
+            out.push_str(&format!("<{code:04X}> <"));
+            // The destination is the character encoded as UTF-16BE hex.
+            let mut buf = [0u16; 2];
+            for u in ch.encode_utf16(&mut buf) {
+                out.push_str(&format!("{u:04X}"));
             }
-        })
-        .collect()
+            out.push_str(">\n");
+        }
+        out.push_str("endbfchar\n");
+    }
+
+    out.push_str(
+        "endcmap\n\
+CMapName currentdict /CMap defineresource pop\n\
+end\n\
+end\n",
+    );
+    out.into_bytes()
 }
 
 /// Formats a coordinate / scalar for a content operator (no trailing zeros).
@@ -317,26 +457,6 @@ fn fmt_num(v: f64) -> String {
         s.pop();
     }
     s
-}
-
-/// Escapes bytes for a PDF literal-string `( … )` operand. Inlined from
-/// `pdf_edit::content` (`pub(crate)` there).
-fn escape_pdf_literal(bytes: &[u8]) -> Vec<u8> {
-    let mut out = Vec::with_capacity(bytes.len() + 2);
-    for &b in bytes {
-        match b {
-            b'\\' => out.extend_from_slice(b"\\\\"),
-            b'(' => out.extend_from_slice(b"\\("),
-            b')' => out.extend_from_slice(b"\\)"),
-            b'\n' => out.extend_from_slice(b"\\n"),
-            b'\r' => out.extend_from_slice(b"\\r"),
-            b'\t' => out.extend_from_slice(b"\\t"),
-            0x08 => out.extend_from_slice(b"\\b"),
-            0x0c => out.extend_from_slice(b"\\f"),
-            _ => out.push(b),
-        }
-    }
-    out
 }
 
 /// A minimal empty single-document PDF used as the sandwich assembly target.

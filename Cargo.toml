@@ -37,7 +37,10 @@ pdf-text = { path = "crates/pdf-text", version = "0.0.0" }
 pdf-edit = { path = "crates/pdf-edit", version = "0.0.0" }
 pdf-image = { path = "crates/pdf-image", version = "0.0.0" }
 pdf-render = { path = "crates/pdf-render", version = "0.0.0" }
-pdf-ocr = { path = "crates/pdf-ocr", version = "0.0.0" }
+# `default-features = false` here so pdf-api's own (default-on) `paddle-ocr`
+# feature is the single switch for the PaddleOCR engine (pdf-api re-enables it);
+# building pdf-api with `--no-default-features` then truly compiles paddle out.
+pdf-ocr = { path = "crates/pdf-ocr", version = "0.0.0", default-features = false }
 pdf-api = { path = "crates/pdf-api", version = "0.0.0" }
 
 # --- shared third-party deps (versions per PRD §11.1) ---

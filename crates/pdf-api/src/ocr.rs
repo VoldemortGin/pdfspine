@@ -1,74 +1,120 @@
 //! OCR facade (M8) — `Page.get_textpage_ocr` / `Document.pdfocr_save` /
-//! `Document.pdfocr_tobytes`. Thin wrappers over [`pdf_ocr`] that pin the
-//! Tesseract default engine and flatten the error into the unified `pdf-api`
-//! [`Error`]. The PyO3 layer calls these free functions (the orphan rule forbids
-//! inherent `impl Page` here).
+//! `Document.pdfocr_tobytes`. Thin wrappers over [`pdf_ocr`] that select the OCR
+//! engine and flatten the error into the unified `pdf-api` [`Error`]. The PyO3
+//! layer calls these free functions (the orphan rule forbids inherent
+//! `impl Page` here).
+//!
+//! # Engine selection
+//!
+//! The `engine` string picks the backend:
+//!
+//! - `"tesseract"` (default) — the system Tesseract CLI adapter (PyMuPDF
+//!   compatible; `tessdata` applies here).
+//! - `"paddle"` — oxide's pure-Rust PaddleOCR (PP-OCRv4) engine, stronger on
+//!   mixed CJK+Latin text. Available only when the (default-on) `paddle-ocr`
+//!   feature is compiled in; `tessdata` is irrelevant to it.
+//!
+//! An unknown engine string, or `"paddle"` when the feature is off, yields the
+//! unified [`Error::Unsupported`](crate::error::Error::Unsupported).
 
 use std::sync::Arc;
 
 use pdf_core::page::Page;
 use pdf_core::DocumentStore;
 
-use pdf_ocr::{OcrOptions, TesseractCli};
+use pdf_ocr::{OcrEngine, OcrOptions, TesseractCli};
 
-use crate::error::Result;
+use crate::error::{Error, Result};
 use pdf_text::TextPage;
 
-/// Builds an OCR [`TextPage`] for `page` via the system Tesseract (PyMuPDF
+/// Builds an OCR [`TextPage`] for `page` via the selected `engine` (PyMuPDF
 /// `Page.get_textpage_ocr`). `full == false` (image-region-only OCR) currently
-/// falls back to full-page OCR (documented deferral).
+/// falls back to full-page OCR (documented deferral). See the module docs for
+/// the `engine` values.
 ///
 /// # Errors
 ///
-/// [`Error::Unsupported`](crate::error::Error::Unsupported) when Tesseract is
-/// unavailable; render / recognition errors propagate.
+/// [`Error::Unsupported`](crate::error::Error::Unsupported) when the selected
+/// engine is unavailable (Tesseract not installed, an unknown engine string, or
+/// `"paddle"` without the `paddle-ocr` feature); render / recognition errors
+/// propagate.
 pub fn page_textpage_ocr(
     page: &Page,
     language: &str,
     dpi: u32,
     full: bool,
     tessdata: Option<&str>,
+    engine: &str,
 ) -> Result<TextPage> {
-    let engine = engine_with(tessdata);
     let opts = OcrOptions {
         language: language.to_string(),
         dpi,
         full,
     };
-    Ok(pdf_ocr::textpage_ocr(page, &engine, &opts)?)
-}
-
-/// Builds the default Tesseract adapter, applying an explicit `tessdata` dir when
-/// the caller passes one (PyMuPDF `tessdata` kwarg).
-fn engine_with(tessdata: Option<&str>) -> TesseractCli {
-    let engine = TesseractCli::new();
-    match tessdata {
-        Some(dir) if !dir.is_empty() => engine.with_tessdata(dir),
-        _ => engine,
-    }
+    with_engine(engine, tessdata, |eng| {
+        Ok(pdf_ocr::textpage_ocr(page, eng, &opts)?)
+    })
 }
 
 /// Produces a searchable "sandwich" PDF for the whole document (PyMuPDF
-/// `Document.pdfocr_tobytes`): each page is rendered, OCR'd, and rebuilt with the
-/// page image plus an invisible OCR text layer.
+/// `Document.pdfocr_tobytes`): each page is rendered, OCR'd via the selected
+/// `engine`, and rebuilt with the page image plus an invisible OCR text layer.
+/// See the module docs for the `engine` values.
 ///
 /// # Errors
 ///
-/// [`Error::Unsupported`](crate::error::Error::Unsupported) when Tesseract is
-/// unavailable; render / recognition / save errors propagate.
+/// [`Error::Unsupported`](crate::error::Error::Unsupported) when the selected
+/// engine is unavailable; render / recognition / save errors propagate.
 pub fn document_pdfocr_bytes(
     doc: &Arc<DocumentStore>,
     language: &str,
     dpi: u32,
     tessdata: Option<&str>,
+    engine: &str,
 ) -> Result<Vec<u8>> {
-    let engine = engine_with(tessdata);
     let opts = OcrOptions {
         language: language.to_string(),
         dpi,
         full: true,
     };
-    Ok(pdf_ocr::pdfocr_bytes(doc, &engine, &opts)?)
+    with_engine(engine, tessdata, |eng| {
+        Ok(pdf_ocr::pdfocr_bytes(doc, eng, &opts)?)
+    })
+}
+
+/// Resolves `engine` to a concrete [`OcrEngine`] and runs `f` with it.
+///
+/// `"tesseract"` builds the [`TesseractCli`] adapter (applying `tessdata`);
+/// `"paddle"` builds [`pdf_ocr::PaddleOcr`] when the `paddle-ocr` feature is on
+/// (`tessdata` is ignored). Any other value — or `"paddle"` with the feature off
+/// — returns [`Error::Unsupported`](crate::error::Error::Unsupported).
+fn with_engine<T>(
+    engine: &str,
+    tessdata: Option<&str>,
+    f: impl FnOnce(&dyn OcrEngine) -> Result<T>,
+) -> Result<T> {
+    match engine {
+        "tesseract" => f(&tesseract_engine(tessdata)),
+        #[cfg(feature = "paddle-ocr")]
+        "paddle" => {
+            let eng = pdf_ocr::PaddleOcr::new()?;
+            f(&eng)
+        }
+        other => Err(Error::Unsupported(format!(
+            "unknown OCR engine {other:?}; expected \"tesseract\" or \"paddle\" \
+             (\"paddle\" requires the default-on `paddle-ocr` feature)"
+        ))),
+    }
+}
+
+/// Builds the default Tesseract adapter, applying an explicit `tessdata` dir when
+/// the caller passes one (PyMuPDF `tessdata` kwarg).
+fn tesseract_engine(tessdata: Option<&str>) -> TesseractCli {
+    let engine = TesseractCli::new();
+    match tessdata {
+        Some(dir) if !dir.is_empty() => engine.with_tessdata(dir),
+        _ => engine,
+    }
 }
 
 /// Whether the system Tesseract binary is runnable (used by Python to `skip`
