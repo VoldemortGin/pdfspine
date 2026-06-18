@@ -13,6 +13,8 @@
 - **API parity:** **84.1%** (647/769 in `COMPAT.toml`); **56 symbols still deferred** (§3.B).
 - **OCR:** Tesseract adapter + **pure-Rust PaddleOCR (PP-OCRv4 via `tract`)** both shipped; PaddleOCR
   selectable from Python, scanned-PDF→searchable proven end-to-end — beats fitz (Tesseract-only) on CJK (§3.A).
+- **Performance** (`conformance/BENCH.md`, 30 docs): pdfspine beats fitz on **open 1.26x** + **text
+  2.75x**; render 1.74x faster after the font-cache fix (still ~2.3x slower than pypdfium2 — headroom §3.E).
 - **Gate:** 1344 Rust + 618 pytest green; clippy `-D warnings` clean.
 
 ## 2. Harness (reuse, don't rebuild)
@@ -98,13 +100,16 @@ Renderer: `crates/pdf-render`; glyph plumbing in `crates/pdf-text` (`interp.rs`,
   folds to canonical ideographs (U+513F 儿). NFKC-equivalent/cosmetic. Small `pdf-fonts` CID→Unicode fix.
 - **CI gate** — wire a born-digital `order ≥ 0.95` (+ tables count-agreement) regression gate into CI.
 
-### E. Performance — measure + optimize (UNMEASURED — no speed numbers yet)
-Accuracy is measured; **speed is not.** As a Rust lib we should be competitive with / faster than
-PyMuPDF and pypdfium2, but this is unproven. Tasks:
-- Add a speed benchmark to `conformance/` (open + extract + render time vs fitz/pypdfium2 on the same
-  corpus); record in `docs/BENCHMARKS.md`.
-- Then optimize hot paths if needed: per-page parallelism (rayon), lazy/streamed object parsing,
-  avoiding redundant content-stream re-parse, font-program caching across pages.
+### E. Performance — MEASURED (Task 3, 2026-06-19); render still has headroom
+**DONE:** 4-engine speed bench (`conformance/bench.py` + `conformance/BENCH.md`, 30 docs, RELEASE):
+pdfspine **wins open** (1.26x vs fitz, 1.55x vs pypdfium2) and **text** (2.75x vs fitz, 1.37x vs
+pypdfium2). Render was the weak op (3.41x slower than fitz) → fixed the dominant hotspot: font
+programs were FlateDecode-re-decompressed per text run; now cached decode-free by ObjRef →
+render **1.74x faster** (worst case 12.9x), output bit-identical (SSIM 0.927 unchanged).
+Remaining (render is still ~2.3x slower than pypdfium2 — optional):
+- Further render wins: per-glyph coverage-mask cache (pure-text pages still fill_path per glyph
+  occurrence); bound clip masks to their bbox + stop full-page mask clones on q/Q (clip-heavy forms);
+  per-page rayon parallelism; JPEG2000 decode speed (hayro_jpeg2000) on image-heavy pages.
 
 ### F. Polish / known deviations (LOW — fix when a consumer needs it)
 - **Font handle carrying the embedded program** — pdfspine's `pdf_fonts::Font` is metrics+encoding only;
