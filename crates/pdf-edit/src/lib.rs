@@ -13,6 +13,7 @@
 //! font embedding ([`fontfile`]) (PRD §8.8 / §8.5.2).
 
 pub mod annot;
+pub mod catalog;
 pub mod color;
 pub mod content;
 pub mod dest;
@@ -38,11 +39,16 @@ pub use annot::{
     add_circle_annot, add_file_annot, add_freetext_annot, add_highlight_annot, add_ink_annot,
     add_line_annot, add_polygon_annot, add_polyline_annot, add_rect_annot, add_redact_annot,
     add_squiggly_annot, add_stamp_annot, add_strikeout_annot, add_text_annot, add_underline_annot,
-    annot_count, annot_names, annot_refs, annots, delete_annot, first_annot, Annot, AnnotType,
+    annot_count, annot_entries, annot_names, annot_refs, annots, delete_annot, first_annot, Annot,
+    AnnotType,
+};
+pub use catalog::{
+    language, mark_info, normalize_language, page_layout, page_mode, set_language, set_mark_info,
+    set_page_layout, set_page_mode, xref_xml_metadata,
 };
 pub use color::Color;
 pub use content::PageContent;
-pub use dest::{resolve_link, resolve_named};
+pub use dest::{resolve_link, resolve_named, resolve_names, ResolvedName};
 pub use drawing::{
     draw_bezier, draw_circle, draw_curve, draw_line, draw_oval, draw_polyline, draw_rect, Shape,
 };
@@ -52,8 +58,9 @@ pub use embfile::{
 };
 pub use fontfile::EmbeddedFont;
 pub use form::{
-    acroform_dict, default_appearance, fill, first_widget, flatten, form_fields, is_form_pdf,
-    need_appearances, terminal_field_refs, widget_refs, widgets, Field, FieldType, Widget,
+    acroform_dict, default_appearance, fill, first_widget, flatten, form_fields, has_acroform,
+    is_form_pdf, need_appearances, set_need_appearances, sigflags, terminal_field_refs,
+    widget_refs, widgets, Field, FieldType, Widget,
 };
 pub use image::{insert_image_jpeg, insert_image_rgb};
 pub use links::{delete_link, get_links, insert_link, update_link, Link, LinkKind};

@@ -145,6 +145,13 @@ fn acroform_ref(doc: &DocumentStore) -> Option<ObjRef> {
         .and_then(Object::as_reference)
 }
 
+/// Whether the document has an `/AcroForm` at all (PyMuPDF reports
+/// `need_appearances()` as `None` when there is no form).
+#[must_use]
+pub fn has_acroform(doc: &DocumentStore) -> bool {
+    acroform_dict(doc).is_some()
+}
+
 /// Whether the form requests `/NeedAppearances true`.
 #[must_use]
 pub fn need_appearances(doc: &DocumentStore) -> bool {
@@ -154,6 +161,58 @@ pub fn need_appearances(doc: &DocumentStore) -> bool {
                 .and_then(Object::as_bool)
         })
         .unwrap_or(false)
+}
+
+/// Sets the form `/NeedAppearances` flag (PyMuPDF `Document.need_appearances`
+/// with a value). A no-op when the document has no `/AcroForm`.
+///
+/// # Errors
+///
+/// Propagates object-edit errors.
+pub fn set_need_appearances(doc: &DocumentStore, value: bool) -> Result<()> {
+    let key = Name::new("NeedAppearances");
+    if let Some(r) = acroform_ref(doc) {
+        // Indirect AcroForm: rewrite the referenced dict in place.
+        let mut af = doc
+            .resolve(r)?
+            .as_dict()
+            .cloned()
+            .ok_or(Error::InvalidArgument("/AcroForm is not a dictionary"))?;
+        af.insert(key, Object::Boolean(value));
+        doc.update_object(r, Object::Dictionary(af))?;
+        return Ok(());
+    }
+    // Inline AcroForm dict in the catalog (or none): rewrite the catalog.
+    let root = doc
+        .root()
+        .ok_or(Error::InvalidArgument("document has no /Root"))?;
+    let mut catalog = doc
+        .resolve(root)?
+        .as_dict()
+        .cloned()
+        .ok_or(Error::InvalidArgument("/Root is not a dictionary"))?;
+    if let Some(Object::Dictionary(af)) = catalog.get(&Name::new("AcroForm")) {
+        let mut af = af.clone();
+        af.insert(key, Object::Boolean(value));
+        catalog.insert(Name::new("AcroForm"), Object::Dictionary(af));
+        doc.update_object(root, Object::Dictionary(catalog))?;
+    }
+    Ok(())
+}
+
+/// The form `/SigFlags` integer (PyMuPDF `Document.get_sigflags`), or `-1` when
+/// the document has no `/AcroForm` — fitz's "no form" sentinel. A present
+/// `/AcroForm` with no `/SigFlags` reports `0`.
+#[must_use]
+pub fn sigflags(doc: &DocumentStore) -> i32 {
+    match acroform_dict(doc) {
+        Some(af) => af
+            .get(&Name::new("SigFlags"))
+            .and_then(Object::as_i64)
+            .map(|v| v as i32)
+            .unwrap_or(0),
+        None => -1,
+    }
 }
 
 /// The form default appearance string `/DA`, if present.

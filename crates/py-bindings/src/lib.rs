@@ -2756,6 +2756,100 @@ impl PyDocument {
         Ok(PyBytes::new(py, &bytes))
     }
 
+    /// The raw (still filter-encoded) stream body of object `num` (PyMuPDF
+    /// `xref_stream_raw`).
+    fn xref_stream_raw<'py>(&self, py: Python<'py>, num: u32) -> PyResult<Bound<'py, PyBytes>> {
+        let bytes = self.doc.xref_stream_raw(num).map_err(map_err)?;
+        Ok(PyBytes::new(py, &bytes))
+    }
+
+    /// Whether object `num` is a stream (PyMuPDF `is_stream`).
+    fn is_stream(&self, num: u32) -> PyResult<bool> {
+        self.doc.is_stream(num).map_err(map_err)
+    }
+
+    /// The dictionary keys of object `num` (PyMuPDF `xref_get_keys`).
+    fn xref_get_keys(&self, num: u32) -> PyResult<Vec<String>> {
+        self.doc.xref_get_keys(num).map_err(map_err)
+    }
+
+    /// Whether object `num` is a Form XObject (PyMuPDF `xref_is_xobject`).
+    fn xref_is_xobject(&self, num: u32) -> PyResult<bool> {
+        self.doc.xref_is_xobject(num).map_err(map_err)
+    }
+
+    /// The `/Catalog` (`/Root`) object number (PyMuPDF `pdf_catalog`).
+    fn pdf_catalog(&self) -> u32 {
+        self.doc.pdf_catalog()
+    }
+
+    /// The trailer dictionary serialized to a string (PyMuPDF `pdf_trailer`).
+    #[pyo3(signature = (compressed=false, ascii=false))]
+    fn pdf_trailer(&self, compressed: bool, ascii: bool) -> String {
+        let _ = (compressed, ascii); // accepted for fitz-signature parity
+        self.doc.pdf_trailer()
+    }
+
+    /// Allocates a new, empty xref slot and returns its number (PyMuPDF
+    /// `get_new_xref`).
+    fn get_new_xref(&self) -> PyResult<u32> {
+        self.doc.get_new_xref().map_err(map_err)
+    }
+
+    /// Replaces object `xref`'s definition from a PDF-syntax string (PyMuPDF
+    /// `update_object`).
+    #[pyo3(signature = (xref, text, page=None))]
+    fn update_object(
+        &self,
+        xref: u32,
+        text: &str,
+        page: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<()> {
+        let _ = page; // fitz accepts an optional page hint we do not need
+        self.doc.update_object(xref, text).map_err(map_err)
+    }
+
+    /// Sets object `xref`'s stream body (PyMuPDF `update_stream`). `stream` is the
+    /// decoded payload; `new=True` allows promoting a dict object to a stream.
+    #[pyo3(signature = (xref, stream, new=true, compress=true))]
+    fn update_stream(
+        &self,
+        xref: u32,
+        stream: &Bound<'_, PyAny>,
+        new: bool,
+        compress: bool,
+    ) -> PyResult<()> {
+        let data: Vec<u8> = if let Ok(b) = stream.cast::<PyBytes>() {
+            b.as_bytes().to_vec()
+        } else {
+            stream.extract::<String>()?.into_bytes()
+        };
+        self.doc
+            .update_stream(xref, data, new, compress)
+            .map_err(map_err)
+    }
+
+    /// Every named destination resolved to a `{name: {page, to, zoom, dest}}`
+    /// dict (PyMuPDF `resolve_names`).
+    fn resolve_names<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        let out = PyDict::new(py);
+        for (name, rn) in self.doc.resolve_names() {
+            let entry = PyDict::new(py);
+            entry.set_item("page", rn.page)?;
+            if let Some((x, y)) = rn.to {
+                entry.set_item("to", (x, y))?;
+            }
+            if let Some(z) = rn.zoom {
+                entry.set_item("zoom", z)?;
+            }
+            if let Some(d) = rn.dest {
+                entry.set_item("dest", d)?;
+            }
+            out.set_item(name, entry)?;
+        }
+        Ok(out)
+    }
+
     // --- extract_image (PRD §8.10) ---------------------------------------
 
     /// Extracts the image XObject at object number `xref` (PyMuPDF
@@ -3117,12 +3211,112 @@ impl PyDocument {
         self.doc.get_page_labels()
     }
 
+    /// Every annotation on page `pno` as `(xref, subtype-name, /NM-id)` (PyMuPDF
+    /// `Document.page_annot_xrefs`; the Python layer maps the subtype name to the
+    /// PyMuPDF integer annot-type code).
+    fn page_annot_xrefs(&self, pno: usize) -> Vec<(u32, String, String)> {
+        self.doc.page_annot_xrefs(pno)
+    }
+
+    // --- catalog state / viewer prefs (PRD §C batch-5) -------------------
+
+    /// The catalog `/PageLayout` (PyMuPDF `Document.pagelayout`).
+    fn pagelayout(&self) -> String {
+        self.doc.page_layout()
+    }
+
+    /// Sets the catalog `/PageLayout` (PyMuPDF `Document.set_pagelayout`).
+    fn set_pagelayout(&self, layout: &str) -> PyResult<()> {
+        self.doc.set_page_layout(layout).map_err(map_err)
+    }
+
+    /// The catalog `/PageMode` (PyMuPDF `Document.pagemode`).
+    fn pagemode(&self) -> String {
+        self.doc.page_mode()
+    }
+
+    /// Sets the catalog `/PageMode` (PyMuPDF `Document.set_pagemode`).
+    fn set_pagemode(&self, mode: &str) -> PyResult<()> {
+        self.doc.set_page_mode(mode).map_err(map_err)
+    }
+
+    /// The catalog `/Lang`, or `None` when absent (PyMuPDF `Document.language`).
+    fn language(&self) -> Option<String> {
+        self.doc.language()
+    }
+
+    /// Sets the catalog `/Lang` (PyMuPDF `Document.set_language`).
+    fn set_language(&self, lang: &str) -> PyResult<()> {
+        self.doc.set_language(lang).map_err(map_err)
+    }
+
+    /// The catalog `/MarkInfo` as `(Marked, UserProperties, Suspects)`, or `None`
+    /// when there is no `/MarkInfo` (PyMuPDF `Document.markinfo` → `{}`).
+    fn markinfo(&self) -> Option<(bool, bool, bool)> {
+        self.doc.mark_info()
+    }
+
+    /// Sets the catalog `/MarkInfo` dict (PyMuPDF `Document.set_markinfo`).
+    fn set_markinfo(&self, marked: bool, user_properties: bool, suspects: bool) -> PyResult<()> {
+        self.doc
+            .set_mark_info(marked, user_properties, suspects)
+            .map_err(map_err)
+    }
+
+    /// The object number of the catalog `/Metadata` XMP stream, or `0` when
+    /// absent (PyMuPDF `Document.xref_xml_metadata`).
+    fn xref_xml_metadata(&self) -> i64 {
+        self.doc.xref_xml_metadata()
+    }
+
+    /// Whether the document has unsaved (overlaid) changes (PyMuPDF
+    /// `Document.is_dirty`).
+    fn is_dirty(&self) -> bool {
+        self.doc.is_dirty()
+    }
+
+    /// Whether the document is linearized / "fast web view" (PyMuPDF
+    /// `Document.is_fast_webaccess`).
+    fn is_fast_webaccess(&self) -> bool {
+        self.doc.is_fast_webaccess()
+    }
+
+    /// Whether the document can be saved incrementally (PyMuPDF
+    /// `Document.can_save_incrementally`).
+    fn can_save_incrementally(&self) -> bool {
+        self.doc.can_save_incrementally()
+    }
+
     // --- forms (PRD §8.8) ------------------------------------------------
 
     /// Whether the document has an interactive form (PyMuPDF `is_form_pdf`).
     #[getter]
     fn is_form_pdf(&self) -> bool {
         self.doc.is_form_pdf()
+    }
+
+    /// Whether the document has an `/AcroForm` (PyMuPDF reports
+    /// `need_appearances()` as `None` when absent).
+    fn has_acroform(&self) -> bool {
+        self.doc.has_acroform()
+    }
+
+    /// Whether the form requests `/NeedAppearances` (PyMuPDF
+    /// `Document.need_appearances`).
+    fn need_appearances(&self) -> bool {
+        self.doc.need_appearances()
+    }
+
+    /// Sets the form `/NeedAppearances` flag (PyMuPDF
+    /// `Document.need_appearances` with a value).
+    fn set_need_appearances(&self, value: bool) -> PyResult<()> {
+        self.doc.set_need_appearances(value).map_err(map_err)
+    }
+
+    /// The form `/SigFlags`, or `-1` when there is no `/AcroForm` (PyMuPDF
+    /// `Document.get_sigflags`).
+    fn get_sigflags(&self) -> i32 {
+        self.doc.sigflags()
     }
 
     /// The fully-qualified names of every terminal form field (PyMuPDF

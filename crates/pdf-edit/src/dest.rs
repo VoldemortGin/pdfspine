@@ -112,6 +112,168 @@ pub fn resolve_named(
     None
 }
 
+/// One resolved named destination (PyMuPDF `Document.resolve_names` value).
+///
+/// `to`/`zoom` are populated only for explicit `/XYZ` destinations; otherwise the
+/// raw serialized destination is carried in `dest` (matching fitz, which only
+/// fills `page`/`to`/`zoom` for `/XYZ` and falls back to a `dest` string).
+#[derive(Debug, Clone, Default)]
+pub struct ResolvedName {
+    /// Target page index (0-based), or `-1` when no page could be resolved.
+    pub page: i64,
+    /// Target point `(x, y)` in PDF coordinates, when the dest is `/XYZ`.
+    pub to: Option<(f64, f64)>,
+    /// Zoom factor, when the dest is `/XYZ`.
+    pub zoom: Option<f64>,
+    /// The raw serialized destination, when not an `/XYZ` (or page unresolved).
+    pub dest: Option<String>,
+}
+
+/// Resolves **every** named destination in the catalog to a [`ResolvedName`]
+/// (PyMuPDF `Document.resolve_names`): the `/Dests` dictionary plus the
+/// `/Names /Dests` name-tree, keyed by destination name.
+#[must_use]
+pub fn resolve_names(doc: &DocumentStore) -> Vec<(String, ResolvedName)> {
+    let pages = page_index_map(doc);
+    let mut out: Vec<(String, ResolvedName)> = Vec::new();
+    let Some(catalog) = catalog_dict(doc) else {
+        return out;
+    };
+
+    // 1. Catalog `/Dests` dictionary (PDF 1.1 form): keys are names.
+    if let Some(dests) = catalog.get(&Name::new("Dests")) {
+        let dests = deref(doc, dests);
+        if let Some(dd) = dests.as_dict() {
+            for (k, v) in dd {
+                let name = String::from_utf8_lossy(k.as_bytes()).into_owned();
+                let v = deref(doc, v);
+                out.push((name, resolve_one_name(doc, &v, &pages)));
+            }
+        }
+    }
+
+    // 2. `/Names /Dests` name-tree (PDF 1.2+): keys are strings.
+    if let Some(names) = catalog.get(&Name::new("Names")) {
+        let names = deref(doc, names);
+        if let Some(nd) = names.as_dict() {
+            if let Some(dests_tree) = nd.get(&Name::new("Dests")) {
+                let root = deref(doc, dests_tree);
+                name_tree_collect(doc, &root, &pages, 0, &mut out);
+            }
+        }
+    }
+    out
+}
+
+/// Walks a name-tree, pushing every `(key, resolved)` pair into `out`.
+fn name_tree_collect(
+    doc: &DocumentStore,
+    node: &Object,
+    pages: &HashMap<u32, usize>,
+    depth: usize,
+    out: &mut Vec<(String, ResolvedName)>,
+) {
+    if depth > 50 {
+        return;
+    }
+    let Some(d) = node.as_dict() else {
+        return;
+    };
+    if let Some(names) = d.get(&Name::new("Names")) {
+        let names = deref(doc, names);
+        if let Some(arr) = names.as_array() {
+            let mut i = 0;
+            while i + 1 < arr.len() {
+                if let Some(k) = arr[i].as_string() {
+                    let name = String::from_utf8_lossy(k.as_bytes()).into_owned();
+                    let v = deref(doc, &arr[i + 1]);
+                    out.push((name, resolve_one_name(doc, &v, pages)));
+                }
+                i += 2;
+            }
+        }
+    }
+    if let Some(kids) = d.get(&Name::new("Kids")) {
+        let kids = deref(doc, kids);
+        if let Some(arr) = kids.as_array() {
+            for kid in arr {
+                let kid = deref(doc, kid);
+                name_tree_collect(doc, &kid, pages, depth + 1, out);
+            }
+        }
+    }
+}
+
+/// Resolves a single named-dest value into a [`ResolvedName`], extracting the
+/// `/XYZ` point + zoom when present (fitz's exact shape).
+fn resolve_one_name(doc: &DocumentStore, v: &Object, pages: &HashMap<u32, usize>) -> ResolvedName {
+    // Unwrap a `<< /D [...] >>` wrapper.
+    let arr_obj = match v {
+        Object::Dictionary(d) => d.get(&Name::new("D")).map(|inner| deref(doc, inner)),
+        other => Some(other.clone()),
+    };
+    let page = dest_value_to_page(doc, v, pages)
+        .and_then(|p| i64::try_from(p).ok())
+        .unwrap_or(-1);
+
+    if let Some(Object::Array(items)) = arr_obj.as_ref() {
+        // [pageref /XYZ x y zoom] — extract the point + zoom for /XYZ.
+        if items.len() >= 2 {
+            if let Some(kind) = items[1].as_name() {
+                if kind.as_bytes() == b"XYZ" {
+                    let x = items.get(2).and_then(num_or_null).unwrap_or(0.0);
+                    let y = items.get(3).and_then(num_or_null).unwrap_or(0.0);
+                    let z = items.get(4).and_then(num_or_null).unwrap_or(0.0);
+                    if page >= 0 {
+                        return ResolvedName {
+                            page,
+                            to: Some((x, y)),
+                            zoom: Some(z),
+                            dest: None,
+                        };
+                    }
+                }
+            }
+        }
+    }
+
+    // Non-/XYZ or unresolved page: carry the serialized dest like fitz, which
+    // drops the leading page reference and keeps only the dest-type tail
+    // (e.g. `/FitH 222`). For a non-array dest, serialize it whole.
+    let dest_str = match arr_obj.as_ref() {
+        Some(Object::Array(items)) if items.len() >= 2 => {
+            let parts: Vec<String> = items[1..]
+                .iter()
+                .map(|o| {
+                    String::from_utf8_lossy(&pdf_core::serialize::write_object(o)).into_owned()
+                })
+                .collect();
+            Some(parts.join(" "))
+        }
+        Some(o) => {
+            Some(String::from_utf8_lossy(&pdf_core::serialize::write_object(o)).into_owned())
+        }
+        None => None,
+    };
+    ResolvedName {
+        page,
+        to: None,
+        zoom: None,
+        dest: dest_str,
+    }
+}
+
+/// A numeric dest coordinate, treating `null` (a "keep current" placeholder) as
+/// `0.0` per fitz.
+fn num_or_null(o: &Object) -> Option<f64> {
+    match o {
+        Object::Integer(n) => Some(*n as f64),
+        Object::Real(r) => Some(*r),
+        Object::Null => Some(0.0),
+        _ => None,
+    }
+}
+
 /// A named-dest value may be `[pageref …]` directly or `<< /D [pageref …] >>`.
 fn dest_value_to_page(
     doc: &DocumentStore,

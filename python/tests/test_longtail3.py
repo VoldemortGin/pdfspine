@@ -182,8 +182,11 @@ def test_xref_set_key_roundtrip() -> None:
 @pytest.mark.skipif(not _JPEG_PATH.exists(), reason="JPEG asset missing")
 def test_xref_copy() -> None:
     d, _name, xref = _doc_with_image()
-    target = d.xref_length()
-    # Materialize a fresh slot, then copy the image onto it.
+    # Allocate + initialize a fresh slot (the fitz-canonical sequence: a new
+    # xref is a null object, so it must be made a dict before keys are set),
+    # then copy the image onto it.
+    target = d.get_new_xref()
+    d.update_object(target, "<< >>")
     d.xref_set_key(target, "Type", "/XObject")
     d.xref_copy(xref, target)
     assert d.xref_is_image(target)

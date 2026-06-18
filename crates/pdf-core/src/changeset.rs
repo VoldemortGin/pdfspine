@@ -118,4 +118,20 @@ impl ChangeSet {
     pub(crate) fn get(&self, num: u32) -> Option<&Change> {
         self.changes.get(&num)
     }
+
+    /// One past the highest object number this overlay touches (created, updated,
+    /// or reserved by [`ChangeSet::allocate`]), or `0` if it is empty. Lets
+    /// [`crate::DocumentStore::xref_length`] reflect freshly-allocated slots that
+    /// are not yet in the original cross-reference table (PyMuPDF `get_new_xref`
+    /// bumps `/Size` immediately).
+    #[must_use]
+    pub(crate) fn high_water(&self) -> u32 {
+        let by_changes = self
+            .changes
+            .keys()
+            .next_back()
+            .map(|n| n.saturating_add(1))
+            .unwrap_or(0);
+        by_changes.max(self.next_free)
+    }
 }

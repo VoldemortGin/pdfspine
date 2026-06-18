@@ -480,6 +480,27 @@ impl DocumentStore {
         self.header_offset
     }
 
+    /// Whether the file is linearized ("fast web view"; PyMuPDF
+    /// `Document.is_fast_webaccess`). A linearized PDF carries its linearization
+    /// parameter dictionary as the **first** indirect object right after the
+    /// header, identified by a `/Linearized` key. We scan the leading window of
+    /// the source for that marker — cheap, and exact across the corpus (a
+    /// `/Linearized` in the header region ⟺ MuPDF's verdict). A repaired/rewritten
+    /// file no longer has a valid leading linearization dict, so this is `false`,
+    /// matching fitz.
+    #[must_use]
+    pub fn is_linearized(&self) -> bool {
+        // The linearization dict lives at the very start; 4 KiB after the header
+        // comfortably covers it without scanning the whole file.
+        const WINDOW: usize = 4096;
+        let bytes = self.source.bytes();
+        let start = self.header_offset.min(bytes.len());
+        let end = start.saturating_add(WINDOW).min(bytes.len());
+        bytes[start..end]
+            .windows(b"/Linearized".len())
+            .any(|w| w == b"/Linearized")
+    }
+
     /// Whether the parse was repair-tainted (PRD §8.2): set when a full-file
     /// scan ran, the header had a nonzero bias, or any xref/`/Length` was
     /// corrected. The precondition gate for incremental save (PRD §8.7).
@@ -571,7 +592,11 @@ impl DocumentStore {
             .last()
             .map(|n| n.saturating_add(1))
             .unwrap_or(0);
-        by_size.max(by_max)
+        // Also reflect any objects created via the change-set overlay (e.g. a
+        // `get_new_xref`/`add_object` slot not yet present in the original table),
+        // so the addressable range — and PyMuPDF `/Size` — grows immediately.
+        let by_changes = self.changes.read().map(|c| c.high_water()).unwrap_or(0);
+        by_size.max(by_max).max(by_changes)
     }
 
     /// The **serialized** source of object `num` — its resolved value rendered
@@ -689,6 +714,59 @@ impl DocumentStore {
             .map(|n| n.as_bytes() == b"Image")
             .unwrap_or(false);
         Ok(is_xobject)
+    }
+
+    /// Whether object `num` is a **Form** XObject (PyMuPDF `xref_is_xobject`):
+    /// a dict/stream whose `/Subtype` is `/Form` (matching fitz, which keys only
+    /// on `/Subtype /Form` — image XObjects are reported by `xref_is_image`). A
+    /// missing object is `Ok(false)`.
+    ///
+    /// # Errors
+    ///
+    /// Resolution errors propagate.
+    pub fn xref_is_xobject(&self, num: u32) -> Result<bool> {
+        let obj = match self.get_object(num, 0) {
+            Ok(o) => o,
+            Err(Error::MissingObject { .. }) => return Ok(false),
+            Err(e) => return Err(e),
+        };
+        let dict = match obj.as_ref() {
+            Object::Dictionary(d) => Some(d),
+            Object::Stream(s) => Some(&s.dict),
+            _ => None,
+        };
+        Ok(dict
+            .and_then(|d| d.get(&Name::new("Subtype")))
+            .and_then(Object::as_name)
+            .map(|n| n.as_bytes() == b"Form")
+            .unwrap_or(false))
+    }
+
+    /// The dictionary keys of object `num` (names, no leading slash), or an empty
+    /// vector for a non-dict / missing object (PyMuPDF `xref_get_keys`). Keys are
+    /// returned in the backing dictionary's order (sorted, an oxide model trait).
+    ///
+    /// # Errors
+    ///
+    /// Resolution errors propagate.
+    pub fn xref_get_keys(&self, num: u32) -> Result<Vec<String>> {
+        let obj = match self.get_object(num, 0) {
+            Ok(o) => o,
+            Err(Error::MissingObject { .. }) => return Ok(Vec::new()),
+            Err(e) => return Err(e),
+        };
+        let dict = match obj.as_ref() {
+            Object::Dictionary(d) => Some(d),
+            Object::Stream(s) => Some(&s.dict),
+            _ => None,
+        };
+        Ok(dict
+            .map(|d| {
+                d.keys()
+                    .map(|k| String::from_utf8_lossy(k.as_bytes()).into_owned())
+                    .collect()
+            })
+            .unwrap_or_default())
     }
 
     /// Whether object `num` resolves to a dictionary (or stream dict) whose

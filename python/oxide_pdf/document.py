@@ -2676,10 +2676,14 @@ def _text_width(text: str, fontname: str, fontsize: float) -> float:
 class Document:
     """A parsed document (PyMuPDF ``fitz.Document``)."""
 
-    __slots__ = ("_doc",)
+    __slots__ = ("_doc", "_name", "_closed")
 
-    def __init__(self, core_doc: "_core.Document") -> None:
+    def __init__(self, core_doc: "_core.Document", name: str | None = None) -> None:
         self._doc = core_doc
+        # PyMuPDF ``doc.name`` is the file path for a path-opened document and
+        # ``None`` for a stream-opened / new document.
+        self._name = name
+        self._closed = False
 
     # --- pages ---
     @property
@@ -2837,6 +2841,183 @@ class Document:
         ``doc.xref_copy``)."""
         del keep
         self._doc.xref_copy(int(source), int(target))
+
+    def xref_stream_raw(self, xref: int) -> bytes:
+        """The raw (still filter-encoded) stream body of object ``xref`` (PyMuPDF
+        ``doc.xref_stream_raw``); cf. :meth:`xref_stream` which decodes."""
+        return self._doc.xref_stream_raw(int(xref))
+
+    def is_stream(self, xref: int) -> bool:
+        """Whether object ``xref`` is a stream (PyMuPDF ``doc.is_stream``)."""
+        return self._doc.is_stream(int(xref))
+
+    def xref_get_keys(self, xref: int) -> tuple:
+        """The dictionary keys of object ``xref`` (PyMuPDF ``doc.xref_get_keys``),
+        as a tuple of names without the leading slash."""
+        return tuple(self._doc.xref_get_keys(int(xref)))
+
+    def xref_is_xobject(self, xref: int) -> bool:
+        """Whether object ``xref`` is a Form XObject (``/Subtype /Form``; PyMuPDF
+        ``doc.xref_is_xobject`` — image XObjects use :meth:`xref_is_image`)."""
+        return self._doc.xref_is_xobject(int(xref))
+
+    def pdf_catalog(self) -> int:
+        """The ``/Catalog`` (``/Root``) object's xref number (PyMuPDF
+        ``doc.pdf_catalog``)."""
+        return self._doc.pdf_catalog()
+
+    def pdf_trailer(self, compressed: bool = False, ascii: bool = False) -> str:
+        """The trailer dictionary as a string (PyMuPDF ``doc.pdf_trailer``)."""
+        return self._doc.pdf_trailer(bool(compressed), bool(ascii))
+
+    def get_new_xref(self) -> int:
+        """Allocates a new, empty xref slot and returns its number (PyMuPDF
+        ``doc.get_new_xref``)."""
+        return self._doc.get_new_xref()
+
+    def update_object(self, xref: int, text: str, page=None) -> None:
+        """Replaces object ``xref``'s definition from a PDF-syntax string (PyMuPDF
+        ``doc.update_object``). A dict update on a stream keeps the stream body."""
+        self._doc.update_object(int(xref), str(text), page)
+
+    def update_stream(
+        self, xref: int, stream=None, new: bool = True, compress: bool = True
+    ) -> None:
+        """Sets object ``xref``'s stream body (PyMuPDF ``doc.update_stream``).
+        ``stream`` is the decoded payload (``bytes`` or ``str``); ``new=True``
+        allows promoting a plain dict object into a stream."""
+        if stream is None:
+            stream = b""
+        self._doc.update_stream(int(xref), stream, bool(new), bool(compress))
+
+    def resolve_names(self) -> dict:
+        """Every named destination resolved to a dict (PyMuPDF
+        ``doc.resolve_names``): ``{name: {"page": int, "to": (x, y),
+        "zoom": float}}`` for ``/XYZ`` dests, else ``{"page": int,
+        "dest": str}``."""
+        return self._doc.resolve_names()
+
+    def page_annot_xrefs(self, pno: int) -> list[tuple[int, int, str]]:
+        """The annotations on page ``pno`` as ``(xref, type, id)`` tuples
+        (PyMuPDF ``doc.page_annot_xrefs``): the annotation's ``xref``, its
+        PyMuPDF integer annot-type code, and its ``/NM`` id (``""`` if none).
+        Includes ``/Popup`` annotations, matching fitz's raw-``/Annots`` dump."""
+        return [
+            (xref, _ANNOT_TYPE_INT.get(subtype, -1), nm)
+            for (xref, subtype, nm) in self._doc.page_annot_xrefs(int(pno))
+        ]
+
+    # --- catalog state / viewer prefs (PRD §C batch-5) -------------------
+
+    @property
+    def pagelayout(self) -> str:
+        """The catalog ``/PageLayout`` (PyMuPDF ``doc.pagelayout``); defaults to
+        ``"SinglePage"`` when absent."""
+        return self._doc.pagelayout()
+
+    def set_pagelayout(self, pagelayout: str) -> None:
+        """Sets the catalog ``/PageLayout`` (PyMuPDF ``doc.set_pagelayout``)."""
+        self._doc.set_pagelayout(str(pagelayout))
+
+    @property
+    def pagemode(self) -> str:
+        """The catalog ``/PageMode`` (PyMuPDF ``doc.pagemode``); defaults to
+        ``"UseNone"`` when absent."""
+        return self._doc.pagemode()
+
+    def set_pagemode(self, pagemode: str) -> None:
+        """Sets the catalog ``/PageMode`` (PyMuPDF ``doc.set_pagemode``)."""
+        self._doc.set_pagemode(str(pagemode))
+
+    @property
+    def language(self) -> str | None:
+        """The catalog ``/Lang`` (PyMuPDF ``doc.language``), or ``None`` when
+        absent."""
+        return self._doc.language()
+
+    def set_language(self, language: str | None = None) -> None:
+        """Sets the catalog ``/Lang`` (PyMuPDF ``doc.set_language``). The tag is
+        normalized to MuPDF's compact ISO-639 form; ``None`` / an empty / invalid
+        tag removes ``/Lang``."""
+        self._doc.set_language("" if language is None else str(language))
+
+    @property
+    def markinfo(self) -> dict:
+        """The catalog ``/MarkInfo`` dict (PyMuPDF ``doc.markinfo``): the keys
+        ``Marked``/``UserProperties``/``Suspects`` mapped to bools, or ``{}`` when
+        there is no ``/MarkInfo``."""
+        mi = self._doc.markinfo()
+        if mi is None:
+            return {}
+        marked, user_properties, suspects = mi
+        return {
+            "Marked": marked,
+            "UserProperties": user_properties,
+            "Suspects": suspects,
+        }
+
+    def set_markinfo(self, markinfo: dict) -> bool:
+        """Sets the catalog ``/MarkInfo`` dict (PyMuPDF ``doc.set_markinfo``).
+        Missing keys default to ``False``; all three are written."""
+        self._doc.set_markinfo(
+            bool(markinfo.get("Marked", False)),
+            bool(markinfo.get("UserProperties", False)),
+            bool(markinfo.get("Suspects", False)),
+        )
+        return True
+
+    def need_appearances(self, value: bool | None = None) -> bool | None:
+        """Gets or sets the form ``/NeedAppearances`` flag (PyMuPDF
+        ``doc.need_appearances``). Returns ``None`` when the document has no
+        ``/AcroForm``; otherwise the (possibly just-set) flag."""
+        if value is not None:
+            self._doc.set_need_appearances(bool(value))
+        if not self._doc.has_acroform():
+            return None
+        return self._doc.need_appearances()
+
+    def get_sigflags(self) -> int:
+        """The form ``/SigFlags`` integer, or ``-1`` when there is no
+        ``/AcroForm`` (PyMuPDF ``doc.get_sigflags``)."""
+        return self._doc.get_sigflags()
+
+    def xref_xml_metadata(self) -> int:
+        """The object number of the catalog ``/Metadata`` XMP stream, or ``0``
+        when absent (PyMuPDF ``doc.xref_xml_metadata``)."""
+        return self._doc.xref_xml_metadata()
+
+    def can_save_incrementally(self) -> bool:
+        """Whether the document can be saved incrementally (PyMuPDF
+        ``doc.can_save_incrementally``)."""
+        return self._doc.can_save_incrementally()
+
+    @property
+    def is_dirty(self) -> bool:
+        """Whether there are unsaved changes (PyMuPDF ``doc.is_dirty``)."""
+        return self._doc.is_dirty()
+
+    @property
+    def is_closed(self) -> bool:
+        """Whether the document has been closed (PyMuPDF ``doc.is_closed``)."""
+        return self._closed
+
+    @property
+    def is_reflowable(self) -> bool:
+        """Whether the document reflows (PyMuPDF ``doc.is_reflowable``); always
+        ``False`` for a PDF."""
+        return False
+
+    @property
+    def is_fast_webaccess(self) -> bool:
+        """Whether the document is linearized / "fast web view" (PyMuPDF
+        ``doc.is_fast_webaccess``)."""
+        return self._doc.is_fast_webaccess()
+
+    @property
+    def name(self) -> str | None:
+        """The file path the document was opened from, or ``None`` for a
+        stream-opened / new document (PyMuPDF ``doc.name``)."""
+        return self._name
 
     def subset_fonts(self, *args, **kwargs) -> int:
         """Reports the number of subsettable embedded fonts (PyMuPDF
@@ -3488,6 +3669,7 @@ class Document:
     def close(self) -> None:
         """Releases the document (drops the underlying Rust handle)."""
         self._doc = None  # type: ignore[assignment]
+        self._closed = True
 
     def __enter__(self) -> "Document":
         return self
@@ -3535,4 +3717,5 @@ def open(
         return Document(_core.open_bytes(bytes(stream)))
     if filename is None:
         return Document(_core.open_bytes(_BLANK_PDF))
-    return Document(_core.open(os.fspath(filename)))
+    path = os.fspath(filename)
+    return Document(_core.open(path), name=path)

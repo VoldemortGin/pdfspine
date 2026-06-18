@@ -108,7 +108,7 @@ add_many("Document", IMPLEMENTED, "M1", ["open", "Document", "close"])
 add_many("Document", IMPLEMENTED, "M3", [
     "save", "ez_save", "saveIncr", "save_incremental", "write", "tobytes",
 ])
-add_many("Document", DEFERRED, "M3", ["can_save_incrementally"], "incremental-safety predicate")
+add("Document.can_save_incrementally", "Document", IMPLEMENTED, "M3", "incremental-safety predicate")
 add("Document.save_snapshot", "Document", OUT_OF_SCOPE, "post-v1", "journalling deferred (PRD §3.2 #5)")
 # Pages — access / layout
 add_many("Document", IMPLEMENTED, "M1", ["load_page", "__getitem__", "pages", "page_count"])
@@ -136,24 +136,26 @@ add_many("Document", IMPLEMENTED, "M3", [
 ])
 add_many("Document", DEFERRED, "M3", [
     "set_toc_item", "del_toc_item", "outline", "del_xml_metadata",
-    "xref_xml_metadata",
 ])
+add("Document.xref_xml_metadata", "Document", IMPLEMENTED, "M3", "xref of catalog /Metadata XML stream (0 if none)")
 # Security / permissions
 add_many("Document", IMPLEMENTED, "M1", [
     "needs_pass", "authenticate", "permissions", "is_encrypted",
 ])
-add("Document.get_sigflags", "Document", DEFERRED, "M4", "signature flags read-only (PRD §3.2 #6)")
+add("Document.get_sigflags", "Document", IMPLEMENTED, "M4", "/AcroForm /SigFlags int, -1 when no form")
 # Identity / state props
 add_many("Document", IMPLEMENTED, "M1", ["is_pdf", "is_repaired"])
 add_many("Document", IMPLEMENTED, "M4", ["is_form_pdf"])
-add_many("Document", DEFERRED, "M3", [
+add_many("Document", IMPLEMENTED, "M3", [
     "is_dirty", "is_reflowable", "language", "set_language", "markinfo",
     "set_markinfo", "pagelayout", "set_pagelayout", "pagemode", "set_pagemode",
 ])
-add_many("Document", DEFERRED, "M1", [
-    "is_fast_webaccess", "is_closed", "name", "version_count",
+add_many("Document", IMPLEMENTED, "M1", [
+    "is_fast_webaccess", "is_closed", "name",
 ])
-add_many("Document", DEFERRED, "M4", ["need_appearances", "FormFonts"])
+add("Document.version_count", "Document", DEFERRED, "M1", "MuPDF-internal revision count (not %%EOF nor /Prev-chain length); no clean model mapping")
+add("Document.need_appearances", "Document", IMPLEMENTED, "M4", "/AcroForm /NeedAppearances get/set, None when no form")
+add_many("Document", DEFERRED, "M4", ["FormFonts"])
 # Conversion / embedded files / fonts
 add("Document.convert_to_pdf", "Document", DEFERRED, "M5", "image inputs only; explicit PdfUnsupportedError stub today")
 add_many("Document", IMPLEMENTED, "M4", [
@@ -166,18 +168,19 @@ add_many("Document", IMPLEMENTED, "M2", ["get_char_widths"], "font /Widths → (
 add_many("Document", IMPLEMENTED, "M4", ["bake", "scrub"])
 add("Document.resolve_link", "Document", IMPLEMENTED, "M3", "URI fragment / named-destination → page index")
 add_many("Document", DEFERRED, "M3", [
-    "subset", "resolve_names", "get_outline_xrefs",
+    "subset", "get_outline_xrefs",
 ])
+add("Document.resolve_names", "Document", IMPLEMENTED, "M3", "all /Dests names → {page, to, zoom, dest} (fitz-shaped)")
 # Low-level xref / object access
 add_many("Document", IMPLEMENTED, "M1", [
     "xref_length", "xref_object", "xref_stream", "xref_get_key", "xref_is_stream",
 ])
-add_many("Document", DEFERRED, "M1", [
+add_many("Document", IMPLEMENTED, "M1", [
     "xref_stream_raw", "xref_get_keys", "xref_is_font", "xref_is_image",
     "xref_is_xobject", "pdf_catalog", "pdf_trailer", "is_stream",
     "page_annot_xrefs",
 ])
-add_many("Document", DEFERRED, "M3", [
+add_many("Document", IMPLEMENTED, "M3", [
     "update_object", "update_stream", "get_new_xref", "xref_set_key", "xref_copy",
 ])
 # Optional content (OCG/layers) — core read/write surface implemented (M7)
@@ -192,7 +195,7 @@ add_many("Document", DEFERRED, "post-v1", [
 add_many("Document", IMPLEMENTED, "M3", [
     "get_page_labels", "get_page_numbers", "get_label",
 ])
-add_many("Document", DEFERRED, "M3", ["get_page_label"])
+add("Document.get_page_label", "Document", IMPLEMENTED, "M3", "delegates to the /PageLabels parser (Page.get_label)")
 add("Document.set_page_labels", "Document", IMPLEMENTED, "M3", "writes /Root /PageLabels number tree")
 # Document-wide page-content helpers
 add_many("Document", IMPLEMENTED, "M2", ["get_page_text"])

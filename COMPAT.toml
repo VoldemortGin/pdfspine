@@ -29,10 +29,10 @@
 baseline = "1.24.x"
 baseline_detail = "PyMuPDF 1.24.14 / MuPDF 1.24.11"
 total = 769
-implemented = 578
-deferred = 125
+implemented = 607
+deferred = 96
 out_of_scope = 66
-coverage_pct = 75.2
+coverage_pct = 78.9
 
 # ── Matrix ──
 [[symbol]]
@@ -1158,7 +1158,7 @@ milestone = "M3"
 [[symbol]]
 name = "Document.can_save_incrementally"
 group = "Document"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M3"
 note = "incremental-safety predicate"
 
@@ -1406,8 +1406,9 @@ milestone = "M3"
 [[symbol]]
 name = "Document.xref_xml_metadata"
 group = "Document"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M3"
+note = "xref of catalog /Metadata XML stream (0 if none)"
 
 [[symbol]]
 name = "Document.needs_pass"
@@ -1436,9 +1437,9 @@ milestone = "M1"
 [[symbol]]
 name = "Document.get_sigflags"
 group = "Document"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
-note = "signature flags read-only (PRD §3.2 #6)"
+note = "/AcroForm /SigFlags int, -1 when no form"
 
 [[symbol]]
 name = "Document.is_pdf"
@@ -1461,79 +1462,79 @@ milestone = "M4"
 [[symbol]]
 name = "Document.is_dirty"
 group = "Document"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M3"
 
 [[symbol]]
 name = "Document.is_reflowable"
 group = "Document"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M3"
 
 [[symbol]]
 name = "Document.language"
 group = "Document"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M3"
 
 [[symbol]]
 name = "Document.set_language"
 group = "Document"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M3"
 
 [[symbol]]
 name = "Document.markinfo"
 group = "Document"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M3"
 
 [[symbol]]
 name = "Document.set_markinfo"
 group = "Document"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M3"
 
 [[symbol]]
 name = "Document.pagelayout"
 group = "Document"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M3"
 
 [[symbol]]
 name = "Document.set_pagelayout"
 group = "Document"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M3"
 
 [[symbol]]
 name = "Document.pagemode"
 group = "Document"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M3"
 
 [[symbol]]
 name = "Document.set_pagemode"
 group = "Document"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M3"
 
 [[symbol]]
 name = "Document.is_fast_webaccess"
 group = "Document"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M1"
 
 [[symbol]]
 name = "Document.is_closed"
 group = "Document"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M1"
 
 [[symbol]]
 name = "Document.name"
 group = "Document"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M1"
 
 [[symbol]]
@@ -1541,12 +1542,14 @@ name = "Document.version_count"
 group = "Document"
 disposition = "deferred"
 milestone = "M1"
+note = "MuPDF-internal revision count (not %%EOF nor /Prev-chain length); no clean model mapping"
 
 [[symbol]]
 name = "Document.need_appearances"
 group = "Document"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
+note = "/AcroForm /NeedAppearances get/set, None when no form"
 
 [[symbol]]
 name = "Document.FormFonts"
@@ -1654,16 +1657,17 @@ disposition = "deferred"
 milestone = "M3"
 
 [[symbol]]
-name = "Document.resolve_names"
+name = "Document.get_outline_xrefs"
 group = "Document"
 disposition = "deferred"
 milestone = "M3"
 
 [[symbol]]
-name = "Document.get_outline_xrefs"
+name = "Document.resolve_names"
 group = "Document"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M3"
+note = "all /Dests names → {page, to, zoom, dest} (fitz-shaped)"
 
 [[symbol]]
 name = "Document.xref_length"
@@ -1698,13 +1702,13 @@ milestone = "M1"
 [[symbol]]
 name = "Document.xref_stream_raw"
 group = "Document"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M1"
 
 [[symbol]]
 name = "Document.xref_get_keys"
 group = "Document"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M1"
 
 [[symbol]]
@@ -1722,49 +1726,49 @@ milestone = "M1"
 [[symbol]]
 name = "Document.xref_is_xobject"
 group = "Document"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M1"
 
 [[symbol]]
 name = "Document.pdf_catalog"
 group = "Document"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M1"
 
 [[symbol]]
 name = "Document.pdf_trailer"
 group = "Document"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M1"
 
 [[symbol]]
 name = "Document.is_stream"
 group = "Document"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M1"
 
 [[symbol]]
 name = "Document.page_annot_xrefs"
 group = "Document"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M1"
 
 [[symbol]]
 name = "Document.update_object"
 group = "Document"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M3"
 
 [[symbol]]
 name = "Document.update_stream"
 group = "Document"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M3"
 
 [[symbol]]
 name = "Document.get_new_xref"
 group = "Document"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M3"
 
 [[symbol]]
@@ -1891,8 +1895,9 @@ milestone = "M3"
 [[symbol]]
 name = "Document.get_page_label"
 group = "Document"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M3"
+note = "delegates to the /PageLabels parser (Page.get_label)"
 
 [[symbol]]
 name = "Document.set_page_labels"

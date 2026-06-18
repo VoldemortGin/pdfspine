@@ -1571,6 +1571,51 @@ pub fn annot_names(doc: &DocumentStore, index: usize) -> Vec<String> {
     annots(doc, index).iter().map(Annot::name).collect()
 }
 
+/// One `(xref, subtype-name, /NM-id)` entry for every object in the page's
+/// `/Annots` array (PyMuPDF `Document.page_annot_xrefs`). Unlike
+/// [`annot_refs`]/[`annots`], this **includes** `/Subtype /Popup` annotations —
+/// fitz's `page_annot_xrefs` dumps the raw `/Annots` array, whereas annotation
+/// *iteration* skips popups. `subtype` is the bare `/Subtype` name (e.g.
+/// `"Highlight"`, `"Widget"`), `""` if absent; `nm` is the `/NM` string or `""`.
+#[must_use]
+pub fn annot_entries(doc: &DocumentStore, index: usize) -> Vec<(u32, String, String)> {
+    let Some(leaf) = pagetree::page_refs(doc).get(index).copied() else {
+        return Vec::new();
+    };
+    let Ok(pd) = doc.resolve(leaf) else {
+        return Vec::new();
+    };
+    let Some(pd) = pd.as_dict() else {
+        return Vec::new();
+    };
+    let arr = match pd.get(&Name::new("Annots")) {
+        Some(Object::Array(a)) => a.clone(),
+        Some(Object::Reference(r)) => doc
+            .resolve(*r)
+            .ok()
+            .and_then(|o| o.as_array().map(<[Object]>::to_vec))
+            .unwrap_or_default(),
+        _ => Vec::new(),
+    };
+    arr.iter()
+        .filter_map(Object::as_reference)
+        .map(|r| {
+            let d = doc.resolve(r).ok().and_then(|o| o.as_dict().cloned());
+            let subtype = d
+                .as_ref()
+                .and_then(|d| d.get(&Name::new("Subtype")).and_then(Object::as_name))
+                .map(|n| String::from_utf8_lossy(n.as_bytes()).into_owned())
+                .unwrap_or_default();
+            let nm = d
+                .as_ref()
+                .and_then(|d| d.get(&Name::new("NM")).and_then(Object::as_string))
+                .map(decode_text_string)
+                .unwrap_or_default();
+            (r.num, subtype, nm)
+        })
+        .collect()
+}
+
 /// Deletes an annotation from the page at `index`: removes it from `/Annots`,
 /// frees the object, and frees its `/AP /N` stream and any embedded-file objects.
 /// No-op if the annotation is not on the page.

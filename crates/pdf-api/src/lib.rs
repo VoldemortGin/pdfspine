@@ -611,6 +611,16 @@ impl Document {
         pdf_edit::get_label(&self.store, index)
     }
 
+    /// Every annotation on page `index` as `(xref, subtype-name, /NM-id)`
+    /// (PyMuPDF `Document.page_annot_xrefs`, whose tuples are
+    /// `(xref, type-code, id)`; the type-code mapping is applied by the Python
+    /// layer from the bare subtype name). Includes `/Popup` annotations, matching
+    /// fitz's raw-`/Annots` dump.
+    #[must_use]
+    pub fn page_annot_xrefs(&self, index: usize) -> Vec<(u32, String, String)> {
+        pdf_edit::annot_entries(&self.store, index)
+    }
+
     // --- metadata (PRD §7) ------------------------------------------------
 
     /// The document metadata as a [`Metadata`] struct, parsed from the trailer
@@ -773,12 +783,282 @@ impl Document {
         Ok(self.store.xref_copy(source, target)?)
     }
 
+    /// The object number of the `/Catalog` (`/Root`) object (PyMuPDF
+    /// `pdf_catalog`). Returns `0` when the trailer has no `/Root`.
+    #[must_use]
+    pub fn pdf_catalog(&self) -> u32 {
+        self.store.root().map(|r| r.num).unwrap_or(0)
+    }
+
+    /// The trailer dictionary serialized to PDF syntax (PyMuPDF `pdf_trailer`).
+    #[must_use]
+    pub fn pdf_trailer(&self) -> String {
+        let obj = Object::Dictionary(self.store.trailer().clone());
+        String::from_utf8_lossy(&pdf_core::serialize::write_object(&obj)).into_owned()
+    }
+
+    /// Whether object `num` is a stream (PyMuPDF `is_stream`; companion of
+    /// [`Self::xref_is_stream`]).
+    ///
+    /// # Errors
+    ///
+    /// Resolution errors propagate.
+    pub fn is_stream(&self, num: u32) -> Result<bool> {
+        Ok(self.store.xref_is_stream(num)?)
+    }
+
+    /// The **raw** (still filter-encoded) stream body of object `num` (PyMuPDF
+    /// `xref_stream_raw`).
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Unsupported`] if `num` is not a stream; range errors propagate.
+    pub fn xref_stream_raw(&self, num: u32) -> Result<Vec<u8>> {
+        Ok(self.store.xref_stream_raw(num)?)
+    }
+
+    /// The dictionary keys of object `num` (names, no leading slash), in source
+    /// order (PyMuPDF `xref_get_keys`). Empty for a non-dict / missing object.
+    ///
+    /// # Errors
+    ///
+    /// Resolution errors propagate.
+    pub fn xref_get_keys(&self, num: u32) -> Result<Vec<String>> {
+        Ok(self.store.xref_get_keys(num)?)
+    }
+
+    /// Whether object `num` is a **Form** XObject (PyMuPDF `xref_is_xobject`):
+    /// `/Subtype /Form` (image XObjects are reported by `xref_is_image`, matching
+    /// fitz). A missing object is `Ok(false)`.
+    ///
+    /// # Errors
+    ///
+    /// Resolution errors propagate.
+    pub fn xref_is_xobject(&self, num: u32) -> Result<bool> {
+        Ok(self.store.xref_is_xobject(num)?)
+    }
+
+    /// Allocates a new, empty indirect object and returns its number (PyMuPDF
+    /// `get_new_xref`). The slot holds `null` until written.
+    ///
+    /// # Errors
+    ///
+    /// Object-edit errors propagate.
+    pub fn get_new_xref(&self) -> Result<u32> {
+        Ok(self.store.add_object(Object::Null)?.num)
+    }
+
+    /// Replaces object `num`'s definition from a PDF-syntax string (PyMuPDF
+    /// `update_object`). The text is a single PDF object (dictionary, array,
+    /// name, …). Staged on the change-set overlay.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Unsupported`] if `text` does not parse; edit errors propagate.
+    pub fn update_object(&self, num: u32, text: &str) -> Result<()> {
+        let parsed = pdf_core::object::parse::Parser::new(text.as_bytes())
+            .parse_object()
+            .map_err(|_| {
+                Error::Unsupported("update_object: text is not a parseable PDF object".to_string())
+            })?;
+        // If the object is a stream, replace its **dictionary** with the parsed
+        // text while preserving the raw stream body verbatim (fitz
+        // `update_object` semantics: the body bytes survive, `/Length` is
+        // recomputed by the writer on save). The caller owns `/Filter` — dropping
+        // it leaves the raw bytes reinterpreted as unfiltered, matching fitz.
+        if let (Object::Dictionary(d), Ok(true)) = (&parsed, self.store.xref_is_stream(num)) {
+            let body = self.store.xref_stream_raw(num)?;
+            self.store
+                .update_stream(ObjRef::new(num, 0), d.clone(), body, true)?;
+            return Ok(());
+        }
+        self.store.update_object(ObjRef::new(num, 0), parsed)?;
+        Ok(())
+    }
+
+    /// Sets object `num`'s stream body (PyMuPDF `update_stream`). `data` is the
+    /// **decoded** payload; when `compress` is on the writer Flate-deflates it on
+    /// save. `new=true` allows turning a plain dict object into a stream.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Unsupported`] if `num` is not a stream (and `new` is false), or
+    /// the object is missing; edit errors propagate.
+    pub fn update_stream(&self, num: u32, data: Vec<u8>, new: bool, compress: bool) -> Result<()> {
+        let r = ObjRef::new(num, 0);
+        let mut dict = match self.store.get_object(num, 0) {
+            Ok(obj) => match obj.as_ref() {
+                Object::Stream(s) => s.dict.clone(),
+                Object::Dictionary(d) if new => d.clone(),
+                Object::Null if new => pdf_core::Dict::new(),
+                _ => {
+                    return Err(Error::Unsupported(
+                        "update_stream: object is not a stream (pass new=True to create one)"
+                            .to_string(),
+                    ))
+                }
+            },
+            Err(_) if new => pdf_core::Dict::new(),
+            Err(e) => return Err(Error::from(e)),
+        };
+        // The writer manages /Filter + /Length for a decoded body; drop any stale
+        // /Filter so a previously-compressed stream is re-encoded cleanly.
+        if compress {
+            dict.insert(Name::new("Length"), Object::Integer(data.len() as i64));
+        } else {
+            dict.remove(&Name::new("Filter"));
+            dict.remove(&Name::new("DecodeParms"));
+            dict.insert(Name::new("Length"), Object::Integer(data.len() as i64));
+        }
+        self.store.update_stream(r, dict, data, false)?;
+        Ok(())
+    }
+
+    /// Every named destination in the catalog resolved to its page + point
+    /// (PyMuPDF `resolve_names`).
+    #[must_use]
+    pub fn resolve_names(&self) -> Vec<(String, pdf_edit::ResolvedName)> {
+        pdf_edit::resolve_names(&self.store)
+    }
+
+    // --- catalog state / viewer prefs (PRD §C batch-5) --------------------
+
+    /// The catalog `/PageLayout` (PyMuPDF `Document.pagelayout`), defaulting to
+    /// `"SinglePage"` when absent.
+    #[must_use]
+    pub fn page_layout(&self) -> String {
+        pdf_edit::page_layout(&self.store)
+    }
+
+    /// Sets the catalog `/PageLayout` (PyMuPDF `Document.set_pagelayout`).
+    ///
+    /// # Errors
+    ///
+    /// Object-edit errors propagate.
+    pub fn set_page_layout(&self, layout: &str) -> Result<()> {
+        Ok(pdf_edit::set_page_layout(&self.store, layout)?)
+    }
+
+    /// The catalog `/PageMode` (PyMuPDF `Document.pagemode`), defaulting to
+    /// `"UseNone"` when absent.
+    #[must_use]
+    pub fn page_mode(&self) -> String {
+        pdf_edit::page_mode(&self.store)
+    }
+
+    /// Sets the catalog `/PageMode` (PyMuPDF `Document.set_pagemode`).
+    ///
+    /// # Errors
+    ///
+    /// Object-edit errors propagate.
+    pub fn set_page_mode(&self, mode: &str) -> Result<()> {
+        Ok(pdf_edit::set_page_mode(&self.store, mode)?)
+    }
+
+    /// The catalog `/Lang` (PyMuPDF `Document.language`), or `None` when absent.
+    #[must_use]
+    pub fn language(&self) -> Option<String> {
+        pdf_edit::language(&self.store)
+    }
+
+    /// Sets the catalog `/Lang` (PyMuPDF `Document.set_language`); the tag is
+    /// normalized to MuPDF's compact ISO-639 form, and an empty/invalid tag
+    /// removes `/Lang`.
+    ///
+    /// # Errors
+    ///
+    /// Object-edit errors propagate.
+    pub fn set_language(&self, lang: &str) -> Result<()> {
+        Ok(pdf_edit::set_language(&self.store, lang)?)
+    }
+
+    /// The catalog `/MarkInfo` as `(Marked, UserProperties, Suspects)`, or `None`
+    /// when there is no `/MarkInfo` (PyMuPDF `Document.markinfo` returns `{}`).
+    #[must_use]
+    pub fn mark_info(&self) -> Option<(bool, bool, bool)> {
+        pdf_edit::mark_info(&self.store)
+    }
+
+    /// Sets the catalog `/MarkInfo` dict (PyMuPDF `Document.set_markinfo`); all
+    /// three flags are always written.
+    ///
+    /// # Errors
+    ///
+    /// Object-edit errors propagate.
+    pub fn set_mark_info(&self, marked: bool, user_properties: bool, suspects: bool) -> Result<()> {
+        Ok(pdf_edit::set_mark_info(
+            &self.store,
+            marked,
+            user_properties,
+            suspects,
+        )?)
+    }
+
+    /// The object number of the catalog `/Metadata` XMP stream (PyMuPDF
+    /// `Document.xref_xml_metadata`), or `0` when absent.
+    #[must_use]
+    pub fn xref_xml_metadata(&self) -> i64 {
+        pdf_edit::xref_xml_metadata(&self.store)
+    }
+
+    /// Whether the document has unsaved (overlaid) changes (PyMuPDF
+    /// `Document.is_dirty`).
+    #[must_use]
+    pub fn is_dirty(&self) -> bool {
+        self.store.is_dirty()
+    }
+
+    /// Whether the document is linearized / "fast web view" (PyMuPDF
+    /// `Document.is_fast_webaccess`).
+    #[must_use]
+    pub fn is_fast_webaccess(&self) -> bool {
+        self.store.is_linearized()
+    }
+
+    /// Whether the document can be saved incrementally (PyMuPDF
+    /// `Document.can_save_incrementally`).
+    #[must_use]
+    pub fn can_save_incrementally(&self) -> bool {
+        self.store.can_save_incrementally()
+    }
+
     // --- forms (PRD §8.8, PyMuPDF `Document`) -----------------------------
 
     /// Whether the document has an interactive form (PyMuPDF `is_form_pdf`).
     #[must_use]
     pub fn is_form_pdf(&self) -> bool {
         pdf_edit::is_form_pdf(&self.store)
+    }
+
+    /// Whether the document has an `/AcroForm` (PyMuPDF reports
+    /// `need_appearances()` as `None` when absent — the Python layer uses this).
+    #[must_use]
+    pub fn has_acroform(&self) -> bool {
+        pdf_edit::has_acroform(&self.store)
+    }
+
+    /// Whether the form requests `/NeedAppearances` (PyMuPDF
+    /// `Document.need_appearances`).
+    #[must_use]
+    pub fn need_appearances(&self) -> bool {
+        pdf_edit::need_appearances(&self.store)
+    }
+
+    /// Sets the form `/NeedAppearances` flag (PyMuPDF `Document.need_appearances`
+    /// with a value); a no-op when there is no `/AcroForm`.
+    ///
+    /// # Errors
+    ///
+    /// Object-edit errors propagate.
+    pub fn set_need_appearances(&self, value: bool) -> Result<()> {
+        Ok(pdf_edit::set_need_appearances(&self.store, value)?)
+    }
+
+    /// The form `/SigFlags`, or `-1` when there is no `/AcroForm` (PyMuPDF
+    /// `Document.get_sigflags`).
+    #[must_use]
+    pub fn sigflags(&self) -> i32 {
+        pdf_edit::sigflags(&self.store)
     }
 
     /// The fully-qualified names of every terminal form field, in document
