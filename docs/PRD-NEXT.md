@@ -15,8 +15,8 @@ gating. Tables, multilingual, CJK, and domain breadth all measured at near-parit
 **Rendering (`get_pixmap`) is now near-parity for embedded-font text**: SSIM ~0.58 → **0.945 mean /
 0.986 median** vs fitz after four root-cause fixes (full per-glyph `Trm` into the render path;
 bare-CFF `FontFile3` parsing; CCITT/JBIG2 1-bpc polarity; CID-keyed CFF charset CID→GID). See §2.A
-for what landed and the remaining long tail. **1338+ Rust + 479 pytest green.** API coverage **73.7%**
-(567/769 in `COMPAT.toml`) after batch-1 Page geometry + batch-2 Document page-helpers + batch-3
+for what landed and the remaining long tail. **1343+ Rust + 511 pytest green.** API coverage **75.2%**
+(578/769 in `COMPAT.toml`) after batch-1 Page geometry + batch-2 Document page-helpers + batch-3
 Shape/Widget/Annot.
 
 ## 1. Tools available (reuse, don't rebuild)
@@ -89,7 +89,7 @@ Renderer code: `crates/pdf-render`; glyph data plumbing in `crates/pdf-text` (`i
   `pdf-fonts` CID→Unicode fix.
 - **CI gate** — wire a born-digital `order ≥ 0.95` (and tables count-agreement) regression gate into CI.
 
-### C. API parity coverage (track A) — 73.7% → higher
+### C. API parity coverage (track A) — 75.2% → higher
 > **NB (drift fixed 2026-06-17):** batches 3 & 4 hand-edited `COMPAT.toml` (Font/Colorspace/Link/
 > Outline/TextWriter/Tools/xref-write/text-trace → 63.7%) but did NOT update the generator
 > `scripts/_compat_catalog.py`, so regenerating regressed coverage to 53.7%. A reconciliation pass at
@@ -133,10 +133,26 @@ src/lib.rs` mean batches that both touch them run SEQUENTIALLY; new pytest goes 
      correct than fitz, documented in tests):** Widget.text_format reads spec `/Q` (fitz returns 0);
      Widget.text_color parses CMYK `/DA` (fitz ignores `k`); Annot.language verbatim (fitz normalizes
      via MuPDF + leaks locale); Annot.clean_contents sanitizes but does not run MuPDF's minifier.
-4. **TextPage** extractHTML/XHTML/XML/extractSelection/Textbox/search; **Font** glyph_bbox/
-   valid_codepoints/buffer.
+4. ~~**TextPage** + **Font**~~ **DONE (batch-4, 2026-06-18, +11 → 75.2%):** TextPage
+   extractHTML/XHTML/XML (fitz-structured, not byte-exact), extractSelection/extractTextbox/search
+   (cross-line search + per-char X/Y clip, fitz-matched), extractIMGINFO, poolsize; Font
+   valid_codepoints/is_writable/Base14_fontnames. `glyph_bbox`/`buffer` kept **deferred** (oxide's
+   `Font` is a metrics-only handle with no embedded program — honest PdfUnsupportedError beats a wrong
+   value; would need Font to carry the `/FontFile*` program). Tests in `test_longtail9.py`.
 5. Document low-level COS (`update_object`/`update_stream`/`get_new_xref`/…), state/meta, OCG/layers.
 Regenerate `COMPAT.toml` + refresh `PARITY.md` after each batch.
+
+### D. OCR quality upgrade — pure-Rust PaddleOCR (post-v1, planned 2026-06-18)
+Tesseract (current default via `TesseractCli`) lags modern DL OCR, esp. CJK. Add a 2nd `OcrEngine`
+adapter running **PaddleOCR ONNX models via `tract`** (pure Rust — user-chosen for the no-Python /
+no-native-lib identity; `ort` only as fallback if tract lacks an op). This BEATS fitz on OCR (fitz is
+Tesseract-only). The `pdf-ocr` pipeline (`OcrEngine` trait + rasterize→recognize→map→TextPage/sandwich)
+is reused unchanged. Scope: DBNet detection + CRNN/CTC recognition (Chinese rec + dict) ONNX, Rust
+pre/post-processing (DB box decode, CTC decode), model distribution. **Cross-platform is ~free**:
+tract cross-compiles to Win/Linux/Mac × x86_64/arm64 with no per-OS native binary (the key tract-vs-ort
+win); `.onnx` files are platform-independent; bundle models in the wheel (offline, identical) or use
+the `directories` crate for per-OS cache if downloading. First step = de-risk: verify tract runs the
+PaddleOCR det+rec ONNX. See the `ocr-upgrade-plan` memory.
 
 ## 3. Verify suite (run from repo root before every commit)
 ```
