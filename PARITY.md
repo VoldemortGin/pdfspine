@@ -32,17 +32,18 @@
 
 ## Summary / Progress Dashboard
 
-> **Snapshot.** Numbers below were taken from the `COMPAT.toml` `[meta]` block + per-symbol data at refresh
-> time. `COMPAT.toml` is being actively regenerated as batches land, so the implemented count may have been
-> **bumped further** since this snapshot — `COMPAT.toml [meta]` is always the live figure.
+> **Snapshot (2026-06-18, after API batches 1–5).** Numbers below are recomputed from the live
+> `COMPAT.toml` per-symbol dispositions. `COMPAT.toml [meta]` is always the authoritative live figure;
+> the current remaining-work list (the 96 deferred symbols, grouped + prioritized) lives in
+> [`docs/PRD-NEXT.md`](docs/PRD-NEXT.md) §3.B.
 
-**Overall: 398 / 769 implemented (51.8% coverage).**
+**Overall: 607 / 769 implemented (78.9% coverage).**
 
 | Disposition | Count | Share |
 |---|---:|---:|
-| **implemented** | **398** | **51.8%** |
-| deferred (planned, later milestone) | 304 | 39.5% |
-| out-of-scope (raises `PdfUnsupportedError`) | 67 | 8.7% |
+| **implemented** | **607** | **78.9%** |
+| deferred (planned, later milestone / post-v1) | 96 | 12.5% |
+| out-of-scope (raises `PdfUnsupportedError`) | 66 | 8.6% |
 | **Total catalogued symbols** | **769** | 100% |
 
 > "Total" counts every PyMuPDF 1.24.x baseline symbol plus the `PdfUnsupportedError` catch-all row. Geometry
@@ -58,44 +59,36 @@
 | `Rect` | 45 | 45 | 0 | 0 | 100% |
 | `IRect` | 25 | 25 | 0 | 0 | 100% |
 | `Quad` | 17 | 17 | 0 | 0 | 100% |
-| `Document` | 150 | 71 | 65 | 14 | 47% |
-| `Page` | 117 | 65 | 50 | 2 | 56% |
-| `TextPage` | 17 | 8 | 9 | 0 | 47% |
+| `Document` | 150 | 117 | 19 | 14 | 78% |
+| `Page` | 117 | 90 | 25 | 2 | 76% |
+| `TextPage` | 17 | 17 | 0 | 0 | 100% |
 | `Pixmap` | 43 | 40 | 3 | 0 | 93% |
-| `Annot` | 51 | 24 | 23 | 4 | 47% |
-| `Widget` | 35 | 11 | 17 | 7 | 31% |
-| `Link` | 14 | 0 | 14 | 0 | 0% |
-| `Outline` | 11 | 0 | 11 | 0 | 0% |
+| `Annot` | 51 | 46 | 1 | 4 | 90% |
+| `Widget` | 35 | 28 | 0 | 7 | 80% |
+| `Link` | 14 | 14 | 0 | 0 | 100% |
+| `Outline` | 11 | 11 | 0 | 0 | 100% |
 | `DisplayList` | 5 | 3 | 2 | 0 | 60% |
-| `Shape` | 24 | 9 | 15 | 0 | 38% |
-| `Font` | 23 | 0 | 22 | 1 | 0% |
-| `TextWriter` | 10 | 0 | 10 | 0 | 0% |
+| `Shape` | 24 | 24 | 0 | 0 | 100% |
+| `Font` | 23 | 20 | 2 | 1 | 86% |
+| `TextWriter` | 10 | 10 | 0 | 0 | 100% |
 | `Story` | 17 | 0 | 0 | 17 | 0% |
 | `Xml` | 4 | 0 | 0 | 4 | 0% |
 | `Archive` | 5 | 0 | 0 | 5 | 0% |
-| `Colorspace` | 6 | 0 | 6 | 0 | 0% |
+| `Colorspace` | 6 | 6 | 0 | 0 | 100% |
 | `constants` | 43 | 20 | 21 | 2 | 47% |
-| Module-level functions | 32 | 7 | 22 | 3 | 22% |
-| `Tools` / `TOOLS` | 22 | 0 | 14 | 8 | 0% |
+| Module-level functions | 32 | 9 | 20 | 3 | 28% |
+| `Tools` / `TOOLS` | 22 | 12 | 3 | 7 | 55% |
 | `exceptions` | 10 | 10 | 0 | 0 | 100% |
-| **Total** | **769** | **398** | **304** | **67** | **51.8%** |
+| **Total** | **769** | **607** | **96** | **66** | **78.9%** |
 
 ### Per-milestone breakdown
 
-| Milestone | Total | Implemented | Deferred | Out-of-scope |
-|---|---:|---:|---:|---:|
-| **M0** Geometry | 149 | 149 | 0 | 0 |
-| **M1** PDF read core | 85 | 42 | 42 | 1 |
-| **M2** Text extraction | 77 | 21 | 56 | 0 |
-| **M3** Save / edit / merge / metadata | 93 | 33 | 60 | 0 |
-| **M4** Content / annot / redaction / forms | 221 | 95 | 119 | 7 |
-| **M5** Image docs / codecs / Pixmap / shim | 55 | 38 | 17 | 0 |
-| **M6** Vector page rendering | 17 | 5 | 3 | 9 |
-| **M7** SVG / tables / OCG | 9 | 9 | 0 | 0 |
-| **M8** OCR | 6 | 6 | 0 | 0 |
-| **post-v1** | 49 | 0 | 7 | 42 |
-| **out-of-scope** | 8 | 0 | 0 | 8 |
-| **Total** | **769** | **398** | **304** | **67** |
+> The early-snapshot per-milestone rollup is no longer maintained here: `COMPAT.toml` does not carry a
+> per-symbol `milestone` field, so it cannot be recomputed mechanically. Use the **per-class table
+> above** (recomputed from the live `COMPAT.toml`) + `docs/PRD-NEXT.md` §3.B for current status. By
+> milestone, all of M0–M8's headline paths are landed (geometry, parsing, text, edit/save, annot/forms,
+> image-docs/Pixmap, rendering near-parity, SVG/tables/OCG, OCR-via-Tesseract); the 96 deferred are the
+> long tails and the 66 out-of-scope are the HTML/CSS story engine + render-era knobs.
 
 ---
 
@@ -123,127 +116,73 @@ per-symbol truth (every name, disposition, milestone, note) is in [`COMPAT.toml`
 
 ### Partial (headline paths landed, long tail deferred)
 
-- [x] **`Page` (65/117)** — text extraction (`get_text` all variants, `get_textpage`, `search_for`, `TEXTFLAGS`,
+- [x] **`Page` (90/117)** — text extraction (`get_text` all variants, `get_textpage`, `search_for`, `TEXTFLAGS`,
   OCR textpage), inventory (`get_fonts`/`get_images`/`get_xobjects`/`get_image_info`/`get_image_bbox`/
   `get_image_rects`/`get_drawings`/`get_cdrawings`), the full annotation `add_*`/`delete`/`apply_redactions`
   family, widgets read (`widgets`/`first_widget`), links (`get_links`/`insert_link`/`delete_link`),
   drawing primitives + `new_shape`, `insert_text`/`insert_textbox`/`insert_image`/`show_pdf_page`,
-  rendering (`get_pixmap`/`get_displaylist`/`get_svg_image`), `find_tables`, boxes/rotation read +
-  `set_rotation`, `get_contents`/`read_contents`, `get_label`.
-- [x] **`Document` (71/150)** — open/lifecycle, save family (`save`/`ez_save`/`save_incremental`/`write`/
+  rendering (`get_pixmap`/`get_displaylist`/`get_svg_image`), `find_tables`, full box geometry
+  (`set_mediabox`/`set_cropbox`/`artbox`/`bleedbox`/`trimbox` + setters), rotation read + `set_rotation` +
+  the rotation matrices, `get_contents`/`read_contents`, page labels (`get_label`). Gaps: annot/widget/link
+  object loaders, page-level draw convenience, `write_text`/`insert_font`, `remove_rotation`.
+- [x] **`Document` (117/150)** — open/lifecycle, save family (`save`/`ez_save`/`save_incremental`/`write`/
   `tobytes`), page ops (`new_page`/`insert_pdf`/`delete_page`/`select`/`fullcopy_page`/`reload_page`/
   `page_xref`/`page_cropbox`), metadata + XMP read/write, TOC get/set, encryption read
   (`needs_pass`/`authenticate`/`permissions`/`is_encrypted`), low-level xref read
-  (`xref_length`/`xref_object`/`xref_stream`/`xref_get_key`/`xref_is_stream`), embedded files
-  (`embfile_*`), `bake`/`scrub`/`resolve_link`, forms (`form_field_names`/`form_fill`/`form_flatten`),
-  OCG read/add/toggle/bind (M7), journalling undo/redo (M3), page-label write, OCR export.
-- [x] **`Annot` (24/51)** — `update`, geometry/colors/opacity/border/flags/info getters+setters, `type`/`rect`/
-  `xref`/`vertices`/`has_ap`, line-ends/blendmode/name/open getters+setters.
-- [x] **`Shape` (9/24)** — `draw_line`/`draw_rect`/`draw_circle`/`draw_oval`/`draw_bezier`/`draw_curve`/
-  `draw_polyline` + `finish`/`commit`.
-- [x] **`Widget` (11/35)** — `field_name`/`field_label`/`field_value`/`field_type`/`field_type_string`/
-  `field_flags`/`rect`/`xref`/`choice_values`/`button_states` + `update`.
-- [x] **`TextPage` (8/17)** — `extractText`/`extractTEXT`/`extractBLOCKS`/`extractWORDS`/`extractDICT`/
-  `extractJSON`/`extractRAWDICT` + `rect`.
+  (`xref_length`/`xref_object`/`xref_stream`/`xref_get_key`/`xref_is_stream`) + COS write
+  (`update_object`/`update_stream`/`get_new_xref`/`pdf_catalog`/`pdf_trailer`/`xref_get_keys`/…) +
+  state/meta (`pagelayout`/`pagemode`/`markinfo`/`language`/`need_appearances`/`get_sigflags`/`name`/…),
+  embedded files (`embfile_*`), `bake`/`scrub`/`resolve_link`, forms, OCG read/add/toggle/bind (M7),
+  journalling undo/redo (M3), page-label write, OCR export. Gaps: OCG layer object ops, TOC node ops,
+  heavy ops (`convert_to_pdf`/`subset`/`insert_file`), `version_count`.
+- [x] **`Annot` (46/51)** — `update`, all geometry/colors/opacity/border/flags/info getters+setters,
+  `type`/`rect`/`xref`/`vertices`/`has_ap`, line-ends/blendmode/name/open, rotation/popup/apn/file-attach;
+  only `get_textbox` deferred (+ 4 out-of-scope).
+- [x] **`Shape` (24/24)** — fully landed: all draw primitives (line/rect/circle/oval/bezier/curve/polyline/
+  quad/sector/squiggle/zigzag) + `insert_text`/`insert_textbox` + `finish`/`commit` + props.
+- [x] **`Widget` (28/35)** — field props + appearance (`/MK`+`/DA`+`/BS`: border/fill/text color+style,
+  fontsize/maxlen/format, field_display, is_signed, on_state, reset, rb_parent) + `update`; 7 out-of-scope.
+- [x] **`TextPage` (17/17)** — fully landed: `extractText`/TEXT/BLOCKS/WORDS/DICT/JSON/RAWDICT/RAWJSON +
+  `extractHTML`/XHTML/XML + `extractSelection`/`extractTextbox`/`search`/`extractIMGINFO` + `rect`/`poolsize`.
 - [x] **`DisplayList` (3/5)** — constructor, `get_pixmap`, `rect` (records the render-op stream; replay via
   `get_pixmap`).
 - [x] **`constants` (20/43)** — geometry singletons/aliases + encryption-method constants
-  (`PDF_ENCRYPT_NONE/RC4_128/AES_128/AES_256`).
-- [x] **Module-level (7/32)** — `open`, `version`, `identity_matrix`, `paper_size`/`paper_rect`/`paper_sizes`,
-  `find_tables`.
+  (`PDF_ENCRYPT_NONE/RC4_128/AES_128/AES_256`). Remaining enum tables (TEXT_*/PDF_ANNOT_*/…) deferred.
+- [x] **Module-level (9/32)** — `open`, `version`, `identity_matrix`, `paper_size`/`paper_rect`/`paper_sizes`,
+  `find_tables`, `get_text_length`. Remaining geometry/quad-recover helpers deferred.
 
-### Not started (0% implemented)
+### Now landed since the early snapshot (were "not started", now done)
 
-- [ ] **`Link` (0/14)** — link value-object API (`rect`/`dest`/`uri`/`page`/`is_external`/`border`/`colors`/
-  `flags`/`next`/`xref`/`linkDest`) — *deferred · M4*. (Page-level `get_links`/`insert_link`/`delete_link`
-  **are** implemented; only the `Link` object wrapper is pending.)
-- [ ] **`Outline` (0/11)** — TOC tree-node object (`title`/`dest`/`page`/`uri`/`next`/`down`/…) — *deferred · M3*.
-  (`Document.get_toc`/`set_toc` **are** implemented; only the node object is pending.)
-- [ ] **`Font` (0/23)** — font metrics object (`text_length`/`char_lengths`/`glyph_advance`/`has_glyph`/
-  metrics props/…) — *deferred · M2*; `css_for_pymupdf_font` is *out-of-scope*.
-- [ ] **`TextWriter` (0/10)** — styled-text writer (`append`/`appendv`/`fill_textbox`/`write_text`/…) — *deferred · M4*.
-- [ ] **`Colorspace` (0/6)** — `Colorspace` object + `csGRAY`/`csRGB`/`csCMYK` — *deferred · M5*.
-- [ ] **`Tools` / `TOOLS` (0/22)** — diagnostics/tuning singleton — *deferred (M1/M3/M4)* and
-  *out-of-scope* (render-era knobs, raw `mupdf.*` access).
+- [x] **`Link` (14/14)**, **`Outline` (11/11)**, **`TextWriter` (10/10)**, **`Colorspace` (6/6)** — the
+  value-object / writer / colorspace surfaces are now fully implemented.
+- [x] **`Font` (20/23)** — metrics object (`text_length`/`char_lengths`/`glyph_advance`/`has_glyph`/
+  `valid_codepoints`/`is_writable`/`Base14_fontnames`/…). Only `glyph_bbox`/`buffer` deferred (oxide's
+  Font is a metrics-only handle with no embedded program); `css_for_pymupdf_font` is out-of-scope.
+- [x] **`Tools` / `TOOLS` (12/22)** — diagnostics/tuning singleton headline paths landed; 3 deferred,
+  7 out-of-scope (render-era knobs, raw `mupdf.*` access).
+
+### Out-of-scope (raises `PdfUnsupportedError`)
+
 - [ ] **`Story` / `Xml` / `Archive` (0/26)** — HTML/CSS → PDF layout engine — **entirely out-of-scope** (PRD §3.2 #2).
 
 ---
 
 ## Remaining work
 
-The 371 not-yet-implemented symbols split into **deferred** (304, planned) and **out-of-scope** (67, will raise
-`PdfUnsupportedError`). The deferred set is prioritised below so future batches target the highest-value items
-first. (Names abbreviated; consult [`COMPAT.toml`](COMPAT.toml) for the exact per-symbol rows.)
+The authoritative, prioritised list of the **96 deferred** symbols (grouped, with quick-wins flagged)
+now lives in **[`docs/PRD-NEXT.md`](docs/PRD-NEXT.md) §3.B** — kept there to avoid two divergent lists.
+In brief the deferred set is: **Page (25)** annot/widget/link loaders + page-level draw convenience +
+`write_text`/`insert_font`/`remove_rotation`; **Document (19)** OCG/layers + TOC node ops + heavy ops
+(`convert_to_pdf`/`subset`/`insert_file`) + `version_count`; **constants (21)** enum tables; **module
+helpers (~15)** `recover_*_quad`/glyph-name maps/logging; **Font (2)** `glyph_bbox`/`buffer` (need an
+embedded-program handle); plus small tails in Pixmap / Tools / DisplayList / Annot.
 
-### HIGH-VALUE remaining (commonly used; prioritise these)
-
-These are deferred symbols that real PyMuPDF users hit constantly. Landing them moves coverage and real-world
-compatibility the most:
-
-- **Text-block / word extraction (M2):** `Page.get_text_blocks`, `Page.get_text_words`, `Page.get_textbox`,
-  `Page.get_text_selection`, `TextPage.search`, `TextPage.extractRAWJSON`, `TextPage.extractTextbox`,
-  `TextPage.extractSelection` — the convenience shapes most extraction code uses.
-- **`Page.get_texttrace` (M2)** — low-level per-glyph trace; valuable for ground-truth / layout analysis.
-- **Document page-content helpers (M2):** `Document.get_page_images`, `Document.get_page_fonts`,
-  `Document.search_page_for` — common one-call page queries.
-- **`Document.subset_fonts` (M5)** — font subsetting; frequently requested for output size.
-- **Font extraction / image extraction (M5):** `Document.extract_font`, `Document.extract_image` — staple
-  asset-extraction calls.
-- **`Font` object (M2, 0/23)** — metrics (`text_length`, `char_lengths`, `glyph_advance`, `has_glyph`,
-  ascender/descender/bbox) needed for accurate text placement and `insert_text`/`TextWriter`.
-- **`Link` object (M4, 0/14)** — `Link.rect`/`dest`/`uri`/`page`/`is_external`/`linkDest`; pairs with the
-  already-implemented page-level link methods.
-- **`Outline` object (M3, 0/11)** — TOC tree navigation; pairs with the implemented `get_toc`/`set_toc`.
-- **`TextWriter` (M4, 0/10)** — `append`/`fill_textbox`/`write_text`; the modern text-emission API.
-- **Remaining `Annot` members (M4):** `Annot.get_text`/`get_textbox`/`get_textpage`, `get_file`/`update_file`/
-  `file_info`, popup control (`set_popup`/`popup_rect`/`has_popup`), `apn_bbox`/`apn_matrix`, `next`.
-- **Remaining `Widget` members (M4):** colors/border (`border_color`/`fill_color`/`text_color`/`border_style`/
-  `border_width`), text style (`text_font`/`text_fontsize`/`text_maxlen`/`text_format`), `reset`/`on_state`/
-  `next`, `is_signed`.
-- **Widget/annot write ops (M4):** `Page.add_widget`, `Page.load_widget`, `Page.delete_widget`,
-  `Page.load_annot`, `Page.add_caret_annot`.
-- **`Page.write_text` / `Page.insert_font` / `Page.replace_image` / `Page.delete_image` (M4)** — round out
-  content creation.
-- **Page box setters & matrices (M1/M3):** `Page.set_mediabox`/`set_cropbox`/`artbox`/`bleedbox`/`trimbox`,
-  `transformation_matrix`/`rotation_matrix`/`derotation_matrix`, `Page.xref`, `Page.parent`,
-  `Page.remove_rotation`.
-- **Page-label read & destinations (M3):** `Document.get_page_labels`/`get_page_numbers`/`get_label`/
-  `get_page_label`, `Document.resolve_names`, `Document.outline`.
-- **Low-level COS write (M3):** `Document.update_object`, `Document.update_stream`, `Document.get_new_xref`,
-  `Document.xref_set_key`, `Document.xref_copy`, `Document.xref_get_keys`, plus type predicates
-  (`xref_is_font`/`xref_is_image`/`xref_is_xobject`), `pdf_catalog`/`pdf_trailer`/`is_stream`/
-  `page_annot_xrefs`.
-- **Document identity/state (M1/M3):** `Document.name`, `Document.is_closed`, `Document.is_dirty`,
-  `Document.version_count`, `Document.is_form_pdf` is **done** — but `language`/`set_language`,
-  `pagelayout`/`pagemode`/`markinfo` setters remain.
-- **`Colorspace` (M5, 0/6)** — needed once codecs/Pixmap colorspace conversion is exercised broadly.
-
-### NICHE / aliases / constants / low-frequency (defer until high-value is done)
-
-- **Reflow / chapter-location model** — `Document.next_location`/`prev_location`/`location_from_page_number`/
-  `make_bookmark`/`find_bookmark` (EPUB-class; mostly *out-of-scope*).
-- **Journalling persistence & per-op naming** — `Document.journal_start_op`/`stop_op`/`op_name`/`position`/
-  `save`/`load` (*out-of-scope*; core undo/redo already implemented).
-- **OCG nesting / OCMD** — `Document.add_layer`/`get_layers`/`switch_layer`/`get_oc`/`get_ocmd`/`set_ocmd`,
-  `Annot.set_oc`/`get_oc`, `Page.get_oc_items` (*deferred post-v1 / out-of-scope*).
-- **`Tools` / `TOOLS` singleton** — diagnostics (`mupdf_warnings`/`mupdf_version`/`fitz_config`), cache knobs
-  (`store_*`), id/stem (`gen_id`/`set_annot_stem`); render-era tuning (`set_aa_level`/`set_icc`/…) and raw
-  `mupdf.*` access are *out-of-scope*.
-- **Constant families** — most enum families are *deferred* until their owning subsystem (text/annot/widget/
-  redaction/page-label/colorspace/border/signature) lands; `UCDN_SCRIPT_*` shaping enums are *out-of-scope*.
-- **Module helpers** — color/text utilities (`get_text_length`, `sRGB_to_rgb`/`sRGB_to_pdf`,
-  `glyph_name_to_unicode`/`unicode_to_glyph_name`, `recover_*_quad`, `planish_line`), HTML/XML export
-  scaffolding (`ConversionHeader`/`ConversionTrailer`), logging (`set_messages`/`message`/`set_log`/`log`),
-  `get_pdf_now`/`get_pdf_str`, `image_profile`.
-- **Vector-render long tail** — `Page.run`, `DisplayList.run`/`get_textpage`, `Annot.get_pixmap`,
-  `Page.cluster_drawings`, `Page.get_bboxlog` (M6; *deferred*/*out-of-scope*).
-- **Widget JavaScript hooks** — `Widget.script*` (JS stored, never executed; *out-of-scope*).
-- **Misc niche** — `Annot.get_sound`, `Annot.set_rotation`, `Annot.irt_xref`/`delete_responses`,
-  `Document.get_sigflags`, `Document.convert_to_pdf` (non-image input), `Document.insert_file`,
-  `Document.save_snapshot`.
-- **`Story` / `Xml` / `Archive`** — full HTML/CSS engine; *out-of-scope* for v1 (PRD §3.2 #2).
+The **66 out-of-scope** symbols (raise `PdfUnsupportedError`) are dominated by `Story` / `Xml` /
+`Archive` (the HTML/CSS -> PDF layout engine, PRD §3.2 #2) + render-era `Tools` knobs + EPUB
+reflow / journalling-persistence + Widget JavaScript hooks.
 
 ---
 
-*End of PARITY.md. This is a derived dashboard — to refresh: regenerate `COMPAT.toml`, re-roll the counts and
-the "Remaining work" lists from it, and confirm tests in `docs/test-case-catalog.md` are green.*
+*End of PARITY.md. This is a derived dashboard — `COMPAT.toml [meta]` is the live source of truth and
+`docs/PRD-NEXT.md` §3.B is the live remaining-work list. To refresh the tables above, recompute the
+per-group counts from `COMPAT.toml`.*
