@@ -471,7 +471,7 @@ fn group_lines(dev: &[DevGlyph]) -> Vec<Line> {
             for run in split_on_baseline(&col_run, dev) {
                 let mut run = run;
                 if is_rtl_run(&run, dev) {
-                    run.reverse();
+                    reorder_rtl_line(&mut run, dev);
                 }
                 // Content-order key: the smallest source-glyph index in this run,
                 // i.e. the earliest-painted glyph of the line (document order).
@@ -796,6 +796,98 @@ fn is_rtl_run(idxs: &[usize], dev: &[DevGlyph]) -> bool {
         }
     }
     strong > 0 && rtl * 2 > strong
+}
+
+/// Bidi class of a glyph, for the simplified UAX#9 reorder of an RTL line.
+#[derive(Clone, Copy, PartialEq)]
+enum BidiClass {
+    /// Strong right-to-left (Arabic/Hebrew letters).
+    Rtl,
+    /// Strong left-to-right (Latin/other LTR letters) and European/Arabic
+    /// numbers — treated as an LTR run so digit groups read left-to-right.
+    Ltr,
+    /// Neutral/weak (spaces, punctuation) — resolved from its neighbours.
+    Neutral,
+}
+
+/// Classifies a glyph by the strong direction of its characters. A glyph carries
+/// the base-letter string (post-ToUnicode), usually one char but possibly a
+/// ligature; we take the first strongly-directional char, falling back to
+/// neutral when the glyph is all whitespace/punctuation.
+fn glyph_bidi_class(g: &DevGlyph) -> BidiClass {
+    for c in g.text.chars() {
+        if is_rtl_char(c) {
+            return BidiClass::Rtl;
+        }
+        if c.is_ascii_digit() || matches!(c as u32, 0x0660..=0x0669 | 0x06F0..=0x06F9) {
+            // European digits and Arabic-Indic / extended digits read LTR.
+            return BidiClass::Ltr;
+        }
+        if c.is_alphabetic() {
+            return BidiClass::Ltr;
+        }
+    }
+    BidiClass::Neutral
+}
+
+/// Reorders one predominantly-RTL line from visual (advance) order into logical
+/// order, per a simplified UAX#9.
+///
+/// The run arrives in advance order (visual left→right). For a right-to-left
+/// line the logical order is the whole line reversed, *except* that contiguous
+/// strong-LTR sub-runs (Latin words, digit groups like `100` or `1990`) must
+/// keep their left-to-right order — a blanket reverse would mangle them
+/// (`100`→`001`, `Linux`→`xuniL`). We therefore reverse the whole line, then
+/// re-reverse each maximal run of LTR glyphs to restore their internal order.
+///
+/// Neutrals (spaces, punctuation) are resolved by the rule: a neutral flanked by
+/// LTR on both sides joins the LTR run (so `Apple Inc` stays intact); otherwise
+/// it stays with the surrounding RTL context. This matches fitz's logical-order
+/// output on mixed Arabic+Latin/number lines.
+fn reorder_rtl_line(run: &mut [usize], dev: &[DevGlyph]) {
+    if run.len() < 2 {
+        return;
+    }
+
+    // Resolve each glyph's effective direction (LTR vs RTL) in visual order.
+    // Neutrals take LTR only when both nearest strong neighbours are LTR; the
+    // line base is RTL, so any other neutral defaults to RTL.
+    let classes: Vec<BidiClass> = run.iter().map(|&i| glyph_bidi_class(&dev[i])).collect();
+    let n = classes.len();
+    let mut is_ltr = vec![false; n];
+    for (k, &cls) in classes.iter().enumerate() {
+        match cls {
+            BidiClass::Ltr => is_ltr[k] = true,
+            BidiClass::Rtl => is_ltr[k] = false,
+            BidiClass::Neutral => {
+                let prev = classes[..k]
+                    .iter()
+                    .rev()
+                    .find(|&&c| c != BidiClass::Neutral);
+                let next = classes[k + 1..].iter().find(|&&c| c != BidiClass::Neutral);
+                is_ltr[k] = prev == Some(&BidiClass::Ltr) && next == Some(&BidiClass::Ltr);
+            }
+        }
+    }
+
+    // Reverse the whole line (visual → RTL logical base order)…
+    run.reverse();
+    is_ltr.reverse();
+
+    // …then re-reverse each maximal contiguous LTR sub-run so its glyphs read
+    // left-to-right again.
+    let mut k = 0;
+    while k < n {
+        if is_ltr[k] {
+            let start = k;
+            while k < n && is_ltr[k] {
+                k += 1;
+            }
+            run[start..k].reverse();
+        } else {
+            k += 1;
+        }
+    }
 }
 
 /// Whether a char is in a strong-RTL Unicode block (Hebrew, Arabic).
@@ -1812,6 +1904,80 @@ mod tests {
             .flat_map(|l| l.spans.iter())
             .map(|s| s.text.as_str())
             .collect()
+    }
+
+    /// A minimal device-space glyph carrying only `text` — enough to exercise
+    /// [`reorder_rtl_line`], which keys solely on each glyph's character class.
+    /// Indices in the run map 1:1 to `dev`, so positions are implicit.
+    fn dg(text: &str) -> DevGlyph {
+        DevGlyph {
+            origin: Point::new(0.0, 0.0),
+            bbox: Rect::new(0.0, 0.0, 1.0, 1.0),
+            text: SmolStr::new(text),
+            font: SmolStr::new("f"),
+            size: 10.0,
+            color: 0,
+            flags: 0,
+            wmode: 0,
+            dir: (1.0, 0.0),
+            ascender: 0.7,
+            descender: -0.2,
+        }
+    }
+
+    /// Reorders a visual-order char list (as it would be laid out left→right on
+    /// the page) into logical order via [`reorder_rtl_line`], returning the
+    /// joined string. Each `&str` is one glyph cell.
+    fn reorder_visual(visual: &[&str]) -> String {
+        let dev: Vec<DevGlyph> = visual.iter().map(|c| dg(c)).collect();
+        let mut run: Vec<usize> = (0..dev.len()).collect();
+        reorder_rtl_line(&mut run, &dev);
+        run.iter().map(|&i| dev[i].text.as_str()).collect()
+    }
+
+    /// LAYOUT-BIDI-001: a digit group embedded in an RTL line must keep its
+    /// left-to-right order. Visually the Arabic "السعر" sits at the right, then
+    /// "100", then "دولار" to its left; in source/logical order it reads
+    /// "السعر 100 دولار". A blanket reverse produced "001"; the UAX#9 re-reverse
+    /// of the LTR sub-run restores "100".
+    #[test]
+    fn layout_bidi_001_embedded_digits_stay_ltr() {
+        // Visual order (page left→right) = whole line reversed but the digit
+        // group "100" kept LTR: دولار-reversed · space · 1 0 0 · space ·
+        // السعر-reversed.
+        let visual = [
+            "ر", "ا", "ل", "و", "د", " ", "1", "0", "0", " ", "ر", "ع", "س", "ل", "ا",
+        ];
+        let got = reorder_visual(&visual);
+        assert_eq!(got, "السعر 100 دولار", "embedded digit group mis-ordered");
+    }
+
+    /// LAYOUT-BIDI-002: a Latin word embedded in an RTL line must keep its
+    /// left-to-right order ("Linux", not "xuniL").
+    #[test]
+    fn layout_bidi_002_embedded_latin_word_stays_ltr() {
+        // Visual = whole line reversed, "Linux" kept LTR: نظام-reversed · space ·
+        // L i n u x · space · أستخدم-reversed.
+        let visual = [
+            "م", "ا", "ظ", "ن", " ", "L", "i", "n", "u", "x", " ", "م", "د", "خ", "ت", "س", "أ",
+        ];
+        let got = reorder_visual(&visual);
+        // Logical: أستخدم Linux نظام
+        assert!(
+            got.contains("Linux") && !got.contains("xuniL"),
+            "embedded Latin word mis-ordered: {got:?}"
+        );
+        assert_eq!(got, "أستخدم Linux نظام");
+    }
+
+    /// LAYOUT-BIDI-003: a pure-RTL line (no LTR sub-runs) is simply reversed into
+    /// logical order, and the single-LTR-glyph case ("3") is a no-op either way.
+    #[test]
+    fn layout_bidi_003_pure_rtl_and_single_digit() {
+        // Pure Arabic word laid out visually (reversed): logical "سلام".
+        assert_eq!(reorder_visual(&["م", "ا", "ل", "س"]), "سلام");
+        // "رقم 3": visual 3 · space · م ق ر  →  logical "رقم 3".
+        assert_eq!(reorder_visual(&["3", " ", "م", "ق", "ر"]), "رقم 3");
     }
 
     /// LAYOUT-WORDGAP-001: two words placed with a word-sized along-axis gap and
