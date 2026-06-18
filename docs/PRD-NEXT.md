@@ -15,9 +15,8 @@ gating. Tables, multilingual, CJK, and domain breadth all measured at near-parit
 **Rendering (`get_pixmap`) is now near-parity for embedded-font text**: SSIM ~0.58 → **0.945 mean /
 0.986 median** vs fitz after four root-cause fixes (full per-glyph `Trm` into the render path;
 bare-CFF `FontFile3` parsing; CCITT/JBIG2 1-bpc polarity; CID-keyed CFF charset CID→GID). See §2.A
-for what landed and the remaining long tail. **1343+ Rust + 511 pytest green.** API coverage **75.2%**
-(578/769 in `COMPAT.toml`) after batch-1 Page geometry + batch-2 Document page-helpers + batch-3
-Shape/Widget/Annot.
+for what landed and the remaining long tail. **1343+ Rust + 589 pytest green.** API coverage **78.9%**
+(607/769 in `COMPAT.toml`) after batch-1..5 (Page/Doc/Shape/Widget/Annot/TextPage/Font/Document-COS).
 
 ## 1. Tools available (reuse, don't rebuild)
 
@@ -89,7 +88,7 @@ Renderer code: `crates/pdf-render`; glyph data plumbing in `crates/pdf-text` (`i
   `pdf-fonts` CID→Unicode fix.
 - **CI gate** — wire a born-digital `order ≥ 0.95` (and tables count-agreement) regression gate into CI.
 
-### C. API parity coverage (track A) — 75.2% → higher
+### C. API parity coverage (track A) — 78.9% → higher
 > **NB (drift fixed 2026-06-17):** batches 3 & 4 hand-edited `COMPAT.toml` (Font/Colorspace/Link/
 > Outline/TextWriter/Tools/xref-write/text-trace → 63.7%) but did NOT update the generator
 > `scripts/_compat_catalog.py`, so regenerating regressed coverage to 53.7%. A reconciliation pass at
@@ -139,7 +138,15 @@ src/lib.rs` mean batches that both touch them run SEQUENTIALLY; new pytest goes 
    valid_codepoints/is_writable/Base14_fontnames. `glyph_bbox`/`buffer` kept **deferred** (oxide's
    `Font` is a metrics-only handle with no embedded program — honest PdfUnsupportedError beats a wrong
    value; would need Font to carry the `/FontFile*` program). Tests in `test_longtail9.py`.
-5. Document low-level COS (`update_object`/`update_stream`/`get_new_xref`/…), state/meta, OCG/layers.
+5. ~~Document low-level COS + state/meta~~ **DONE (batch-5, 2026-06-18, +29 → 78.9%):** pdf_catalog/
+   pdf_trailer/is_stream/xref_stream_raw/xref_get_keys/xref_is_xobject/page_annot_xrefs/resolve_names/
+   update_object/update_stream/get_new_xref; pagelayout/pagemode/markinfo/language/need_appearances/
+   get_sigflags/is_dirty/is_closed/is_reflowable/is_fast_webaccess/name/can_save_incrementally/
+   get_page_label/xref_xml_metadata. `version_count` deferred; xref_get_keys key-ORDER is sorted
+   (oxide Dict=BTreeMap) vs fitz PDF-order — documented benign deviation. Tests in `test_longtail10.py`.
+   **Still TODO on track C:** Document OCG/layers (add_layer/get_layers/switch_layer/get_oc/get_ocmd/
+   set_ocmd), TOC (set_toc_item/del_toc_item/outline), heavy ops (convert_to_pdf/subset/insert_file/
+   embfile_upd), version_count; + Page/Pixmap/constants long-tail.
 Regenerate `COMPAT.toml` + refresh `PARITY.md` after each batch.
 
 ### D. OCR quality upgrade — pure-Rust PaddleOCR (post-v1, planned 2026-06-18)
