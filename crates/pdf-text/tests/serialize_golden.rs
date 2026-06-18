@@ -62,53 +62,34 @@ fn golden_tp() -> pdf_text::TextPage {
     textpage_from_glyphs(&gs, &[], letter(), 0)
 }
 
-const HTML_GOLDEN: &str = "<!DOCTYPE html>\n\
-<html>\n\
-<head>\n\
-<meta charset=\"utf-8\">\n\
-<style>.oxide-pdf-page{position:relative;}</style>\n\
-</head>\n\
-<body>\n\
-<div class=\"oxide-pdf-page\" style=\"width:612pt;height:792pt\">\n\
-<div style=\"position:absolute;left:100pt;top:83.6pt\">\n\
-<p><span style=\"font-family:Helvetica-Bold;font-size:12pt;font-weight:bold\">Hi</span></p>\n\
-<p><span style=\"font-family:Helvetica;font-size:12pt;color:#ff0000\">x&lt;y</span></p>\n\
-</div>\n\
-</div>\n\
-</body>\n\
-</html>\n";
+const HTML_GOLDEN: &str = "<div id=\"page0\" style=\"width:612pt;height:792pt\">\n\
+<p style=\"top:83.6pt;left:100pt;line-height:12pt\"><span style=\"font-family:Helvetica-Bold;font-size:12pt;color:#000000;font-weight:bold\">Hi</span></p>\n\
+<p style=\"top:95.6pt;left:100pt;line-height:12pt\"><span style=\"font-family:Helvetica;font-size:12pt;color:#ff0000\">x&lt;y</span></p>\n\
+</div>\n";
 
-const XHTML_GOLDEN: &str = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
-<html xmlns=\"http://www.w3.org/1999/xhtml\">\n\
-<head>\n\
-<title>oxide-pdf</title>\n\
-</head>\n\
-<body>\n\
-<div>\n\
-<p><span style=\"font-family:Helvetica-Bold;font-size:12pt;font-weight:bold\">Hi</span></p>\n\
+const XHTML_GOLDEN: &str = "<div id=\"page0\">\n\
+<p><span style=\"font-family:Helvetica-Bold;font-size:12pt;color:#000000;font-weight:bold\">Hi</span></p>\n\
 <p><span style=\"font-family:Helvetica;font-size:12pt;color:#ff0000\">x&lt;y</span></p>\n\
-</div>\n\
-</body>\n\
-</html>\n";
+</div>\n";
 
 const XML_GOLDEN: &str = concat!(
     "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n",
-    "<page width=\"612\" height=\"792\">\n",
-    "  <block bbox=\"100 83.6 121 106.4\">\n",
-    "    <line bbox=\"100 83.6 114 94.4\" wmode=\"0\" dir=\"1 0\">\n",
-    "      <font name=\"Helvetica-Bold\" size=\"12\">\n",
-    "        <char bbox=\"100 83.6 107 94.4\" x=\"100\" y=\"92\" c=\"H\"/>\n",
-    "        <char bbox=\"107 83.6 114 94.4\" x=\"107\" y=\"92\" c=\"i\"/>\n",
-    "      </font>\n",
-    "    </line>\n",
-    "    <line bbox=\"100 95.6 121 106.4\" wmode=\"0\" dir=\"1 0\">\n",
-    "      <font name=\"Helvetica\" size=\"12\">\n",
-    "        <char bbox=\"100 95.6 107 106.4\" x=\"100\" y=\"104\" c=\"x\"/>\n",
-    "        <char bbox=\"107 95.6 114 106.4\" x=\"107\" y=\"104\" c=\"&lt;\"/>\n",
-    "        <char bbox=\"114 95.6 121 106.4\" x=\"114\" y=\"104\" c=\"y\"/>\n",
-    "      </font>\n",
-    "    </line>\n",
-    "  </block>\n",
+    "<page id=\"page0\" width=\"612\" height=\"792\">\n",
+    "<block bbox=\"100 83.6 121 106.4\" justify=\"unknown\">\n",
+    "<line bbox=\"100 83.6 114 94.4\" wmode=\"0\" dir=\"1 0\" flags=\"0\" text=\"Hi\">\n",
+    "<font name=\"Helvetica-Bold\" size=\"12\">\n",
+    "<char quad=\"100 83.6 107 83.6 100 94.4 107 94.4\" x=\"100\" y=\"92\" bidi=\"0\" color=\"#000000\" alpha=\"#ff\" flags=\"16\" c=\"H\"/>\n",
+    "<char quad=\"107 83.6 114 83.6 107 94.4 114 94.4\" x=\"107\" y=\"92\" bidi=\"0\" color=\"#000000\" alpha=\"#ff\" flags=\"16\" c=\"i\"/>\n",
+    "</font>\n",
+    "</line>\n",
+    "<line bbox=\"100 95.6 121 106.4\" wmode=\"0\" dir=\"1 0\" flags=\"0\" text=\"x&lt;y\">\n",
+    "<font name=\"Helvetica\" size=\"12\">\n",
+    "<char quad=\"100 95.6 107 95.6 100 106.4 107 106.4\" x=\"100\" y=\"104\" bidi=\"0\" color=\"#ff0000\" alpha=\"#ff\" flags=\"0\" c=\"x\"/>\n",
+    "<char quad=\"107 95.6 114 95.6 107 106.4 114 106.4\" x=\"107\" y=\"104\" bidi=\"0\" color=\"#ff0000\" alpha=\"#ff\" flags=\"0\" c=\"&lt;\"/>\n",
+    "<char quad=\"114 95.6 121 95.6 114 106.4 121 106.4\" x=\"114\" y=\"104\" bidi=\"0\" color=\"#ff0000\" alpha=\"#ff\" flags=\"0\" c=\"y\"/>\n",
+    "</font>\n",
+    "</line>\n",
+    "</block>\n",
     "</page>\n",
 );
 

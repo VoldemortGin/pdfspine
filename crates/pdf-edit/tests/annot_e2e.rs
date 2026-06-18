@@ -63,7 +63,11 @@ fn annot_text_001() {
     // add_text_annot auto-creates a /Popup child (matching fitz), so the page
     // carries the Text annot (index 0) plus its Popup.
     assert_eq!(dicts.len(), 2, "text annot + auto popup");
-    assert_eq!(annot_subtype(&dicts[0]), "Text", "first annot is the Text note");
+    assert_eq!(
+        annot_subtype(&dicts[0]),
+        "Text",
+        "first annot is the Text note"
+    );
     assert!(
         dicts.iter().any(|x| annot_subtype(x) == "Popup"),
         "auto-created /Popup present"

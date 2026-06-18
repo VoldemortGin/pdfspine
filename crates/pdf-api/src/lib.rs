@@ -47,8 +47,9 @@ pub use pdf_crypto::{EncryptMethod, EncryptSpec};
 // these free functions (the orphan rule forbids inherent `impl Page` here, since
 // `Page` is defined in `pdf-core`).
 pub use text::{
-    get_fonts, get_image_bbox, get_image_info, get_image_rects, get_images, get_text, get_xobjects,
-    search, textpage, FontInfo, ImageInfo, ImageInfoEntry, ImageRect, TextOutput, XObjectInfo,
+    extract_imginfo, extract_selection, extract_textbox, get_fonts, get_image_bbox, get_image_info,
+    get_image_rects, get_images, get_text, get_xobjects, search, textpage, textpage_poolsize,
+    FontInfo, ImageInfo, ImageInfoEntry, ImageRect, ImgInfoEntry, TextOutput, XObjectInfo,
 };
 
 // Image path (M5): `Pixmap`, `get_pixmap`, `extract_image`, image documents
@@ -67,7 +68,7 @@ pub use pdf_text::{
 };
 
 // Standalone Core-14 font handle (PyMuPDF `fitz.Font`) — name/metrics/advances.
-pub use pdf_fonts::Font;
+pub use pdf_fonts::{Font, BASE14_FONTNAMES};
 
 // Table detection (M7): `find_tables`, `TableFinder`, `Table` (PRD §7). The
 // bindings depend only on `pdf-api`.

@@ -29,10 +29,10 @@
 baseline = "1.24.x"
 baseline_detail = "PyMuPDF 1.24.14 / MuPDF 1.24.11"
 total = 769
-implemented = 567
-deferred = 136
+implemented = 578
+deferred = 125
 out_of_scope = 66
-coverage_pct = 73.7
+coverage_pct = 75.2
 
 # ── Matrix ──
 [[symbol]]
@@ -2822,49 +2822,49 @@ milestone = "M2"
 [[symbol]]
 name = "TextPage.extractHTML"
 group = "TextPage"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M2"
 
 [[symbol]]
 name = "TextPage.extractXHTML"
 group = "TextPage"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M2"
 
 [[symbol]]
 name = "TextPage.extractXML"
 group = "TextPage"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M2"
 
 [[symbol]]
 name = "TextPage.extractIMGINFO"
 group = "TextPage"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M2"
 
 [[symbol]]
 name = "TextPage.extractSelection"
 group = "TextPage"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M2"
 
 [[symbol]]
 name = "TextPage.extractTextbox"
 group = "TextPage"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M2"
 
 [[symbol]]
 name = "TextPage.search"
 group = "TextPage"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M2"
 
 [[symbol]]
 name = "TextPage.poolsize"
 group = "TextPage"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M2"
 
 # ── Pixmap ──
@@ -4075,7 +4075,7 @@ milestone = "M2"
 [[symbol]]
 name = "Font.valid_codepoints"
 group = "Font"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M2"
 
 [[symbol]]
@@ -4159,13 +4159,13 @@ milestone = "M2"
 [[symbol]]
 name = "Font.is_writable"
 group = "Font"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M2"
 
 [[symbol]]
 name = "Font.Base14_fontnames"
 group = "Font"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M2"
 
 [[symbol]]

@@ -13,6 +13,14 @@
 //! char remembers which source char (hence bbox + line identity) it came from.
 //! A plain substring search of the folded needle over the folded page string
 //! then maps matched folded ranges back to source chars for geometry.
+//!
+//! Whitespace is normalized to match PyMuPDF: every run of whitespace (incl. a
+//! line break, which contributes one synthetic space at the line boundary)
+//! collapses to a single space in BOTH the page string and the needle. So a
+//! needle with a space bridges a line break (`"apple cherry"` matches when
+//! `apple` ends one line and `cherry` starts the next, yielding one quad per
+//! line fragment), multiple spaces / tabs / newlines in the needle all match a
+//! single gap, and a needle WITHOUT a space cannot bridge a break.
 
 use pdf_core::geom::{Quad, Rect};
 use unicode_normalization::UnicodeNormalization;
@@ -34,6 +42,11 @@ pub struct SearchOptions {
     /// `Quad`s; the PyO3 layer converts to `Rect` when `quads == false`.
     pub quads: bool,
 }
+
+/// Owner sentinel for a synthetic line-break space in the folded page string:
+/// it joins lines (so a spaced needle bridges a break) and marks the boundary
+/// that splits a hit into per-line quads, but contributes no geometry.
+const NO_OWNER: usize = usize::MAX;
 
 /// A flattened page char carrying its source geometry + line identity.
 struct SearchChar {
@@ -65,17 +78,32 @@ pub fn search(tp: &TextPage, needle: &str, opts: SearchOptions) -> Vec<Quad> {
 
     // Flatten the page. `folded` is the concatenated comparison string; `owner`
     // maps each folded char (by char index) to the index of its source char in
-    // `chars`. We intentionally insert NO separator between lines so a match can
-    // cross a visual line break (PyMuPDF matches across the break; SEARCH-006).
+    // `chars`, or `NO_OWNER` for a synthetic line-break space (no geometry — it
+    // only joins lines and marks the boundary that splits a hit into per-line
+    // quads). Whitespace runs collapse to a single space (matching PyMuPDF):
+    // each line is separated by exactly one synthetic space, and consecutive
+    // real whitespace chars after the first are dropped from the comparison
+    // string (the first whitespace keeps its source geometry).
     let mut chars: Vec<SearchChar> = Vec::new();
     let mut folded = String::new();
     let mut owner: Vec<usize> = Vec::new();
+    // Tracks whether the previously-emitted folded char was a (collapsed) space,
+    // so a run of whitespace — within a line, across spans, or across a line
+    // break — yields exactly one space.
+    let mut prev_space = false;
+    let mut started = false;
 
     for (b_idx, block) in tp.blocks.iter().enumerate() {
         if block.kind == BlockKind::Image {
             continue;
         }
         for (l_idx, line) in block.lines.iter().enumerate() {
+            // A line break is one space: collapse into a preceding space run.
+            if started && !prev_space {
+                folded.push(' ');
+                owner.push(NO_OWNER);
+                prev_space = true;
+            }
             for span in &line.spans {
                 for c in &span.chars {
                     let src_idx = chars.len();
@@ -83,10 +111,22 @@ pub fn search(tp: &TextPage, needle: &str, opts: SearchOptions) -> Vec<Quad> {
                         bbox: c.bbox,
                         line_id: (b_idx, l_idx),
                     });
-                    for fc in fold_char(c.c) {
-                        folded.push(fc);
-                        owner.push(src_idx);
+                    if c.c.is_whitespace() {
+                        // Whitespace → a single collapsed space. The first space
+                        // in a run keeps its source geometry; later ones drop.
+                        if !prev_space {
+                            folded.push(' ');
+                            owner.push(src_idx);
+                            prev_space = true;
+                        }
+                    } else {
+                        for fc in fold_char(c.c) {
+                            folded.push(fc);
+                            owner.push(src_idx);
+                        }
+                        prev_space = false;
                     }
+                    started = true;
                 }
             }
         }
@@ -183,9 +223,27 @@ fn push_quad(quads: &mut Vec<Quad>, rect: Rect, clip: Option<Rect>) {
     quads.push(Quad::from_rect(&rect));
 }
 
-/// Folds a whole string for comparison: NFC normalization + lowercasing.
+/// Folds a whole string for comparison: NFC normalization + lowercasing, with
+/// every whitespace run collapsed to a single space (matching the page string,
+/// where a line break is one space and whitespace runs collapse). This lets a
+/// needle's spaces / tabs / newlines all match a single gap, including a line
+/// break.
 fn fold(s: &str) -> String {
-    s.nfc().flat_map(char::to_lowercase).nfc().collect()
+    let normalized: String = s.nfc().flat_map(char::to_lowercase).nfc().collect();
+    let mut out = String::new();
+    let mut prev_space = false;
+    for c in normalized.chars() {
+        if c.is_whitespace() {
+            if !prev_space {
+                out.push(' ');
+                prev_space = true;
+            }
+        } else {
+            out.push(c);
+            prev_space = false;
+        }
+    }
+    out
 }
 
 /// Folds a single source char for comparison, preserving the source-char →

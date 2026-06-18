@@ -59,10 +59,18 @@ pub struct ImageInfo {
     /// `/BitsPerComponent` (`0` if absent).
     pub bpc: i32,
     /// The colorspace name: a `/ColorSpace` name, or the first array element
-    /// name (e.g. `"ICCBased"`, `"Indexed"`), else empty.
+    /// name (e.g. `"ICCBased"`, `"Indexed"`), else empty. Indirect `/ColorSpace`
+    /// references are resolved (PyMuPDF `get_images[5]`).
     pub colorspace: String,
     /// The ICCBased alternate colorspace if trivially available, else empty.
     pub alt_colorspace: String,
+    /// The colorspace component count (1 gray, 3 RGB, 4 CMYK; `0` if unknown),
+    /// resolved from the colorspace family — ICCBased reads its `/N` (PyMuPDF's
+    /// integer `colorspace` in `get_image_info` / `extractIMGINFO`).
+    pub cs_components: i32,
+    /// A descriptive colorspace name for `extractIMGINFO`'s `cs-name`, e.g.
+    /// `"DeviceRGB"` or `"ICCBased(RGB)"`.
+    pub cs_name: String,
     /// The resource name the image is referenced under (e.g. `"Im0"`).
     pub name: String,
     /// The `/Filter` name (or the first filter in an array; empty if none).
@@ -237,17 +245,29 @@ pub fn get_images(page: &Page) -> Vec<ImageInfo> {
         if xref != 0 {
             seen_xref.insert(xref);
         }
-        out.push(build_image_info(dict, xref, name.to_string(), referencer));
+        out.push(build_image_info(
+            doc,
+            dict,
+            xref,
+            name.to_string(),
+            referencer,
+        ));
     }
     out
 }
 
 /// Assembles one [`ImageInfo`] from a resolved image XObject dict.
-fn build_image_info(dict: &Dict, xref: i32, name: String, referencer: i32) -> ImageInfo {
+fn build_image_info(
+    doc: &DocumentStore,
+    dict: &Dict,
+    xref: i32,
+    name: String,
+    referencer: i32,
+) -> ImageInfo {
     let width = dict_int(dict, "Width");
     let height = dict_int(dict, "Height");
     let bpc = dict_int(dict, "BitsPerComponent");
-    let (colorspace, alt_colorspace) = colorspace_names(dict);
+    let cs = resolve_colorspace(doc, dict);
     let filter = filter_name(dict);
     let smask = dict
         .get(&Name::new("SMask"))
@@ -261,30 +281,143 @@ fn build_image_info(dict: &Dict, xref: i32, name: String, referencer: i32) -> Im
         width,
         height,
         bpc,
-        colorspace,
-        alt_colorspace,
+        colorspace: cs.name,
+        alt_colorspace: cs.alt,
+        cs_components: cs.components,
+        cs_name: cs.cs_name,
         name,
         filter,
         referencer,
     }
 }
 
-/// `(colorspace, alt_colorspace)`: a `/ColorSpace` name verbatim, or the array's
-/// leading name (e.g. `"ICCBased"`). `alt_colorspace` is left empty (the ICCBased
-/// alternate is not trivially available without decoding the stream).
-fn colorspace_names(dict: &Dict) -> (String, String) {
-    match dict.get(&Name::new("ColorSpace")) {
-        Some(Object::Name(n)) => (n.as_str().unwrap_or_default().to_string(), String::new()),
-        Some(Object::Array(a)) => {
-            let head = a
+/// A resolved image colorspace: its PyMuPDF `get_images` name, the ICCBased
+/// alternate (when available), the device component count, and a descriptive
+/// `extractIMGINFO` `cs-name`.
+struct ResolvedColorspace {
+    /// The `get_images[5]` name (e.g. `"DeviceRGB"`, `"ICCBased"`, `"Indexed"`).
+    name: String,
+    /// The ICCBased alternate device-space name (`get_images[6]`), else empty.
+    alt: String,
+    /// Component count: 1 gray, 3 RGB, 4 CMYK, else `0`.
+    components: i32,
+    /// A descriptive name for `extractIMGINFO` (e.g. `"DeviceRGB"`,
+    /// `"ICCBased(RGB)"`).
+    cs_name: String,
+}
+
+/// Resolves an image's `/ColorSpace` (following indirect references) to its
+/// PyMuPDF name, component count and `cs-name`.
+///
+/// A bare device name maps directly (`DeviceRGB` → 3, `DeviceGray` → 1,
+/// `DeviceCMYK` → 4). An array form `[/ICCBased <stream>]` resolves the stream's
+/// `/N` to the component count and an `Alternate` device name; `[/Indexed base …]`
+/// and other special families report their family name with the component count
+/// derived from the base where trivially available, else `0`.
+fn resolve_colorspace(doc: &DocumentStore, dict: &Dict) -> ResolvedColorspace {
+    let Some(cs) = resolve_key(doc, dict, "ColorSpace") else {
+        return ResolvedColorspace {
+            name: String::new(),
+            alt: String::new(),
+            components: 0,
+            cs_name: String::new(),
+        };
+    };
+    colorspace_from_object(doc, cs.as_ref())
+}
+
+/// Resolves a (already dereferenced) colorspace object to its parts.
+fn colorspace_from_object(doc: &DocumentStore, cs: &Object) -> ResolvedColorspace {
+    match cs {
+        Object::Name(n) => {
+            let name = n.as_str().unwrap_or_default().to_string();
+            let components = device_components(&name);
+            ResolvedColorspace {
+                cs_name: name.clone(),
+                name,
+                alt: String::new(),
+                components,
+            }
+        }
+        Object::Array(a) => {
+            let family = a
                 .first()
                 .and_then(Object::as_name)
                 .and_then(Name::as_str)
                 .unwrap_or_default()
                 .to_string();
-            (head, String::new())
+            match family.as_str() {
+                "ICCBased" => iccbased_colorspace(doc, a, family),
+                // Indexed/Separation/DeviceN palettes index into a base space;
+                // each placed sample is a single index component.
+                "Indexed" | "I" => ResolvedColorspace {
+                    name: "Indexed".to_string(),
+                    alt: String::new(),
+                    components: 1,
+                    cs_name: "Indexed".to_string(),
+                },
+                _ => {
+                    let components = device_components(&family);
+                    ResolvedColorspace {
+                        cs_name: family.clone(),
+                        name: family,
+                        alt: String::new(),
+                        components,
+                    }
+                }
+            }
         }
-        _ => (String::new(), String::new()),
+        _ => ResolvedColorspace {
+            name: String::new(),
+            alt: String::new(),
+            components: 0,
+            cs_name: String::new(),
+        },
+    }
+}
+
+/// Resolves an `[/ICCBased <stream>]` colorspace: the stream's `/N` is the
+/// component count and `/Alternate` (when present) the device alternate.
+fn iccbased_colorspace(doc: &DocumentStore, arr: &[Object], family: String) -> ResolvedColorspace {
+    // The ICC profile stream is the second array element.
+    let stream_dict = arr
+        .get(1)
+        .and_then(|o| resolve_value(doc, o))
+        .and_then(|o| o.as_dict().cloned());
+    let n = stream_dict.as_ref().map(|d| dict_int(d, "N")).unwrap_or(0);
+    // `alt_colorspace` (get_images[6]) is the explicit /Alternate only — left
+    // empty when absent, matching PyMuPDF (it does NOT infer from /N here).
+    let alt = stream_dict
+        .as_ref()
+        .and_then(|d| dict_name(d, "Alternate"))
+        .unwrap_or_default();
+    let device = match n {
+        1 => "Gray",
+        4 => "CMYK",
+        3 => "RGB",
+        _ => "",
+    };
+    let cs_name = if device.is_empty() {
+        family.clone()
+    } else {
+        format!("ICCBased({device})")
+    };
+    ResolvedColorspace {
+        name: family,
+        alt,
+        components: n,
+        cs_name,
+    }
+}
+
+/// The device component count for a device-colorspace name (`0` if not a known
+/// device space).
+fn device_components(name: &str) -> i32 {
+    match name {
+        "DeviceRGB" | "RGB" | "CalRGB" | "Lab" => 3,
+        "DeviceGray" | "G" | "Gray" | "CalGray" => 1,
+        "DeviceCMYK" | "CMYK" => 4,
+        _ => 0,
     }
 }
 
@@ -470,6 +603,10 @@ pub struct ImageInfoEntry {
     pub bpc: i32,
     /// The colorspace name (e.g. `"DeviceRGB"`, `"ICCBased"`; empty if unknown).
     pub colorspace: String,
+    /// The colorspace component count (1/3/4; `0` if unknown), ICCBased-aware.
+    pub cs_components: i32,
+    /// A descriptive colorspace name for `extractIMGINFO` (`cs-name`).
+    pub cs_name: String,
     /// The `/Filter` name (empty if none).
     pub filter: String,
 }
@@ -500,6 +637,8 @@ pub fn get_image_info(page: &Page) -> Vec<ImageInfoEntry> {
                 height: r.height,
                 bpc: meta.map(|m| m.bpc).unwrap_or(0),
                 colorspace: meta.map(|m| m.colorspace.clone()).unwrap_or_default(),
+                cs_components: meta.map(|m| m.cs_components).unwrap_or(0),
+                cs_name: meta.map(|m| m.cs_name.clone()).unwrap_or_default(),
                 filter: meta.map(|m| m.filter.clone()).unwrap_or_default(),
             }
         })
@@ -524,6 +663,153 @@ pub fn get_image_bbox(page: &Page, name_or_xref: &str) -> Option<(f64, f64, f64,
         }
     }
     None
+}
+
+// === extractIMGINFO =======================================================
+
+/// One `TextPage.extractIMGINFO()` entry: the per-image info dicts PyMuPDF
+/// returns for images on the page. Field set matches fitz's key set (`number`,
+/// `bbox`, `transform`, `width`, `height`, `colorspace`, `cs-name`, `xres`,
+/// `yres`, `bpc`, `size`, `has-mask`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct ImgInfoEntry {
+    /// The placement index on the page (PyMuPDF `number`).
+    pub number: usize,
+    /// The device-space placement bbox `(x0, y0, x1, y1)`.
+    pub bbox: (f64, f64, f64, f64),
+    /// The image-to-device transform `(a, b, c, d, e, f)` mapping the unit
+    /// image square to the placement bbox (fitz `transform`).
+    pub transform: (f64, f64, f64, f64, f64, f64),
+    /// The pixel width (`/Width`).
+    pub width: u32,
+    /// The pixel height (`/Height`).
+    pub height: u32,
+    /// The colorspace component count (1 gray, 3 RGB, 4 CMYK; `0` if unknown).
+    pub colorspace: i32,
+    /// The colorspace name (fitz `cs-name`, e.g. `"DeviceRGB"`).
+    pub cs_name: String,
+    /// Horizontal resolution in DPI (fitz default `96` when not derivable).
+    pub xres: i32,
+    /// Vertical resolution in DPI (fitz default `96`).
+    pub yres: i32,
+    /// `/BitsPerComponent` (`0` if unknown).
+    pub bpc: i32,
+    /// The (compressed) image stream byte size, or `0` if unavailable.
+    pub size: usize,
+    /// Whether the image carries an `/SMask` (soft mask) — fitz `has-mask`.
+    pub has_mask: bool,
+}
+
+/// The images on `page` as fitz-shaped [`ImgInfoEntry`] dicts (PyMuPDF
+/// `TextPage.extractIMGINFO`). One placement per entry, in reading order. Reuses
+/// the layout-reconstructed image blocks ([`get_image_info`]) and enriches each
+/// with a unit-square→bbox `transform`, the resolved component-count
+/// `colorspace`, and the `/SMask`/stream-size metadata fitz reports. The
+/// `colorspace` int and `cs-name` come from the resolved colorspace (indirect
+/// references followed, ICCBased `/N` read), matching fitz's `extractIMGINFO`.
+#[must_use]
+pub fn extract_imginfo(page: &Page) -> Vec<ImgInfoEntry> {
+    // XObject metadata (smask / stream length) keyed by xref for enrichment.
+    let metas = get_images(page);
+    let smask_by_xref: std::collections::HashMap<i32, i32> =
+        metas.iter().map(|m| (m.xref, m.smask)).collect();
+    let len_by_xref = stream_len_by_xref(page, &metas);
+
+    get_image_info(page)
+        .into_iter()
+        .map(|e| {
+            let (x0, y0, x1, y1) = e.bbox;
+            // The descriptive cs-name; fall back to the colorspace family name.
+            let cs_name = if e.cs_name.is_empty() {
+                e.colorspace.clone()
+            } else {
+                e.cs_name.clone()
+            };
+            ImgInfoEntry {
+                number: e.number,
+                bbox: e.bbox,
+                // Map the unit image square to the placement bbox (top-left
+                // origin): scale (w, h), translate (x0, y0).
+                transform: (x1 - x0, 0.0, 0.0, y1 - y0, x0, y0),
+                width: e.width,
+                height: e.height,
+                colorspace: e.cs_components,
+                cs_name,
+                xres: 96,
+                yres: 96,
+                bpc: e.bpc,
+                size: *len_by_xref.get(&e.xref).unwrap_or(&0) as usize,
+                has_mask: smask_by_xref.get(&e.xref).copied().unwrap_or(0) != 0,
+            }
+        })
+        .collect()
+}
+
+/// The `/Length` of each image XObject stream, keyed by xref (best-effort; `0`
+/// when the object cannot be resolved). Used to fill fitz's `size` field.
+fn stream_len_by_xref(page: &Page, metas: &[ImageInfo]) -> std::collections::HashMap<i32, i32> {
+    use pdf_core::object::ObjRef;
+    let doc = page.document();
+    let mut out = std::collections::HashMap::new();
+    for m in metas {
+        if m.xref == 0 || out.contains_key(&m.xref) {
+            continue;
+        }
+        let len = doc
+            .resolve(ObjRef::new(m.xref as u32, 0))
+            .ok()
+            .and_then(|o| o.as_stream().map(|s| s.data.len() as i32))
+            .unwrap_or(0);
+        out.insert(m.xref, len);
+    }
+    out
+}
+
+/// A small stat reflecting the byte footprint of a [`TextPage`]'s structured
+/// model (PyMuPDF `TextPage.poolsize`).
+///
+/// MuPDF's `poolsize` is the size of the `fz_pool` block allocator backing the
+/// structured-text page — an internal allocator stat with no portable
+/// definition outside MuPDF. We report a deterministic proxy: the in-memory size
+/// of the model's blocks/lines/spans/chars (the data MuPDF stores in that pool),
+/// so the value scales with page complexity exactly as fitz's does. (Documented
+/// deviation: not byte-identical to MuPDF's pool, which over-allocates in
+/// chunks.)
+#[must_use]
+pub fn textpage_poolsize(tp: &TextPage) -> usize {
+    use std::mem::size_of;
+    let mut total = size_of::<TextPage>();
+    for block in &tp.blocks {
+        total += size_of::<pdf_text::Block>();
+        for line in &block.lines {
+            total += size_of::<pdf_text::Line>();
+            for span in &line.spans {
+                total += size_of::<pdf_text::Span>();
+                total += span.text.len();
+                total += span.chars.len() * size_of::<pdf_text::Char>();
+            }
+        }
+    }
+    total
+}
+
+/// The text within `clip` (PyMuPDF `TextPage.extractTextbox`). Delegates to
+/// [`pdf_text::get_textbox`] over a pre-built `tp`.
+#[must_use]
+pub fn extract_textbox(tp: &TextPage, clip: Rect) -> String {
+    pdf_text::get_textbox(tp, clip)
+}
+
+/// The text between two device-space points `a` and `b`, like a mouse drag
+/// (PyMuPDF `TextPage.extractSelection`). Delegates to
+/// [`pdf_text::extract_selection`] over a pre-built `tp`.
+#[must_use]
+pub fn extract_selection(
+    tp: &TextPage,
+    a: pdf_core::geom::Point,
+    b: pdf_core::geom::Point,
+) -> String {
+    pdf_text::extract_selection(tp, a, b)
 }
 
 // === reusable TextPage ====================================================

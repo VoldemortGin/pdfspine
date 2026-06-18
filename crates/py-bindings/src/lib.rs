@@ -235,6 +235,100 @@ impl PyTextPage {
         text_output_to_py(py, &self.page, "rawjson", None, Some(&self.tp), false)
     }
 
+    /// fitz-shaped HTML (PyMuPDF `TextPage.extractHTML`).
+    fn extractHTML(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        text_output_to_py(py, &self.page, "html", None, Some(&self.tp), false)
+    }
+
+    /// fitz-shaped XHTML (PyMuPDF `TextPage.extractXHTML`).
+    fn extractXHTML(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        text_output_to_py(py, &self.page, "xhtml", None, Some(&self.tp), false)
+    }
+
+    /// fitz-shaped char-level XML (PyMuPDF `TextPage.extractXML`).
+    fn extractXML(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        text_output_to_py(py, &self.page, "xml", None, Some(&self.tp), false)
+    }
+
+    /// The text contained in `rect` (PyMuPDF `TextPage.extractTextbox`).
+    /// `rect` is the `(x0, y0, x1, y1)` tuple the Python layer passes.
+    fn extractTextbox(&self, py: Python<'_>, rect: (f64, f64, f64, f64)) -> String {
+        let clip = Rect::new(rect.0, rect.1, rect.2, rect.3);
+        py.detach(|| pdf_api::extract_textbox(&self.tp, clip))
+    }
+
+    /// The text between two points `a`/`b` like a mouse drag (PyMuPDF
+    /// `TextPage.extractSelection`). Both points are `(x, y)` 2-tuples.
+    fn extractSelection(&self, py: Python<'_>, a: (f64, f64), b: (f64, f64)) -> String {
+        let (pa, pb) = (point_of(a), point_of(b));
+        py.detach(|| pdf_api::extract_selection(&self.tp, pa, pb))
+    }
+
+    /// Searches the page for `needle` (PyMuPDF `TextPage.search`). Returns a list
+    /// of quad 8-tuples when `quads`, else a list of rect 4-tuples (the Python
+    /// layer wraps them as `fitz.Quad` / `fitz.Rect`).
+    #[pyo3(signature = (needle, quads=false))]
+    fn search<'py>(
+        &self,
+        py: Python<'py>,
+        needle: &str,
+        quads: bool,
+    ) -> PyResult<Bound<'py, PyList>> {
+        let opts = SearchOptions {
+            hit_max: 0,
+            clip: None,
+            quads,
+        };
+        let needle_owned = needle.to_string();
+        let page = self.page.clone();
+        let tp = self.tp.clone();
+        let hits: Vec<Quad> =
+            py.detach(move || pdf_api::search(&page, &needle_owned, opts, Some(&tp)));
+        let list = PyList::empty(py);
+        for q in &hits {
+            if quads {
+                list.append(quad_tuple(q))?;
+            } else {
+                // The enclosing rect of the hit quad.
+                let r = q.rect();
+                list.append((r.x0, r.y0, r.x1, r.y1))?;
+            }
+        }
+        Ok(list)
+    }
+
+    /// Per-image info dicts for images on the page (PyMuPDF
+    /// `TextPage.extractIMGINFO`). Keys: `number`, `bbox`, `transform`, `width`,
+    /// `height`, `colorspace`, `cs-name`, `xres`, `yres`, `bpc`, `size`,
+    /// `has-mask`.
+    fn extractIMGINFO<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
+        let entries = py.detach(|| pdf_api::extract_imginfo(&self.page));
+        let list = PyList::empty(py);
+        for e in entries {
+            let d = PyDict::new(py);
+            d.set_item("number", e.number)?;
+            d.set_item("bbox", e.bbox)?;
+            d.set_item("transform", e.transform)?;
+            d.set_item("width", e.width)?;
+            d.set_item("height", e.height)?;
+            d.set_item("colorspace", e.colorspace)?;
+            d.set_item("cs-name", e.cs_name)?;
+            d.set_item("xres", e.xres)?;
+            d.set_item("yres", e.yres)?;
+            d.set_item("bpc", e.bpc)?;
+            d.set_item("size", e.size)?;
+            d.set_item("has-mask", e.has_mask)?;
+            list.append(d)?;
+        }
+        Ok(list)
+    }
+
+    /// The structured-text pool size (PyMuPDF `TextPage.poolsize`): a small stat
+    /// reflecting the byte footprint of the page's char/glyph model.
+    fn poolsize(&self) -> usize {
+        pdf_api::textpage_poolsize(&self.tp)
+    }
+
     fn __repr__(&self) -> String {
         format!(
             "<oxide_pdf._core.TextPage blocks={} {:.0}x{:.0}>",
@@ -3910,6 +4004,65 @@ impl PyFont {
         self.inner.unicode_to_glyph_name(ch).to_string()
     }
 
+    /// Whether the font can be used to write text (PyMuPDF `Font.is_writable`).
+    #[getter]
+    fn is_writable(&self) -> bool {
+        self.inner.is_writable()
+    }
+
+    /// The embedded font program bytes (PyMuPDF `Font.buffer`).
+    ///
+    /// DEFERRED: oxide's `Font` is a Core-14 **metrics-only** handle (built from
+    /// a font name; it carries no `/FontFile*` program and has no access to an
+    /// embedded font's outline bytes). PyMuPDF returns a bundled TTF's bytes;
+    /// returning empty bytes would be a misleading non-implementation, so this
+    /// raises `PdfUnsupportedError` until embedded-font programs are wired up.
+    #[getter]
+    fn buffer(&self) -> PyResult<Py<PyBytes>> {
+        Err(PdfUnsupportedError::new_err(
+            "Font.buffer is deferred: the oxide Font is a metrics-only Core-14 \
+             handle with no embedded /FontFile* program to expose",
+        ))
+    }
+
+    /// The Unicode codepoints the font's encoding covers, ascending (PyMuPDF
+    /// `Font.valid_codepoints` — an array of ints).
+    ///
+    /// For a non-embedded (Core-14) handle this reflects the font's built-in PDF
+    /// encoding coverage (WinAnsi for the text fonts; the font's own encoding for
+    /// Symbol/ZapfDingbats) — an honest subset of PyMuPDF's bundled-cmap set, with
+    /// no false positives. For an embedded font the real cmap would be preferred.
+    #[pyo3(signature = (*_args, **_kwargs))]
+    fn valid_codepoints(
+        &self,
+        _args: &Bound<'_, PyTuple>,
+        _kwargs: Option<&Bound<'_, PyDict>>,
+    ) -> Vec<u32> {
+        self.inner.valid_codepoints()
+    }
+
+    /// The glyph bbox `(x0, y0, x1, y1)` for character `chr` (PyMuPDF
+    /// `Font.glyph_bbox(chr)`).
+    ///
+    /// DEFERRED: the metrics-only Core-14 handle has no per-glyph outlines, so it
+    /// cannot compute each glyph's individual ink box. Returning the same
+    /// font-level bbox for every glyph would be a misleading constant, so this
+    /// raises `PdfUnsupportedError` until per-glyph outlines (embedded-font
+    /// programs / a bundled font) are available.
+    #[pyo3(signature = (chr, *_args, **_kwargs))]
+    fn glyph_bbox(
+        &self,
+        chr: u32,
+        _args: &Bound<'_, PyTuple>,
+        _kwargs: Option<&Bound<'_, PyDict>>,
+    ) -> PyResult<(f64, f64, f64, f64)> {
+        let _ = chr;
+        Err(PdfUnsupportedError::new_err(
+            "Font.glyph_bbox is deferred: the oxide Font is a metrics-only \
+             Core-14 handle with no per-glyph outlines (only a font-level bbox)",
+        ))
+    }
+
     fn __repr__(&self) -> String {
         format!("Font('{}')", self.inner.name())
     }
@@ -4321,6 +4474,13 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // A process-wide `Tools` singleton, also exposed as `TOOLS` (PyMuPDF).
     let tools = Py::new(py, PyTools::py_new())?;
     m.add("TOOLS", tools)?;
+
+    // The 14 standard PDF base-font names (PyMuPDF module-level
+    // `fitz.Base14_fontnames`), an immutable tuple.
+    m.add(
+        "Base14_fontnames",
+        PyTuple::new(py, pdf_api::BASE14_FONTNAMES)?,
+    )?;
 
     // Exception hierarchy (PRD §9.3).
     m.add("PdfError", py.get_type::<PdfError>())?;

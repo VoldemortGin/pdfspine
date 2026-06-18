@@ -48,7 +48,7 @@ pub mod widths;
 
 pub use cmap::{CMap, CidUnicode, CodespaceRange};
 pub use encodings::BaseEncoding;
-pub use font::Font;
+pub use font::{Font, BASE14_FONTNAMES};
 pub use glyphlist::{glyph_name_to_unicode, unicode_to_glyph_name};
 pub use mapper::{CodeIter, FontKind, FontMapper};
 pub use predefined::{BundledCjk, PredefinedKind};

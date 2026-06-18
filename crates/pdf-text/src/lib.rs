@@ -41,9 +41,9 @@ pub use model::{
 pub use renderops::{ImageOp, RenderOp, RenderSink, ShadingOp, TextRun};
 pub use search::{search, SearchOptions};
 pub use serialize::{
-    defaults, get_textbox, textflags, to_blocks, to_dict, to_html, to_json, to_text, to_words,
-    to_xhtml, to_xml, BlockTuple, DictBlock, DictChar, DictImageBlock, DictLine, DictSpan,
-    DictTextBlock, TextDict, WordTuple,
+    defaults, extract_selection, get_textbox, textflags, to_blocks, to_dict, to_html, to_json,
+    to_text, to_words, to_xhtml, to_xml, BlockTuple, DictBlock, DictChar, DictImageBlock, DictLine,
+    DictSpan, DictTextBlock, TextDict, WordTuple,
 };
 pub use texttrace::{get_bboxlog, get_texttrace, BBoxLogEntry, TraceChar, TraceSpan};
 pub use words::words;

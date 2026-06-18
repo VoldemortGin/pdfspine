@@ -562,6 +562,13 @@ _BATCH34_IMPLEMENTED = {
     "Font.flags", "Font.glyph_advance", "Font.glyph_count", "Font.glyph_name_to_unicode",
     "Font.has_glyph", "Font.is_bold", "Font.is_italic", "Font.is_monospaced",
     "Font.is_serif", "Font.name", "Font.text_length", "Font.unicode_to_glyph_name",
+    "Font.Base14_fontnames", "Font.is_writable",
+    "Font.valid_codepoints",
+    # Font.buffer and Font.glyph_bbox stay DEFERRED: the oxide Font is a
+    # metrics-only Core-14 handle (built from a name; no embedded /FontFile*
+    # program, no per-glyph outlines). Shipping empty bytes / a constant
+    # font-level bbox would be misleading, so both raise PdfUnsupportedError
+    # until embedded-font programs / per-glyph outlines are available.
     "Link.border", "Link.colors", "Link.dest", "Link.flags",
     "Link.is_external", "Link.linkDest", "Link.next", "Link.page",
     "Link.rect", "Link.set_border", "Link.set_colors", "Link.set_flags",
@@ -571,7 +578,10 @@ _BATCH34_IMPLEMENTED = {
     "Outline.y", "Page.clean_contents", "Page.delete_image", "Page.get_bboxlog",
     "Page.get_text_blocks", "Page.get_text_selection", "Page.get_text_words", "Page.get_textbox",
     "Page.get_texttrace", "Page.replace_image", "Page.wrap_contents", "TOOLS",
-    "TextPage.extractRAWJSON", "TextWriter.TextWriter", "TextWriter.append", "TextWriter.appendv",
+    "TextPage.extractRAWJSON", "TextPage.extractHTML", "TextPage.extractXHTML",
+    "TextPage.extractXML", "TextPage.extractIMGINFO", "TextPage.extractSelection",
+    "TextPage.extractTextbox", "TextPage.search", "TextPage.poolsize",
+    "TextWriter.TextWriter", "TextWriter.append", "TextWriter.appendv",
     "TextWriter.clean_rtl", "TextWriter.color", "TextWriter.fill_textbox", "TextWriter.last_point",
     "TextWriter.opacity", "TextWriter.text_rect", "TextWriter.write_text", "Tools",
     "Tools.fitz_config", "Tools.gen_id", "Tools.glyph_cache_empty", "Tools.mupdf_display_errors",

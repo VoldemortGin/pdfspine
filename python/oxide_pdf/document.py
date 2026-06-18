@@ -1098,6 +1098,56 @@ class TextPage:
     def extractRAWJSON(self) -> str:  # noqa: N802
         return self._tp.extractRAWJSON()
 
+    def extractHTML(self) -> str:  # noqa: N802
+        """fitz-shaped HTML (PyMuPDF ``TextPage.extractHTML``)."""
+        return self._tp.extractHTML()
+
+    def extractXHTML(self) -> str:  # noqa: N802
+        """fitz-shaped XHTML (PyMuPDF ``TextPage.extractXHTML``)."""
+        return self._tp.extractXHTML()
+
+    def extractXML(self) -> str:  # noqa: N802
+        """fitz-shaped char-level XML (PyMuPDF ``TextPage.extractXML``)."""
+        return self._tp.extractXML()
+
+    def extractTextbox(self, rect) -> str:  # noqa: N802
+        """The text contained in ``rect`` (PyMuPDF ``TextPage.extractTextbox``)."""
+        r = rect if isinstance(rect, (tuple, list)) else (rect.x0, rect.y0, rect.x1, rect.y1)
+        return self._tp.extractTextbox((float(r[0]), float(r[1]), float(r[2]), float(r[3])))
+
+    def extractSelection(self, a, b) -> str:  # noqa: N802
+        """Text between two points like a mouse drag (PyMuPDF
+        ``TextPage.extractSelection``). ``a``/``b`` are points or ``(x, y)``."""
+        pa = a if isinstance(a, (tuple, list)) else (a.x, a.y)
+        pb = b if isinstance(b, (tuple, list)) else (b.x, b.y)
+        return self._tp.extractSelection(
+            (float(pa[0]), float(pa[1])), (float(pb[0]), float(pb[1]))
+        )
+
+    def search(self, needle: str, quads: bool = False) -> list:
+        """All occurrences of ``needle`` (PyMuPDF ``TextPage.search``).
+
+        Returns a list of :class:`Quad` when ``quads`` is ``True``, else a list
+        of :class:`Rect` (the enclosing rectangle of each hit)."""
+        hits = self._tp.search(needle, quads)
+        if quads:
+            # The core returns each quad as an 8-tuple
+            # (ul.x, ul.y, ur.x, ur.y, ll.x, ll.y, lr.x, lr.y).
+            return [
+                Quad((q[0], q[1]), (q[2], q[3]), (q[4], q[5]), (q[6], q[7]))
+                for q in hits
+            ]
+        return [Rect(*r) for r in hits]
+
+    def extractIMGINFO(self) -> list[dict]:  # noqa: N802
+        """Per-image info dicts for images on the page (PyMuPDF
+        ``TextPage.extractIMGINFO``)."""
+        return self._tp.extractIMGINFO()
+
+    def poolsize(self) -> int:
+        """The structured-text pool size (PyMuPDF ``TextPage.poolsize``)."""
+        return self._tp.poolsize()
+
     @property
     def rect(self) -> Rect:
         return Rect(0.0, 0.0, self._tp.width, self._tp.height)
@@ -1240,6 +1290,10 @@ DisplayList = _core.DisplayList
 # standalone Core-14 font handle exposing name / metrics / advances /
 # glyph-name ↔ Unicode helpers (PRD §8.5).
 Font = _core.Font
+
+# The 14 standard PDF base-font names (PyMuPDF module-level
+# ``fitz.Base14_fontnames``).
+Base14_fontnames = _core.Base14_fontnames
 
 # ``Tools`` / ``TOOLS`` is PyMuPDF's utility singleton (cache knobs, ids,
 # version, warnings). Most methods are advisory no-ops in the pure-Rust core.

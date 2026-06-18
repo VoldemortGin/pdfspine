@@ -180,27 +180,51 @@ fn search_005_across_spans_one_quad() {
 
 #[test]
 fn search_006_across_line_break_two_quads() {
-    // Two lines "Hel" / "lo"; "Hello" matches across the visual line break
-    // (PyMuPDF matches across the break, no separator inserted), yielding one
-    // quad per line segment.
+    // Two lines "abc" / "def"; the line break reads as one space (PyMuPDF), so
+    // the spaced needle "abc def" matches across the break, yielding one quad
+    // per line segment. (A needle WITHOUT the space — "abcdef" — does NOT
+    // bridge a break in PyMuPDF; see search_006b.)
     let tp = page(vec![
-        line_of(vec![span_of("Hel", 100.0, 10.0, 100.0, 112.0)]),
-        line_of(vec![span_of("lo", 100.0, 10.0, 200.0, 212.0)]),
+        line_of(vec![span_of("abc", 100.0, 10.0, 100.0, 112.0)]),
+        line_of(vec![span_of("def", 100.0, 10.0, 200.0, 212.0)]),
     ]);
-    let quads = search(&tp, "Hello", SearchOptions::default());
-    assert_eq!(quads.len(), 2, "wrapped hit yields one quad per line");
-    // First quad: "Hel" on the upper line.
+    let quads = search(&tp, "abc def", SearchOptions::default());
+    assert_eq!(
+        quads.len(),
+        2,
+        "spaced needle bridges the break, one quad/line"
+    );
+    // First quad: "abc" on the upper line.
     let r0 = quads[0].rect();
     approx(r0.x0, 100.0);
     approx(r0.x1, 130.0);
     approx(r0.y0, 100.0);
     approx(r0.y1, 112.0);
-    // Second quad: "lo" on the lower line.
+    // Second quad: "def" on the lower line.
     let r1 = quads[1].rect();
     approx(r1.x0, 100.0);
-    approx(r1.x1, 120.0);
+    approx(r1.x1, 130.0);
     approx(r1.y0, 200.0);
     approx(r1.y1, 212.0);
+}
+
+// === SEARCH-006b a NON-spaced needle does NOT bridge a line break =========
+
+#[test]
+fn search_006b_no_space_does_not_bridge_break() {
+    // The line break is whitespace; a needle with no whitespace at the break
+    // cannot match across it (matches PyMuPDF: "abcdef" finds nothing here).
+    let tp = page(vec![
+        line_of(vec![span_of("abc", 100.0, 10.0, 100.0, 112.0)]),
+        line_of(vec![span_of("def", 100.0, 10.0, 200.0, 212.0)]),
+    ]);
+    assert!(
+        search(&tp, "abcdef", SearchOptions::default()).is_empty(),
+        "no-space needle cannot bridge a line break"
+    );
+    // Multiple spaces / a newline in the needle all collapse to the one break.
+    assert_eq!(search(&tp, "abc  def", SearchOptions::default()).len(), 2);
+    assert_eq!(search(&tp, "abc\ndef", SearchOptions::default()).len(), 2);
 }
 
 // === SEARCH-007 hit_max caps ==============================================

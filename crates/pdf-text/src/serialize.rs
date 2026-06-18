@@ -8,8 +8,9 @@
 //! - [`to_words`] — `(x0,y0,x1,y1,word,block_no,line_no,word_no)` tuples;
 //! - [`to_dict`] / [`to_json`] — the structured tree (`dict`/`rawdict` and
 //!   `json`/`rawjson`), as a neutral [`TextDict`] that M2e converts to Python;
-//! - [`to_html`] / [`to_xhtml`] / [`to_xml`] — oxide-pdf-defined valid markup
-//!   (Tier-B, PRD §6.1: own goldens, not PyMuPDF-byte-exact);
+//! - [`to_html`] / [`to_xhtml`] / [`to_xml`] — fitz-shaped valid markup
+//!   (Tier-B, PRD §6.1: own goldens, structurally fitz-shaped but not
+//!   PyMuPDF-byte-exact);
 //! - [`get_textbox`] — text within a clip rect.
 //!
 //! The `TEXT_*` flag values and the **per-method default flag sets** match
@@ -271,8 +272,13 @@ fn line_text(line: &Line) -> String {
 
 // === get_textbox (PRD §8.6.2) ============================================
 
-/// Returns the text within `clip` (PyMuPDF `get_textbox`): a line is included
-/// when its bbox intersects the clip rect; included lines are `\n`-joined.
+/// Returns the text within `clip` (PyMuPDF `get_textbox`).
+///
+/// fitz clips **per character**: a char is kept when its bbox overlaps `clip` in
+/// both X and Y (strict overlap — a char merely touching a clip edge is out). A
+/// line that contributes at least one char yields its kept chars in order; the
+/// surviving lines are `\n`-joined. So a clip narrower than a line trims that
+/// line's head/tail rather than including or dropping the whole line.
 #[must_use]
 pub fn get_textbox(tp: &TextPage, clip: Rect) -> String {
     let clip = clip.normalize();
@@ -282,12 +288,213 @@ pub fn get_textbox(tp: &TextPage, clip: Rect) -> String {
             continue;
         }
         for line in &block.lines {
-            if line.bbox.normalize().intersects(&clip) {
-                lines.push(line_text(line));
+            let mut kept = String::new();
+            for span in &line.spans {
+                for ch in &span.chars {
+                    if char_overlaps_clip(&ch.bbox.normalize(), &clip) {
+                        kept.push(ch.c);
+                    }
+                }
+            }
+            if !kept.is_empty() {
+                lines.push(kept);
             }
         }
     }
     lines.join("\n")
+}
+
+/// Strict bbox overlap of a char against the clip rect (fitz's textbox clip: a
+/// char whose bbox only touches a clip edge is excluded).
+fn char_overlaps_clip(c: &Rect, clip: &Rect) -> bool {
+    c.x0 < clip.x1 && c.x1 > clip.x0 && c.y0 < clip.y1 && c.y1 > clip.y0
+}
+
+// === extract_selection (PRD §8.6.2) ======================================
+
+/// One flattened selection char: its bbox + a running `(block, line)` identity,
+/// plus the line's baseline (char origin Y) and font size for line resolution.
+struct SelChar<'a> {
+    c: &'a crate::model::Char,
+    line_id: (usize, usize),
+    /// The char's baseline Y (device space) — identical between oxide and fitz,
+    /// unlike the bbox Y (oxide uses a tighter glyph box).
+    baseline: f64,
+    /// The owning span's font size (em), for the baseline-relative line band.
+    size: f64,
+}
+
+/// Returns the text between two device-space points `a` and `b`, as if dragged
+/// with the mouse (PyMuPDF `extractSelection`).
+///
+/// Chars are flattened in reading order (block → line → char, text blocks only).
+/// Each point is resolved to a line by fitz's **baseline-relative line box**
+/// (see [`point_line`]): the start point picks the first line, the end point the
+/// last line, the point falls within. Within the start/end lines a point picks a
+/// char by horizontal position; the inclusive char range `[lo ..= hi]` is emitted
+/// with a `\n` at every line boundary (matching MuPDF's selection text). Because
+/// the line band is baseline-relative (not bbox-relative), the rule reproduces
+/// fitz's behavior despite oxide's tighter glyph box.
+#[must_use]
+pub fn extract_selection(tp: &TextPage, a: Point, b: Point) -> String {
+    // Flatten all text chars in reading order.
+    let mut chars: Vec<SelChar> = Vec::new();
+    for (bi, block) in tp.blocks.iter().enumerate() {
+        if block.kind != BlockKind::Text {
+            continue;
+        }
+        for (li, line) in block.lines.iter().enumerate() {
+            for span in &line.spans {
+                for c in &span.chars {
+                    chars.push(SelChar {
+                        c,
+                        line_id: (bi, li),
+                        baseline: c.origin.y,
+                        size: span.size,
+                    });
+                }
+            }
+        }
+    }
+    if chars.is_empty() {
+        return String::new();
+    }
+
+    let start = char_index_for_point(&chars, a, true);
+    let end = char_index_for_point(&chars, b, false);
+    let (lo, hi) = if start <= end {
+        (start, end)
+    } else {
+        (end, start)
+    };
+
+    let mut out = String::new();
+    let mut prev_line: Option<(usize, usize)> = None;
+    for sc in &chars[lo..=hi] {
+        if let Some(pl) = prev_line {
+            if pl != sc.line_id {
+                out.push('\n');
+            }
+        }
+        out.push(sc.c.c);
+        prev_line = Some(sc.line_id);
+    }
+    out
+}
+
+/// The line a selection point falls in, by fitz's baseline-relative line box.
+///
+/// fitz's selection treats each line as a band `[baseline − 0.875·size,
+/// baseline + 0.125·size]` (its full-em line box around the baseline; the two
+/// fractions sum to 1 em). A `start` point picks the **first** line whose band
+/// bottom is at/after it (`p.y ≤ baseline + 0.125·size`); an `end` point picks
+/// the **last** line whose band top is at/before it (`p.y ≥ baseline − 0.875·
+/// size`). Points above all text resolve to the first line; below all text to
+/// the last (so an end point past the final line keeps that line in full).
+fn point_line(chars: &[SelChar], p: Point, is_start: bool) -> (usize, usize) {
+    // Lines in reading order, each with its baseline + max size.
+    let mut lines: Vec<((usize, usize), f64, f64)> = Vec::new();
+    for sc in chars {
+        match lines.last_mut() {
+            Some((id, _, size)) if *id == sc.line_id => {
+                *size = size.max(sc.size);
+            }
+            _ => lines.push((sc.line_id, sc.baseline, sc.size)),
+        }
+    }
+
+    if is_start {
+        // First line whose band bottom is at/after the point.
+        for (id, baseline, size) in &lines {
+            if p.y <= baseline + 0.125 * size {
+                return *id;
+            }
+        }
+        // Below every line → the last line.
+        lines.last().map(|l| l.0).unwrap()
+    } else {
+        // Last line whose band top is at/before the point.
+        let mut chosen = lines.first().map(|l| l.0).unwrap();
+        for (id, baseline, size) in &lines {
+            if p.y >= baseline - 0.875 * size {
+                chosen = *id;
+            }
+        }
+        chosen
+    }
+}
+
+/// Maps a point to a char index for selection: resolves the point's line via
+/// [`point_line`], then within that line picks the char by position.
+///
+/// fitz snaps to the line edge when the point is vertically outside the line's
+/// box (`[baseline − 0.875·size, baseline + 0.125·size]`): a `start` point ABOVE
+/// the line selects from its first char (whole line head), an `end` point BELOW
+/// the line selects to its last char (whole line tail). When the point is within
+/// the line's vertical box, the char is chosen by horizontal position relative to
+/// char centers — `start` = first char whose center is at/after the point, `end`
+/// = last char whose center is at/before it — so a mid-glyph drag includes the
+/// expected text. Points past a line's horizontal extent clamp to its end / start.
+fn char_index_for_point(chars: &[SelChar], p: Point, is_start: bool) -> usize {
+    let line = point_line(chars, p, is_start);
+
+    // The resolved line's baseline + max font size → its vertical box. The
+    // baseline is shared across the line; the size is the largest span size.
+    let (baseline, size) = chars
+        .iter()
+        .filter(|sc| sc.line_id == line)
+        .fold((0.0_f64, 0.0_f64), |(_, sz), sc| {
+            (sc.baseline, sz.max(sc.size))
+        });
+    let line_top = baseline - 0.875 * size;
+    let line_bottom = baseline + 0.125 * size;
+
+    // First / last char index on the resolved line.
+    let first_on_line = chars.iter().position(|sc| sc.line_id == line).unwrap();
+    let last_on_line = chars.iter().rposition(|sc| sc.line_id == line).unwrap();
+
+    // Vertically outside the line box → snap to the line edge.
+    if is_start && p.y < line_top {
+        return first_on_line;
+    }
+    if !is_start && p.y > line_bottom {
+        return last_on_line;
+    }
+
+    // Within the box: choose by horizontal position relative to char centers.
+    let mut idx = 0usize;
+    let mut found_any = false;
+    for (i, sc) in chars.iter().enumerate() {
+        if sc.line_id != line {
+            continue;
+        }
+        let bb = sc.c.bbox.normalize();
+        let center = (bb.x0 + bb.x1) / 2.0;
+        if is_start {
+            // Start: first char whose center is at/after the point.
+            if p.x <= center {
+                idx = i;
+                found_any = true;
+                break;
+            }
+        } else {
+            // End: last char whose center is at/before the point.
+            if center <= p.x {
+                idx = i;
+                found_any = true;
+            }
+        }
+    }
+    if !found_any {
+        // Start point past the line end → its last char; end point before the
+        // line start → its first char.
+        idx = if is_start {
+            last_on_line
+        } else {
+            first_on_line
+        };
+    }
+    idx
 }
 
 // === blocks (PRD §8.6.2) =================================================
@@ -680,23 +887,24 @@ fn base64_encode(data: &[u8]) -> String {
 
 // === html / xhtml / xml (oxide-pdf-defined; Tier-B, PRD §6.1) ===============
 
-/// Serializes a [`TextPage`] to oxide-pdf-defined **HTML** (`get_text("html")`).
+/// Serializes a [`TextPage`] to **HTML** (`get_text("html")`), shaped to match
+/// PyMuPDF's `extractHTML`.
 ///
-/// Each text block becomes an absolutely-positioned `<div>` (page-relative
-/// `left`/`top` from the block bbox); each line a `<p>`; each span a `<span>`
-/// styled with font size / color / bold / italic. Image blocks become an empty
-/// positioned `<div class="oxide-pdf-image">` placeholder (bytes deferred to M5).
-/// This is **not** PyMuPDF-byte-exact — it is validated against our own goldens
-/// (Tier-B, PRD §6.1).
+/// The page is a single `<div id="page0" style="width:…pt;height:…pt">`; each
+/// text *line* is an absolutely-positioned `<p style="top:…pt;left:…pt;
+/// line-height:…pt">`; each span a `<span style="font-family:…;font-size:…pt;
+/// color:#rrggbb">` (bold/italic added when flagged). Image blocks become an
+/// `<img>` with the placement geometry (no data-URI; bytes deferred to M5).
+///
+/// Not PyMuPDF-byte-exact (deviations: line-`<p>` rather than block-`<p>`; no
+/// MuPDF heading promotion; CSS `font-family` is the raw PDF font name; image
+/// `<img>` has no `src` data URI), but structurally fitz-shaped, valid, and
+/// carrying all text + geometry. Validated against our own goldens (Tier-B).
 #[must_use]
 pub fn to_html(tp: &TextPage, _flags: u32) -> String {
     let mut s = String::new();
-    s.push_str("<!DOCTYPE html>\n<html>\n<head>\n");
-    s.push_str("<meta charset=\"utf-8\">\n");
-    s.push_str("<style>.oxide-pdf-page{position:relative;}</style>\n");
-    s.push_str("</head>\n<body>\n");
     s.push_str(&format!(
-        "<div class=\"oxide-pdf-page\" style=\"width:{}pt;height:{}pt\">\n",
+        "<div id=\"page0\" style=\"width:{}pt;height:{}pt\">\n",
         fmt_num(tp.width),
         fmt_num(tp.height)
     ));
@@ -706,63 +914,57 @@ pub fn to_html(tp: &TextPage, _flags: u32) -> String {
             BlockKind::Image => html_image_block(&mut s, block),
         }
     }
-    s.push_str("</div>\n</body>\n</html>\n");
+    s.push_str("</div>\n");
     s
 }
 
-/// Serializes a [`TextPage`] to oxide-pdf-defined **XHTML** (`get_text("xhtml")`):
-/// semantic, well-formed XML markup — `<div>` blocks → `<p>` lines → `<span>`
-/// runs, without absolute positioning (reflowable). Tier-B (PRD §6.1).
+/// Serializes a [`TextPage`] to **XHTML** (`get_text("xhtml")`), shaped to match
+/// PyMuPDF's `extractXHTML`: semantic, reflowable, well-formed markup. The page
+/// is `<div id="page0">`; each text line a `<p>` of styled `<span>`s, without
+/// absolute positioning. Tier-B; same documented deviations as [`to_html`].
 #[must_use]
 pub fn to_xhtml(tp: &TextPage, _flags: u32) -> String {
     let mut s = String::new();
-    s.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
-    s.push_str(
-        "<html xmlns=\"http://www.w3.org/1999/xhtml\">\n<head>\n<title>oxide-pdf</title>\n</head>\n",
-    );
-    s.push_str("<body>\n");
+    s.push_str("<div id=\"page0\">\n");
     for block in &tp.blocks {
         match block.kind {
             BlockKind::Text => html_text_block(&mut s, block, true),
-            BlockKind::Image => {
-                s.push_str("<div class=\"oxide-pdf-image\"></div>\n");
-            }
+            BlockKind::Image => html_image_block(&mut s, block),
         }
     }
-    s.push_str("</body>\n</html>\n");
+    s.push_str("</div>\n");
     s
 }
 
 fn html_text_block(s: &mut String, block: &Block, semantic: bool) {
-    if semantic {
-        s.push_str("<div>\n");
-    } else {
-        let b = block.bbox.normalize();
-        s.push_str(&format!(
-            "<div style=\"position:absolute;left:{}pt;top:{}pt\">\n",
-            fmt_num(b.x0),
-            fmt_num(b.y0)
-        ));
-    }
     for line in &block.lines {
-        s.push_str("<p>");
+        let lb = line.bbox.normalize();
+        // Line height ≈ the largest span size on the line.
+        let lh = line.spans.iter().map(|sp| sp.size).fold(0.0_f64, f64::max);
+        if semantic {
+            s.push_str("<p>");
+        } else {
+            s.push_str(&format!(
+                "<p style=\"top:{}pt;left:{}pt;line-height:{}pt\">",
+                fmt_num(lb.y0),
+                fmt_num(lb.x0),
+                fmt_num(lh)
+            ));
+        }
         for span in &line.spans {
             html_span(s, span);
         }
         s.push_str("</p>\n");
     }
-    s.push_str("</div>\n");
 }
 
 fn html_span(s: &mut String, span: &Span) {
     let mut style = format!(
-        "font-family:{};font-size:{}pt",
+        "font-family:{};font-size:{}pt;color:#{:06x}",
         css_font(&span.font),
-        fmt_num(span.size)
+        fmt_num(span.size),
+        span.color & 0x00FF_FFFF
     );
-    if span.color != 0 {
-        style.push_str(&format!(";color:#{:06x}", span.color & 0x00FF_FFFF));
-    }
     if span.flags & crate::model::flags::BOLD != 0 {
         style.push_str(";font-weight:bold");
     }
@@ -777,9 +979,9 @@ fn html_span(s: &mut String, span: &Span) {
 fn html_image_block(s: &mut String, block: &Block) {
     let b = block.bbox.normalize();
     s.push_str(&format!(
-        "<div class=\"oxide-pdf-image\" style=\"position:absolute;left:{}pt;top:{}pt;width:{}pt;height:{}pt\"></div>\n",
-        fmt_num(b.x0),
+        "<img style=\"top:{}pt;left:{}pt;width:{}pt;height:{}pt\"/>\n",
         fmt_num(b.y0),
+        fmt_num(b.x0),
         fmt_num(b.x1 - b.x0),
         fmt_num(b.y1 - b.y0)
     ));
@@ -798,7 +1000,7 @@ pub fn to_xml(tp: &TextPage, _flags: u32) -> String {
     let mut s = String::new();
     s.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
     s.push_str(&format!(
-        "<page width=\"{}\" height=\"{}\">\n",
+        "<page id=\"page0\" width=\"{}\" height=\"{}\">\n",
         fmt_num(tp.width),
         fmt_num(tp.height)
     ));
@@ -808,7 +1010,7 @@ pub fn to_xml(tp: &TextPage, _flags: u32) -> String {
             BlockKind::Image => {
                 let b = block.bbox.normalize();
                 s.push_str(&format!(
-                    "  <image bbox=\"{} {} {} {}\"/>\n",
+                    "<image bbox=\"{} {} {} {}\"/>\n",
                     fmt_num(b.x0),
                     fmt_num(b.y0),
                     fmt_num(b.x1),
@@ -824,7 +1026,7 @@ pub fn to_xml(tp: &TextPage, _flags: u32) -> String {
 fn xml_text_block(s: &mut String, block: &Block) {
     let b = block.bbox.normalize();
     s.push_str(&format!(
-        "  <block bbox=\"{} {} {} {}\">\n",
+        "<block bbox=\"{} {} {} {}\" justify=\"unknown\">\n",
         fmt_num(b.x0),
         fmt_num(b.y0),
         fmt_num(b.x1),
@@ -833,43 +1035,49 @@ fn xml_text_block(s: &mut String, block: &Block) {
     for line in &block.lines {
         let lb = line.bbox.normalize();
         s.push_str(&format!(
-            "    <line bbox=\"{} {} {} {}\" wmode=\"{}\" dir=\"{} {}\">\n",
+            "<line bbox=\"{} {} {} {}\" wmode=\"{}\" dir=\"{} {}\" flags=\"0\" text=\"{}\">\n",
             fmt_num(lb.x0),
             fmt_num(lb.y0),
             fmt_num(lb.x1),
             fmt_num(lb.y1),
             line.wmode,
             fmt_num(line.dir.0),
-            fmt_num(line.dir.1)
+            fmt_num(line.dir.1),
+            xml_attr(&line_text(line))
         ));
         for span in &line.spans {
             xml_span(s, span);
         }
-        s.push_str("    </line>\n");
+        s.push_str("</line>\n");
     }
-    s.push_str("  </block>\n");
+    s.push_str("</block>\n");
 }
 
 fn xml_span(s: &mut String, span: &Span) {
     s.push_str(&format!(
-        "      <font name=\"{}\" size=\"{}\">\n",
+        "<font name=\"{}\" size=\"{}\">\n",
         xml_attr(&span.font),
         fmt_num(span.size)
     ));
+    let color = format!("#{:06x}", span.color & 0x00FF_FFFF);
     for ch in &span.chars {
         let cb = ch.bbox.normalize();
+        // The char quad: four corners of the (axis-aligned) bbox,
+        // ul, ur, ll, lr (PyMuPDF `<char quad=…>`).
         s.push_str(&format!(
-            "        <char bbox=\"{} {} {} {}\" x=\"{}\" y=\"{}\" c=\"{}\"/>\n",
-            fmt_num(cb.x0),
-            fmt_num(cb.y0),
-            fmt_num(cb.x1),
-            fmt_num(cb.y1),
+            "<char quad=\"{} {} {} {} {} {} {} {}\" x=\"{}\" y=\"{}\" bidi=\"0\" color=\"{}\" alpha=\"#ff\" flags=\"{}\" c=\"{}\"/>\n",
+            fmt_num(cb.x0), fmt_num(cb.y0),
+            fmt_num(cb.x1), fmt_num(cb.y0),
+            fmt_num(cb.x0), fmt_num(cb.y1),
+            fmt_num(cb.x1), fmt_num(cb.y1),
             fmt_num(ch.origin.x),
             fmt_num(ch.origin.y),
+            color,
+            span.flags,
             xml_attr(&ch.c.to_string())
         ));
     }
-    s.push_str("      </font>\n");
+    s.push_str("</font>\n");
 }
 
 /// Escapes text for HTML/XML element content.
