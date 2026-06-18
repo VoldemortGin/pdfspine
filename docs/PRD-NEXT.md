@@ -88,8 +88,12 @@ Remaining, by group (largest first):
 Renderer: `crates/pdf-render`; glyph plumbing in `crates/pdf-text` (`interp.rs`, `renderops.rs`).
 
 ### D. Extraction breadth (LOWER — text already at parity, diminishing returns)
-- **RTL / Arabic (bidi)** — the one untested script class; most likely to surface a real bug. Needs
-  bidi-aware GT (visual vs logical order). Born-digital Arabic (Chrome) or UN ODS Arabic PDFs.
+- ~~**RTL / Arabic (bidi)**~~ **DONE (Task 4, 2026-06-19):** 9-doc born-digital Arabic/bidi corpus +
+  logical-order GT (conformance/gt/corpus-arabic, born_arabic.py). pdfspine mean lev **1.0000** vs
+  fitz 0.602 — pdfspine BEATS fitz on Arabic (fitz returns visual order + has glyph artifacts). Fixed
+  the one bug: blanket RTL `run.reverse()` flipped embedded LTR sub-runs (100→001, Linux→xuniL) →
+  replaced with a UAX#9 reorder (re-reverse strong-LTR sub-runs), gated behind `is_rtl_run`. No
+  presentation-form leakage, logical order correct. 3 LAYOUT-BIDI regression tests.
 - **FinTabNet gold table GT** — validate table *structure* vs human ground truth (not just fitz).
   FinTabNet (IBM, CDLA-Permissive), HF `bsmock/FinTabNet.c`. (Earlier fetch flaky — retry.)
 - **Scale robustness** — `fetch_robustness.py` got only 23 (throttled); rerun for thousands of
