@@ -63,10 +63,10 @@ The current baseline targets **PyMuPDF 1.24.x**. The machine-readable
 
 | Disposition | Count | Meaning |
 |---|---:|---|
-| Implemented | 324 | Present and does not raise on use |
-| Deferred | 361 | Known, planned for a later milestone |
-| Out-of-scope | 81 | Intentionally never in v1 |
-| **Total baseline** | **766** | **~42% implemented** |
+| Implemented | 647 | Present and does not raise on use |
+| Deferred | 56 | Known, planned for a later milestone |
+| Out-of-scope | 66 | Intentionally never in v1 |
+| **Total baseline** | **769** | **84.1% implemented** |
 
 Anything not yet implemented raises a typed, catchable
 `PdfUnsupportedError` (never a bare `AttributeError`), so you always get a clear

@@ -34,15 +34,15 @@
 
 > **Snapshot (2026-06-18, after API batches 1–5).** Numbers below are recomputed from the live
 > `COMPAT.toml` per-symbol dispositions. `COMPAT.toml [meta]` is always the authoritative live figure;
-> the current remaining-work list (the 96 deferred symbols, grouped + prioritized) lives in
+> the current remaining-work list (the 56 deferred symbols, grouped + prioritized) lives in
 > [`docs/PRD-NEXT.md`](docs/PRD-NEXT.md) §3.B.
 
-**Overall: 607 / 769 implemented (78.9% coverage).**
+**Overall: 647 / 769 implemented (84.1% coverage).**
 
 | Disposition | Count | Share |
 |---|---:|---:|
-| **implemented** | **607** | **78.9%** |
-| deferred (planned, later milestone / post-v1) | 96 | 12.5% |
+| **implemented** | **647** | **84.1%** |
+| deferred (planned, later milestone / post-v1) | 56 | 7.3% |
 | out-of-scope (raises `PdfUnsupportedError`) | 66 | 8.6% |
 | **Total catalogued symbols** | **769** | 100% |
 
@@ -60,7 +60,7 @@
 | `IRect` | 25 | 25 | 0 | 0 | 100% |
 | `Quad` | 17 | 17 | 0 | 0 | 100% |
 | `Document` | 150 | 117 | 19 | 14 | 78% |
-| `Page` | 117 | 90 | 25 | 2 | 76% |
+| `Page` | 117 | 90 | 25 | 2 | 77% |
 | `TextPage` | 17 | 17 | 0 | 0 | 100% |
 | `Pixmap` | 43 | 40 | 3 | 0 | 93% |
 | `Annot` | 51 | 46 | 1 | 4 | 90% |
@@ -69,17 +69,17 @@
 | `Outline` | 11 | 11 | 0 | 0 | 100% |
 | `DisplayList` | 5 | 3 | 2 | 0 | 60% |
 | `Shape` | 24 | 24 | 0 | 0 | 100% |
-| `Font` | 23 | 20 | 2 | 1 | 86% |
+| `Font` | 23 | 20 | 2 | 1 | 87% |
 | `TextWriter` | 10 | 10 | 0 | 0 | 100% |
 | `Story` | 17 | 0 | 0 | 17 | 0% |
 | `Xml` | 4 | 0 | 0 | 4 | 0% |
 | `Archive` | 5 | 0 | 0 | 5 | 0% |
 | `Colorspace` | 6 | 6 | 0 | 0 | 100% |
-| `constants` | 43 | 20 | 21 | 2 | 47% |
-| Module-level functions | 32 | 9 | 20 | 3 | 28% |
+| `constants` | 43 | 41 | 0 | 2 | 95% |
+| Module-level functions | 32 | 28 | 1 | 3 | 88% |
 | `Tools` / `TOOLS` | 22 | 12 | 3 | 7 | 55% |
 | `exceptions` | 10 | 10 | 0 | 0 | 100% |
-| **Total** | **769** | **607** | **96** | **66** | **78.9%** |
+| **Total** | **769** | **647** | **56** | **66** | **84.1%** |
 
 ### Per-milestone breakdown
 
@@ -87,7 +87,7 @@
 > per-symbol `milestone` field, so it cannot be recomputed mechanically. Use the **per-class table
 > above** (recomputed from the live `COMPAT.toml`) + `docs/PRD-NEXT.md` §3.B for current status. By
 > milestone, all of M0–M8's headline paths are landed (geometry, parsing, text, edit/save, annot/forms,
-> image-docs/Pixmap, rendering near-parity, SVG/tables/OCG, OCR-via-Tesseract); the 96 deferred are the
+> image-docs/Pixmap, rendering near-parity, SVG/tables/OCG, OCR-via-Tesseract); the 56 deferred are the
 > long tails and the 66 out-of-scope are the HTML/CSS story engine + render-era knobs.
 
 ---
@@ -169,7 +169,7 @@ per-symbol truth (every name, disposition, milestone, note) is in [`COMPAT.toml`
 
 ## Remaining work
 
-The authoritative, prioritised list of the **96 deferred** symbols (grouped, with quick-wins flagged)
+The authoritative, prioritised list of the **56 deferred** symbols (grouped, with quick-wins flagged)
 now lives in **[`docs/PRD-NEXT.md`](docs/PRD-NEXT.md) §3.B** — kept there to avoid two divergent lists.
 In brief the deferred set is: **Page (25)** annot/widget/link loaders + page-level draw convenience +
 `write_text`/`insert_font`/`remove_rotation`; **Document (19)** OCG/layers + TOC node ops + heavy ops

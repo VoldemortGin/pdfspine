@@ -38,10 +38,10 @@ repository tracks the disposition of every public PyMuPDF symbol:
 
 | Disposition | Count | What it means |
 |---|---:|---|
-| Implemented | 324 | Works today; does not raise on use. |
-| Deferred | 361 | Known and planned for a later milestone. |
-| Out-of-scope | 81 | Intentionally never in v1. |
-| **Total** | **766** | **~42% implemented** |
+| Implemented | 647 | Works today; does not raise on use. |
+| Deferred | 56 | Known and planned for a later milestone. |
+| Out-of-scope | 66 | Intentionally never in v1. |
+| **Total** | **769** | **84.1% implemented** |
 
 !!! warning "Accuracy validation is in progress"
     "Implemented" means the method exists and returns a result of the right

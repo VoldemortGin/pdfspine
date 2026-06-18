@@ -99,7 +99,7 @@ jobs:
     # Allowed-fail in M0 (only the placeholder geom target exists).
     continue-on-error: true
     env:
-      OXIPDF_MMAP: never
+      PDFSPINE_MMAP: never
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@nightly
@@ -191,7 +191,7 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           command: build
-          args: --release --out dist
+          args: --release --out dist --strip
       - name: Smoke-import the built wheel
         shell: bash
         run: |

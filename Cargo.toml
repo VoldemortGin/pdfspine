@@ -24,7 +24,7 @@ exclude = ["fuzz"]
 version = "0.0.0"
 edition = "2021"
 license = "Apache-2.0"
-repository = "https://github.com/pdfspine/pdfspine"
+repository = "https://github.com/VoldemortGin/pdfspine"
 authors = ["pdfspine contributors"]
 rust-version = "1.96"
 

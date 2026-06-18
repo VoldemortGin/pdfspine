@@ -11,9 +11,11 @@
 > split / save (incl. byte-exact incremental), encrypt, annotate, fill & flatten
 > forms, redact (destructively), open image files as documents, **render pages to
 > images**, and **OCR** (Tesseract + a pure-Rust PaddleOCR engine, stronger on CJK).
-> ~**79%** of the PyMuPDF 1.24 public API is implemented and tested (climbing),
-> with **1343+ Rust tests + 590+ Python tests** green. Text extraction is at fitz
-> parity and rendering is near-parity (see [Accuracy](#accuracy)).
+> **84.1%** (647 / 769) of the PyMuPDF 1.24 public API is implemented and tested
+> (climbing), with **1349+ Rust tests + 593+ Python tests** green. Text extraction
+> is at fitz parity (and beats fitz on Arabic / RTL), rendering is near-parity and
+> ~1.74× faster, and the pure-Rust PaddleOCR engine beats fitz on CJK scans
+> (see [Accuracy](#accuracy)).
 > Not yet on PyPI — [build from source](#build--install) for now.
 
 ---
@@ -51,11 +53,12 @@ pdfspine is a **drop-in-shaped, permissively-licensed (Apache-2.0)** alternative
 | **Render** | `get_pixmap` (vector + text + image + shadings via a tiny-skia rasterizer), `Pixmap` (buffer-protocol/numpy), `DisplayList`, **`get_svg_image`** |
 | **Images** | open PNG/JPEG/TIFF/GIF/BMP/WEBP as documents, `convert_to_pdf`, image-XObject decode (DCT/CCITT/JBIG2/JPX), `extract_image` |
 | **Layers** | Optional Content Groups read/write (`get_ocgs` / `add_ocg` / `set_layer`) |
+| **OCR** | pluggable engine: Tesseract adapter **and** a pure-Rust PaddleOCR engine (PP-OCRv4, embedded models, stronger on CJK) → searchable-sandwich PDF |
 | **CLI** | `pdfspine info / text / render / merge / split / pages / images / toc` |
 
-Planned next: OCR (pluggable engine, Tesseract default), reading-order accuracy
-improvements, Type1/Type3 glyph rendering, broader CJK. See [`PRD.md`](PRD.md) /
-[`docs/ROADMAP.md`](docs/ROADMAP.md). Out of scope: digital-signature *creation*.
+Planned next: reading-order accuracy improvements, Type1/Type3 glyph rendering,
+broader CJK coverage. See [`PRD.md`](PRD.md) / [`docs/ROADMAP.md`](docs/ROADMAP.md).
+Out of scope: digital-signature *creation*.
 
 ## Quick start
 
@@ -96,16 +99,23 @@ pdfspine merge a.pdf b.pdf -o merged.pdf
 
 ## Accuracy
 
-First real-corpus validation (34 public-domain US-government PDFs, with PyMuPDF as
-the differential oracle — see [`conformance/REPORT.md`](conformance/REPORT.md)):
+Validated against an objective ground-truth harness and with PyMuPDF (`fitz`) as
+the differential oracle (clean-room: the AGPL oracle is run locally only and never
+committed). See [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) and the
+[`conformance/gt/`](conformance/gt/) reports for the dated, reproducible evidence.
 
-- **Open rate 100%**, **0 panics/hangs**, **re-saved files 100% `qpdf --check`-clean**.
-- Text vs PyMuPDF: **word-set overlap (Jaccard) ~0.92–0.97** (we extract the right
-  words) — sequence similarity is lower, driven mainly by **multi-column reading
-  order**, which is the current focus of an ongoing diff-oracle improvement loop.
+- **Text extraction is at fitz parity** on born-digital corpora, and **beats fitz
+  on Arabic / RTL** (correct bidi reordering).
+- **Rendering is near-parity** with fitz (page-image SSIM ~**0.945**) and ~**1.74×
+  faster** after a font-cache fix.
+- **OCR beats fitz on CJK scans**: the pure-Rust PaddleOCR engine (PP-OCRv4, with
+  models embedded in the wheel) outperforms fitz's OCR path on Chinese/Japanese/
+  Korean documents.
+- Real-corpus robustness: **open rate 100%**, **0 panics/hangs**, **re-saved files
+  100% `qpdf --check`-clean** across the public-domain US-government corpus.
 
-This is an early data point (born-digital documents only); scanned / CJK / malformed
-corpora come with the OCR and long-tail work.
+Remaining accuracy work (multi-column reading order, Type1/Type3 glyph rendering,
+broader CJK) is tracked in [`docs/PRD-NEXT.md`](docs/PRD-NEXT.md).
 
 ## Build & install
 
@@ -120,6 +130,14 @@ python -c "import pdfspine; print(pdfspine.__version__)"
 # redistributable wheel:
 maturin build --release         # -> target/wheels/
 ```
+
+> **Building from source needs a C/asm compiler.** The bundled pure-Rust
+> PaddleOCR engine depends on `tract`, which compiles target-specific assembly
+> kernels at build time: a C compiler (`cc`/`clang`) on Linux/macOS, or the MSVC
+> Build Tools (incl. `ml64.exe`) on Windows. Prebuilt wheels (once published) need
+> none of this. To build a fully C-free library, compile the Rust crates with
+> `--no-default-features` (drops the `paddle-ocr` feature). Wheels are large
+> (~15–25 MB) because the OCR models (~16 MB) are embedded.
 
 ## Architecture
 
