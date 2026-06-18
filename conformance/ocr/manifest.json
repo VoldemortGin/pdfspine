@@ -1,0 +1,150 @@
+{
+  "font": "/System/Library/Fonts/STHeiti Light.ttc",
+  "n_docs": 16,
+  "docs": [
+    {
+      "image": "images/scan_00.png",
+      "cjk_size": 40,
+      "latin_size": 30,
+      "blur": 0.0,
+      "noise": 0,
+      "cjk_text": "纯Rust实现的文字识别引擎中文与拉丁混排的扫描文档发票金额合计为壹万贰仟元",
+      "latin_text": "pdfspine OCR 2026 invoice no. A1938 total USD 12000"
+    },
+    {
+      "image": "images/scan_01.png",
+      "cjk_size": 34,
+      "latin_size": 26,
+      "blur": 0.6,
+      "noise": 0,
+      "cjk_text": "北京市海淀区中关村大街机器学习与深度神经网络光学字符识别准确率评测",
+      "latin_text": "Beijing 100190 PaddleOCR v4 model accuracy 0.97 score"
+    },
+    {
+      "image": "images/scan_02.png",
+      "cjk_size": 38,
+      "latin_size": 28,
+      "blur": 0.0,
+      "noise": 6,
+      "cjk_text": "这是一段用于测试的中文文本人工智能正在改变世界格局软件工程实践与质量保证数据库索引优化技术要点",
+      "latin_text": "sample line 4827 AI changes world build passed 100% index speed up 3x"
+    },
+    {
+      "image": "images/scan_03.png",
+      "cjk_size": 30,
+      "latin_size": 24,
+      "blur": 0.8,
+      "noise": 0,
+      "cjk_text": "跨平台桌面应用程序开发自然语言处理前沿研究综述分布式系统的一致性算法高性能计算与并行编程模型",
+      "latin_text": "cross-platform app NLP survey 2025 raft consensus v2 HPC parallel 64"
+    },
+    {
+      "image": "images/scan_04.png",
+      "cjk_size": 36,
+      "latin_size": 28,
+      "blur": 0.0,
+      "noise": 0,
+      "cjk_text": "图像分割与目标检测网络操作系统内核调度策略分析纯Rust实现的文字识别引擎中文与拉丁混排的扫描文档发票金额合计为壹万贰仟元",
+      "latin_text": "detect 30 objects kernel sched fair pdfspine OCR 2026 invoice no. A1938 total USD 12000"
+    },
+    {
+      "image": "images/scan_05.png",
+      "cjk_size": 32,
+      "latin_size": 26,
+      "blur": 0.5,
+      "noise": 4,
+      "cjk_text": "北京市海淀区中关村大街机器学习与深度神经网络光学字符识别准确率评测这是一段用于测试的中文文本人工智能正在改变世界格局",
+      "latin_text": "Beijing 100190 PaddleOCR v4 model accuracy 0.97 score sample line 4827 AI changes world"
+    },
+    {
+      "image": "images/scan_06.png",
+      "cjk_size": 34,
+      "latin_size": 26,
+      "blur": 0.0,
+      "noise": 0,
+      "cjk_text": "软件工程实践与质量保证数据库索引优化技术要点跨平台桌面应用程序开发自然语言处理前沿研究综述分布式系统的一致性算法高性能计算与并行编程模型",
+      "latin_text": "build passed 100% index speed up 3x cross-platform app NLP survey 2025 raft consensus v2 HPC parallel 64"
+    },
+    {
+      "image": "images/scan_07.png",
+      "cjk_size": 30,
+      "latin_size": 24,
+      "blur": 0.0,
+      "noise": 8,
+      "cjk_text": "图像分割与目标检测网络操作系统内核调度策略分析纯Rust实现的文字识别引擎中文与拉丁混排的扫描文档发票金额合计为壹万贰仟元北京市海淀区中关村大街",
+      "latin_text": "detect 30 objects kernel sched fair pdfspine OCR 2026 invoice no. A1938 total USD 12000 Beijing 100190"
+    },
+    {
+      "image": "images/scan_08.png",
+      "cjk_size": 44,
+      "latin_size": 32,
+      "blur": 0.4,
+      "noise": 0,
+      "cjk_text": "机器学习与深度神经网络光学字符识别准确率评测这是一段用于测试的中文文本",
+      "latin_text": "PaddleOCR v4 model accuracy 0.97 score sample line 4827"
+    },
+    {
+      "image": "images/scan_09.png",
+      "cjk_size": 40,
+      "latin_size": 30,
+      "blur": 0.0,
+      "noise": 5,
+      "cjk_text": "人工智能正在改变世界格局软件工程实践与质量保证数据库索引优化技术要点跨平台桌面应用程序开发",
+      "latin_text": "AI changes world build passed 100% index speed up 3x cross-platform app"
+    },
+    {
+      "image": "images/scan_10.png",
+      "cjk_size": 28,
+      "latin_size": 22,
+      "blur": 0.0,
+      "noise": 0,
+      "cjk_text": "自然语言处理前沿研究综述分布式系统的一致性算法高性能计算与并行编程模型图像分割与目标检测网络操作系统内核调度策略分析",
+      "latin_text": "NLP survey 2025 raft consensus v2 HPC parallel 64 detect 30 objects kernel sched fair"
+    },
+    {
+      "image": "images/scan_11.png",
+      "cjk_size": 36,
+      "latin_size": 28,
+      "blur": 1.0,
+      "noise": 0,
+      "cjk_text": "纯Rust实现的文字识别引擎中文与拉丁混排的扫描文档发票金额合计为壹万贰仟元",
+      "latin_text": "pdfspine OCR 2026 invoice no. A1938 total USD 12000"
+    },
+    {
+      "image": "images/scan_12.png",
+      "cjk_size": 34,
+      "latin_size": 26,
+      "blur": 0.0,
+      "noise": 0,
+      "cjk_text": "北京市海淀区中关村大街机器学习与深度神经网络光学字符识别准确率评测这是一段用于测试的中文文本",
+      "latin_text": "Beijing 100190 PaddleOCR v4 model accuracy 0.97 score sample line 4827"
+    },
+    {
+      "image": "images/scan_13.png",
+      "cjk_size": 38,
+      "latin_size": 30,
+      "blur": 0.3,
+      "noise": 6,
+      "cjk_text": "人工智能正在改变世界格局软件工程实践与质量保证数据库索引优化技术要点跨平台桌面应用程序开发自然语言处理前沿研究综述",
+      "latin_text": "AI changes world build passed 100% index speed up 3x cross-platform app NLP survey 2025"
+    },
+    {
+      "image": "images/scan_14.png",
+      "cjk_size": 32,
+      "latin_size": 24,
+      "blur": 0.6,
+      "noise": 0,
+      "cjk_text": "分布式系统的一致性算法高性能计算与并行编程模型图像分割与目标检测网络操作系统内核调度策略分析纯Rust实现的文字识别引擎中文与拉丁混排的扫描文档",
+      "latin_text": "raft consensus v2 HPC parallel 64 detect 30 objects kernel sched fair pdfspine OCR 2026 invoice no. A1938"
+    },
+    {
+      "image": "images/scan_15.png",
+      "cjk_size": 42,
+      "latin_size": 32,
+      "blur": 0.0,
+      "noise": 0,
+      "cjk_text": "发票金额合计为壹万贰仟元北京市海淀区中关村大街机器学习与深度神经网络光学字符识别准确率评测",
+      "latin_text": "total USD 12000 Beijing 100190 PaddleOCR v4 model accuracy 0.97 score"
+    }
+  ]
+}

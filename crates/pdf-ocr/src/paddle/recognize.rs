@@ -19,8 +19,12 @@ use crate::paddle::preprocess::{resize_exact, to_tensor};
 
 /// Recognition input height.
 const REC_H: u32 = 48;
-/// Width bucket granularity (must match the rec runnable cache key).
-const WIDTH_BUCKET: u32 = 32;
+/// Width bucket granularity (must match the rec runnable cache key). Coarse
+/// (64px) buckets keep the number of distinct rec input shapes small, so the
+/// expensive per-shape `into_optimized()` runs few times and the runnable cache
+/// hits far more often across boxes/pages. The extra right-pad (≤63px of CTC
+/// blank) does not change recognition output.
+const WIDTH_BUCKET: u32 = 64;
 /// Minimum bucketed width.
 const MIN_WIDTH: u32 = 16;
 /// Symmetric `(px/255-0.5)/0.5` normalization.

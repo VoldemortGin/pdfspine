@@ -71,6 +71,70 @@ pub(crate) fn resize_exact(img: &RgbImage, w: u32, h: u32) -> RgbImage {
     image::imageops::resize(img, w.max(1), h.max(1), FilterType::Triangle)
 }
 
+/// Extracts a rotated-rectangle region and renders it upright (horizontal) via
+/// bilinear sampling along the rect's axes.
+///
+/// `quad` are the four corners in image pixel coordinates ordered top-left,
+/// top-right, bottom-right, bottom-left along the rect's own axes (as produced
+/// by `detect::unclip_rect`). The output width/height are the rect's side
+/// lengths, so the text reads left-to-right in the result. A degenerate rect
+/// yields a 1×1 image so downstream resize never sees a zero dimension.
+pub(crate) fn crop_rotated(img: &RgbImage, quad: &[(f32, f32); 4]) -> RgbImage {
+    let (tl, tr, br, bl) = (quad[0], quad[1], quad[2], quad[3]);
+    // Side lengths: top/bottom → width axis, left/right → height axis.
+    let dist = |a: (f32, f32), b: (f32, f32)| ((a.0 - b.0).powi(2) + (a.1 - b.1).powi(2)).sqrt();
+    let out_w = (dist(tl, tr).max(dist(bl, br))).round().max(1.0) as u32;
+    let out_h = (dist(tl, bl).max(dist(tr, br))).round().max(1.0) as u32;
+    if out_w <= 1 && out_h <= 1 {
+        return RgbImage::new(1, 1);
+    }
+    let mut out = RgbImage::new(out_w, out_h);
+    let iw = img.width() as i32;
+    let ih = img.height() as i32;
+    let fw = (out_w.max(2) - 1) as f32;
+    let fh = (out_h.max(2) - 1) as f32;
+    for oy in 0..out_h {
+        let ty = oy as f32 / fh; // 0..1 along height (top→bottom)
+                                 // Interpolate the left and right edges, then across.
+        let lx = tl.0 + (bl.0 - tl.0) * ty;
+        let ly = tl.1 + (bl.1 - tl.1) * ty;
+        let rx = tr.0 + (br.0 - tr.0) * ty;
+        let ry = tr.1 + (br.1 - tr.1) * ty;
+        for ox in 0..out_w {
+            let tx = ox as f32 / fw; // 0..1 along width (left→right)
+            let sx = lx + (rx - lx) * tx;
+            let sy = ly + (ry - ly) * tx;
+            out.put_pixel(ox, oy, sample_bilinear(img, sx, sy, iw, ih));
+        }
+    }
+    out
+}
+
+/// Bilinearly samples `img` at fractional `(x,y)`, clamping to image bounds.
+fn sample_bilinear(img: &RgbImage, x: f32, y: f32, iw: i32, ih: i32) -> image::Rgb<u8> {
+    let x0 = x.floor() as i32;
+    let y0 = y.floor() as i32;
+    let fx = x - x0 as f32;
+    let fy = y - y0 as f32;
+    let at = |xx: i32, yy: i32| -> [f32; 3] {
+        let cx = xx.clamp(0, iw - 1).max(0) as u32;
+        let cy = yy.clamp(0, ih - 1).max(0) as u32;
+        let p = img.get_pixel(cx, cy);
+        [p[0] as f32, p[1] as f32, p[2] as f32]
+    };
+    let p00 = at(x0, y0);
+    let p10 = at(x0 + 1, y0);
+    let p01 = at(x0, y0 + 1);
+    let p11 = at(x0 + 1, y0 + 1);
+    let mut out = [0u8; 3];
+    for c in 0..3 {
+        let top = p00[c] + (p10[c] - p00[c]) * fx;
+        let bot = p01[c] + (p11[c] - p01[c]) * fx;
+        out[c] = (top + (bot - top) * fy).round().clamp(0.0, 255.0) as u8;
+    }
+    image::Rgb(out)
+}
+
 /// Crops an axis-aligned region from `img`, clamped to image bounds. Returns a
 /// new owned `RgbImage`; an empty/degenerate region yields a 1×1 image so the
 /// downstream resize never sees a zero dimension.

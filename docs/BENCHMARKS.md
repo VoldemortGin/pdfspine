@@ -140,9 +140,72 @@ robustness 0.843, fixtures 0.971. Full machine report: `conformance/gt/RENDER-RE
 with `conformance/gt/render_diff.py`). Remaining long tail (bare Type1 PFB, non-embedded standard-14
 fonts, Indexed/Separation/ICC colorspaces + `/Decode` arrays) is tracked in `docs/PRD-NEXT.md` §3.C.
 
-## 6. Reproduce
+## 6. OCR accuracy — PaddleOCR vs Tesseract (= fitz's OCR) (2026-06-19)
+
+pdfspine ships **two** OCR backends behind one API (`page.get_textpage_ocr(engine=...)` /
+`doc.pdfocr_*`): the default `"tesseract"` (the system Tesseract CLI — exactly what PyMuPDF/fitz
+uses, since **fitz's OCR is Tesseract-only**) and `"paddle"` (pdfspine's pure-Rust PP-OCRv4 engine,
+embedded in the wheel, no external binary). This benchmark quantifies the CJK win.
+
+**Corpus.** 16 deterministic synthetic SCANS (`conformance/ocr/`), each a mixed
+Chinese + Latin + digit page rendered with a real CJK font (STHeiti), varying font size (28–44 px),
+line count (3–6), and scan-like degradation (Gaussian blur ≤1.0 px and per-pixel noise on a subset).
+Each image is fed through the **same pdfspine pipeline** (`Page.insert_image` → image-only PDF →
+`get_textpage_ocr` at 150 dpi) for both engines. Ground truth is known per-image and split into a CJK
+stream and a Latin stream so each script is scored independently.
+
+**Metrics.** CJK = character accuracy (`1 − normalized Levenshtein`) over the pure-CJK character
+streams. Latin = per-token best-match accuracy (for each ground-truth Latin token, the closest token
+the engine emitted) — deliberately the metric **most favorable to Tesseract**, so a CJK-blind engine's
+ASCII garbage for Chinese glyphs is *not* charged against its Latin score. Tesseract runs with its
+**default `eng` language** — the same default fitz uses — i.e. no Chinese model is loaded.
+
+| engine | CJK char-acc | Latin token-acc |
+|---|---:|---:|
+| **pdfspine PaddleOCR** (`engine="paddle"`) | **1.000** | 0.867 |
+| Tesseract (`engine="tesseract"`, `eng`) = **fitz's OCR** | **0.000** | 0.988 |
+
+**The win: PaddleOCR scores 1.000 on Chinese vs Tesseract's 0.000.** With only the default English
+model — which is all fitz's OCR offers out of the box — Tesseract cannot read a single Chinese
+character (it emits ASCII noise like `RUSTSCEM`, `RZEMETASARATTZ`), so its CJK accuracy is a flat zero
+across all 16 scans. PaddleOCR recovers the Chinese **perfectly** (16/16 images at 1.000) with no
+external binary and no model download. On Latin the two are close and Tesseract edges ahead (0.988 vs
+0.867 — PaddleOCR occasionally mis-segments a Latin token); for a CJK or mixed-script document the
+PaddleOCR engine is the one that actually works.
+
+Per-image numbers and the raw recognized text live in `conformance/ocr/results.json`. The corpus is
+regenerable and the scoring is deterministic.
+
+### OCR speed (PaddleOCR, CPU, single-thread) (2026-06-19)
+
+Measured on a representative 1100×2372 page (~42 text boxes) via the `paddle_prof` harness on Apple
+Silicon (release build, single-threaded):
+
+| | per page |
+|---|---|
+| **COLD** (first page in process) | ~5.2 s |
+| **WARM** (subsequent pages, same `PaddleOcr`) | ~4.5 s |
+
+Per-stage breakdown of a page (WARM): **detection ≈ 0.8 s, classification ≈ 0.2 s, recognition ≈ 3.5 s**
+(recognition dominates — one CRNN+CTC inference per box). The COLD↔WARM gap (~0.7 s) is the one-time
+`tract` `into_optimized()` cost paid per *distinct input shape*: detection (1 shape) + classifier
+(1 fixed shape) + recognition (one shape per width bucket). The runnable cache lives on the `PaddleOcr`
+instance and persists across pages, and the whole-document path (`pdfocr_save` / `pdfocr_tobytes`) builds
+**one** engine and reuses it for every page — so that optimize cost is amortized to ~zero after the first page.
+
+**Tuning applied:** the recognition width bucket was coarsened from 32 px to **64 px**
+(`crates/pdf-ocr/src/paddle/recognize.rs`). On this page that cuts distinct recognition shapes from 9 to 6,
+shrinking the COLD penalty (and improving cross-page cache hits) with **no accuracy change** (the extra
+≤63 px right-pad is CTC blank): CJK 1.000 and Latin 0.867 are byte-for-byte unchanged from the 32 px
+baseline. Reproduce the timing with
+`cargo test -p pdf-ocr --release --test paddle_prof -- --nocapture --ignored`.
+
+## 7. Reproduce
 
 ```
+# OCR accuracy — PaddleOCR vs Tesseract (= fitz's OCR), one line:
+bash conformance/ocr/run_ocr_bench.sh
+
 # objective ground-truth (build corpora first, then score):
 conformance/gt/born_digital.py  --out conformance/gt/corpus-born
 conformance/gt/pmc_fetch.py     --out conformance/gt/corpus-pmc   --n 12

@@ -1,0 +1,124 @@
+{
+  "summary": {
+    "n_docs": 16,
+    "paddle_cjk_acc": 1.0,
+    "paddle_latin_acc": 0.8672,
+    "tesseract_cjk_acc": 0.0,
+    "tesseract_latin_acc": 0.9877,
+    "tesseract_lang": "eng (fitz default; no CJK model loaded)"
+  },
+  "per_doc": [
+    {
+      "image": "images/scan_00.png",
+      "paddle_cjk_acc": 1.0,
+      "paddle_latin_acc": 1.0,
+      "tesseract_cjk_acc": 0.0,
+      "tesseract_latin_acc": 0.9861
+    },
+    {
+      "image": "images/scan_01.png",
+      "paddle_cjk_acc": 1.0,
+      "paddle_latin_acc": 0.5617,
+      "tesseract_cjk_acc": 0.0,
+      "tesseract_latin_acc": 1.0
+    },
+    {
+      "image": "images/scan_02.png",
+      "paddle_cjk_acc": 1.0,
+      "paddle_latin_acc": 0.9615,
+      "tesseract_cjk_acc": 0.0,
+      "tesseract_latin_acc": 0.9615
+    },
+    {
+      "image": "images/scan_03.png",
+      "paddle_cjk_acc": 1.0,
+      "paddle_latin_acc": 0.8431,
+      "tesseract_cjk_acc": 0.0,
+      "tesseract_latin_acc": 1.0
+    },
+    {
+      "image": "images/scan_04.png",
+      "paddle_cjk_acc": 1.0,
+      "paddle_latin_acc": 0.9333,
+      "tesseract_cjk_acc": 0.0,
+      "tesseract_latin_acc": 0.9917
+    },
+    {
+      "image": "images/scan_05.png",
+      "paddle_cjk_acc": 1.0,
+      "paddle_latin_acc": 0.7,
+      "tesseract_cjk_acc": 0.0,
+      "tesseract_latin_acc": 0.9667
+    },
+    {
+      "image": "images/scan_06.png",
+      "paddle_cjk_acc": 1.0,
+      "paddle_latin_acc": 1.0,
+      "tesseract_cjk_acc": 0.0,
+      "tesseract_latin_acc": 1.0
+    },
+    {
+      "image": "images/scan_07.png",
+      "paddle_cjk_acc": 1.0,
+      "paddle_latin_acc": 0.78,
+      "tesseract_cjk_acc": 0.0,
+      "tesseract_latin_acc": 1.0
+    },
+    {
+      "image": "images/scan_08.png",
+      "paddle_cjk_acc": 1.0,
+      "paddle_latin_acc": 1.0,
+      "tesseract_cjk_acc": 0.0,
+      "tesseract_latin_acc": 1.0
+    },
+    {
+      "image": "images/scan_09.png",
+      "paddle_cjk_acc": 1.0,
+      "paddle_latin_acc": 0.9615,
+      "tesseract_cjk_acc": 0.0,
+      "tesseract_latin_acc": 0.9615
+    },
+    {
+      "image": "images/scan_10.png",
+      "paddle_cjk_acc": 1.0,
+      "paddle_latin_acc": 0.9379,
+      "tesseract_cjk_acc": 0.0,
+      "tesseract_latin_acc": 1.0
+    },
+    {
+      "image": "images/scan_11.png",
+      "paddle_cjk_acc": 1.0,
+      "paddle_latin_acc": 0.7917,
+      "tesseract_cjk_acc": 0.0,
+      "tesseract_latin_acc": 0.9861
+    },
+    {
+      "image": "images/scan_12.png",
+      "paddle_cjk_acc": 1.0,
+      "paddle_latin_acc": 0.8333,
+      "tesseract_cjk_acc": 0.0,
+      "tesseract_latin_acc": 1.0
+    },
+    {
+      "image": "images/scan_13.png",
+      "paddle_cjk_acc": 1.0,
+      "paddle_latin_acc": 0.9688,
+      "tesseract_cjk_acc": 0.0,
+      "tesseract_latin_acc": 0.9688
+    },
+    {
+      "image": "images/scan_14.png",
+      "paddle_cjk_acc": 1.0,
+      "paddle_latin_acc": 0.6861,
+      "tesseract_cjk_acc": 0.0,
+      "tesseract_latin_acc": 0.9815
+    },
+    {
+      "image": "images/scan_15.png",
+      "paddle_cjk_acc": 1.0,
+      "paddle_latin_acc": 0.9167,
+      "tesseract_cjk_acc": 0.0,
+      "tesseract_latin_acc": 1.0
+    }
+  ]
+}

@@ -6,12 +6,16 @@
 //! Python and no C/C++ runtime. It is higher-accuracy on mixed CJK+Latin text
 //! than the Tesseract default and needs no external binary.
 //!
-//! Pipeline per page image: **detect** text boxes → for each box **crop**
-//! (axis-aligned) → **classify** orientation (rotate 180° if needed) →
-//! **recognize** (CRNN+CTC) → emit one [`OcrWord`] per box with the box in image
-//! pixel coordinates and confidence on the Tesseract `[0,100]` scale.
+//! Pipeline per page image: **detect** text boxes (minimum-area rotated rects) →
+//! for each box **crop** (axis-aligned for upright text, or de-rotated to
+//! horizontal via the rotated quad for skewed text) → **classify** orientation
+//! (rotate 180° if needed) → **recognize** (CRNN+CTC) → emit one [`OcrWord`] per
+//! box with the box in image pixel coordinates and confidence on the Tesseract
+//! `[0,100]` scale.
 //!
-//! Rotated/skewed text is represented by its axis-aligned bounding box (v1).
+//! Rotated/skewed text is detected as a rotated rectangle and de-rotated before
+//! recognition; the public [`OcrWord::bbox`](crate::OcrWord::bbox) remains the
+//! axis-aligned bounding box of that rotated quad.
 
 mod classify;
 mod detect;
@@ -29,6 +33,11 @@ use self::model::Models;
 
 /// Below this recognizer confidence (`[0,1]`) a result is dropped (`text_score`).
 const TEXT_SCORE: f32 = 0.5;
+
+/// Boxes within this angle of horizontal (radians, ≈2.9°) are treated as upright
+/// and use the axis-aligned crop path — keeping upright text byte-for-byte as it
+/// was before rotated-rect detection.
+const UPRIGHT_ANGLE_RAD: f32 = 0.05;
 
 /// A pure-Rust PaddleOCR engine running PP-OCRv4 ONNX models via `tract`.
 ///
@@ -67,7 +76,14 @@ impl OcrEngine for PaddleOcr {
 
         let mut words = Vec::with_capacity(boxes.len());
         for b in boxes {
-            let crop = preprocess::crop(&rgb, b.x0, b.y0, b.x1, b.y1);
+            // Upright (~0°) boxes use the exact axis-aligned crop path as before;
+            // skewed boxes are de-rotated to horizontal via the rotated quad so
+            // the recognizer (which needs horizontal text) sees an upright line.
+            let crop = if b.angle.abs() <= UPRIGHT_ANGLE_RAD {
+                preprocess::crop(&rgb, b.x0, b.y0, b.x1, b.y1)
+            } else {
+                preprocess::crop_rotated(&rgb, &b.quad)
+            };
             let oriented = classify::classify_and_orient(&self.models, crop)?;
             let rec = recognize::recognize(&self.models, &oriented)?;
             let text = rec.text.trim().to_string();

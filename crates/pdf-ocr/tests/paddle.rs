@@ -96,3 +96,43 @@ fn paddle_recognizes_three_reference_lines() {
         );
     }
 }
+
+/// `PADDLE-ROT` — rotated/skewed text. A single CJK+Latin line rendered upright
+/// then rotated ~20° (fixture `ocr_rotated.png`, generated with PIL). With only
+/// axis-aligned detection this line is garbled/missed; minimum-area rotated-rect
+/// detection + de-rotation before recognition must recover the bulk of it.
+#[test]
+fn paddle_recognizes_rotated_line() {
+    let bytes = include_bytes!("fixtures/ocr_rotated.png");
+    let img = image::load_from_memory(bytes)
+        .expect("decode rotated png")
+        .to_rgb8();
+    let (w, h) = (img.width(), img.height());
+    let pix = Pixmap::new(w, h, Colorspace::Rgb, false, img.into_raw());
+
+    let engine = PaddleOcr::new().expect("build PaddleOcr");
+    let words = engine.recognize(&pix, "ch", 72.0).expect("recognize ok");
+
+    eprintln!("rotated: recognized {} word(s):", words.len());
+    for wd in &words {
+        eprintln!(
+            "  text={:?} bbox=[{:.0},{:.0},{:.0},{:.0}] conf={:.1}",
+            wd.text, wd.bbox.x0, wd.bbox.y0, wd.bbox.x1, wd.bbox.y1, wd.confidence
+        );
+    }
+
+    let joined: String = words
+        .iter()
+        .flat_map(|w| w.text.chars())
+        .filter(|c| !c.is_whitespace())
+        .collect();
+
+    // The rotated line is "旋转文字 Rotated 2026". Require the CJK head, the Latin
+    // word, and the digits to all be recovered (substring, whitespace-stripped).
+    for needle in ["旋转文字", "Rotated", "2026"] {
+        assert!(
+            joined.contains(needle),
+            "rotated line fragment {needle:?} not found in {joined:?}"
+        );
+    }
+}
