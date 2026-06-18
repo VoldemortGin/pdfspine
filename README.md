@@ -2,13 +2,18 @@
 
 **An Apache-2.0-licensed, pure-Rust reimplementation of [PyMuPDF](https://pymupdf.readthedocs.io/) (`fitz`), with PyO3 Python bindings.**
 
+> 🦴 **Part of the `spine` family — framework-free backend engines, each the spine of a domain:**
+> zero framework lock-in, Protocol-ized seams, offline-capable. **pdfspine** is the *PDF spine* (this
+> repo); **ragspine** is the *RAG spine* (deterministic dual-channel retrieval + agent orchestration).
+
 > **Status: alpha / pre-1.0, but the core is feature-complete.** pdfspine can
 > already parse/repair/decrypt PDFs, extract text & tables, search, edit / merge /
 > split / save (incl. byte-exact incremental), encrypt, annotate, fill & flatten
-> forms, redact (destructively), open image files as documents, and **render
-> pages to images**. ~**42%** of the PyMuPDF 1.24 public API is implemented and
-> tested (climbing), with **1100+ Rust tests + 260+ Python tests** green.
-> Real-world accuracy validation is in progress (see [Accuracy](#accuracy)).
+> forms, redact (destructively), open image files as documents, **render pages to
+> images**, and **OCR** (Tesseract + a pure-Rust PaddleOCR engine, stronger on CJK).
+> ~**79%** of the PyMuPDF 1.24 public API is implemented and tested (climbing),
+> with **1343+ Rust tests + 590+ Python tests** green. Text extraction is at fitz
+> parity and rendering is near-parity (see [Accuracy](#accuracy)).
 > Not yet on PyPI — [build from source](#build--install) for now.
 
 ---
