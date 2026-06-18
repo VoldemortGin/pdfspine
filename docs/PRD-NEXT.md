@@ -11,7 +11,8 @@
   robustness — see `docs/BENCHMARKS.md`.
 - **Rendering (`get_pixmap`):** SSIM **0.945 mean / 0.986 median** vs fitz (`conformance/gt/RENDER-REPORT.md`).
 - **API parity:** **78.9%** (607/769 in `COMPAT.toml`); **96 symbols still deferred** (§3.B).
-- **OCR:** Tesseract adapter shipped; pure-Rust PaddleOCR-via-`tract` **de-risked**, full build pending (§3.A).
+- **OCR:** Tesseract adapter + **pure-Rust PaddleOCR (PP-OCRv4 via `tract`)** both shipped; PaddleOCR
+  selectable from Python, scanned-PDF→searchable proven end-to-end — beats fitz (Tesseract-only) on CJK (§3.A).
 - **Gate:** 1343 Rust + 589 pytest green; clippy `-D warnings` clean.
 
 ## 2. Harness (reuse, don't rebuild)
@@ -30,20 +31,25 @@ corpora/cache/`*-results.json` gitignored, regenerable):
 
 ## 3. Remaining work (priority order)
 
-### A. OCR — full pure-Rust PaddleOCR build (HIGH — de-risked, next up)
-De-risk DONE: `tract` (pure Rust) loads + runs all three PP-OCRv4 models (det/rec/cls); route B is GO,
-no `ort` fallback needed. Full pipeline NOT yet built. Add a 2nd `OcrEngine` adapter (`PaddleOcr`)
-alongside `TesseractCli` — this BEATS fitz on OCR (fitz is Tesseract-only), esp. CJK. Steps:
-1. Add `tract-onnx` to `pdf-ocr`; bundle the **dim-fixed** PP-OCRv4 models (det 4.7MB, rec 10.9MB,
-   cls 0.6MB, Apache-2.0) + char dict in the wheel. **Gotcha:** tract's ONNX parser rejects
-   Paddle2ONNX symbolic dim names — pre-fix input dims to concrete via `onnx` offline (det
-   `[1,3,640,640]`, rec `[1,3,48,320]`) + `del graph.value_info[:]`; ship the fixed models.
-2. Rust pre-processing (det: resize/pad to 640²+normalize; rec: per-box crop→48×W+normalize),
-   DBNet post-process (prob map→binarize→contours→min-area-box→unclip), CTC greedy decode + dict.
-3. det→cls→rec→`OcrWord` loop; wire into the existing `integration.rs` pipeline; expose engine choice
-   on `get_textpage_ocr` / `pdfocr_save`. Cross-platform is ~free (pure Rust, platform-independent
-   `.onnx`, models bundled). Validate recognized text vs GT on real CJK + Latin scan samples.
-See the `ocr-upgrade-plan` memory for the full recipe + exact verified output shapes.
+### A. OCR — pure-Rust PaddleOCR (CORE DONE 2026-06-18; remaining = polish)
+**DONE:** `PaddleOcr` (PP-OCRv4 det+cls+rec via `tract`, pure Rust, models embedded, default-on
+`paddle-ocr` feature) is implemented, generalises (verified on two independent CJK+Latin images vs
+RapidOCR), and is selectable from Python (`get_textpage_ocr`/`pdfocr_*` `engine="paddle"`) with the
+full scanned-PDF→searchable-text pipeline proven end-to-end (`test_ocr_paddle.py`). This BEATS fitz
+(Tesseract-only) on CJK. See the `ocr-upgrade-plan` memory.
+
+Remaining OCR polish (LOWER priority):
+- **OCR accuracy benchmark** — quantify "beats fitz/Tesseract on CJK": score PaddleOCR vs Tesseract
+  (+ fitz's Tesseract path) on a CJK + Latin SCAN corpus, record in `docs/BENCHMARKS.md`. (Currently
+  validated by exact-match on 2 synthetic images only.)
+- **Rotated / skewed text** — det post-process uses axis-aligned bboxes (v1); add min-area rotated
+  rectangles (rotating calipers) for rotated scans.
+- **Speed** — `tract` `into_optimized()` is ~2s per distinct shape (cached after) + det/rec per page;
+  profile + tune for many-page docs (shape bucketing, batch rec).
+- **More languages** — the bundled `ch` model covers CJK+Latin; optionally add other PaddleOCR lang
+  rec models (each ~10MB) selectable by `lang`.
+- **Model distribution** — models are committed + `include_bytes!` (16MB in repo + wheel). Consider
+  git-LFS for the repo and/or optional download-on-first-use (via `directories`) to slim the base wheel.
 
 ### B. API parity coverage — 78.9% → higher (96 deferred)
 The monoliths `python/oxide_pdf/document.py` + `crates/py-bindings/src/lib.rs` mean batches that both
