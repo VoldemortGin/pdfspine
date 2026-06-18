@@ -40,7 +40,7 @@
 use std::collections::HashMap;
 
 use pdf_core::geom::{IRect, Matrix, Rect};
-use pdf_core::{Dict, DocumentStore, Name, Object, Page};
+use pdf_core::{Dict, DocumentStore, Name, ObjRef, Object, Page};
 use pdf_image::codecs::decode_image_stream;
 use pdf_image::pixmap::{Colorspace, Pixmap};
 use pdf_text::{interpret_page_render, ImageOp, RenderOp, ShadingOp, TextRun};
@@ -419,6 +419,14 @@ struct FontCache {
     entries: Vec<(u64, Box<[u8]>)>,
     /// `fingerprint → Some(index into entries)` or `None` (no usable program).
     index: HashMap<u64, Option<usize>>,
+    /// `FontFile stream ObjRef → Some(index into entries)` (or `None` for an
+    /// unparseable program). Keyed off the indirect reference so a repeated text
+    /// run on the same font is resolved **without re-decompressing** the embedded
+    /// font program stream (the dominant render cost on text-heavy pages — the
+    /// stream is FlateDecode-compressed and decoding it per run is what made
+    /// clip/text pages many times slower than the C engines). Falls back to the
+    /// fingerprint cache when a program is inline (no indirect ref).
+    prog_by_ref: HashMap<ObjRef, Option<usize>>,
     /// Per-`(entry index, glyph id)` extracted outline path. A glyph appears
     /// many times on a page; extracting + building its [`tiny_skia::Path`] is
     /// done once and reused for every occurrence. `None` caches a
@@ -431,6 +439,7 @@ impl FontCache {
         FontCache {
             entries: Vec::new(),
             index: HashMap::new(),
+            prog_by_ref: HashMap::new(),
             glyph_paths: HashMap::new(),
         }
     }
@@ -454,28 +463,59 @@ fn draw_text(
     if is_type3(&run.font_dict) {
         return draw_type3_run(canvas, doc, run, ctx);
     }
-    // Resolve + cache the embedded font program bytes.
-    let program = match resolve_font_program(doc, &run.font_dict) {
-        Some(p) => p,
-        None => return Ok(()), // non-embedded / Type1 / Type3: no outline pipeline.
-    };
-    let fp = fingerprint(&program);
-    let idx = match cache.index.get(&fp) {
-        Some(slot) => *slot,
-        None => {
-            // Parse once to validate; store bytes so the Face borrow lives.
-            let slot = if GlyphFont::from_program(&program, 0).is_ok() {
-                cache.entries.push((fp, program.into_boxed_slice()));
-                Some(cache.entries.len() - 1)
-            } else {
-                None
-            };
-            cache.index.insert(fp, slot);
-            slot
+    // Resolve + cache the embedded font program. When the program is reachable
+    // through an indirect `/FontFile2`/`/FontFile3` reference (the normal case),
+    // key the cache on that `ObjRef` and short-circuit BEFORE decoding: the
+    // embedded program stream is FlateDecode-compressed, and re-inflating it on
+    // every text run was by far the dominant render cost on text-heavy pages.
+    let prog_ref = font_program_ref(doc, &run.font_dict);
+    let idx = if let Some(r) = prog_ref {
+        if let Some(slot) = cache.prog_by_ref.get(&r) {
+            // Already decoded + parsed this program stream — no decode this run.
+            match *slot {
+                Some(idx) => idx,
+                None => return Ok(()), // known-unparseable program.
+            }
+        } else {
+            // First time we see this stream: decode + parse + cache by ref.
+            let slot = resolve_font_program(doc, &run.font_dict)
+                .filter(|p| GlyphFont::from_program(p, 0).is_ok())
+                .map(|program| {
+                    let fp = fingerprint(&program);
+                    cache.entries.push((fp, program.into_boxed_slice()));
+                    cache.entries.len() - 1
+                });
+            cache.prog_by_ref.insert(r, slot);
+            match slot {
+                Some(idx) => idx,
+                None => return Ok(()),
+            }
         }
-    };
-    let Some(idx) = idx else {
-        return Ok(()); // unparseable program (e.g. bare Type1): documented gap.
+    } else {
+        // Inline program (no indirect ref): fall back to the fingerprint cache,
+        // which still requires decoding to compute the fingerprint.
+        let program = match resolve_font_program(doc, &run.font_dict) {
+            Some(p) => p,
+            None => return Ok(()), // non-embedded / Type1 / Type3: no outline pipeline.
+        };
+        let fp = fingerprint(&program);
+        let slot = match cache.index.get(&fp) {
+            Some(slot) => *slot,
+            None => {
+                let slot = if GlyphFont::from_program(&program, 0).is_ok() {
+                    cache.entries.push((fp, program.into_boxed_slice()));
+                    Some(cache.entries.len() - 1)
+                } else {
+                    None
+                };
+                cache.index.insert(fp, slot);
+                slot
+            }
+        };
+        match slot {
+            Some(idx) => idx,
+            None => return Ok(()), // unparseable program (e.g. bare Type1).
+        }
     };
 
     // Split-borrow the cache: `font` borrows `entries[idx]` immutably while we
@@ -887,6 +927,25 @@ fn fingerprint(bytes: &[u8]) -> u64 {
         .take(16)
         .fold(0u64, |h, &b| h.wrapping_mul(131).wrapping_add(u64::from(b)));
     len ^ head.rotate_left(17) ^ tail.rotate_left(31)
+}
+
+/// Returns the **indirect reference** of a font dict's embedded program stream
+/// (`/FontFile2` or `/FontFile3`) without decoding it. Used as a cheap,
+/// decode-free cache key so a repeated text run on the same font skips
+/// re-decompressing the (FlateDecode) program stream. Returns `None` when the
+/// program is inline (a direct stream value, no indirect ref) or absent — the
+/// caller then falls back to the fingerprint path.
+fn font_program_ref(doc: &DocumentStore, font_dict: &Dict) -> Option<ObjRef> {
+    let descriptor = font_descriptor(doc, font_dict)?;
+    for key in ["FontFile2", "FontFile3"] {
+        if let Some(r) = descriptor
+            .get(&Name::new(key))
+            .and_then(Object::as_reference)
+        {
+            return Some(r);
+        }
+    }
+    None
 }
 
 /// Resolves a font dict's **embedded** program bytes (`/FontFile2` TrueType or

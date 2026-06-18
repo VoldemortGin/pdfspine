@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Performance benchmark harness: pdfspine vs pypdf vs pypdfium2.
+"""Performance benchmark harness: pdfspine vs fitz vs pypdfium2 vs pypdf.
 
 Times three operations over the public-domain corpus in ``fixtures/corpus/*.pdf``
 for each PDF library and emits an honest comparison table to
@@ -17,9 +17,10 @@ The competitors (pypdf MIT, pypdfium2 BSD/Apache) are bench-only and live in a
 separate, gitignored ``.venv-bench``. They must never be imported into the same
 interpreter as our Apache-2.0 build, so every measurement runs in a SUBPROCESS:
 
-* ``pdfspine``     -> the current project interpreter (``sys.executable``, in .venv)
+* ``pdfspine``  -> the current project interpreter (``sys.executable``, in .venv)
 * ``pypdf``     -> ``.venv-bench/bin/python``
 * ``pypdfium2`` -> ``.venv-bench/bin/python``
+* ``fitz``      -> ``.venv-oracle/bin/python`` (PyMuPDF, AGPL, bench-only diff ref)
 
 Subprocess isolation also means a crash/hang/abort on one document for one
 library is contained: the parent applies a wall-clock timeout and records that
@@ -49,13 +50,19 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 CORPUS_DIR = ROOT / "fixtures" / "corpus"
 BENCH_VENV = ROOT / ".venv-bench"
+ORACLE_VENV = ROOT / ".venv-oracle"
 OUT_MD = ROOT / "conformance" / "BENCH.md"
 OUT_JSON = ROOT / "conformance" / "bench-results.json"
 
-LIBS = ("pdfspine", "pypdf", "pypdfium2")
+LIBS = ("pdfspine", "pypdf", "pypdfium2", "fitz")
 OPS = ("open", "text", "render")
 DEFAULT_RUNS = 5
 DEFAULT_DPI = 150
+# Sentinel framing the worker's JSON payload on stdout. Native engines (MuPDF /
+# PDFium) may print C-level warnings straight to fd 1, so we can't assume stdout
+# is pure JSON; the orchestrator extracts the text between these markers.
+RESULT_BEGIN = "<<<BENCH_JSON>>>"
+RESULT_END = "<<<END_BENCH_JSON>>>"
 # Generous per-document, per-library wall-clock budget for one worker process
 # (covers all ops + warmup). A timeout marks that one cell as failed.
 WORKER_TIMEOUT_S = 300.0
@@ -210,10 +217,62 @@ def _bench_pypdfium2(path: str, runs: int, dpi: int) -> dict:
     return out
 
 
+def _bench_fitz(path: str, runs: int, dpi: int) -> dict:
+    # fitz / PyMuPDF is AGPL and bench-only: it runs ONLY in the gitignored
+    # .venv-oracle as an external diff/timing reference and is never imported
+    # into our Apache-2.0 build's interpreter. Only timings are recorded.
+    import fitz
+
+    out: dict = {"ops": {}, "page_count": None, "text_chars": None}
+
+    def _open():
+        doc = fitz.open(path)
+        n = doc.page_count
+        doc.close()
+        return n
+
+    t_open, n = _median_time(_open, runs)
+    out["ops"]["open"] = t_open
+    out["page_count"] = int(n)
+
+    def _text():
+        doc = fitz.open(path)
+        try:
+            if doc.needs_pass:
+                try:
+                    doc.authenticate("")
+                except Exception:  # noqa: BLE001
+                    pass
+            chars = 0
+            for page in doc:
+                chars += len(page.get_text())
+            return chars
+        finally:
+            doc.close()
+
+    t_text, chars = _median_time(_text, runs)
+    out["ops"]["text"] = t_text
+    out["text_chars"] = int(chars)
+
+    def _render():
+        doc = fitz.open(path)
+        try:
+            pm = doc.load_page(0).get_pixmap(dpi=dpi)
+            return (pm.width, pm.height)
+        finally:
+            doc.close()
+
+    t_render, dims = _median_time(_render, runs)
+    out["ops"]["render"] = t_render
+    out["render_dims"] = list(dims)
+    return out
+
+
 _WORKERS = {
     "pdfspine": _bench_pdfspine,
     "pypdf": _bench_pypdf,
     "pypdfium2": _bench_pypdfium2,
+    "fitz": _bench_fitz,
 }
 
 
@@ -224,7 +283,7 @@ def _run_worker(lib: str, path: str, runs: int, dpi: int) -> int:
         out["ok"] = True
     except Exception as exc:  # noqa: BLE001
         out["error"] = f"{type(exc).__name__}: {exc}"
-    sys.stdout.write(json.dumps(out))
+    sys.stdout.write(f"{RESULT_BEGIN}{json.dumps(out)}{RESULT_END}")
     return 0
 
 
@@ -260,7 +319,13 @@ def _probe_versions() -> int:
             pass
     except Exception:  # noqa: BLE001
         pass
-    sys.stdout.write(json.dumps(info))
+    try:
+        import fitz  # noqa: F401
+
+        info["fitz"] = _md.version("PyMuPDF")
+    except Exception:  # noqa: BLE001
+        pass
+    sys.stdout.write(f"{RESULT_BEGIN}{json.dumps(info)}{RESULT_END}")
     return 0
 
 
@@ -270,10 +335,11 @@ def _probe_versions() -> int:
 def _interpreter_for(lib: str) -> str:
     if lib == "pdfspine":
         return sys.executable
-    bench_py = BENCH_VENV / "bin" / "python"
-    if not bench_py.exists():
-        bench_py = BENCH_VENV / "Scripts" / "python.exe"  # Windows
-    return str(bench_py)
+    venv = ORACLE_VENV if lib == "fitz" else BENCH_VENV
+    py = venv / "bin" / "python"
+    if not py.exists():
+        py = venv / "Scripts" / "python.exe"  # Windows
+    return str(py)
 
 
 def _clean_env() -> dict:
@@ -309,21 +375,32 @@ def _measure(lib: str, pdf: Path, runs: int, dpi: int) -> dict:
         msg = (proc.stderr or "").strip().splitlines()
         tail = msg[-1] if msg else f"exit {proc.returncode}"
         return {"lib": lib, "path": str(pdf), "ok": False, "error": f"crash: {tail}"}
+    stdout = proc.stdout or ""
+    start = stdout.find(RESULT_BEGIN)
+    end = stdout.find(RESULT_END)
+    if start == -1 or end == -1:
+        return {"lib": lib, "path": str(pdf), "ok": False, "error": "no-result-marker"}
+    payload = stdout[start + len(RESULT_BEGIN) : end]
     try:
-        return json.loads(proc.stdout)
+        return json.loads(payload)
     except Exception as exc:  # noqa: BLE001
         return {"lib": lib, "path": str(pdf), "ok": False, "error": f"bad-json: {exc}"}
 
 
 def _probe_bench_versions() -> dict:
     info: dict = {}
-    for interp in (sys.executable, _interpreter_for("pypdf")):
+    for interp in (sys.executable, _interpreter_for("pypdf"), _interpreter_for("fitz")):
         cmd = [interp, str(Path(__file__).resolve()), "--versions"]
         try:
             proc = subprocess.run(
                 cmd, capture_output=True, text=True, timeout=60, env=_clean_env()
             )
-            info.update(json.loads(proc.stdout))
+            stdout = proc.stdout or ""
+            start = stdout.find(RESULT_BEGIN)
+            end = stdout.find(RESULT_END)
+            if start == -1 or end == -1:
+                continue
+            info.update(json.loads(stdout[start + len(RESULT_BEGIN) : end]))
         except Exception:  # noqa: BLE001
             continue
     return info
@@ -362,6 +439,15 @@ def run(runs: int, dpi: int, limit: int | None) -> dict:
             "Create it with:\n"
             "  env -u CONDA_PREFIX <python3.x> -m venv .venv-bench\n"
             "  env -u CONDA_PREFIX .venv-bench/bin/python -m pip install pypdf pypdfium2"
+        )
+
+    oracle_py = _interpreter_for("fitz")
+    if not Path(oracle_py).exists():
+        raise SystemExit(
+            f"oracle venv interpreter not found: {oracle_py}\n"
+            "fitz/PyMuPDF is the bench-only diff reference. Create it with:\n"
+            "  env -u CONDA_PREFIX <python3.x> -m venv .venv-oracle\n"
+            "  env -u CONDA_PREFIX .venv-oracle/bin/python -m pip install PyMuPDF"
         )
 
     versions = _probe_bench_versions()
@@ -450,9 +536,10 @@ def write_report(data: dict) -> None:
     lines.append("# pdfspine performance benchmark")
     lines.append("")
     lines.append(
-        "Honest, reproducible comparison of **pdfspine** against two popular "
-        "Python PDF libraries on a shared public-domain corpus. Generated by "
-        "`conformance/bench.py`."
+        "Honest, reproducible comparison of **pdfspine** against three other PDF "
+        "libraries — fitz/PyMuPDF (MuPDF C engine, AGPL, bench-only reference), "
+        "pypdfium2 (PDFium C engine), and pypdf (pure Python) — on a shared "
+        "public-domain corpus. Generated by `conformance/bench.py`."
     )
     lines.append("")
 
@@ -464,11 +551,14 @@ def write_report(data: dict) -> None:
         ox = op_med[op]["pdfspine"]
         pf = op_med[op]["pypdf"]
         pm = op_med[op]["pypdfium2"]
+        fz = op_med[op]["fitz"]
         parts = []
-        if ox is not None and pf is not None:
-            parts.append(f"vs pypdf: pdfspine {_ratio_text(ox, pf)}")
+        if ox is not None and fz is not None:
+            parts.append(f"vs fitz: pdfspine {_ratio_text(ox, fz)}")
         if ox is not None and pm is not None:
             parts.append(f"vs pypdfium2: pdfspine {_ratio_text(ox, pm)}")
+        if ox is not None and pf is not None:
+            parts.append(f"vs pypdf: pdfspine {_ratio_text(ox, pf)}")
         if op == "render" and pf is None:
             parts.append("pypdf: unsupported")
         if parts:
@@ -500,6 +590,12 @@ def write_report(data: dict) -> None:
         f"- **pypdfium2**: {ver.get('pypdfium2', 'unknown')} "
         f"(C-engine binding, BSD-3/Apache-2.0{pdfium_core})"
     )
+    lines.append(
+        f"- **fitz / PyMuPDF**: {ver.get('fitz', 'unknown')} "
+        "(C-engine binding over MuPDF, **AGPL-3.0** — bench-only diff reference; "
+        "runs in the gitignored `.venv-oracle`, never linked into our build, only "
+        "its timings are recorded)"
+    )
     lines.append("")
     lines.append(
         f"Corpus: **{cfg['corpus']}** public-domain PDFs in `fixtures/corpus/` "
@@ -511,9 +607,10 @@ def write_report(data: dict) -> None:
     lines.append("## Results (median seconds per document)")
     lines.append("")
     lines.append(
-        "| Operation | pdfspine | pypdf | pypdfium2 | pdfspine vs pypdf | pdfspine vs pypdfium2 |"
+        "| Operation | pdfspine | fitz | pypdfium2 | pypdf "
+        "| pdfspine vs fitz | pdfspine vs pypdfium2 |"
     )
-    lines.append("|---|---|---|---|---|---|")
+    lines.append("|---|---|---|---|---|---|---|")
     op_titles = {
         "open": "open + page_count",
         "text": "get_text (whole doc)",
@@ -523,10 +620,12 @@ def write_report(data: dict) -> None:
         ox = op_med[op]["pdfspine"]
         pf = op_med[op]["pypdf"]
         pm = op_med[op]["pypdfium2"]
+        fz = op_med[op]["fitz"]
         pf_cell = _fmt_sec(pf) if pf is not None else "n/a (unsupported)"
         lines.append(
-            f"| {op_titles[op]} | {_fmt_sec(ox)} | {pf_cell} | {_fmt_sec(pm)} "
-            f"| pdfspine {_ratio_text(ox, pf)} | pdfspine {_ratio_text(ox, pm)} |"
+            f"| {op_titles[op]} | {_fmt_sec(ox)} | {_fmt_sec(fz)} | {_fmt_sec(pm)} "
+            f"| {pf_cell} | pdfspine {_ratio_text(ox, fz)} "
+            f"| pdfspine {_ratio_text(ox, pm)} |"
         )
     lines.append("")
     lines.append(
@@ -538,15 +637,15 @@ def write_report(data: dict) -> None:
     # ---- Per-op totals ----------------------------------------------------- #
     lines.append("## Totals across corpus (sum of per-doc medians)")
     lines.append("")
-    lines.append("| Operation | pdfspine | pypdf | pypdfium2 | #docs (pdfspine) |")
-    lines.append("|---|---|---|---|---|")
+    lines.append("| Operation | pdfspine | fitz | pypdfium2 | pypdf | #docs (pdfspine) |")
+    lines.append("|---|---|---|---|---|---|")
     for op in OPS:
         sums = {lib: (sum(per_op[op][lib]) if per_op[op][lib] else None) for lib in LIBS}
         n_ox = len(per_op[op]["pdfspine"])
         lines.append(
             f"| {op_titles[op]} | {_fmt_sec(sums['pdfspine'])} | "
-            f"{_fmt_sec(sums['pypdf']) if sums['pypdf'] is not None else 'n/a'} | "
-            f"{_fmt_sec(sums['pypdfium2'])} | {n_ox} |"
+            f"{_fmt_sec(sums['fitz'])} | {_fmt_sec(sums['pypdfium2'])} | "
+            f"{_fmt_sec(sums['pypdf']) if sums['pypdf'] is not None else 'n/a'} | {n_ox} |"
         )
     lines.append("")
 
@@ -579,17 +678,20 @@ def write_report(data: dict) -> None:
     lines.append(
         "- **Subprocess isolation.** Every measurement runs in a fresh worker "
         "process via the correct interpreter — pdfspine in the project `.venv`, "
-        "pypdf/pypdfium2 in a separate gitignored `.venv-bench`. This keeps the "
+        "pypdf/pypdfium2 in a separate gitignored `.venv-bench`, fitz/PyMuPDF in "
+        "the gitignored `.venv-oracle`. This keeps the "
         "AGPL/3rd-party deps out of our build's interpreter and contains "
         "crashes/hangs (a per-document wall-clock timeout marks a cell failed)."
     )
     lines.append(
         "- **Operations.** `open` = open + read `page_count`; `text` = extract "
         "text over the *whole* document (pdfspine `page.get_text()`, pypdf "
-        "`page.extract_text()`, pypdfium2 `textpage.get_text_bounded()`); "
+        "`page.extract_text()`, pypdfium2 `textpage.get_text_bounded()`, fitz "
+        "`page.get_text()`); "
         f"`render` = rasterize page 1 at {cfg['dpi']} dpi (pdfspine "
         f"`page.get_pixmap(dpi={cfg['dpi']})`, pypdfium2 "
-        f"`page.render(scale={cfg['dpi']}/72)`)."
+        f"`page.render(scale={cfg['dpi']}/72)`, fitz "
+        f"`page.get_pixmap(dpi={cfg['dpi']})`)."
     )
     lines.append(
         "- **Process-creation overhead** is excluded: workers are spawned once "
@@ -607,6 +709,13 @@ def write_report(data: dict) -> None:
         "engine from Chromium. pdfspine is **pure Rust**. A pure-Rust library "
         "beating a hand-tuned C engine is not the expectation — where pypdfium2 "
         "wins, that is the C engine's maturity showing."
+    )
+    lines.append(
+        "- **fitz / PyMuPDF is AGPL-licensed and bench-only.** It wraps MuPDF "
+        "(another mature C engine) and is used here purely as an external speed "
+        "and differential reference. It is never imported into or linked with the "
+        "Apache-2.0 build; it runs isolated in `.venv-oracle` and only its "
+        "timings are recorded — no output is committed."
     )
     lines.append(
         "- **pdfspine's rasterizer is young.** The `render` path is a from-scratch "
