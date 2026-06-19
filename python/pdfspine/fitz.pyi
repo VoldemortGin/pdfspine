@@ -1,4 +1,4 @@
-"""Type stubs for the ``fitz`` compatibility shim (re-exports pdfspine)."""
+"""Type stubs for the ``pdfspine.fitz`` compatibility shim (re-exports pdfspine)."""
 
 from typing import Any
 

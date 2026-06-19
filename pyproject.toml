@@ -15,7 +15,9 @@ keywords = ["pdf", "pymupdf", "fitz", "mupdf", "rust"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: Apache Software License",
+    # NB: no "License ::" trove classifier — the SPDX `license = "Apache-2.0"`
+    # expression (PEP 639) is the single source of truth; having both is rejected
+    # by recent setuptools/twine (metadata 2.4 license-expression conflict).
     "Operating System :: OS Independent",
     "Operating System :: POSIX :: Linux",
     "Operating System :: MacOS",
@@ -47,7 +49,9 @@ pdfspine = "pdfspine.cli:main"
 manifest-path = "crates/py-bindings/Cargo.toml"
 # Place the compiled `_core` inside the `pdfspine` package.
 module-name = "pdfspine._core"
-# Pure-Python sources (pdfspine / fitz / pymupdf packages) live here.
+# Pure-Python sources live here. The pdfspine package ships the native API plus
+# the opt-in `pdfspine.fitz` / `pdfspine.pymupdf` compatibility submodules; the
+# top-level `fitz` / `pymupdf` names are claimed only via `install_fitz_shim()`.
 python-source = "python"
 # abi3 wheel covering CPython >= 3.11 (PRD §9.4 / §11.2). The 3.11 floor is
 # required by `Pixmap`'s zero-copy buffer protocol — the `bf_getbuffer` /
@@ -57,10 +61,6 @@ features = ["pyo3/abi3-py311"]
 include = [
     "python/pdfspine/py.typed",
     "python/pdfspine/*.pyi",
-    "python/fitz/py.typed",
-    "python/fitz/*.pyi",
-    "python/pymupdf/py.typed",
-    "python/pymupdf/*.pyi",
 ]
 
 [tool.pytest.ini_options]

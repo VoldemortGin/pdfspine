@@ -4,13 +4,14 @@ pdfspine is designed so that existing PyMuPDF code can run unmodified for the
 supported subset. This page is the honest, no-marketing account of what works,
 what differs, and what isn't there yet.
 
-## `import fitz` just works
+## `import fitz` — one opt-in step
 
-The compatibility shim maps PyMuPDF's exact names onto pdfspine. In most cases
-the only change you need is… nothing:
+The compatibility shim maps PyMuPDF's exact names onto pdfspine. It is **opt-in**
+so a default install never collides with a real PyMuPDF in the same environment.
+Either import the shim under its submodule name (no global-name collision):
 
 ```python
-import fitz                       # resolves to the pdfspine shim
+import pdfspine.fitz as fitz      # the shim, always available
 
 doc = fitz.open("input.pdf")
 page = doc[0]
@@ -20,8 +21,17 @@ pix.save("out.png")
 doc.save("out.pdf")
 ```
 
-`import pymupdf` is supported the same way. For new code, prefer the native
-package:
+…or, to keep an unmodified `import fitz` working, opt in once at startup:
+
+```python
+import pdfspine
+pdfspine.install_fitz_shim()      # registers global `fitz` / `pymupdf`
+import fitz                       # now resolves to the pdfspine shim
+```
+
+`install_fitz_shim()` is idempotent and uses `setdefault`, so it never clobbers a
+real PyMuPDF you already imported. `import pymupdf` (and `from pdfspine import
+pymupdf`) is supported the same way. For new code, prefer the native package:
 
 ```python
 import pdfspine

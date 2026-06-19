@@ -1,9 +1,15 @@
 """``fitz`` compatibility shim for pdfspine (PRD §9.5).
 
-PyMuPDF is imported as ``import fitz``; this package maps PyMuPDF's exact names
+PyMuPDF is imported as ``import fitz``; this module maps PyMuPDF's exact names
 onto pdfspine so existing code runs unchanged. It re-exports :func:`pdfspine.open`,
 the :class:`~pdfspine.Document`/:class:`~pdfspine.Page` classes and the geometry value
 types, and aliases PyMuPDF's exception names onto pdfspine's typed hierarchy.
+
+This shim is *opt-in*: a default ``pip install pdfspine`` does NOT claim the
+global top-level ``fitz`` / ``pymupdf`` import names (so it never collides with a
+real PyMuPDF in the same environment). It is always available one step away as
+``import pdfspine.fitz as fitz``; to make the literal ``import fitz`` resolve to
+this shim, call :func:`pdfspine.install_fitz_shim` first.
 
 The full PyMuPDF surface (text/image/edit) is built out in later milestones; the
 read surface (open, page_count, indexing, metadata, geometry, encryption) is

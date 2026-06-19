@@ -66,9 +66,12 @@ from .helpers import (
 
 __version__: str
 
+def install_fitz_shim() -> None: ...
+
 __all__ = [
     "__version__",
     "identity_matrix",
+    "install_fitz_shim",
     "open",
     "Document",
     "Page",

@@ -33,9 +33,13 @@ pdfspine is a **drop-in-shaped, permissively-licensed (Apache-2.0)** alternative
   SSPL** from the shipped wheel. License cleanliness is CI-enforced, not a promise.
 - **Pure Rust, no C blob.** Self-contained wheels, no system `zlib`/C linkage, no
   bundled prebuilt engine (the differentiator vs pdfium-based wrappers).
-- **`import fitz` compatible.** A compatibility shim lets much existing PyMuPDF
-  code run unmodified, with a machine-readable [`COMPAT.toml`](COMPAT.toml)
-  documenting every symbol's status.
+- **`import fitz` compatible (opt-in).** A compatibility shim lets much existing
+  PyMuPDF code run unmodified — available as `import pdfspine.fitz as fitz`, or
+  registered under the global `fitz` / `pymupdf` names with one call to
+  `pdfspine.install_fitz_shim()`. A default install is collision-safe: it does
+  **not** claim those global names, so it coexists with a real PyMuPDF in the
+  same environment. A machine-readable [`COMPAT.toml`](COMPAT.toml) documents
+  every symbol's status.
 - **Memory-safe by construction.** `#![forbid(unsafe_code)]` in every first-party
   crate except the single audited PyO3 FFI chokepoint.
 - **Clean-room.** No code, tests, or fixtures derived from MuPDF / PyMuPDF / any
@@ -80,13 +84,22 @@ for t in tables.tables:
 doc.save("output.pdf", garbage=4, deflate=True)
 ```
 
-Existing PyMuPDF code often runs unchanged via the compat shim:
+Existing PyMuPDF code often runs unchanged via the opt-in compat shim:
 
 ```python
-import fitz                                   # -> pdfspine's fitz shim
+import pdfspine.fitz as fitz                  # the shim, no global-name collision
 doc = fitz.open("input.pdf")
 text = doc[0].get_text("dict")
+
+# Or make the literal `import fitz` resolve to the shim (one-time opt-in):
+import pdfspine
+pdfspine.install_fitz_shim()
+import fitz                                    # now -> pdfspine's fitz shim
 ```
+
+A default install does **not** claim the global `fitz` / `pymupdf` names, so it
+is safe alongside a real PyMuPDF; `install_fitz_shim()` uses `setdefault` and
+never clobbers a PyMuPDF you imported first.
 
 Command line:
 

@@ -24,8 +24,10 @@ Once published, installation will be the usual:
 pip install pdfspine
 ```
 
-This will provide three importable packages — `pdfspine` (native), and the
-`fitz` / `pymupdf` compatibility shims — from one wheel.
+This provides the `pdfspine` (native) package from one wheel, plus the opt-in
+`pdfspine.fitz` / `pdfspine.pymupdf` compatibility submodules. By default it does
+**not** claim the global `fitz` / `pymupdf` import names, so it is collision-safe
+alongside a real PyMuPDF; call `pdfspine.install_fitz_shim()` to register them.
 
 ## Build from source (today)
 
@@ -61,7 +63,7 @@ import pdfspine
 print(pdfspine.__version__)
 print(pdfspine.version)           # version tuple from the Rust core
 
-# The fitz compat shim works too:
-import fitz
+# The opt-in fitz compat shim works too:
+import pdfspine.fitz as fitz
 print(fitz.pymupdf_version)        # the PyMuPDF baseline this shim targets
 ```

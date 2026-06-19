@@ -11,6 +11,8 @@ Geometry is returned to Python as PyMuPDF-compatible value types
 
 from __future__ import annotations
 
+import sys
+
 from . import _core
 from ._core import (
     PdfDecodeError,
@@ -75,9 +77,35 @@ from .helpers import (
 
 __version__: str = _core.__version__
 
+
+def install_fitz_shim() -> None:
+    """Opt in to the global ``import fitz`` / ``import pymupdf`` drop-in shim.
+
+    By default pdfspine does NOT claim the top-level ``fitz`` / ``pymupdf``
+    import names, so it stays collision-safe alongside a real PyMuPDF in the
+    same environment. Calling this registers :mod:`pdfspine.fitz` and
+    :mod:`pdfspine.pymupdf` under those global names, so afterwards a plain
+    ``import fitz`` resolves to the pdfspine shim.
+
+    It is idempotent and never clobbers an already-imported module: if a real
+    PyMuPDF (or anything else) already occupies ``sys.modules["fitz"]`` /
+    ``sys.modules["pymupdf"]``, that import wins and is left untouched (the
+    registration uses :meth:`dict.setdefault`). Call this before the first
+    ``import fitz`` for the shim to take effect.
+    """
+    # Import the submodules lazily so a default `import pdfspine` never has to
+    # build the shim namespace.
+    from . import fitz as _fitz
+    from . import pymupdf as _pymupdf
+
+    sys.modules.setdefault("fitz", _fitz)
+    sys.modules.setdefault("pymupdf", _pymupdf)
+
+
 __all__ = [
     "__version__",
     "identity_matrix",
+    "install_fitz_shim",
     "open",
     "Document",
     "Page",

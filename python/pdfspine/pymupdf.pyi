@@ -1,8 +1,8 @@
-"""Type stubs for the ``pymupdf`` alias package (re-exports the fitz shim)."""
+"""Type stubs for the ``pdfspine.pymupdf`` alias module (re-exports the fitz shim)."""
 
 from typing import Any
 
-from fitz import (
+from pdfspine.fitz import (
     PDF_ENCRYPT_AES_128 as PDF_ENCRYPT_AES_128,
     PDF_ENCRYPT_AES_256 as PDF_ENCRYPT_AES_256,
     PDF_ENCRYPT_NONE as PDF_ENCRYPT_NONE,
@@ -29,7 +29,6 @@ from fitz import (
     Shape as Shape,
     Table as Table,
     TableFinder as TableFinder,
-    TextPage as TextPage,
     Widget as Widget,
     __version__ as __version__,
     open as open,

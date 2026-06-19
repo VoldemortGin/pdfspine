@@ -8,14 +8,16 @@ individual feature areas. Every code block uses the **actual** public API.
 pdfspine ships two equivalent entry points:
 
 ```python
-import pdfspine          # the native, idiomatic package
-# or
-import fitz               # the PyMuPDF compatibility shim
+import pdfspine               # the native, idiomatic package
+# or, the opt-in PyMuPDF compatibility shim:
+import pdfspine.fitz as fitz  # no global-name collision
 ```
 
 Both expose the same `open()`, `Document`, `Page`, `Pixmap`, and geometry
-classes. Use `import pdfspine` for new code; use `import fitz` to run existing
-PyMuPDF code unmodified — see
+classes. Use `import pdfspine` for new code; for existing PyMuPDF code, the shim
+is opt-in (a default install does not claim the global `fitz` / `pymupdf` names,
+so it coexists with a real PyMuPDF). To make an unmodified `import fitz` resolve
+to the shim, call `pdfspine.install_fitz_shim()` once at startup — see
 [Migrating from PyMuPDF](migrating-from-pymupdf.md).
 
 ## Where to go next

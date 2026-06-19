@@ -5,8 +5,9 @@
 pdfspine lets you read, search, extract, edit, and render PDFs from Python with
 a PyMuPDF-shaped API — but the entire engine is written in safe Rust and shipped
 under **Apache-2.0**. Existing code that does `import fitz` can run unmodified on
-the supported subset, while new code can use the idiomatic `import pdfspine`
-package directly.
+the supported subset via the opt-in shim (`pdfspine.install_fitz_shim()`, or
+`import pdfspine.fitz as fitz`), while new code can use the idiomatic
+`import pdfspine` package directly.
 
 !!! warning "Alpha / work-in-progress"
     pdfspine is **pre-1.0** (`Development Status :: 2 - Pre-Alpha`, version
@@ -33,9 +34,11 @@ pdfspine exists to be the **permissively-licensed, drop-in-shaped** alternative:
   pdfium-based wrappers.
 - **Memory-safe by construction.** `#![forbid(unsafe_code)]` in all first-party
   crates except the single audited PyO3 FFI chokepoint.
-- **`fitz` / `pymupdf`-compatible surface.** A compatibility shim aims to let
-  existing `import fitz` code run unchanged for the supported subset, with a
-  machine-readable `COMPAT.toml` documenting every deviation.
+- **`fitz` / `pymupdf`-compatible surface (opt-in).** A compatibility shim aims
+  to let existing `import fitz` code run unchanged for the supported subset —
+  `import pdfspine.fitz as fitz`, or `pdfspine.install_fitz_shim()` to claim the
+  global names (collision-safe by default), with a machine-readable `COMPAT.toml`
+  documenting every deviation.
 - **Clean-room.** An independent reimplementation: no code, tests, or fixtures
   are derived from MuPDF / PyMuPDF or any AGPL source.
 
@@ -75,7 +78,7 @@ signal — see [Migrating from PyMuPDF](guide/migrating-from-pymupdf.md).
 ## Quick example
 
 ```python
-import pdfspine  # or: import fitz
+import pdfspine  # or, opt-in shim: import pdfspine.fitz as fitz
 
 doc = pdfspine.open("input.pdf")
 print(f"{doc.page_count} pages")

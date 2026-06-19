@@ -21,7 +21,7 @@
 |---|---|---|
 | PyPI distribution name | **`pdfspine`** (reserved / verified free) | USER-GATED (publish) |
 | crates.io name | **`pdfspine`** (reserved for brand protection) | NOT PUBLISHED (Python-first, like ragspine; all crates `publish=false`) |
-| Python import package | **`pdfspine`** (+ `fitz` / `pymupdf` compat shims) | DONE |
+| Python import package | **`pdfspine`** (+ opt-in `pdfspine.fitz` / `pdfspine.pymupdf` compat shims via `install_fitz_shim()`) | DONE |
 | License | **Apache-2.0** (`LICENSE` + `NOTICE` + per-data `PROVENANCE.md`) | DONE |
 | GitHub repo | `github.com/VoldemortGin/pdfspine` — **currently PRIVATE** | USER-GATED (flip public) |
 | Build backend | **maturin** (PyO3 compiled Rust extension `pdfspine._core`) | DONE |
@@ -147,12 +147,15 @@ python -m twine check dist/*           # README renders, metadata valid
 python -m zipfile -l dist/pdfspine-*.whl | head    # inspect wheel contents
 ```
 
-> **Note on `fitz`/`pymupdf` top-level shims.** The repo ships `python/fitz/` and
-> `python/pymupdf/` so `import fitz` works as a true drop-in. These WILL be in the
-> wheel and can collide if the user also has real PyMuPDF installed. This is an
-> intentional drop-in design choice — keep it, but document the collision loudly,
-> or move the shims under `pdfspine.fitz` if you prefer a non-colliding install.
-> Decide before the first public upload.
+> **Note on the `fitz`/`pymupdf` compat shims — RESOLVED (opt-in, option C).**
+> The shims now ship as **submodules of the package** (`pdfspine.fitz` /
+> `pdfspine.pymupdf`), not as top-level packages. A default install therefore
+> does **not** claim the global `fitz` / `pymupdf` import names, so it is
+> collision-safe alongside a real PyMuPDF in the same environment — this is **no
+> longer a go-live blocker**. The drop-in is one step away: `import pdfspine.fitz
+> as fitz`, or `pdfspine.install_fitz_shim()` (idempotent, `setdefault`-based, so
+> it never clobbers a real PyMuPDF) to make the literal `import fitz` resolve to
+> the shim.
 
 ---
 
