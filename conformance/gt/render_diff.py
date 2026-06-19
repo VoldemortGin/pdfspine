@@ -286,6 +286,156 @@ def _mean(px: list[float]) -> float:
 
 
 # --------------------------------------------------------------------------- #
+# NO-ORACLE reference-buffer gate (committed SSIM references; no fitz needed)
+# --------------------------------------------------------------------------- #
+#
+# .venv-oracle (real fitz) is not available in CI, so the render regression gate
+# compares pdfspine's CURRENT raster against a small, COMMITTED reference buffer
+# captured at a known-good point (post-Stage-A render fix). The reference is the
+# page downsampled to a <=REF_MAX_DIM grayscale image stored as uint8 (compact,
+# git-friendly). SSIM(current, reference) must stay >= a threshold, and the page
+# must not regress to near-blank (the pre-fix failure mode). Self-comparison is
+# exactly 1.0, so any renderer change shows up as a drop.
+
+# Smaller than GRAY_MAX_DIM: keeps the committed reference tiny while staying
+# sensitive on a dense fixture (see make_ci_fixtures.render-fixture.pdf).
+REF_MAX_DIM = 192
+REF_MAGIC = b"PSREF1\n"
+
+
+def _pdfspine_gray(pdf: str, page_idx: int, dpi: float, max_dim: int) -> tuple[int, int, list[float]]:
+    """Render a page with pdfspine and return its downsampled grayscale buffer."""
+    import pdfspine
+
+    doc = pdfspine.open(pdf)
+    if page_idx >= len(doc):
+        raise IndexError(f"no such page {page_idx} (len={len(doc)})")
+    page = doc[page_idx]
+    try:
+        pm = page.get_pixmap(dpi=dpi)
+    except TypeError:
+        from pdfspine import Matrix  # type: ignore
+
+        s = dpi / 72.0
+        pm = page.get_pixmap(matrix=Matrix(s, 0, 0, s, 0, 0))
+    samples = bytes(pm.samples)
+    w, h, n = pm.width, pm.height, pm.n
+    if n == 4:
+        samples, n = _drop_alpha(samples, w, h), 3
+    return _to_gray_downsampled(w, h, n, samples, max_dim=max_dim)
+
+
+def write_reference(path: Path, gw: int, gh: int, px: list[float], dpi: float) -> None:
+    """Write a committed grayscale reference: magic + JSON header + uint8 bytes."""
+    body = bytes(max(0, min(255, int(round(v)))) for v in px)
+    header = json.dumps(
+        {"gw": gw, "gh": gh, "dpi": dpi, "max_dim": REF_MAX_DIM,
+         "mean_gray": round(_mean(px), 2)}
+    ).encode("utf-8")
+    with open(path, "wb") as fh:
+        fh.write(REF_MAGIC)
+        fh.write(struct.pack("<I", len(header)))
+        fh.write(header)
+        fh.write(body)
+
+
+def read_reference(path: Path) -> tuple[int, int, list[float], dict]:
+    """Read a committed grayscale reference written by :func:`write_reference`."""
+    with open(path, "rb") as fh:
+        magic = fh.read(len(REF_MAGIC))
+        if magic != REF_MAGIC:
+            raise ValueError(f"{path}: bad reference magic {magic!r}")
+        (hlen,) = struct.unpack("<I", fh.read(4))
+        header = json.loads(fh.read(hlen).decode("utf-8"))
+        body = fh.read()
+    px = [float(b) for b in body]
+    return header["gw"], header["gh"], px, header
+
+
+def make_references(
+    entries: list[dict], ref_dir: Path, dpi: float, n_pages: int
+) -> int:
+    """Render each (pdf, page) with pdfspine and write a committed reference."""
+    ref_dir.mkdir(parents=True, exist_ok=True)
+    count = 0
+    for e in entries:
+        pdf, name = e["pdf"], e["name"]
+        for page in range(n_pages):
+            try:
+                gw, gh, px = _pdfspine_gray(pdf, page, dpi, REF_MAX_DIM)
+            except IndexError:
+                break  # fewer pages than requested
+            out = ref_dir / f"{name}__p{page}.ssimref"
+            write_reference(out, gw, gh, px, dpi)
+            print(f"wrote {out.relative_to(ref_dir.parent.parent.parent)} "
+                  f"({gw}x{gh}, mean_gray={round(_mean(px), 1)})")
+            count += 1
+    return count
+
+
+def check_references(
+    entries: list[dict], ref_dir: Path, dpi: float, n_pages: int, min_ssim: float
+) -> dict:
+    """Compare pdfspine's CURRENT raster vs committed references; assert SSIM.
+
+    Each doc/page must have SSIM(current, reference) >= ``min_ssim`` and must not
+    render near-blank while its reference has ink. Returns a payload with a
+    top-level ``passed`` flag.
+    """
+    docs: list[dict] = []
+    all_ok = True
+    for e in entries:
+        pdf, name = e["pdf"], e["name"]
+        for page in range(n_pages):
+            ref_path = ref_dir / f"{name}__p{page}.ssimref"
+            rec: dict = {"name": name, "page": page, "ssim": None,
+                         "passed": False, "error": None}
+            if not ref_path.exists():
+                # Pages beyond what was captured are simply absent; stop for this doc.
+                if page == 0:
+                    rec["error"] = f"missing reference {ref_path.name}"
+                    all_ok = False
+                    docs.append(rec)
+                break
+            try:
+                rgw, rgh, rpx, rhdr = read_reference(ref_path)
+                cgw, cgh, cpx = _pdfspine_gray(pdf, page, dpi, REF_MAX_DIM)
+            except Exception as exc:  # noqa: BLE001
+                rec["error"] = f"{type(exc).__name__}: {exc}"
+                all_ok = False
+                docs.append(rec)
+                continue
+            # Force identical dims (a size change is itself a regression signal).
+            tw, th = min(rgw, cgw), min(rgh, cgh)
+            rfit = _resize_gray(rgw, rgh, rpx, tw, th)
+            cfit = _resize_gray(cgw, cgh, cpx, tw, th)
+            s = ssim(cfit, rfit, tw, th)
+            rec["ssim"] = round(s, 4)
+            rec["size_match"] = (rgw == cgw and rgh == cgh)
+            rec["cur_mean_gray"] = round(_mean(cpx), 1)
+            rec["ref_mean_gray"] = round(rhdr.get("mean_gray", _mean(rpx)), 1)
+            rec["cur_near_blank"] = _near_blank(cpx)
+            ref_blank = _near_blank(rpx)
+            blanked = rec["cur_near_blank"] and not ref_blank
+            rec["passed"] = (s >= min_ssim) and rec["size_match"] and not blanked
+            if blanked:
+                rec["error"] = "regressed to near-blank vs an inked reference"
+            elif not rec["size_match"]:
+                rec["error"] = f"raster size changed: ref {rgw}x{rgh}, cur {cgw}x{cgh}"
+            all_ok = all_ok and rec["passed"]
+            docs.append(rec)
+    return {
+        "generated": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+        "mode": "reference-no-oracle",
+        "dpi": dpi,
+        "min_ssim": min_ssim,
+        "n": len(docs),
+        "passed": all_ok,
+        "docs": docs,
+    }
+
+
+# --------------------------------------------------------------------------- #
 # Orchestration
 # --------------------------------------------------------------------------- #
 
@@ -461,9 +611,55 @@ def main(argv: list[str]) -> int:
     )
     ap.add_argument("--cache", default=str(ROOT / "conformance" / "gt" / "cache" / "render"))
     ap.add_argument("--no-png", action="store_true", help="skip saving inspection PNGs")
-    ap.add_argument("--report", required=True)
-    ap.add_argument("--json", dest="json_out", required=True)
+    ap.add_argument("--report", help="markdown report path (oracle differential mode)")
+    ap.add_argument("--json", dest="json_out", help="JSON output path")
+    # NO-ORACLE committed-reference SSIM gate (CI regression gate; no fitz needed).
+    ap.add_argument("--ref-dir", default=str(ROOT / "conformance" / "gt" / "ssim-refs"),
+                    help="directory of committed grayscale SSIM references")
+    ap.add_argument("--make-references", action="store_true",
+                    help="render pdfspine and (re)write committed references under --ref-dir")
+    ap.add_argument("--reference-mode", action="store_true",
+                    help="gate pdfspine's current raster against committed --ref-dir references")
+    ap.add_argument("--min-ssim", type=float, default=0.97,
+                    help="per-page SSIM threshold for --reference-mode")
     args = ap.parse_args(argv)
+
+    # ---- NO-ORACLE reference modes (committed SSIM references) ----
+    if args.make_references or args.reference_mode:
+        entries: list[dict] = []
+        for m in args.manifest:
+            entries.extend(_load_manifest(Path(m)))
+        for c in args.corpus:
+            entries.extend(_load_corpus_dir(Path(c)))
+        if not entries:
+            sys.stderr.write("no input PDFs found via --manifest/--corpus\n")
+            return 2
+        entries = sorted(entries, key=lambda e: e["name"])
+        n_pages = max(1, args.pages)
+        ref_dir = Path(args.ref_dir)
+        if args.make_references:
+            n = make_references(entries, ref_dir, args.dpi, n_pages)
+            print(f"wrote {n} reference buffer(s) under {ref_dir}")
+            return 0
+        payload = check_references(entries, ref_dir, args.dpi, n_pages, args.min_ssim)
+        if args.json_out:
+            Path(args.json_out).parent.mkdir(parents=True, exist_ok=True)
+            Path(args.json_out).write_text(json.dumps(payload, indent=2))
+            print(f"Wrote {args.json_out}")
+        n_pass = sum(1 for d in payload["docs"] if d["passed"])
+        for d in payload["docs"]:
+            tag = "ok" if d["passed"] else "FAIL"
+            extra = f" ({d['error']})" if d.get("error") else ""
+            print(f"  {d['name']} p{d['page']}: ssim={d['ssim']} -> {tag}{extra}")
+        print(f"render SSIM gate: {n_pass}/{payload['n']} pages >= {args.min_ssim}")
+        if not payload["passed"]:
+            sys.stderr.write("RENDER GATE FAILED — a reference page SSIM regressed\n")
+            return 1
+        print("render SSIM gate PASSED")
+        return 0
+
+    if not args.report or not args.json_out:
+        ap.error("--report and --json are required for the oracle differential mode")
 
     cache_dir = Path(args.cache)
     cache_dir.mkdir(parents=True, exist_ok=True)

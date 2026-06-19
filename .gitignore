@@ -48,7 +48,11 @@ conformance/gt/cache/
 conformance/gt/corpus-*/
 conformance/gt/gt-*.json
 conformance/gt/render-results.json
+conformance/gt/ci-baseline-results.json
 conformance/gt/__pycache__/
+# CI regression gate (no-oracle): the tiny committed SSIM reference buffers and
+# the inlined-gt manifest ARE tracked (small + license-clean); only the live gate
+# JSON outputs above are transient. ssim-refs/ + ci_manifest.json are committed.
 
 # Editor / OS
 .DS_Store

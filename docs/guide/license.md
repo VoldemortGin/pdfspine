@@ -42,9 +42,17 @@ A small amount of third-party data is bundled and carries its own attribution:
   text is retained verbatim in each bundled data file. (Source:
   [adobe-type-tools/agl-aglfn](https://github.com/adobe-type-tools/agl-aglfn).)
 
+- **Liberation fonts** (Liberation Sans / Serif / Mono, 12 faces) — Copyright
+  (c) 2010 Google Corporation and (c) 2012 Red Hat, Inc., licensed under the
+  **SIL Open Font License, Version 1.1** (`OFL-1.1`). The renderer uses these
+  metric-compatible faces as substitute glyph outlines for non-embedded
+  standard-14 text fonts (Helvetica / Times / Courier, and the Arial / Times New
+  Roman / Courier New aliases). The fonts are shipped unmodified. (Source:
+  [liberationfonts/liberation-fonts](https://github.com/liberationfonts/liberation-fonts).)
+
 The authoritative, per-file provenance and full license headers live in the
-repository under `crates/pdf-fonts/data/` (see that directory's `NOTICE` and
-`PROVENANCE.md`).
+repository under `crates/pdf-fonts/data/` and `crates/pdf-fonts/fonts/liberation/`
+(see each directory's `NOTICE` and `PROVENANCE.md`).
 
 ## Relationship to PyMuPDF
 

@@ -27,9 +27,12 @@
 //!   (`/FontFile3`) programs, and for **Type3** fonts (each glyph is a
 //!   content-stream `/CharProcs` procedure, drawn recursively through the
 //!   `FontMatrix · Trm` mapping — d0/d1, colored/uncolored, depth-guarded).
-//!   Bare Type1 (`/FontFile` PFB) and non-embedded standard-14 fonts are
-//!   **not** rasterized (text stays extractable; no license-uncertain
-//!   substitute font is bundled).
+//!   A **non-embedded standard-14** font (Helvetica / Times / Courier, or the
+//!   Arial / Times New Roman / Courier New aliases) falls back to the bundled
+//!   permissive **Liberation** substitute face (SIL OFL 1.1) so its body text
+//!   renders instead of going blank (advance widths stay authoritative). Bare
+//!   Type1 (`/FontFile` PFB) is still **not** rasterized (text stays
+//!   extractable), and Symbol / ZapfDingbats have no Liberation substitute.
 //! - Images: XObject + inline, Gray/RGB/CMYK, `/SMask` soft masks, stencil
 //!   `/ImageMask`. Tiling patterns and shading-pattern fills are deferred; the
 //!   bare `sh` operator paints axial/radial (types 2 & 3).
@@ -948,30 +951,68 @@ fn font_program_ref(doc: &DocumentStore, font_dict: &Dict) -> Option<ObjRef> {
     None
 }
 
-/// Resolves a font dict's **embedded** program bytes (`/FontFile2` TrueType or
-/// `/FontFile3` OpenType/CFF), decompressing the stream. `None` for a
-/// non-embedded font, a bare Type1 `/FontFile` (PFB — not parseable by the
-/// outline pipeline), or any resolution failure.
+/// Resolves a font dict's program bytes for the outline pipeline.
+///
+/// Prefers the **embedded** program (`/FontFile2` TrueType or `/FontFile3`
+/// OpenType/CFF), decompressing the stream. When no embedded program is present
+/// and the font is a non-embedded **standard-14** (or a metric-compatible alias
+/// — Arial / Times New Roman / Courier New), falls back to the bundled
+/// permissive **Liberation** substitute face ([`liberation_substitute`]) so the
+/// renderer paints real glyphs instead of leaving body text blank.
+///
+/// `None` for a bare Type1 `/FontFile` (PFB — not parseable by the outline
+/// pipeline), a pictographic Symbol / ZapfDingbats (Liberation does not cover
+/// them), or any resolution failure.
 fn resolve_font_program(doc: &DocumentStore, font_dict: &Dict) -> Option<Vec<u8>> {
-    let descriptor = font_descriptor(doc, font_dict)?;
-    // Prefer FontFile2 (TrueType) / FontFile3 (CFF/OpenType); FontFile (Type1
-    // PFB) is not parseable by ttf-parser, so we skip it (documented gap).
-    for key in ["FontFile2", "FontFile3"] {
-        if let Some(obj) = doc
-            .resolve_dict_key(&descriptor, &Name::new(key))
-            .ok()
-            .flatten()
-        {
-            if let Some(stream) = obj.as_stream() {
-                if let Ok(bytes) = doc.decode_stream(stream).and_then(|o| o.into_decoded()) {
-                    if !bytes.is_empty() {
-                        return Some(bytes);
+    if let Some(descriptor) = font_descriptor(doc, font_dict) {
+        // Prefer FontFile2 (TrueType) / FontFile3 (CFF/OpenType); FontFile
+        // (Type1 PFB) is not parseable by ttf-parser, so we skip it (gap).
+        for key in ["FontFile2", "FontFile3"] {
+            if let Some(obj) = doc
+                .resolve_dict_key(&descriptor, &Name::new(key))
+                .ok()
+                .flatten()
+            {
+                if let Some(stream) = obj.as_stream() {
+                    if let Ok(bytes) = doc.decode_stream(stream).and_then(|o| o.into_decoded()) {
+                        if !bytes.is_empty() {
+                            return Some(bytes);
+                        }
                     }
                 }
             }
         }
     }
-    None
+    // No embedded program: substitute a bundled Liberation face for a
+    // non-embedded standard-14 / aliased family (else leave the font untouched).
+    liberation_substitute(doc, font_dict).map(<[u8]>::to_vec)
+}
+
+/// The bundled permissive **Liberation** substitute program for a *non-embedded*
+/// standard-14 simple font, or `None` when no substitution applies.
+///
+/// Only fires for simple fonts (Type1 / TrueType) — Type0 composite and Type3
+/// fonts are excluded (their callers handle them separately). The face is chosen
+/// from `/BaseFont` (with subset-tag stripping + Arial/Times New Roman/Courier
+/// New aliasing) refined by the `/FontDescriptor` serif / fixed-pitch / italic /
+/// force-bold flags. Advance widths stay authoritative via the run's recorded
+/// `trms` (the substitute only supplies outlines, never metrics).
+fn liberation_substitute(doc: &DocumentStore, font_dict: &Dict) -> Option<&'static [u8]> {
+    // Composite (Type0) fonts resolve glyphs by CID against their own program;
+    // never substitute a simple Liberation face for them.
+    if is_type0(font_dict) || is_type3(font_dict) {
+        return None;
+    }
+    let base_font = font_dict
+        .get(&Name::new("BaseFont"))
+        .and_then(Object::as_name)
+        .and_then(Name::as_str)
+        .unwrap_or_default();
+    let flags = font_descriptor(doc, font_dict)
+        .and_then(|d| d.get(&Name::new("Flags")).and_then(Object::as_i64))
+        .map(|f| f.max(0) as u32)
+        .unwrap_or(0);
+    pdf_fonts::liberation_fallback(base_font, flags)
 }
 
 /// Resolves a font dict's `/FontDescriptor`, following the descendant CIDFont for
@@ -1026,6 +1067,9 @@ fn draw_image_op(canvas: &mut Canvas, doc: &DocumentStore, img: &ImageOp) -> Res
             return Ok(());
         }
         let paint = Paint::from_rgb(img.fill_color);
+        // Honor a `/Decode [1 0]` array (the only non-default mapping for a
+        // 1-bit stencil): it inverts which sample value paints.
+        let decode_inverted = image_mask_decode_inverted(&img.dict);
         let _ = draw_image_mask(
             canvas,
             &decoded.data,
@@ -1034,6 +1078,7 @@ fn draw_image_op(canvas: &mut Canvas, doc: &DocumentStore, img: &ImageOp) -> Res
             paint,
             img.ctm,
             img.alpha,
+            decode_inverted,
         );
         return Ok(());
     }
@@ -1347,4 +1392,22 @@ fn dict_bool(dict: &Dict, key: &str) -> bool {
     dict.get(&Name::new(key))
         .and_then(Object::as_bool)
         .unwrap_or(false)
+}
+
+/// Whether a 1-bit `/ImageMask` dict carries a `/Decode [1 0]` array (the inline
+/// image abbreviation is `/D`), which inverts the stencil sample → paint mapping
+/// relative to the default `/Decode [0 1]`. Any other value (absent, `[0 1]`,
+/// or a malformed array) is treated as the default (non-inverted).
+fn image_mask_decode_inverted(dict: &Dict) -> bool {
+    let decode = dict
+        .get(&Name::new("Decode"))
+        .or_else(|| dict.get(&Name::new("D")))
+        .and_then(Object::as_array);
+    let Some(arr) = decode else {
+        return false;
+    };
+    // `/Decode [1 0]`: first sample maps to 1.0, second to 0.0.
+    arr.len() >= 2
+        && arr[0].as_f64().is_some_and(|v| v >= 0.5)
+        && arr[1].as_f64().is_some_and(|v| v < 0.5)
 }

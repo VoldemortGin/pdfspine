@@ -29,8 +29,10 @@
 - **Text extraction:** at fitz parity for **single-column** born-digital / CJK / EUR-Lex / GovInfo. **NOT at
   parity for multi-column** — committed GT shows PMC journals at order 0.08–0.44 vs fitz ~0.99, born-digital
   0/6 match-or-exceed (see §3 C4, Phase 3). Arabic/bidi beats fitz (logical order, UAX#9 reorder).
-- **Rendering (`get_pixmap`):** SSIM **0.945 mean / 0.986 median** vs fitz — but the 3 worst pages
-  (0.527/0.541/0.558) are all **blank non-embedded standard-14 body text** (Phase 1's top fix).
+- **Rendering (`get_pixmap`):** prior SSIM **0.945 mean / 0.986 median** vs fitz was dragged down by the 3
+  worst pages of **blank non-embedded standard-14 body text** — **fixed in P1-1** (Liberation OFL fallback;
+  real-page ink coverage +5..+10 pts), so the true mean is now higher (fresh oracle re-measure pending —
+  `.venv-oracle` absent). Symbol/ZapfDingbats fallback is a documented residual (→ P1-1r).
 - **OCR:** Tesseract adapter + pure-Rust PaddleOCR (PP-OCRv4 via `tract`) both shipped, Python-selectable,
   scanned→searchable proven end-to-end, beats fitz on CJK. Wheel-bloat **resolved** and the publishing path
   is **decided + implemented** (P0-5r): the published `pdfspine` wheel compiles OCR in but embeds **no
@@ -109,24 +111,17 @@ All six blockers landed and were verified (full §8 suite). Done summary:
 - **P0-5r · OCR publishing — ✅ RESOLVED (2026-06-19, commit `ff6495c`)** — chose **Option A: a model-data companion + the OCR feature compiled into the published wheel**. The published `pdfspine` wheel compiles the `ocr` feature in (via `[tool.maturin] features`) but embeds no models; the ~16 MB models ship as a new `pdfspine-ocr-models` data distribution (`packages/pdfspine-ocr-models/`, hatchling force-include from `crates/pdf-ocr/models` — no git duplication) that the `[ocr]` extra depends on. `document.py` sets `PDFSPINE_OCR_MODELS` from the installed companion for `engine="paddle"`; resolution order PDFSPINE_OCR_MODELS → companion → in-repo dev fallback → clear `PdfUnsupportedError`. `release.yml` publishes both dists via OIDC trusted publishing; `docs/RELEASE-PYPI.md` §D.1 documents the flow.
 - **P0-6r · `fetch_corpus.py` relative paths** — the gitignored/regenerable corpus manifests (`conformance/gt/corpus-*/manifest.json`) still embed absolute paths; `fetch_corpus.py` should emit manifest-relative pdf paths so future regenerations stay rename-proof.
 
-### Phase 1 — Pre-launch quality (cheap + high-credibility)
+### Phase 1 — COMPLETE (2026-06-19) — committed on `main`
 
-- **P1-1 · Bundle a permissive fallback family for non-embedded standard-14 fonts** — *M · High*
-  - **Why:** the single highest visual-correctness fix. Non-embedded Helvetica/Times/Courier body text renders **BLANK** (`resolve_font_program` → `None` → `draw_text` early-returns); the 3 worst RENDER-REPORT pages are all "missing body text". Metrics exist (`std_widths.rs`); only outlines are missing. **Independent of the Font refactor** (C3).
-  - **Files:** `crates/pdf-render/src/render.rs:451,497`, `crates/pdf-fonts/src/std_widths.rs`, `crates/pdf-render/src/render.rs:30`.
-  - **Decision:** Liberation (SIL OFL) vs Nimbus/URW — needs license vetting + NOTICE/provenance entry.
-  - **Acceptance:** the 3 worst pages climb from ~0.55 toward ~0.95 SSIM (`render_diff.py`); aggregate mean rises; NOTICE updated.
+All three pre-launch quality items landed and were verified (full §8 suite; the new accuracy gate green). Done summary:
 
-- **P1-2 · Honor `/Decode [1 0]` on stencil ImageMask** — *S · Medium*
-  - **Why:** `draw_image_mask` hardcodes default `/Decode [0 1]` and never reads the dict, so a `/Decode [1 0]` mask paints **fully inverted** (common in scanned/forms content). Cheap; do it while in the render path with P1-1.
-  - **Files:** `crates/pdf-render/src/image.rs:118,149`, `crates/pdf-render/src/render.rs:1016`.
-  - **Acceptance:** an `/ImageMask` with `/Decode [1 0]` renders correctly; regression test added.
+- **P1-1 · Liberation std-14 fallback fonts** — DONE. Bundled the 12 base-14-covering **Liberation 2.1.5** faces (**SIL OFL 1.1**, ~4.2 MB) under `crates/pdf-fonts/fonts/liberation/`; `render.rs::liberation_substitute` maps standard-14 names (+ Arial/Times New Roman/Courier New aliases, refined by `/FontDescriptor` serif/fixed-pitch/italic/force-bold) to them when a simple font has no embedded `/FontFile*`. Non-embedded Helvetica/Times/Courier body text now renders real glyphs instead of blank (real-page ink coverage +5..+10 pts; a bare `/Helvetica` with no `/FontDescriptor` also covered). `std_widths` stays authoritative for advances. NOTICE + per-dir PROVENANCE + `docs/guide/license.md` carry the OFL provenance. **Residual → P1-1r** (Symbol/ZapfDingbats not covered — no regression).
+- **P1-2 · `/Decode [1 0]` ImageMask** — DONE. `draw_image_mask` reads `/Decode` (or inline `/D`) and inverts which sample paints; an inverted stencil no longer fills solid. Regression test added.
+- **P1-3 · CI accuracy/SSIM regression gate** — DONE. Three tiny clean-room **CC0-1.0** born-digital fixtures (`fixtures/born/`, reproducible via `conformance/gt/make_ci_fixtures.py`, manifest-lint-cleared); `run_gt.py` gained a **no-oracle** reading-order gate vs inlined `gt_text` (`ci_manifest.json`) and `render_diff.py` a **committed-reference SSIM** gate (`conformance/gt/ssim-refs/`, captured post-fix). New `ci.yml` `accuracy-gate` job fails on regression. Thresholds carry margin (order 0.90, SSIM 0.97); both fail-paths verified. **Note:** with `.venv-oracle` absent, the SSIM gate is self-referential against committed buffers (still catches any renderer change — the requested no-oracle design).
 
-- **P1-3 · Wire a real extraction/render CI regression gate** — *M · High*
-  - **Why:** ci.yml has lint/test/pytest/wheels but **no accuracy/SSIM job**, and the only "guards" are the M0 stubs (C10). Without it, the std-14 fix and every later extraction fix can silently regress.
-  - **Approach:** commit a tiny born-digital fixture set with inlined `gt_text` (`corpus-born/manifest.json` already inlines it); add a no-oracle pdfspine-vs-baseline mode to `run_gt.py` asserting per-doc `order >= threshold`; add SSIM via `render_diff.py` vs committed reference buffers.
-  - **Files:** `.github/workflows/ci.yml:141`, `conformance/gt/run_gt.py:516`, `conformance/gt/render_diff.py:377`, `.gitignore:48`.
-  - **Acceptance:** CI fails if born-digital order drops below threshold or a reference page's SSIM regresses.
+**Residual carried forward:**
+
+- **P1-1r · Symbol/ZapfDingbats fallback** — *S · Low* — the two non-Latin standard-14 fonts aren't covered by Liberation (`liberation_substitute` returns `None`); wire a reasonable symbol fallback or accept as a documented deviation. No regression vs today.
 
 ### Phase 2 — Launch parity push (pure-Python / binding clusters → ~86–90%)
 
@@ -230,9 +225,10 @@ All six blockers landed and were verified (full §8 suite). Done summary:
 | P0-2r | 12 `_core` PyO3 deferred members still AttributeError (Rust-core) | M | Med | open | 0r |
 | P0-5r | OCR publishing — model-data companion + OCR-in-wheel (Option A) | M | High | ✅ done | 0r |
 | P0-6r | `fetch_corpus.py` emits manifest-relative pdf paths | S | Low | open | 0r |
-| P1-1 | Bundle std-14 fallback fonts (blank body text) | M | High | – | 1 |
-| P1-2 | Honor `/Decode [1 0]` ImageMask | S | Med | – | 1 |
-| P1-3 | Real extraction/render CI regression gate | M | High | – | 1 |
+| P1-1 | Liberation std-14 fallback fonts (blank body text) | M | High | ✅ done | 1 |
+| P1-2 | Honor `/Decode [1 0]` ImageMask | S | Med | ✅ done | 1 |
+| P1-3 | Real extraction/render CI accuracy gate | M | High | ✅ done | 1 |
+| P1-1r | Symbol/ZapfDingbats fallback (Liberation gap) | S | Low | open | 1r |
 | P2-1 | Page draw-convenience + loader/alias (~12 syms) | M | High | – | 2 |
 | P2-2 | `Document.convert_to_pdf` (image inputs) | M | Med | – | 2 |
 | P2-3 | Small binding clusters (Pixmap/Tools/Page/Doc) | S–M | Low–Med | – | 2 |
@@ -247,10 +243,10 @@ All six blockers landed and were verified (full §8 suite). Done summary:
 | P4-3 | OCR `recognize()` rayon parallelism | M | High | – | 4 |
 | P4-4 | Full public-surface API reference docs | M | Med | – | 4 |
 
-**Recommended next 3 (in order):** *(Phase 0 + P0-5r COMPLETE — committed on `phase0-blockers`.)*
-1. **Phase 1 — P1-1 std-14 fallback fonts** (+ the one-line P1-2 while in the render path, + P1-3 to lock quality) — the top visual-correctness fix now that the blockers are cleared.
-2. **Phase 2 — P2-1 Page parity batch** (+ P2-2 convert_to_pdf) — biggest parity-%-per-effort momentum (~86%), no Rust-architecture risk.
-3. Then the large **P3-1 multi-column** and **P4-1 Font** work, guarded by P1-3. (The remaining Phase 0 residuals P0-2r / P0-6r are low-priority cleanups.)
+**Recommended next 3 (in order):** *(Phase 0 + P0-5r + Phase 1 COMPLETE — committed on `main`.)*
+1. **Phase 2 — P2-1 Page parity batch** (+ P2-2 convert_to_pdf) — biggest parity-%-per-effort momentum (~86%), pure-Python/binding clusters, no Rust-architecture risk.
+2. **Phase 2 cont. — P2-3 / P2-4** (small binding + medium parity clusters), then the large **P3-1 multi-column** reading-order engine, now guarded by the new P1-3 accuracy gate.
+3. **P4-1 Font `/FontFile*`** API work, plus the low-priority residuals (P0-2r `_core` deferred, P0-6r corpus paths, P1-1r Symbol/Zapf).
 
 ## 7. Pre-public chores + docs upkeep (do alongside / last)
 
@@ -287,5 +283,5 @@ and trust a clean machine / CI.
 
 *Re-verified 2026-06-19 from a code-level 5-dimension survey (project health · API parity · rendering ·
 extraction/conformance · perf/OCR). §3 is the correction log against this doc's previous A–F framing.
-**Phase 0 + P0-5r landed on 2026-06-19** (committed on branch `phase0-blockers`: 98a437a, ff6495c) — §3
-rows C1 / C2 / C6 / C10 / C11 are fixed; residuals P0-2r / P0-6r carried forward.*
+**Phase 0 + P0-5r + Phase 1 landed on 2026-06-19** (on `main`) — §3 rows C1 / C2 / C6 / C10 / C11 are
+fixed; residuals P0-2r / P0-6r / P1-1r carried forward.*

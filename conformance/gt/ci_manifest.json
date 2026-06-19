@@ -1,0 +1,20 @@
+{
+  "subset": "born-ci",
+  "entries": [
+    {
+      "id": "pangrams.pdf",
+      "pdf": "../../fixtures/born/pangrams.pdf",
+      "gt_text": "The quick brown fox jumps over the lazy dog. Pack my box with five dozen liquor jugs. Sphinx of black quartz judge my vow. How razorback jumping frogs can level six piqued gymnasts."
+    },
+    {
+      "id": "reading-order.pdf",
+      "pdf": "../../fixtures/born/reading-order.pdf",
+      "gt_text": "Reading order matters when a document has multiple lines. Each line should appear in the same sequence it was written. A faithful extractor preserves top to bottom ordering. This page exercises simple single column flow. The second page continues the same logical narrative. Page breaks must not scramble the overall reading order. Extraction joins pages in their natural document sequence. End of the born digital reading order fixture."
+    },
+    {
+      "id": "render-fixture.pdf",
+      "pdf": "../../fixtures/born/render-fixture.pdf",
+      "gt_text": "RENDER REGRESSION FIXTURE pdfspine raster vs committed reference ABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789 the rasterizer fill and glyph paths"
+    }
+  ]
+}

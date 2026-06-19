@@ -109,12 +109,14 @@ pub fn draw_image(canvas: &mut Canvas, image: &Pixmap, ctm: Matrix, alpha: u8) -
 ///
 /// `bits` is the packed 1-bit-per-pixel mask, MSB-first, **rows byte-aligned**
 /// (the PDF sample layout). With the default `/Decode [0 1]`, a sample of `0`
-/// means "paint" and `1` means "leave transparent". `ctm`/`alpha` behave as in
-/// [`draw_image`].
+/// means "paint" and `1` means "leave transparent"; `decode_inverted` (a
+/// `/Decode [1 0]` array on the image dict) swaps that mapping so a sample of
+/// `1` paints and `0` is transparent. `ctm`/`alpha` behave as in [`draw_image`].
 ///
 /// # Errors
 ///
 /// [`Error::InvalidArgument`] for a zero dimension or a `bits` buffer too short.
+#[allow(clippy::too_many_arguments)]
 pub fn draw_image_mask(
     canvas: &mut Canvas,
     bits: &[u8],
@@ -123,6 +125,7 @@ pub fn draw_image_mask(
     color: Paint,
     ctm: Matrix,
     alpha: u8,
+    decode_inverted: bool,
 ) -> Result<()> {
     if width == 0 || height == 0 {
         return Err(Error::InvalidArgument("zero image dimension"));
@@ -138,16 +141,18 @@ pub fn draw_image_mask(
         return Ok(());
     };
 
-    // Build a premultiplied RGBA stencil: fill color where bit == 0, else clear.
+    // Build a premultiplied RGBA stencil: fill color where the sample says
+    // "paint", else clear. The default `/Decode [0 1]` paints where the bit is
+    // 0; `/Decode [1 0]` (`decode_inverted`) paints where the bit is 1.
     let [r, g, b, _] = color.rgba;
+    let paint_bit = u8::from(decode_inverted);
     let mut out = vec![0u8; width as usize * height as usize * 4];
     for y in 0..height as usize {
         let row = &bits[y * row_bytes..y * row_bytes + row_bytes];
         for x in 0..width as usize {
             let byte = row[x / 8];
             let bit = (byte >> (7 - (x % 8))) & 1;
-            if bit == 0 {
-                // /Decode [0 1] default: 0 => paint.
+            if bit == paint_bit {
                 let o = (y * width as usize + x) * 4;
                 // Fully opaque; premultiplied == straight at a == 255.
                 out[o] = r;

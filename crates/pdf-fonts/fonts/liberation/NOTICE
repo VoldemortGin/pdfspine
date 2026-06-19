@@ -1,0 +1,25 @@
+pdfspine — bundled Liberation fonts NOTICE
+==========================================
+
+This product includes the Liberation font family (Liberation Sans, Liberation
+Serif, Liberation Mono — Regular / Bold / Italic / BoldItalic), embedded into
+the renderer as permissive substitute glyph outlines for the non-embedded
+standard-14 text fonts (Helvetica / Times / Courier and their metric-compatible
+aliases Arial / Times New Roman / Courier New).
+
+  Liberation Fonts
+  Digitized data copyright (c) 2010 Google Corporation,
+    with Reserved Font Name Arimo, Tinos and Cousine.
+  Copyright (c) 2012 Red Hat, Inc.,
+    with Reserved Font Name Liberation.
+  Original designer: Steve Matteson (Ascender, Inc.).
+
+  Licensed under the SIL Open Font License, Version 1.1.
+  SPDX-License-Identifier: OFL-1.1
+  Source: https://github.com/liberationfonts/liberation-fonts (release 2.1.5)
+
+The full SIL Open Font License 1.1 text is retained verbatim in the `LICENSE`
+file in this directory (copied byte-for-byte from the upstream release tarball).
+The font files are shipped unmodified; the Reserved Font Names above are not
+used for any derived/modified version. See `PROVENANCE.md` for the per-file
+provenance and SHA-256 checksums.

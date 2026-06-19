@@ -230,7 +230,17 @@ fn render_img_stencil_mask() {
     let bits = vec![0b0100_0000u8, 0b1100_0000u8];
     let fill = Paint::from_rgb(0x00_FF8800); // orange
     let mut cv = canvas_yflip(20, 20);
-    draw_image_mask(&mut cv, &bits, 2, 2, fill, Matrix::scale(20.0, 20.0), 255).unwrap();
+    draw_image_mask(
+        &mut cv,
+        &bits,
+        2,
+        2,
+        fill,
+        Matrix::scale(20.0, 20.0),
+        255,
+        false,
+    )
+    .unwrap();
     // top-left quadrant painted orange
     let tl = px(&cv, 4, 4);
     assert!(
@@ -240,6 +250,37 @@ fn render_img_stencil_mask() {
     assert!(tl[3] > 200, "stencil tl opaque {tl:?}");
     // top-right quadrant NOT painted -> transparent
     assert_eq!(px(&cv, 16, 4)[3], 0, "stencil tr transparent");
+}
+
+// RENDER-IMG-MASK-DECODE-INVERT (P1-2): an /ImageMask with /Decode [1 0] inverts
+// the stencil — the same bits now paint where the default mapping would have
+// left transparent, and vice versa.
+#[test]
+fn render_img_stencil_mask_decode_inverted() {
+    // Same 2x2 stencil as the default test: bit pattern top-left = 0, rest = 1.
+    let bits = vec![0b0100_0000u8, 0b1100_0000u8];
+    let fill = Paint::from_rgb(0x00_FF8800); // orange
+    let mut cv = canvas_yflip(20, 20);
+    draw_image_mask(
+        &mut cv,
+        &bits,
+        2,
+        2,
+        fill,
+        Matrix::scale(20.0, 20.0),
+        255,
+        true, // /Decode [1 0]: invert which sample paints
+    )
+    .unwrap();
+    // With inversion, the top-left (bit 0) is now TRANSPARENT...
+    assert_eq!(px(&cv, 4, 4)[3], 0, "inverted tl transparent");
+    // ...and the top-right (bit 1) is now PAINTED.
+    let tr = px(&cv, 16, 4);
+    assert!(
+        close(tr[0], 0xFF) && close(tr[1], 0x88) && close(tr[2], 0x00),
+        "inverted tr painted {tr:?}"
+    );
+    assert!(tr[3] > 200, "inverted tr opaque {tr:?}");
 }
 
 // RENDER-IMG-CLIP-OOB: placement entirely off-canvas paints nothing, no panic.

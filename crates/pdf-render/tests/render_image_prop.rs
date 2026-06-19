@@ -50,7 +50,7 @@ proptest! {
     fn draw_image_mask_never_panics(m in mat(), a in 0u8..=255) {
         let mut cv = Canvas::blank(16, 16, Matrix::IDENTITY, Colorspace::Rgb, true).unwrap();
         let bits = vec![0b1010_1010u8; 4]; // 4x4 1bpp -> row_bytes=1, 4 rows
-        let _ = draw_image_mask(&mut cv, &bits, 4, 4, Paint::from_rgb(0x00FF00FF), m, a);
+        let _ = draw_image_mask(&mut cv, &bits, 4, 4, Paint::from_rgb(0x00FF00FF), m, a, false);
         prop_assert_eq!(cv.width(), 16);
     }
 

@@ -158,6 +158,42 @@ jobs:
       - name: manifest-lint (affirmative-license fixtures + manifest hygiene)
         run: python scripts/manifest-lint.py
 
+  # ------------------------------------------- extraction / render regression
+  accuracy-gate:
+    name: accuracy gate (reading-order + render SSIM, no oracle)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.96.0
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install maturin
+        run: pip install "maturin>=1.12,<2"
+      - name: Build + install pdfspine (maturin develop)
+        run: maturin develop
+      # The committed fixtures regenerate byte-for-byte; assert they are in sync
+      # so a stale fixture cannot silently weaken the gate.
+      - name: Fixtures reproducible (no drift)
+        run: |
+          python conformance/gt/make_ci_fixtures.py
+          git diff --exit-code -- fixtures/born
+      - name: Reading-order gate (pdfspine vs inlined gt_text)
+        run: |
+          python conformance/gt/run_gt.py \
+            --baseline-manifest conformance/gt/ci_manifest.json \
+            --min-order 0.90 \
+            --json conformance/gt/ci-baseline-results.json
+      - name: Render SSIM gate (pdfspine vs committed references)
+        run: |
+          python conformance/gt/render_diff.py \
+            --reference-mode \
+            --corpus fixtures/born \
+            --dpi 100 --pages 1 \
+            --min-ssim 0.97 \
+            --json conformance/gt/render-results.json
+
   # ----------------------------------------------------------- supply-chain
   supply-chain:
     name: supply-chain (cargo-vet)

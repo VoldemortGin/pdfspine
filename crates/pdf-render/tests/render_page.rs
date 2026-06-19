@@ -188,6 +188,67 @@ fn render_page_001_text_page_non_blank_sized() {
 }
 
 // ============================================================================
+// RENDER-PAGE-STD14-FALLBACK (P1-1): a NON-embedded standard-14 font (Helvetica,
+// no /FontFile*) now renders real glyphs via the bundled Liberation substitute
+// — body text is no longer blank. Before P1-1, resolve_font_program returned
+// None for such a font and draw_text early-returned (blank page).
+// ============================================================================
+
+/// A non-embedded `/Type1` `/Helvetica` simple font (resource `/F1`): objects
+/// 10 (font) + 11 (descriptor), with NO `/FontFile*` program.
+fn non_embedded_helvetica_objs() -> Vec<(u32, Vec<u8>)> {
+    vec![
+        (
+            10,
+            b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica \
+              /Encoding /WinAnsiEncoding >>"
+                .to_vec(),
+        ),
+        (
+            11,
+            b"<< /Type /FontDescriptor /FontName /Helvetica /Flags 32 \
+              /FontBBox [-166 -225 1000 931] /ItalicAngle 0 /Ascent 718 \
+              /Descent -207 /CapHeight 718 /StemV 88 >>"
+                .to_vec(),
+        ),
+    ]
+}
+
+#[test]
+fn render_page_std14_non_embedded_helvetica_not_blank() {
+    // Large text covering many pixels; printable ASCII resolves through the
+    // Liberation Sans cmap by Unicode.
+    let content = b"BT /F1 100 Tf 20 80 Td (Hello) Tj ET";
+    let pdf = page_pdf_extra(
+        content,
+        "<< /Font << /F1 10 0 R >> >>",
+        0,
+        non_embedded_helvetica_objs(),
+    );
+    let (doc, page) = open_page(pdf);
+    let pm = render(&doc, &page, &RenderOptions::default());
+    assert_eq!((pm.width, pm.height), (200, 200));
+    // The substitute outlines must paint *some* ink: pre-P1-1 this page was
+    // entirely blank (no embedded program → no glyphs drawn).
+    assert!(
+        non_blank(&pm),
+        "non-embedded Helvetica body text must render glyphs (Liberation fallback)"
+    );
+    // Count painted (non-white) pixels: a real glyph run covers a meaningful
+    // area, not a stray pixel.
+    let n = pm.n as usize;
+    let inked = pm
+        .samples()
+        .chunks_exact(n)
+        .filter(|c| c[0] != 255 || c[1] != 255 || c[2] != 255)
+        .count();
+    assert!(
+        inked > 100,
+        "expected substantial glyph coverage, got {inked}"
+    );
+}
+
+// ============================================================================
 // RENDER-PAGE-002: a filled rect paints its fill color; white elsewhere.
 // ============================================================================
 

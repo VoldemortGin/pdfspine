@@ -541,6 +541,98 @@ def run(
 
 
 # --------------------------------------------------------------------------- #
+# NO-ORACLE baseline gate: pdfspine vs INLINED gt_text (CI regression gate)
+# --------------------------------------------------------------------------- #
+def _extract_pdfspine_inproc(pdf: Path) -> str:
+    """Extract full-document pdfspine text in-process (no oracle, no subprocess).
+
+    Used by the CI baseline gate, where we ARE pdfspine: there is no need to
+    isolate it in a subprocess or shell out to an oracle venv. Pages are joined
+    in document order, mirroring the worker's ``"\\n".join(pages)``.
+    """
+    import pdfspine  # local import: only the baseline gate needs the wheel
+
+    doc = pdfspine.open(str(pdf))
+    pages = [doc[i].get_text() for i in range(len(doc))]
+    return "\n".join(pages)
+
+
+def run_baseline(manifest: Path, min_order: float) -> dict:
+    """Score pdfspine get_text vs inlined gt_text; assert per-doc order threshold.
+
+    The manifest is an object (or bare list) of entries, each with a ``pdf``
+    path (resolved relative to the manifest dir) and an inlined ``gt_text``
+    ground truth. No fitz / oracle / network is involved — this is the
+    born-digital reading-order regression gate.
+
+    Returns a payload with per-doc ``order``/``lev`` scores and an overall
+    ``passed`` flag (True iff every scored doc has ``order >= min_order``).
+    """
+    score_all = _import_score_all()
+    subset, entries = load_manifest(manifest)
+    manifest_dir = manifest.resolve().parent
+    print(f"[baseline] {manifest} subset={subset} entries={len(entries)} "
+          f"min_order={min_order}", flush=True)
+
+    docs: list[dict] = []
+    all_ok = True
+    for i, entry in enumerate(entries, 1):
+        pdf_raw = entry.get("pdf") or entry.get("path") or entry.get("file")
+        doc_id = entry.get("id") or (Path(pdf_raw).name if pdf_raw else "?")
+        rec: dict = {"id": doc_id, "pdf": pdf_raw, "order": None, "lev": None,
+                     "passed": False, "error": None}
+        gt_text = entry.get("gt_text")
+        if gt_text is None:
+            rec["error"] = "manifest entry has no inlined 'gt_text'"
+            all_ok = False
+            docs.append(rec)
+            print(f"  [{i}/{len(entries)}] {doc_id} -> FAIL ({rec['error']})", flush=True)
+            continue
+        if not pdf_raw:
+            rec["error"] = "manifest entry has no 'pdf'/'path'/'file'"
+            all_ok = False
+            docs.append(rec)
+            print(f"  [{i}/{len(entries)}] {doc_id} -> FAIL ({rec['error']})", flush=True)
+            continue
+        pdf = Path(pdf_raw)
+        if not pdf.is_absolute():
+            pdf = manifest_dir / pdf
+        if not pdf.exists():
+            rec["error"] = f"pdf not found: {pdf}"
+            all_ok = False
+            docs.append(rec)
+            print(f"  [{i}/{len(entries)}] {doc_id} -> FAIL ({rec['error']})", flush=True)
+            continue
+        try:
+            hyp = _extract_pdfspine_inproc(pdf)
+        except Exception as exc:  # noqa: BLE001
+            rec["error"] = f"{type(exc).__name__}: {exc}"
+            all_ok = False
+            docs.append(rec)
+            print(f"  [{i}/{len(entries)}] {doc_id} -> FAIL ({rec['error']})", flush=True)
+            continue
+        scores = normalize_scores(score_all(hyp, str(gt_text)))
+        rec["order"] = scores["order"]
+        rec["lev"] = scores["lev"]
+        rec["passed"] = rec["order"] is not None and rec["order"] >= min_order
+        all_ok = all_ok and rec["passed"]
+        docs.append(rec)
+        tag = "ok" if rec["passed"] else "FAIL"
+        print(f"  [{i}/{len(entries)}] {doc_id} -> {tag} "
+              f"(order={rec['order']}, lev={rec['lev']})", flush=True)
+
+    return {
+        "generated": datetime.now(timezone.utc).isoformat(),
+        "mode": "baseline-no-oracle",
+        "subset": subset,
+        "min_order": min_order,
+        "n_docs": len(docs),
+        "passed": all_ok,
+        "docs": docs,
+    }
+
+
+# --------------------------------------------------------------------------- #
 # Self-test (no wheel, no network, no oracle, no siblings)
 # --------------------------------------------------------------------------- #
 def _selftest() -> int:
@@ -687,10 +779,35 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--limit", type=int, default=None, help="cap entries per manifest")
     ap.add_argument("--selftest", action="store_true",
                     help="run offline plumbing self-test (no wheel/network/oracle) and exit")
+    ap.add_argument("--baseline-manifest", type=Path,
+                    help="NO-ORACLE gate: score pdfspine get_text vs inlined gt_text "
+                         "in this manifest and FAIL if any doc's reading order regresses")
+    ap.add_argument("--min-order", type=float, default=0.95,
+                    help="per-doc reading-order threshold for --baseline-manifest")
     args = ap.parse_args(argv)
 
     if args.selftest:
         return _selftest()
+
+    if args.baseline_manifest is not None:
+        if not args.baseline_manifest.exists():
+            print(f"ERROR: baseline manifest not found: {args.baseline_manifest}",
+                  file=sys.stderr)
+            return 1
+        payload = run_baseline(args.baseline_manifest, args.min_order)
+        if args.json_out:
+            args.json_out.parent.mkdir(parents=True, exist_ok=True)
+            args.json_out.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+            print(f"Wrote {args.json_out}")
+        n_pass = sum(1 for d in payload["docs"] if d["passed"])
+        print(f"baseline reading-order gate: {n_pass}/{payload['n_docs']} docs "
+              f">= {payload['min_order']}")
+        if not payload["passed"]:
+            print("BASELINE GATE FAILED — born-digital reading order regressed",
+                  file=sys.stderr)
+            return 1
+        print("baseline reading-order gate PASSED")
+        return 0
 
     if not args.manifest:
         ap.error("at least one --manifest is required (or use --selftest)")

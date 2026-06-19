@@ -22,6 +22,21 @@ per-file provenance and full license headers are retained in
   retained verbatim in the comment header of each bundled data file.
   Source: https://github.com/adobe-type-tools/agl-aglfn
 
+* Liberation fonts (Liberation Sans / Serif / Mono, 12 faces)
+  (`crates/pdf-fonts/fonts/liberation/Liberation*.ttf`)
+  Digitized data copyright (c) 2010 Google Corporation, with Reserved Font
+  Name Arimo, Tinos and Cousine. Copyright (c) 2012 Red Hat, Inc., with
+  Reserved Font Name Liberation. Original designer: Steve Matteson.
+  Licensed under the SIL Open Font License, Version 1.1 (SPDX: OFL-1.1). The
+  full OFL-1.1 text is retained verbatim in
+  `crates/pdf-fonts/fonts/liberation/LICENSE`. The renderer uses these
+  metric-compatible faces as substitute glyph outlines for the non-embedded
+  standard-14 text fonts (Helvetica / Times / Courier and the Arial / Times
+  New Roman / Courier New aliases). The font files are shipped unmodified.
+  Source: https://github.com/liberationfonts/liberation-fonts (release 2.1.5)
+  Per-file provenance and SHA-256 checksums are retained in
+  `crates/pdf-fonts/fonts/liberation/PROVENANCE.md` and `NOTICE`.
+
 * PaddleOCR PP-OCR models and recognition dictionary
   (`crates/pdf-ocr/models/ppocrv4_det.onnx`,
   `crates/pdf-ocr/models/ppocrv4_rec.onnx`,
