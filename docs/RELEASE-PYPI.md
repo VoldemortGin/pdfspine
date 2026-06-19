@@ -1,4 +1,4 @@
-# pdfspine — GO-LIVE RUNBOOK (PyPI + crates.io + public GitHub)
+# pdfspine — GO-LIVE RUNBOOK (PyPI + public GitHub)
 
 > **Audience:** the maintainer (or an automated agent) executing the first public
 > release of `pdfspine`. This is the ordered, end-to-end runbook. Each step is
@@ -7,7 +7,7 @@
 > - **DONE** — already applied in the repo; nothing to do.
 > - **READY** — code/config is in place; run the listed command(s) when you get here.
 > - **USER-GATED** — needs your account, credentials, or an explicit decision
->   (PyPI/crates.io ownership, making the repo public, the local folder rename).
+>   (PyPI ownership, making the repo public, the local folder rename).
 >
 > Do the steps **in order**. The local-folder rename (§C) is deliberately the
 > **last build-environment step** before publishing, because it invalidates the
@@ -20,7 +20,7 @@
 | Fact | Value | Status |
 |---|---|---|
 | PyPI distribution name | **`pdfspine`** (reserved / verified free) | USER-GATED (publish) |
-| crates.io name | **`pdfspine`** (reserved by you) | USER-GATED (publish) |
+| crates.io name | **`pdfspine`** (reserved for brand protection) | NOT PUBLISHED (Python-first, like ragspine; all crates `publish=false`) |
 | Python import package | **`pdfspine`** (+ `fitz` / `pymupdf` compat shims) | DONE |
 | License | **Apache-2.0** (`LICENSE` + `NOTICE` + per-data `PROVENANCE.md`) | DONE |
 | GitHub repo | `github.com/VoldemortGin/pdfspine` — **currently PRIVATE** | USER-GATED (flip public) |
@@ -79,7 +79,7 @@ Already applied in this audit pass (**DONE**):
 Still to do (**USER-GATED — version decision**):
 
 1. **Bump the version** from `0.0.0` to a real release. `0.0.0` cannot be uploaded
-   to PyPI/crates.io. Recommended first artifact: **`0.1.0a1`** (PyPI alpha
+   to PyPI. Recommended first artifact: **`0.1.0a1`** (PyPI alpha
    pre-release; `pip install pdfspine` won't pick it up without `--pre`), or
    `0.1.0` if you want it to be the default install target immediately. Keep the
    two in sync:
@@ -193,21 +193,22 @@ One-time setup in the PyPI web UI (do BEFORE the first publish):
 Then publishing is automatic on tag push (§G) — `pypa/gh-action-pypi-publish`
 uploads via OIDC and attaches PEP 740 build attestations. No tokens stored.
 
-### F.2 crates.io (Rust library) — USER-GATED (decision + publish)
+### F.2 crates.io — NOT published (Python-first, matches the spine family)
 
-There is currently **no crate literally named `pdfspine`** in the workspace, so
-`cargo publish` has no target matching the reserved name. **Decision required:**
+**Decision (2026-06-19): pdfspine ships via PyPI only, like its sibling `ragspine`
+(pure Python, no crates.io).** The `pdfspine` name is **reserved on crates.io for
+brand protection but nothing is published there.** ALL workspace crates are now
+`publish = false` (pdf-core/pdf-api/pdf-crypto/pdf-edit/pdf-fonts/pdf-image/
+pdf-ocr/pdf-render/pdf-text + py-bindings + pdf-testdata) — this prevents the
+internal `pdf-*` crates from ever being accidentally published under fragmented
+names, keeping the brand a single unified `pdfspine`.
 
-- **Option A (recommended):** add a thin top-level `pdfspine` crate that
-  re-exports `pdf-api` (the public façade). Give it `keywords = ["pdf", "pymupdf",
-  "mupdf", "ocr", "rust"]` and `categories = ["parser-implementations",
-  "multimedia::images", "text-processing"]`, then `cargo publish -p pdfspine`.
-- **Option B:** rename the `pdf-api` crate to `pdfspine`.
-
-Either way, mark the remaining internal crates `publish = false` (currently only
-`py-bindings` and `pdf-testdata` are). The Python extension stays PyPI-only
-(`py-bindings` is `publish=false`, correct). crates.io publish is OPTIONAL — you
-can ship the wheel on PyPI without ever publishing to crates.io.
+This is NOT a release blocker — it is a deliberate non-action. If, in the future,
+Rust developers want to depend on the engine directly, publishing to crates.io
+would mean: name a public-facing crate `pdfspine` (a thin re-export of `pdf-api`,
+NEVER `pdf-spine`), flip the whole dependency tree's `publish` back on, add
+version-deps, and `cargo publish` each — a deliberate future effort, not part of
+the v1 go-live. For v1: ignore crates.io beyond holding the reserved name.
 
 ---
 
@@ -236,7 +237,7 @@ python -c "import pdfspine; print(pdfspine.__version__); print(pdfspine.open)"
 
 - https://pypi.org/project/pdfspine/ renders the README, shows Apache-2.0, links,
   and all platform wheels + sdist.
-- (If published) https://crates.io/crates/pdfspine resolves and points at the repo.
+- crates.io: name `pdfspine` held (reserved) but NOT published for v1 — by design (Python-first).
 
 ---
 
@@ -251,7 +252,7 @@ python -c "import pdfspine; print(pdfspine.__version__); print(pdfspine.open)"
 | D | Build wheel matrix + sdist (`release.yml`) | READY |
 | E | Test-install wheels (TestPyPI dry run) | READY |
 | F.1 | PyPI Trusted Publishing setup + publish | USER-GATED |
-| F.2 | crates.io crate decision + publish (optional) | USER-GATED |
+| F.2 | crates.io — name reserved, NOT published (Python-first) | DONE (decided) |
 | G | Tag `v*` + flip repo public + push | USER-GATED |
 | H | Post-publish verification | READY |
 

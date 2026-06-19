@@ -1,5 +1,6 @@
 [package]
 name = "pdf-render"
+publish = false  # crates.io: name "pdfspine" reserved only; this lib ships via PyPI (Python-first, like ragspine)
 version.workspace = true
 edition.workspace = true
 license.workspace = true
