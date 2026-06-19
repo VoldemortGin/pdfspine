@@ -32,11 +32,12 @@
 - **Rendering (`get_pixmap`):** SSIM **0.945 mean / 0.986 median** vs fitz — but the 3 worst pages
   (0.527/0.541/0.558) are all **blank non-embedded standard-14 body text** (Phase 1's top fix).
 - **OCR:** Tesseract adapter + pure-Rust PaddleOCR (PP-OCRv4 via `tract`) both shipped, Python-selectable,
-  scanned→searchable proven end-to-end, beats fitz on CJK. Wheel-bloat **resolved** via feature-split: the
-  lean **6.75 MB** default base wheel embeds no models; OCR is opt-in (`maturin build --features ocr`, 21.4 MB)
-  and the ~16 MB models load at runtime from `PDFSPINE_OCR_MODELS`/`models/` (offline, no download). One
-  release residual remains: how to actually *publish* OCR to end users (→ P0-5r). The per-box `recognize()`
-  loop is still sequential (→ P4-3).
+  scanned→searchable proven end-to-end, beats fitz on CJK. Wheel-bloat **resolved** and the publishing path
+  is **decided + implemented** (P0-5r): the published `pdfspine` wheel compiles OCR in but embeds **no
+  models** (~7 MB compressed; the `cargo` build default stays lean), and the ~16 MB models ship as a separate
+  `pdfspine-ocr-models` data distribution the `[ocr]` extra pulls in (`pip install pdfspine[ocr]`); models
+  resolve at runtime `PDFSPINE_OCR_MODELS` → companion → in-repo dev fallback (offline, no download). The
+  per-box `recognize()` loop is still sequential (→ P4-3).
 - **Performance:** pdfspine **beats fitz on open (1.26×)** and **text (2.75×)** — the ops users actually
   call; render is 1.74× faster than before but still ~2.3× slower than pypdfium2 (a C engine, not the parity
   target). **All render-perf work is deferred** — see §5 "Deferred for v1".
@@ -91,7 +92,7 @@ mis-stated the work. The phased plan in §4 replaces it. Key corrections (all ca
 Effort: **S** ≈ hours · **M** ≈ 1–2 days · **L** ≈ multi-day. Each task lists **why · files · effort/impact
 · Acceptance** (the green condition that means "done").
 
-### Phase 0 — COMPLETE (2026-06-19) — in the working tree, pending commit
+### Phase 0 — COMPLETE (2026-06-19) — committed on branch `phase0-blockers` (98a437a; P0-5r in ff6495c)
 
 All six blockers landed and were verified (full §8 suite). Done summary:
 
@@ -99,13 +100,13 @@ All six blockers landed and were verified (full §8 suite). Done summary:
 - **P0-2 · Deferred → `PdfUnsupportedError`** — DONE for the 40 Page/Document deferred symbols. Catalog now emits `python/pdfspine/_compat_deferred.py` (a self-maintaining `frozenset`, ships in the wheel); `Page/Document.__getattr__` route deferred members through it → `PdfUnsupportedError` with name+hint. Dead `_UNIMPLEMENTED_PAGE['get_pixmap']` removed; new `test_deferred_symbols.py`; `compat-symbol-guard.py` extended with lockstep + runtime checks. **Residual → P0-2r.**
 - **P0-3 · Flip 4 + regen COMPAT** — DONE. The 4 flipped deferred→implemented in `_compat_catalog.py`; COMPAT regenerated to **651 / 52 / 66 = 769, coverage 84.7%**; README + PARITY counts refreshed (Document 119/17, Page 92/23). No count drift; the 4 verified live/non-stub via the in-process fitz shim (`.venv-oracle` unavailable — see §2).
 - **P0-4 · Real CI guards** — DONE. All three (`test-order-guard`, `catalog-status-guard`, `manifest-lint`) now enforce real invariants, each proven by a canary-and-revert: catalog-guard re-renders COMPAT + baseline in-process and byte-compares; test-order-guard enforces 1:1 between catalog `red` rows and `RED: <ID>` source tags; manifest-lint enforces the affirmative-license allowlist + well-formed sha256 + no stale absolute paths. The raw GPL byte-scan was dropped (false-positived on real public-domain fixtures).
-- **P0-5 · OCR wheel-bloat → feature-split** — DONE. `paddle-ocr` is default-OFF across pdf-ocr / pdf-api / py-bindings (`ocr` alias on py-bindings); models load at runtime from `PDFSPINE_OCR_MODELS`/`models/`. Lean default cdylib **6.75 MB** (was 37.1 MB); OCR build 21.4 MB; lean install raises `PdfUnsupportedError` pointing to `pdfspine[ocr]`. **Residual → P0-5r (release-relevant).**
+- **P0-5 · OCR wheel-bloat → feature-split** — DONE. `paddle-ocr` is default-OFF across pdf-ocr / pdf-api / py-bindings (`ocr` alias on py-bindings); models load at runtime from `PDFSPINE_OCR_MODELS`/`models/`. Lean default cdylib **6.75 MB** (was 37.1 MB); OCR build 21.4 MB; lean install raises `PdfUnsupportedError` pointing to `pdfspine[ocr]`. **Residual P0-5r — ✅ RESOLVED (see below).**
 - **P0-6 · CHANGELOG + stale paths** — DONE. New `CHANGELOG.md` (Keep-a-Changelog + SemVer); `GT-REPORT-tables.md` de-absolutized to repo-relative; `run_gt.py` already resolves repo-root-relative. **Residual → P0-6r.**
 
 **Residuals carried forward:**
 
 - **P0-2r · 12 `_core` PyO3 deferred members still raise `AttributeError`** — *Rust-core* — the deferred members on non-subclassable `_core` types (Pixmap / DisplayList / Tools) can't route through the Python `__getattr__` path; making them raise `PdfUnsupportedError` needs a Rust-core change (outside the Python-scoped P0-2). Tracked as xfail + a COMPAT note.
-- **P0-5r · OCR publishing decision** — **the only release-relevant residual** — a pip extra is install-time while a Cargo feature is compile-time, so `pip install pdfspine[ocr]` CANNOT make the same base wheel OCR-capable. As implemented, the OCR wheel is a separate `--features ocr` build and `[ocr]` is only a documented marker (no PyPI deps, no model-data companion). Decide how to actually deliver OCR (a separate `pdfspine-ocr` distribution, or a model-data companion package + the feature compiled into the published wheel) and encode it in `docs/RELEASE-PYPI.md` **before the public tag**.
+- **P0-5r · OCR publishing — ✅ RESOLVED (2026-06-19, commit `ff6495c`)** — chose **Option A: a model-data companion + the OCR feature compiled into the published wheel**. The published `pdfspine` wheel compiles the `ocr` feature in (via `[tool.maturin] features`) but embeds no models; the ~16 MB models ship as a new `pdfspine-ocr-models` data distribution (`packages/pdfspine-ocr-models/`, hatchling force-include from `crates/pdf-ocr/models` — no git duplication) that the `[ocr]` extra depends on. `document.py` sets `PDFSPINE_OCR_MODELS` from the installed companion for `engine="paddle"`; resolution order PDFSPINE_OCR_MODELS → companion → in-repo dev fallback → clear `PdfUnsupportedError`. `release.yml` publishes both dists via OIDC trusted publishing; `docs/RELEASE-PYPI.md` §D.1 documents the flow.
 - **P0-6r · `fetch_corpus.py` relative paths** — the gitignored/regenerable corpus manifests (`conformance/gt/corpus-*/manifest.json`) still embed absolute paths; `fetch_corpus.py` should emit manifest-relative pdf paths so future regenerations stay rename-proof.
 
 ### Phase 1 — Pre-launch quality (cheap + high-credibility)
@@ -227,7 +228,7 @@ All six blockers landed and were verified (full §8 suite). Done summary:
 | P0-5 | OCR wheel-bloat decision (opt-in extra) | M | Med | ✅ done | 0 |
 | P0-6 | CHANGELOG + fix stale `/workspace/pypdf` paths | S | Low | ✅ done | 0 |
 | P0-2r | 12 `_core` PyO3 deferred members still AttributeError (Rust-core) | M | Med | open | 0r |
-| P0-5r | OCR publishing decision (separate dist vs model-data companion) **release-relevant** | M | High | open | 0r |
+| P0-5r | OCR publishing — model-data companion + OCR-in-wheel (Option A) | M | High | ✅ done | 0r |
 | P0-6r | `fetch_corpus.py` emits manifest-relative pdf paths | S | Low | open | 0r |
 | P1-1 | Bundle std-14 fallback fonts (blank body text) | M | High | – | 1 |
 | P1-2 | Honor `/Decode [1 0]` ImageMask | S | Med | – | 1 |
@@ -246,10 +247,10 @@ All six blockers landed and were verified (full §8 suite). Done summary:
 | P4-3 | OCR `recognize()` rayon parallelism | M | High | – | 4 |
 | P4-4 | Full public-surface API reference docs | M | Med | – | 4 |
 
-**Recommended next 3 (in order):** *(Phase 0 is COMPLETE — in the working tree, pending commit.)*
+**Recommended next 3 (in order):** *(Phase 0 + P0-5r COMPLETE — committed on `phase0-blockers`.)*
 1. **Phase 1 — P1-1 std-14 fallback fonts** (+ the one-line P1-2 while in the render path, + P1-3 to lock quality) — the top visual-correctness fix now that the blockers are cleared.
-2. **Resolve P0-5r (OCR publishing decision)** before the public tag — the only release-relevant residual; encode the chosen OCR-distribution path in `docs/RELEASE-PYPI.md`.
-3. **Phase 2 — P2-1 Page parity batch** (+ P2-2 convert_to_pdf) — biggest parity-%-per-effort momentum (~86%), no Rust-architecture risk. Then tackle the large **P3-1 multi-column** and **P4-1 Font** work, guarded by P1-3.
+2. **Phase 2 — P2-1 Page parity batch** (+ P2-2 convert_to_pdf) — biggest parity-%-per-effort momentum (~86%), no Rust-architecture risk.
+3. Then the large **P3-1 multi-column** and **P4-1 Font** work, guarded by P1-3. (The remaining Phase 0 residuals P0-2r / P0-6r are low-priority cleanups.)
 
 ## 7. Pre-public chores + docs upkeep (do alongside / last)
 
@@ -257,7 +258,7 @@ All six blockers landed and were verified (full §8 suite). Done summary:
 - **Keep `PARITY.md` + `docs/BENCHMARKS.md` current** — they drift as batches land; refresh after each.
 - Docs-site completeness pass (`docs/guide`, `docs/reference`, `index.md`) — see P4-4.
 - PyPI publish runbook: `docs/RELEASE-PYPI.md` (gated on P0-1 + P0-5); optional name trademark.
-- The PyPI runbook **must encode the P0-5r OCR-distribution decision** — a separate `pdfspine-ocr` distribution vs a model-data companion package + the `ocr` feature compiled into the published wheel — since `pip install pdfspine[ocr]` cannot make the base wheel OCR-capable on its own.
+- The PyPI runbook **encodes the P0-5r OCR-distribution decision** (✅ done) — the published `pdfspine` wheel compiles the `ocr` feature in (no embedded models) and the `[ocr]` extra pulls the `pdfspine-ocr-models` data distribution; see `docs/RELEASE-PYPI.md` §D.1.
 - Repo stays **PRIVATE** until everything is done (Phase 0 + Phase 1 + the parity push + docs), then flip to
   public + push (`gh` authed as VoldemortGin).
 
@@ -286,5 +287,5 @@ and trust a clean machine / CI.
 
 *Re-verified 2026-06-19 from a code-level 5-dimension survey (project health · API parity · rendering ·
 extraction/conformance · perf/OCR). §3 is the correction log against this doc's previous A–F framing.
-**Phase 0 landed in the working tree (pending commit) on 2026-06-19** — §3 rows C1 / C2 / C6 / C10 / C11
-are now fixed (P0-2r / P0-5r / P0-6r carried forward).*
+**Phase 0 + P0-5r landed on 2026-06-19** (committed on branch `phase0-blockers`: 98a437a, ff6495c) — §3
+rows C1 / C2 / C6 / C10 / C11 are fixed; residuals P0-2r / P0-6r carried forward.*
