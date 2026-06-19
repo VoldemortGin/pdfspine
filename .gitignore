@@ -55,3 +55,6 @@ conformance/gt/__pycache__/
 .idea/
 .vscode/
 *.swp
+
+# Regenerable real-corpus validation PDFs (re-fetch via conformance/fetch_corpus.py); never commit.
+fixtures/corpus/
