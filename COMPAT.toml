@@ -29,10 +29,10 @@
 baseline = "1.24.x"
 baseline_detail = "PyMuPDF 1.24.14 / MuPDF 1.24.11"
 total = 769
-implemented = 647
-deferred = 56
+implemented = 651
+deferred = 52
 out_of_scope = 66
-coverage_pct = 84.1
+coverage_pct = 84.7
 
 # ── Matrix ──
 [[symbol]]
@@ -1415,7 +1415,7 @@ milestone = "M3"
 [[symbol]]
 name = "Document.outline"
 group = "Document"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M3"
 
 [[symbol]]
@@ -1636,7 +1636,7 @@ milestone = "M5"
 [[symbol]]
 name = "Document.extract_image"
 group = "Document"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M5"
 
 [[symbol]]
@@ -2164,7 +2164,7 @@ milestone = "M4"
 [[symbol]]
 name = "Page.links"
 group = "Page"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
@@ -2176,7 +2176,7 @@ milestone = "M4"
 [[symbol]]
 name = "Page.first_link"
 group = "Page"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]

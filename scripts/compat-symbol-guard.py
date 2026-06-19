@@ -16,7 +16,14 @@ What it does
   3. FAIL (exit 1) if any baseline symbol has no entry in ``COMPAT.toml``.
   4. FAIL (exit 1) on COMPAT.toml integrity problems (bad/missing disposition,
      duplicate symbol).
-  5. WARN (does not fail) if a COMPAT.toml symbol is not in the baseline list
+  5. FAIL (exit 1) if the generated ``python/pdfspine/_compat_deferred.py``
+     (the runtime deferred-symbol set the ``Page``/``Document`` wrappers route
+     ``__getattr__`` through) drifts from COMPAT.toml's ``deferred`` symbols.
+  6. FAIL (exit 1) — best-effort, only when a compiled ``pdfspine`` wheel is
+     importable — if any deferred ``Page``/``Document`` symbol raises
+     ``AttributeError`` instead of ``PdfUnsupportedError`` on instance access.
+     Skipped (no failure) when no wheel is importable (the CI compat worktree).
+  7. WARN (does not fail) if a COMPAT.toml symbol is not in the baseline list
      (stale entry), or if a symbol marked ``implemented`` cannot be found by name
      anywhere under ``python/`` (best-effort static check; the worktree has no
      compiled wheel so this is name-presence only).
@@ -142,6 +149,91 @@ def check_implemented_in_source(
     return warnings
 
 
+def _deferred_from_compat(dispositions: dict[str, str]) -> set[str]:
+    return {name for name, disp in dispositions.items() if disp == "deferred"}
+
+
+def check_generated_deferred_lockstep(dispositions: dict[str, str]) -> list[str]:
+    """Errors if ``python/pdfspine/_compat_deferred.py`` drifts from COMPAT.toml.
+
+    That generated module is the runtime source of truth the ``Page``/``Document``
+    wrappers route ``__getattr__`` through (so deferred symbols raise
+    ``PdfUnsupportedError``, never ``AttributeError``). It must list exactly the
+    ``deferred`` symbols in COMPAT.toml; regenerate via scripts/_compat_catalog.py.
+    """
+    gen = PYTHON_SRC / "pdfspine" / "_compat_deferred.py"
+    if not gen.exists():
+        return [f"generated deferred set missing: {gen} (run scripts/_compat_catalog.py)"]
+    ns: dict[str, object] = {}
+    try:
+        exec(compile(gen.read_text(encoding="utf-8"), str(gen), "exec"), ns)  # noqa: S102
+    except SyntaxError as exc:  # pragma: no cover - generated file is trusted
+        return [f"{gen.name} does not parse: {exc}"]
+    generated = set(ns.get("DEFERRED", set()))  # type: ignore[arg-type]
+    expected = _deferred_from_compat(dispositions)
+    errs: list[str] = []
+    only_compat = sorted(expected - generated)
+    only_gen = sorted(generated - expected)
+    if only_compat:
+        errs.append(
+            f"{gen.name} is missing deferred symbol(s) present in COMPAT.toml: "
+            f"{only_compat} (regenerate via scripts/_compat_catalog.py)"
+        )
+    if only_gen:
+        errs.append(
+            f"{gen.name} lists symbol(s) not deferred in COMPAT.toml: "
+            f"{only_gen} (regenerate via scripts/_compat_catalog.py)"
+        )
+    return errs
+
+
+def check_deferred_runtime(dispositions: dict[str, str]) -> tuple[list[str], str]:
+    """Best-effort runtime check: deferred wrapper symbols raise PdfUnsupportedError.
+
+    Returns ``(errors, status_line)``. If the compiled ``pdfspine`` wheel is not
+    importable in this interpreter (CI compat worktree has no built wheel), the
+    check is skipped (no error) and that is reported.
+
+    Only the ``Page`` / ``Document`` deferred symbols — the ones routed through a
+    Python ``__getattr__`` — are asserted here (bare instance access must raise
+    ``PdfUnsupportedError``, never ``AttributeError``). Other deferred owners are
+    out of this check's reach: ``Annot`` / ``Font`` symbols exist as descriptors
+    that raise on *call* (Rust-side), and ``Pixmap`` / ``DisplayList`` / ``Tools``
+    are non-subclassable ``_core`` aliases whose deferred members are absent
+    (Rust-side) — tracked in COMPAT.toml, fixable only in the core.
+    """
+    try:
+        import pdfspine  # noqa: PLC0415
+        from pdfspine._core import PdfUnsupportedError  # noqa: PLC0415
+    except Exception as exc:  # noqa: BLE001 - any import failure -> skip
+        return [], f"runtime deferred check: SKIPPED (pdfspine not importable: {exc})"
+
+    deferred = _deferred_from_compat(dispositions)
+    doc = pdfspine.open()
+    page = doc.new_page()
+    targets = {"Page": page, "Document": doc}
+    errors: list[str] = []
+    checked = 0
+    for sym in sorted(deferred):
+        group, _, member = sym.partition(".")
+        obj = targets.get(group)
+        if obj is None or not member:
+            continue  # non-Page/Document owner — out of this check's reach
+        checked += 1
+        try:
+            getattr(obj, member)
+        except PdfUnsupportedError:
+            pass
+        except AttributeError:
+            errors.append(f"{sym}: raised AttributeError (want PdfUnsupportedError)")
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"{sym}: raised {type(exc).__name__} (want PdfUnsupportedError)")
+        else:
+            errors.append(f"{sym}: did not raise (want PdfUnsupportedError)")
+    doc.close()
+    return errors, f"runtime deferred check: {checked} Page/Document symbol(s) verified"
+
+
 def main(argv: list[str]) -> int:
     verbose = any(a in ("-v", "--verbose") for a in argv)
 
@@ -164,7 +256,14 @@ def main(argv: list[str]) -> int:
     # Soft: implemented-but-not-found-in-source.
     impl_warnings = check_implemented_in_source(dispositions, baseline)
 
-    ok = not missing and not errors
+    # Hard: the generated runtime deferred set must mirror COMPAT.toml exactly.
+    lockstep_errors = check_generated_deferred_lockstep(dispositions)
+
+    # Hard (when a wheel is importable): deferred Page/Document symbols must
+    # raise PdfUnsupportedError, never AttributeError.
+    runtime_errors, runtime_status = check_deferred_runtime(dispositions)
+
+    ok = not missing and not errors and not lockstep_errors and not runtime_errors
 
     print("compat-symbol-guard — PyMuPDF baseline disposition gate")
     print(f"  baseline symbols : {len(baseline)}  ({BASELINE.name})")
@@ -216,6 +315,24 @@ def main(argv: list[str]) -> int:
                 print(f"    - {w}")
         else:
             print("    (run with -v to list)")
+
+    if lockstep_errors:
+        print(
+            f"\n  FAIL: generated deferred set drift ({len(lockstep_errors)}):",
+            file=sys.stderr,
+        )
+        for e in lockstep_errors:
+            print(f"    - {e}", file=sys.stderr)
+
+    print(f"\n  {runtime_status}")
+    if runtime_errors:
+        print(
+            f"\n  FAIL: {len(runtime_errors)} deferred symbol(s) do not raise "
+            f"PdfUnsupportedError:",
+            file=sys.stderr,
+        )
+        for e in runtime_errors:
+            print(f"    - {e}", file=sys.stderr)
 
     if ok:
         print("\n  OK — every baseline symbol is dispositioned.")

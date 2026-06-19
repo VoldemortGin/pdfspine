@@ -15,14 +15,21 @@ name = "_core"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-# Default features (incl. `encryption` and `paddle-ocr`) are on, so the shipped
-# wheel gets pdfspine's pure-Rust PaddleOCR engine (`engine="paddle"`); `paddle-ocr`
-# is named explicitly to make the dependency intentional and survive any future
-# change to pdf-api's default set.
-pdf-api = { workspace = true, features = ["paddle-ocr"] }
+# The DEFAULT build is the LEAN base wheel (P0-5): `encryption` is on (pdf-api's
+# default) but `paddle-ocr` is OFF, so the ~16 MB PaddleOCR engine is compiled
+# out. The opt-in OCR build turns it on via this crate's `ocr` feature
+# (`maturin develop --features ocr`), which forwards to `pdf-api/paddle-ocr`.
+pdf-api = { workspace = true }
 # abi3-py311 (not py310): the buffer-protocol slots (`bf_getbuffer` /
 # `bf_releasebuffer`) used by `Pixmap` (PRD §9.4) entered the stable ABI in
 # CPython 3.11, so a single abi3 wheel that ships the zero-copy buffer protocol
 # requires the 3.11 floor. The wheel still covers every supported (>=3.11)
 # interpreter from one artifact.
 pyo3 = { workspace = true, features = ["abi3-py311", "extension-module"] }
+
+[features]
+# `ocr` is the opt-in OCR build switch for the wheel (P0-5). The default build is
+# the lean base wheel (no PaddleOCR); `maturin develop --features ocr` (or
+# `--cargo-extra-args="--features ocr"`) forwards to `pdf-api/paddle-ocr`, pulling
+# in pdfspine's pure-Rust PaddleOCR engine (`engine="paddle"`).
+ocr = ["pdf-api/paddle-ocr"]

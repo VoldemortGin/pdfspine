@@ -27,17 +27,18 @@ pdf-edit.workspace = true
 thiserror.workspace = true
 
 # --- `paddle-ocr` feature: pure-Rust PaddleOCR (PP-OCRv4) engine ---
-# Optional heavy deps, gated behind the (default-on) `paddle-ocr` feature so the
-# base crate stays lean and the engine can be compiled out with
-# `--no-default-features`.
+# Optional heavy deps, gated behind the (default-OFF) `paddle-ocr` feature so the
+# base crate / wheel stays lean (P0-5): the multi-MB tract-onnx code path is
+# compiled out by default and only the opt-in `pdfspine[ocr]` build pulls it in.
 # `tract-onnx`: pure-Rust ONNX inference (det/rec/cls). `image`: pure-Rust resize.
 tract-onnx = { workspace = true, optional = true }
 image = { workspace = true, optional = true }
 
 [features]
-# On by default so the wheel (py-bindings -> pdf-api -> pdf-ocr, all default
-# features) ships the PaddleOCR engine. Disable with `--no-default-features`.
-default = ["paddle-ocr"]
+# OFF by default (P0-5): the lean base wheel must NOT carry the PaddleOCR engine.
+# Enable it explicitly for an OCR build (`cargo build --features paddle-ocr`,
+# `maturin develop --features ocr` via the py-bindings `ocr` alias).
+default = []
 # Gates the whole `paddle` module + its tract-onnx/image dependencies.
 paddle-ocr = ["dep:tract-onnx", "dep:image"]
 

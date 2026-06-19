@@ -11,11 +11,12 @@
 //! - `"tesseract"` (default) — the system Tesseract CLI adapter (PyMuPDF
 //!   compatible; `tessdata` applies here).
 //! - `"paddle"` — pdfspine's pure-Rust PaddleOCR (PP-OCRv4) engine, stronger on
-//!   mixed CJK+Latin text. Available only when the (default-on) `paddle-ocr`
-//!   feature is compiled in; `tessdata` is irrelevant to it.
+//!   mixed CJK+Latin text. Available only in the opt-in OCR build (the
+//!   `paddle-ocr` feature, shipped as `pip install pdfspine[ocr]`); the lean
+//!   base build compiles it out. `tessdata` is irrelevant to it.
 //!
-//! An unknown engine string, or `"paddle"` when the feature is off, yields the
-//! unified [`Error::Unsupported`](crate::error::Error::Unsupported).
+//! An unknown engine string, or `"paddle"` in the lean build (feature off),
+//! yields the unified [`Error::Unsupported`](crate::error::Error::Unsupported).
 
 use std::sync::Arc;
 
@@ -36,8 +37,8 @@ use pdf_text::TextPage;
 ///
 /// [`Error::Unsupported`](crate::error::Error::Unsupported) when the selected
 /// engine is unavailable (Tesseract not installed, an unknown engine string, or
-/// `"paddle"` without the `paddle-ocr` feature); render / recognition errors
-/// propagate.
+/// `"paddle"` in the lean build without the OCR feature); render / recognition
+/// errors propagate.
 pub fn page_textpage_ocr(
     page: &Page,
     language: &str,
@@ -85,9 +86,9 @@ pub fn document_pdfocr_bytes(
 /// Resolves `engine` to a concrete [`OcrEngine`] and runs `f` with it.
 ///
 /// `"tesseract"` builds the [`TesseractCli`] adapter (applying `tessdata`);
-/// `"paddle"` builds [`pdf_ocr::PaddleOcr`] when the `paddle-ocr` feature is on
-/// (`tessdata` is ignored). Any other value — or `"paddle"` with the feature off
-/// — returns [`Error::Unsupported`](crate::error::Error::Unsupported).
+/// `"paddle"` builds [`pdf_ocr::PaddleOcr`] in the OCR build (the `paddle-ocr`
+/// feature; `tessdata` is ignored). Any other value — or `"paddle"` in the lean
+/// build — returns [`Error::Unsupported`](crate::error::Error::Unsupported).
 fn with_engine<T>(
     engine: &str,
     tessdata: Option<&str>,
@@ -100,9 +101,17 @@ fn with_engine<T>(
             let eng = pdf_ocr::PaddleOcr::new()?;
             f(&eng)
         }
+        #[cfg(not(feature = "paddle-ocr"))]
+        "paddle" => Err(Error::Unsupported(
+            "OCR engine \"paddle\" is not available in this lean build of \
+             pdfspine. Install the OCR build with `pip install pdfspine[ocr]` to \
+             use the pure-Rust PaddleOCR engine (or fall back to \
+             engine=\"tesseract\")."
+                .to_string(),
+        )),
         other => Err(Error::Unsupported(format!(
             "unknown OCR engine {other:?}; expected \"tesseract\" or \"paddle\" \
-             (\"paddle\" requires the default-on `paddle-ocr` feature)"
+             (\"paddle\" requires the OCR build, `pip install pdfspine[ocr]`)"
         ))),
     }
 }

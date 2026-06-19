@@ -6,12 +6,17 @@
 //! shipped ONNX), so we pin a concrete fact at first use of each bucket; the
 //! classifier is already fully concrete (3×48×192) and uses a single runnable.
 //!
-//! Model bytes are embedded with [`include_bytes!`] and the recognition
-//! dictionary with [`include_str!`], so the engine needs no runtime file paths
-//! (the wheel ships nothing on disk).
+//! The ~16 MB ONNX model files are NOT embedded in the binary (that bloated
+//! every wheel, even for non-OCR users — see P0-5). Instead they are loaded from
+//! a resolvable directory at runtime (offline, no network): the
+//! `PDFSPINE_OCR_MODELS` environment variable when set, else the in-repo
+//! `crates/pdf-ocr/models` directory (via `CARGO_MANIFEST_DIR`) so `cargo test`
+//! and `maturin develop` work in a checkout with no setup. The tiny (~26 KB)
+//! recognition dictionary stays embedded with [`include_str!`].
 
 use std::collections::HashMap;
 use std::io::Cursor;
+use std::path::PathBuf;
 use std::sync::Mutex;
 
 use tract_onnx::prelude::*;
@@ -21,26 +26,58 @@ use crate::error::{Error, Result};
 /// The optimized + runnable typed model produced by `into_optimized().into_runnable()`.
 pub(crate) type Runnable = TypedRunnableModel<TypedModel>;
 
-// --- Embedded assets (no runtime file paths). ---
+// --- Model files: loaded from disk at runtime (NOT embedded). ---
+
+/// Environment variable pointing at the directory that holds the three
+/// `*.onnx` model files. Set by the `pdfspine[ocr]` install (or by a user who
+/// places the models elsewhere). Overrides the in-repo default.
+const ENV_MODELS_DIR: &str = "PDFSPINE_OCR_MODELS";
 
 /// DBNet text-detection model. Input `[1,3,H,W]`, output prob map `[1,1,H,W]`.
-const DET_ONNX: &[u8] = include_bytes!("../../models/ppocrv4_det.onnx");
+const DET_FILE: &str = "ppocrv4_det.onnx";
 /// CRNN+CTC recognition model. Input `[1,3,48,W]`, output logits `[1,T,6625]`.
-const REC_ONNX: &[u8] = include_bytes!("../../models/ppocrv4_rec.onnx");
+const REC_FILE: &str = "ppocrv4_rec.onnx";
 /// 180° angle classifier. Input concrete `[1,3,48,192]`, output `[1,2]`.
-const CLS_ONNX: &[u8] = include_bytes!("../../models/ppocrv2_cls.onnx");
+const CLS_FILE: &str = "ppocrv2_cls.onnx";
 
 /// The recognition dictionary, INDEX-ALIGNED to the rec output's class axis:
 /// line 0 = the CTC blank, lines 1.. = characters, last line = a single space.
-/// We must preserve the trailing space line, so we split on `'\n'` (not
-/// `lines()`, which would also be fine, but we keep this explicit) and do NOT
-/// trim.
+/// This is tiny (~26 KB) and stays embedded; only the multi-MB ONNX weights are
+/// loaded from disk. We must preserve the trailing space line, so we split on
+/// `'\n'` (not `lines()`, which would also be fine, but we keep this explicit)
+/// and do NOT trim.
 const KEYS: &str = include_str!("../../models/ppocr_keys_v4.txt");
 
-/// Builds an `InferenceModel` from embedded ONNX bytes, mapping any tract error
-/// into our typed `Unsupported` error (the model is shipped, so a failure here
-/// is a build/environment problem, surfaced — never a panic).
-fn proto(bytes: &'static [u8]) -> Result<InferenceModel> {
+/// Resolves the directory holding the ONNX model files. Prefers the
+/// `PDFSPINE_OCR_MODELS` environment variable (the `pdfspine[ocr]` install /
+/// user override); falls back to the in-repo `crates/pdf-ocr/models` directory
+/// so a source checkout works with no setup. Never touches the network.
+fn models_dir() -> PathBuf {
+    if let Some(dir) = std::env::var_os(ENV_MODELS_DIR) {
+        return PathBuf::from(dir);
+    }
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("models")
+}
+
+/// Reads a model file from the resolved [`models_dir`], mapping a missing file
+/// or read error to a clear `Unsupported` error that points the user at the
+/// `pdfspine[ocr]` extra / the `PDFSPINE_OCR_MODELS` override.
+fn read_model(file: &str) -> Result<Vec<u8>> {
+    let path = models_dir().join(file);
+    std::fs::read(&path).map_err(|e| {
+        Error::Unsupported(format!(
+            "paddle: OCR model {file:?} not found at {} ({e}). Install the OCR \
+             models with `pip install pdfspine[ocr]`, or point \
+             `{ENV_MODELS_DIR}` at the directory holding the PP-OCR `*.onnx` files.",
+            path.display(),
+        ))
+    })
+}
+
+/// Builds an `InferenceModel` from ONNX bytes, mapping any tract error into our
+/// typed `Unsupported` error (a failure here is a build/environment problem,
+/// surfaced — never a panic).
+fn proto(bytes: &[u8]) -> Result<InferenceModel> {
     tract_onnx::onnx()
         .model_for_read(&mut Cursor::new(bytes))
         .map_err(|e| Error::Unsupported(format!("paddle: failed to parse ONNX model: {e}")))
@@ -125,7 +162,7 @@ impl Models {
         if let Some(r) = self.det.lock().unwrap().get(&(h, w)) {
             return Ok(r.clone());
         }
-        let runnable = std::sync::Arc::new(build_runnable(proto(DET_ONNX)?, h, w)?);
+        let runnable = std::sync::Arc::new(build_runnable(proto(&read_model(DET_FILE)?)?, h, w)?);
         self.det.lock().unwrap().insert((h, w), runnable.clone());
         Ok(runnable)
     }
@@ -137,7 +174,7 @@ impl Models {
         if let Some(r) = self.rec.lock().unwrap().get(&key) {
             return Ok(r.clone());
         }
-        let runnable = std::sync::Arc::new(build_runnable(proto(REC_ONNX)?, 48, w)?);
+        let runnable = std::sync::Arc::new(build_runnable(proto(&read_model(REC_FILE)?)?, 48, w)?);
         self.rec.lock().unwrap().insert(key, runnable.clone());
         Ok(runnable)
     }
@@ -147,7 +184,8 @@ impl Models {
         if let Some(r) = self.cls.get() {
             return Ok(r.clone());
         }
-        let runnable = std::sync::Arc::new(build_runnable(proto(CLS_ONNX)?, 48, 192)?);
+        let runnable =
+            std::sync::Arc::new(build_runnable(proto(&read_model(CLS_FILE)?)?, 48, 192)?);
         // OnceLock: if a concurrent caller won the race, use theirs.
         let _ = self.cls.set(runnable);
         Ok(self.cls.get().expect("just set").clone())

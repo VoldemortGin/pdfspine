@@ -12,6 +12,7 @@ Geometry is returned to Python as PyMuPDF-compatible value types
 from __future__ import annotations
 
 import sys
+from importlib.metadata import PackageNotFoundError, version as _pkg_version
 
 from . import _core
 from ._core import (
@@ -75,7 +76,14 @@ from .helpers import (
     unicode_to_glyph_name,
 )
 
-__version__: str = _core.__version__
+try:
+    # The single source of truth: the version baked into the installed wheel's
+    # metadata at build time (maturin reads it from Cargo.toml; tagged CI builds
+    # set that from the git tag — see .github/workflows/release.yml). This always
+    # reflects the actually-installed distribution, not a hardcoded constant.
+    __version__: str = _pkg_version("pdfspine")
+except PackageNotFoundError:  # pragma: no cover - source tree without dist-info
+    __version__ = _core.__version__
 
 
 def install_fitz_shim() -> None:

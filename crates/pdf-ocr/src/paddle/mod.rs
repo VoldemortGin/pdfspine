@@ -49,15 +49,16 @@ pub struct PaddleOcr {
 }
 
 impl PaddleOcr {
-    /// Builds the engine. Model bytes are embedded in the binary, so this needs
-    /// no filesystem access; it does not run any optimization yet (that happens
-    /// lazily on first use of each input-shape bucket), so it is cheap.
+    /// Builds the engine. The ONNX model files are loaded lazily from disk on
+    /// first use (not at construction), and no optimization runs yet (that also
+    /// happens lazily on first use of each input-shape bucket), so this is cheap.
     ///
     /// # Errors
     /// Returns [`Error::Unsupported`](crate::error::Error::Unsupported) only if
     /// the embedded recognition dictionary cannot be prepared (it always can in
-    /// a correctly built binary); model parsing/optimization is deferred to the
-    /// first [`recognize`](OcrEngine::recognize) call.
+    /// a correctly built binary); model loading/parsing/optimization is deferred
+    /// to the first [`recognize`](OcrEngine::recognize) call — a missing model
+    /// directory surfaces there as `Unsupported`, pointing at `pdfspine[ocr]`.
     pub fn new() -> Result<Self> {
         Ok(PaddleOcr {
             models: Models::new()?,

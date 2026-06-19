@@ -2,7 +2,7 @@
 (``engine="paddle"``) through the full Python pipeline.
 
 The pipeline under test, with NO external binary and NO network (the PP-OCRv4
-models are embedded in the wheel):
+models load from disk in the OCR build):
 
 1. Build an image-only "scanned" page in memory: a new doc / page whose entire
    content is the OCR sample raster (three mixed CJK+Latin lines) inserted via
@@ -12,9 +12,12 @@ models are embedded in the wheel):
    PDF; reopening it and calling ``page.get_text()`` finds the same three lines
    in the now-present invisible text layer.
 
-The paddle assertions are NOT skipped (the engine ships by default). The default
-``engine="tesseract"`` path is also exercised, but its assertions are guarded
-with a skip when Tesseract is not installed (it is an external dependency).
+The PaddleOCR engine is an OPT-IN build (P0-5): the lean base wheel compiles it
+out, so these paddle assertions are SKIPPED unless the wheel was built with the
+``ocr`` feature (``maturin develop --features ocr``). The default
+``engine="tesseract"`` path is exercised regardless, but its recognition
+assertions are guarded with a skip when Tesseract is not installed (it is an
+external dependency).
 """
 
 from __future__ import annotations
@@ -133,9 +136,37 @@ def _contains_line(text: str, line: str) -> bool:
     return "".join(line.split()) in norm
 
 
+def _paddle_available() -> bool:
+    """Whether this wheel was built with the opt-in ``ocr`` feature (PaddleOCR).
+
+    Probes by running ``engine="paddle"`` on a tiny image-only page. On a lean
+    base build the engine is compiled out, so routing raises
+    ``PdfUnsupportedError`` *before* any model work — we treat that as "not
+    available" and skip. On an OCR build it recognizes (returning, possibly
+    empty) text without raising.
+    """
+    doc = pdfspine.open()
+    page = doc.new_page(width=8.0, height=8.0)
+    page.insert_image((0, 0, 8.0, 8.0), stream=b"\xff" * (8 * 8 * 3), width=8, height=8)
+    try:
+        doc[0].get_textpage_ocr(dpi=72, engine="paddle")
+    except pdfspine.PdfUnsupportedError:
+        return False
+    return True
+
+
+_HAS_PADDLE = _paddle_available()
+
+_requires_paddle = pytest.mark.skipif(
+    not _HAS_PADDLE,
+    reason="PaddleOCR engine not compiled in (lean build); install pdfspine[ocr]",
+)
+
+
 # --- OCR-PADDLE-001: get_textpage_ocr(engine="paddle") -> the 3 lines -------
 
 
+@_requires_paddle
 def test_paddle_get_textpage_ocr():
     doc = _scanned_pdf()
     tp = doc[0].get_textpage_ocr(dpi=150, engine="paddle")
@@ -148,6 +179,7 @@ def test_paddle_get_textpage_ocr():
 # --- OCR-PADDLE-002: pdfocr_tobytes(engine="paddle") -> searchable sandwich -
 
 
+@_requires_paddle
 def test_paddle_pdfocr_tobytes_searchable():
     doc = _scanned_pdf()
     sandwich = doc.pdfocr_tobytes(dpi=150, engine="paddle")

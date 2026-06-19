@@ -34,15 +34,15 @@
 
 > **Snapshot (2026-06-18, after API batches 1–5).** Numbers below are recomputed from the live
 > `COMPAT.toml` per-symbol dispositions. `COMPAT.toml [meta]` is always the authoritative live figure;
-> the current remaining-work list (the 56 deferred symbols, grouped + prioritized) lives in
+> the current remaining-work list (the 52 deferred symbols, grouped + prioritized) lives in
 > [`docs/PRD-NEXT.md`](docs/PRD-NEXT.md) §3.B.
 
-**Overall: 647 / 769 implemented (84.1% coverage).**
+**Overall: 651 / 769 implemented (84.7% coverage).**
 
 | Disposition | Count | Share |
 |---|---:|---:|
-| **implemented** | **647** | **84.1%** |
-| deferred (planned, later milestone / post-v1) | 56 | 7.3% |
+| **implemented** | **651** | **84.7%** |
+| deferred (planned, later milestone / post-v1) | 52 | 6.8% |
 | out-of-scope (raises `PdfUnsupportedError`) | 66 | 8.6% |
 | **Total catalogued symbols** | **769** | 100% |
 
@@ -59,8 +59,8 @@
 | `Rect` | 45 | 45 | 0 | 0 | 100% |
 | `IRect` | 25 | 25 | 0 | 0 | 100% |
 | `Quad` | 17 | 17 | 0 | 0 | 100% |
-| `Document` | 150 | 117 | 19 | 14 | 78% |
-| `Page` | 117 | 90 | 25 | 2 | 77% |
+| `Document` | 150 | 119 | 17 | 14 | 79% |
+| `Page` | 117 | 92 | 23 | 2 | 79% |
 | `TextPage` | 17 | 17 | 0 | 0 | 100% |
 | `Pixmap` | 43 | 40 | 3 | 0 | 93% |
 | `Annot` | 51 | 46 | 1 | 4 | 90% |
@@ -79,7 +79,7 @@
 | Module-level functions | 32 | 28 | 1 | 3 | 88% |
 | `Tools` / `TOOLS` | 22 | 12 | 3 | 7 | 55% |
 | `exceptions` | 10 | 10 | 0 | 0 | 100% |
-| **Total** | **769** | **647** | **56** | **66** | **84.1%** |
+| **Total** | **769** | **651** | **52** | **66** | **84.7%** |
 
 ### Per-milestone breakdown
 
@@ -87,7 +87,7 @@
 > per-symbol `milestone` field, so it cannot be recomputed mechanically. Use the **per-class table
 > above** (recomputed from the live `COMPAT.toml`) + `docs/PRD-NEXT.md` §3.B for current status. By
 > milestone, all of M0–M8's headline paths are landed (geometry, parsing, text, edit/save, annot/forms,
-> image-docs/Pixmap, rendering near-parity, SVG/tables/OCG, OCR-via-Tesseract); the 56 deferred are the
+> image-docs/Pixmap, rendering near-parity, SVG/tables/OCG, OCR-via-Tesseract); the 52 deferred are the
 > long tails and the 66 out-of-scope are the HTML/CSS story engine + render-era knobs.
 
 ---
@@ -116,16 +116,16 @@ per-symbol truth (every name, disposition, milestone, note) is in [`COMPAT.toml`
 
 ### Partial (headline paths landed, long tail deferred)
 
-- [x] **`Page` (90/117)** — text extraction (`get_text` all variants, `get_textpage`, `search_for`, `TEXTFLAGS`,
+- [x] **`Page` (92/117)** — text extraction (`get_text` all variants, `get_textpage`, `search_for`, `TEXTFLAGS`,
   OCR textpage), inventory (`get_fonts`/`get_images`/`get_xobjects`/`get_image_info`/`get_image_bbox`/
   `get_image_rects`/`get_drawings`/`get_cdrawings`), the full annotation `add_*`/`delete`/`apply_redactions`
-  family, widgets read (`widgets`/`first_widget`), links (`get_links`/`insert_link`/`delete_link`),
+  family, widgets read (`widgets`/`first_widget`), links (`get_links`/`links`/`first_link`/`insert_link`/`delete_link`),
   drawing primitives + `new_shape`, `insert_text`/`insert_textbox`/`insert_image`/`show_pdf_page`,
   rendering (`get_pixmap`/`get_displaylist`/`get_svg_image`), `find_tables`, full box geometry
   (`set_mediabox`/`set_cropbox`/`artbox`/`bleedbox`/`trimbox` + setters), rotation read + `set_rotation` +
   the rotation matrices, `get_contents`/`read_contents`, page labels (`get_label`). Gaps: annot/widget/link
   object loaders, page-level draw convenience, `write_text`/`insert_font`, `remove_rotation`.
-- [x] **`Document` (117/150)** — open/lifecycle, save family (`save`/`ez_save`/`save_incremental`/`write`/
+- [x] **`Document` (119/150)** — open/lifecycle, save family (`save`/`ez_save`/`save_incremental`/`write`/
   `tobytes`), page ops (`new_page`/`insert_pdf`/`delete_page`/`select`/`fullcopy_page`/`reload_page`/
   `page_xref`/`page_cropbox`), metadata + XMP read/write, TOC get/set, encryption read
   (`needs_pass`/`authenticate`/`permissions`/`is_encrypted`), low-level xref read
@@ -169,10 +169,10 @@ per-symbol truth (every name, disposition, milestone, note) is in [`COMPAT.toml`
 
 ## Remaining work
 
-The authoritative, prioritised list of the **56 deferred** symbols (grouped, with quick-wins flagged)
+The authoritative, prioritised list of the **52 deferred** symbols (grouped, with quick-wins flagged)
 now lives in **[`docs/PRD-NEXT.md`](docs/PRD-NEXT.md) §3.B** — kept there to avoid two divergent lists.
-In brief the deferred set is: **Page (25)** annot/widget/link loaders + page-level draw convenience +
-`write_text`/`insert_font`/`remove_rotation`; **Document (19)** OCG/layers + TOC node ops + heavy ops
+In brief the deferred set is: **Page (23)** annot/widget/link loaders + page-level draw convenience +
+`write_text`/`insert_font`/`remove_rotation`; **Document (17)** OCG/layers + TOC node ops + heavy ops
 (`convert_to_pdf`/`subset`/`insert_file`) + `version_count`; **constants (21)** enum tables; **module
 helpers (~15)** `recover_*_quad`/glyph-name maps/logging; **Font (2)** `glyph_bbox`/`buffer` (need an
 embedded-program handle); plus small tails in Pixmap / Tools / DisplayList / Annot.

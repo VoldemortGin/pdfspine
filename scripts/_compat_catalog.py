@@ -601,6 +601,11 @@ _BATCH34_IMPLEMENTED = {
     "Tools.fitz_config", "Tools.gen_id", "Tools.glyph_cache_empty", "Tools.mupdf_display_errors",
     "Tools.mupdf_display_warnings", "Tools.mupdf_version", "Tools.mupdf_warnings", "Tools.reset_mupdf_warnings",
     "Tools.set_small_glyph_heights", "Tools.store_maxsize", "Tools.store_shrink", "Tools.store_size",
+    # Live + non-stub in python/pdfspine/document.py but historically marked
+    # deferred: Page.links/first_link (link iteration), Document.outline (TOC
+    # tree), Document.extract_image (image XObject -> dict). Verified present
+    # and working on sample PDFs at reconciliation time.
+    "Page.links", "Page.first_link", "Document.outline", "Document.extract_image",
 }
 
 
@@ -635,6 +640,37 @@ def render_baseline() -> str:
         "",
     ]
     return "\n".join(header) + "\n".join(syms) + "\n"
+
+
+def render_deferred_py() -> str:
+    """A generated ``pdfspine`` module exposing the deferred-symbol set.
+
+    The runtime wrappers (``Page``/``Document``) route ``__getattr__`` through
+    this set so that *every* deferred baseline symbol raises
+    ``PdfUnsupportedError`` (never a bare ``AttributeError``), per the §7
+    fitz-migration contract. It is derived from the same catalog as
+    ``COMPAT.toml`` (one source of truth) and ships inside the wheel, where
+    ``COMPAT.toml`` is not available at import time.
+    """
+    deferred = sorted(sym for sym, _g, disp, _m, _n in CATALOG if disp == DEFERRED)
+    lines = [
+        '"""Generated deferred-symbol set — do not edit by hand.',
+        "",
+        "Regenerate with ``python3 scripts/_compat_catalog.py`` (derived from the",
+        "same catalog as COMPAT.toml). One entry per deferred baseline symbol,",
+        "spelled ``Class.member`` (or a bare module-level name).",
+        '"""',
+        "",
+        "from __future__ import annotations",
+        "",
+        "DEFERRED: frozenset[str] = frozenset(",
+        "    {",
+    ]
+    lines.extend(f'        "{_toml_escape(sym)}",' for sym in deferred)
+    lines.append("    }")
+    lines.append(")")
+    lines.append("")
+    return "\n".join(lines)
 
 
 def render_toml() -> str:
@@ -716,6 +752,7 @@ def main() -> int:
     baseline_dir = repo_root / "compat"
     baseline_dir.mkdir(exist_ok=True)
     baseline_txt = baseline_dir / "compat-baseline.txt"
+    deferred_py = repo_root / "python" / "pdfspine" / "_compat_deferred.py"
 
     # Integrity: no duplicate symbols.
     syms = [e[0] for e in CATALOG]
@@ -725,13 +762,16 @@ def main() -> int:
 
     compat_toml.write_text(render_toml(), encoding="utf-8")
     baseline_txt.write_text(render_baseline(), encoding="utf-8")
+    deferred_py.write_text(render_deferred_py(), encoding="utf-8")
 
     counts = {IMPLEMENTED: 0, DEFERRED: 0, OUT_OF_SCOPE: 0}
     for e in CATALOG:
         counts[e[2]] += 1
     total = len(CATALOG)
+    n_deferred = sum(1 for e in CATALOG if e[2] == DEFERRED)
     print(f"wrote {compat_toml} ({total} symbols)")
     print(f"wrote {baseline_txt} ({len({e[0] for e in CATALOG})} unique symbols)")
+    print(f"wrote {deferred_py} ({n_deferred} deferred symbols)")
     print(
         f"  implemented={counts[IMPLEMENTED]} deferred={counts[DEFERRED]} "
         f"out-of-scope={counts[OUT_OF_SCOPE]} "

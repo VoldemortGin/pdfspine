@@ -1,0 +1,65 @@
+"""Generated deferred-symbol set — do not edit by hand.
+
+Regenerate with ``python3 scripts/_compat_catalog.py`` (derived from the
+same catalog as COMPAT.toml). One entry per deferred baseline symbol,
+spelled ``Class.member`` (or a bare module-level name).
+"""
+
+from __future__ import annotations
+
+DEFERRED: frozenset[str] = frozenset(
+    {
+        "Annot.get_textbox",
+        "DisplayList.get_textpage",
+        "DisplayList.run",
+        "Document.FormFonts",
+        "Document.add_layer",
+        "Document.convert_to_pdf",
+        "Document.del_toc_item",
+        "Document.embfile_upd",
+        "Document.extract_font",
+        "Document.get_layers",
+        "Document.get_oc",
+        "Document.get_ocmd",
+        "Document.get_outline_xrefs",
+        "Document.insert_file",
+        "Document.set_layer_ui_config",
+        "Document.set_ocmd",
+        "Document.set_toc_item",
+        "Document.subset",
+        "Document.switch_layer",
+        "Document.version_count",
+        "Font.buffer",
+        "Font.glyph_bbox",
+        "Page.add_caret_annot",
+        "Page.add_widget",
+        "Page.cluster_drawings",
+        "Page.delete_widget",
+        "Page.draw_curve",
+        "Page.draw_quad",
+        "Page.draw_sector",
+        "Page.draw_squiggle",
+        "Page.draw_zigzag",
+        "Page.extend_textpage",
+        "Page.insert_font",
+        "Page.is_wrapped",
+        "Page.language",
+        "Page.load_annot",
+        "Page.load_links",
+        "Page.load_widget",
+        "Page.refresh",
+        "Page.remove_rotation",
+        "Page.run",
+        "Page.set_contents",
+        "Page.set_language",
+        "Page.update_link",
+        "Page.write_text",
+        "Pixmap.__array_interface__",
+        "Pixmap.samples_ptr",
+        "Pixmap.warp",
+        "Tools.image_profile",
+        "Tools.set_annot_stem",
+        "Tools.set_subset_fontnames",
+        "image_profile",
+    }
+)

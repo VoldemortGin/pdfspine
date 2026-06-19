@@ -149,13 +149,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: test-order-guard (git-history test-precedes-impl)
+      - name: test-order-guard (catalog ⇄ RED-tag consistency)
         run: python scripts/test-order-guard.py
-      - name: catalog-status-guard (0 remaining RED at milestone exit)
+      - name: catalog-status-guard (COMPAT.toml ⇄ generator sync)
         run: python scripts/catalog-status-guard.py
       - name: compat-symbol-guard (PyMuPDF baseline disposition)
         run: python scripts/compat-symbol-guard.py
-      - name: manifest-lint (affirmative-license fixtures)
+      - name: manifest-lint (affirmative-license fixtures + manifest hygiene)
         run: python scripts/manifest-lint.py
 
   # ----------------------------------------------------------- supply-chain

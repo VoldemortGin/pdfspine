@@ -15,6 +15,7 @@ import os
 from typing import Iterator
 
 from . import _core
+from ._compat_deferred import DEFERRED as _DEFERRED_SYMBOLS
 from ._core import PdfError, PdfRedactionError, PdfUnsupportedError
 from .constants import CS_CMYK, CS_GRAY, CS_RGB
 
@@ -31,16 +32,31 @@ from .constants import PDF_ENCRYPT_UNKNOWN as PDF_ENCRYPT_UNKNOWN  # noqa: F401,
 from .constants import PDF_PERM_ACCESSIBILITY as PDF_PERM_ACCESSIBILITY  # noqa: F401,PLC0414
 from .geometry import FZ_MAX_INF_RECT, FZ_MIN_INF_RECT, Matrix, Point, Quad, Rect
 
-# PyMuPDF methods/properties that exist on the real API but land in later
-# milestones. Accessing them raises a typed, catchable error with a hint, not
-# AttributeError (PRD §9.5).
-_UNIMPLEMENTED_PAGE = {
-    "get_pixmap": "rendering / image pages (M5/M6)",
+# Deferred baseline symbols carry richer, human-facing hints where we have one;
+# the authoritative deferred set itself is the generated ``_compat_deferred``
+# module (derived from COMPAT.toml). Accessing any deferred symbol raises a
+# typed, catchable PdfUnsupportedError — never AttributeError (PRD §7 / §9.5).
+_DEFERRED_HINTS = {
+    "Document.convert_to_pdf": "image documents (M5)",
 }
 
-_UNIMPLEMENTED_DOC = {
-    "convert_to_pdf": "image documents (M5)",
-}
+
+def _deferred_members(group: str) -> frozenset[str]:
+    """The deferred baseline members owned by ``group`` (e.g. ``"Page"``)."""
+    prefix = f"{group}."
+    return frozenset(
+        sym[len(prefix):] for sym in _DEFERRED_SYMBOLS if sym.startswith(prefix)
+    )
+
+
+def _raise_deferred(group: str, name: str) -> None:
+    """Raise ``PdfUnsupportedError`` for a deferred ``group.name`` symbol."""
+    hint = _DEFERRED_HINTS.get(f"{group}.{name}")
+    detail = f": {hint}" if hint else ""
+    raise PdfUnsupportedError(
+        f"{group}.{name} is deferred / not yet implemented{detail}. "
+        "See the pdfspine parity matrix (COMPAT.toml)."
+    )
 
 
 def _rect(t: tuple[float, float, float, float]) -> Rect:
@@ -1421,8 +1437,8 @@ class Page:
         Tesseract CLI, using ``language`` / ``tessdata``, kept for PyMuPDF
         compatibility) or ``"paddle"`` (pdfspine's pure-Rust PaddleOCR — stronger on
         mixed CJK+Latin text, needs no external binary; ``tessdata`` is ignored,
-        and it requires the default-on ``paddle-ocr`` build feature). Raises
-        ``PdfUnsupportedError`` if the selected engine is unavailable.
+        and it requires the opt-in OCR build, ``pip install pdfspine[ocr]``).
+        Raises ``PdfUnsupportedError`` if the selected engine is unavailable.
         """
         return TextPage(
             self._page.get_textpage_ocr(flags, language, dpi, full, tessdata, engine)
@@ -2273,13 +2289,11 @@ class Page:
     def __repr__(self) -> str:
         return f"<pdfspine.Page number={self.number}>"
 
+    _DEFERRED = _deferred_members("Page")
+
     def __getattr__(self, name: str):
-        hint = _UNIMPLEMENTED_PAGE.get(name)
-        if hint is not None:
-            raise PdfUnsupportedError(
-                f"Page.{name} is not implemented yet: {hint}. "
-                "See the pdfspine parity matrix."
-            )
+        if name in Page._DEFERRED:
+            _raise_deferred("Page", name)
         raise AttributeError(f"'Page' object has no attribute {name!r}")
 
 
@@ -3140,7 +3154,7 @@ class Document:
         ``engine`` selects the backend: ``"tesseract"`` (default; the system
         Tesseract CLI, kept for PyMuPDF compatibility) or ``"paddle"`` (pdfspine's
         pure-Rust PaddleOCR — stronger on CJK; ``tessdata`` is ignored, and it
-        requires the default-on ``paddle-ocr`` build feature). Raises
+        requires the opt-in OCR build, ``pip install pdfspine[ocr]``). Raises
         ``PdfUnsupportedError`` if the selected engine is unavailable.
         """
         return self._doc.pdfocr_tobytes(
@@ -3697,13 +3711,11 @@ class Document:
     def __repr__(self) -> str:
         return f"<pdfspine.Document page_count={self.page_count}>"
 
+    _DEFERRED = _deferred_members("Document")
+
     def __getattr__(self, name: str):
-        hint = _UNIMPLEMENTED_DOC.get(name)
-        if hint is not None:
-            raise PdfUnsupportedError(
-                f"Document.{name} is not implemented yet: {hint}. "
-                "See the pdfspine parity matrix."
-            )
+        if name in Document._DEFERRED:
+            _raise_deferred("Document", name)
         raise AttributeError(f"'Document' object has no attribute {name!r}")
 
 

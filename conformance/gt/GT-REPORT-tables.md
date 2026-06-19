@@ -1,8 +1,8 @@
 # Table-extraction differential — pdfspine vs fitz
 
-Harness: `/Users/linhan/workspace/pypdf/conformance/gt/tables_diff.py`  
-pdfspine python: `/Users/linhan/workspace/pypdf/.venv/bin/python`  
-fitz python:  `/Users/linhan/workspace/pypdf/.venv-oracle/bin/python` (PyMuPDF 1.27.2.3)  
+Harness: `conformance/gt/tables_diff.py` (paths relative to repo root)  
+pdfspine python: `.venv/bin/python`  
+fitz python:  `.venv-oracle/bin/python` (PyMuPDF 1.27.2.3)  
 Match rule: bbox IoU > 0.5; grid-shape = exact (rows,cols); cell-text = token-F1 (`gt/score.py`) of flattened cells, pdfspine-vs-fitz.
 
 ## Aggregate (pdfspine vs fitz)

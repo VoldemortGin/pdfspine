@@ -4,7 +4,7 @@
 //! mixed CJK+Latin lines) into a [`Pixmap`], runs [`PaddleOcr`], and asserts the
 //! three reference lines from `ocr_sample_ref.json` are each recognized with high
 //! character similarity and a box near the reference. Deterministic and offline
-//! (models + dict are embedded in the crate).
+//! (the dict is embedded; the ONNX models load from the in-repo `models` dir).
 //!
 //! Gated on the `paddle-ocr` feature (the engine itself is feature-gated).
 #![cfg(feature = "paddle-ocr")]

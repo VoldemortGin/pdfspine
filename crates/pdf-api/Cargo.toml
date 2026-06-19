@@ -27,10 +27,11 @@ bytes.workspace = true
 # Encryption is ON by default so the shipped wheel can open encrypted PDFs from
 # Python (PRD §8.4 / M1f). Threads through to `pdf-core`'s `encryption` feature
 # and surfaces `pdf-crypto`'s encryption-authoring types for `save(encryption=…)`.
-# `paddle-ocr` is ON by default so the shipped wheel can OCR with pdfspine's
-# pure-Rust PaddleOCR engine (PRD §3.2 #3); it forwards to `pdf-ocr`'s
-# `paddle-ocr` feature. Disable both with `--no-default-features`.
-default = ["encryption", "paddle-ocr"]
+# `paddle-ocr` is OFF by default (P0-5): the lean base wheel must not carry the
+# ~16 MB PaddleOCR engine. The opt-in OCR build (`pip install pdfspine[ocr]` /
+# `maturin develop --features ocr`) turns it on; it forwards to `pdf-ocr`'s
+# `paddle-ocr` feature.
+default = ["encryption"]
 encryption = ["pdf-core/encryption", "dep:pdf-crypto"]
 paddle-ocr = ["pdf-ocr/paddle-ocr"]
 
