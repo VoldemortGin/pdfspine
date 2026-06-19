@@ -1,0 +1,48 @@
+[build-system]
+requires = ["hatchling>=1.21"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pdfspine-ocr-models"
+# Pure-data, universal (py3-none-any) wheel: the ~16 MB PP-OCRv4 ONNX models that
+# the `pdfspine[ocr]` extra pulls in (P0-5r / Option A). The `pdfspine` wheel has
+# the OCR *code* compiled in; this companion supplies the *weights*, resolved at
+# runtime via `pdfspine_ocr_models.models_dir()`. Dev builds show 0.0.0; tagged CI
+# stamps the real version (see .github/workflows/release.yml) so it tracks the
+# `pdfspine` release it ships alongside.
+version = "0.0.0"
+description = "PP-OCRv4 ONNX model weights for pdfspine's PaddleOCR engine (the pdfspine[ocr] data companion)."
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.11"
+authors = [{ name = "pdfspine contributors" }]
+keywords = ["pdf", "ocr", "paddleocr", "pp-ocr", "onnx", "pdfspine"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Image Recognition",
+    "Topic :: Text Processing :: General",
+]
+
+[project.urls]
+Homepage = "https://github.com/VoldemortGin/pdfspine"
+Repository = "https://github.com/VoldemortGin/pdfspine"
+Issues = "https://github.com/VoldemortGin/pdfspine/issues"
+
+# The 3 ONNX models are NOT a second copy in git: a custom build hook
+# (hatch_build.py) force-includes them from the repo's single source of truth at
+# `crates/pdf-ocr/models/` into both the sdist and the wheel at build time.
+[tool.hatch.build.targets.wheel.hooks.custom]
+path = "hatch_build.py"
+
+[tool.hatch.build.targets.sdist.hooks.custom]
+path = "hatch_build.py"
+
+# The Python source of the import package (the .py shim + carried NOTICE/PROVENANCE);
+# the ONNX are added by the hook, not tracked here.
+[tool.hatch.build.targets.wheel]
+packages = ["pdfspine_ocr_models"]
+
+[tool.hatch.build.targets.sdist]
+include = ["pdfspine_ocr_models", "hatch_build.py", "README.md"]

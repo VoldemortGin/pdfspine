@@ -28,7 +28,9 @@
 | ABI | **abi3-py311** → ONE wheel per (OS, arch), CPython **≥ 3.11** | DONE |
 | `requires-python` | `>=3.11` | DONE |
 | Native build deps | pure-Rust codecs/crypto, **BUT** the OCR `tract` kernels compile per-arch **assembly** → a C/asm toolchain is needed to *build from source* (GH runners + maturin-action containers already have it) | DONE (documented in README) |
-| Wheel size | ~15–25 MB (embeds ~16 MB OCR models) | DONE (documented) |
+| OCR delivery | **Option A (P0-5r):** ONE `pdfspine` wheel with the PaddleOCR engine compiled IN, but the ~16 MB ONNX models NOT embedded; models ship as the separate `pdfspine-ocr-models` data distribution that the `pdfspine[ocr]` extra pulls in | DONE (§D.1) |
+| Wheel size | `pdfspine` ~7 MB (compressed; OCR code in, models out); `pdfspine-ocr-models` ~15 MB universal `py3-none-any` data wheel | DONE |
+| PyPI projects | **two**: `pdfspine` + `pdfspine-ocr-models` (each needs its own pending publisher — see §F.1) | USER-GATED (publish) |
 
 ---
 
@@ -147,6 +149,56 @@ python -m twine check dist/*           # README renders, metadata valid
 python -m zipfile -l dist/pdfspine-*.whl | head    # inspect wheel contents
 ```
 
+---
+
+### D.1 OCR delivery — two distributions (Option A, P0-5r)
+
+**Decision (P0-5r):** OCR ships as **one wheel with the PaddleOCR engine compiled
+in + a separate models data package** — NOT as a second "fat" wheel, and NOT with
+the ~16 MB ONNX models embedded in every wheel.
+
+| Distribution | What | How it is built |
+|---|---|---|
+| **`pdfspine`** | the engine wheel — OCR *code* compiled in (`[tool.maturin] features = ["pyo3/abi3-py311", "ocr"]`), models **NOT** embedded | the `wheels` + `sdist` jobs (maturin) |
+| **`pdfspine-ocr-models`** | pure-data, universal `py3-none-any` wheel — the 3 PP-OCRv4 ONNX weights only (import package `pdfspine_ocr_models`, exposes `models_dir()`) | the `ocr-models` job (`python -m build packages/pdfspine-ocr-models`) |
+
+The companion does **not** keep a second copy of the models in git: its hatchling
+build hook (`packages/pdfspine-ocr-models/hatch_build.py`) `force_include`s the 3
+ONNX from the repo's single source of truth `crates/pdf-ocr/models/` into both its
+sdist and its wheel at build time. `crates/pdf-ocr/models/` also remains the Rust
+**dev fallback** for source checkouts.
+
+**End-user UX:**
+
+```bash
+pip install pdfspine          # OCR code present, NO models -> engine="paddle" raises a clear error
+pip install pdfspine[ocr]     # + pdfspine-ocr-models -> OCR works, fully offline
+```
+
+**Runtime model resolution order** (`python/pdfspine/document.py`
+`_ensure_ocr_models_env` sets the env, then the Rust `models_dir()` in
+`crates/pdf-ocr/src/paddle/model.rs` resolves it):
+
+1. **`PDFSPINE_OCR_MODELS`** env var, if already set — explicit user override;
+2. else the installed **`pdfspine_ocr_models`** companion (the `[ocr]` extra) —
+   Python exports its `models_dir()` as `PDFSPINE_OCR_MODELS`;
+3. else the in-repo **`crates/pdf-ocr/models`** dev fallback (source checkout);
+4. else a clear **`PdfUnsupportedError`** pointing at `pip install pdfspine[ocr]`.
+
+Local sanity build of the companion (optional, before tagging):
+
+```bash
+python -m build packages/pdfspine-ocr-models --outdir dist   # data sdist + universal wheel
+python -c "import pdfspine_ocr_models, os; d=pdfspine_ocr_models.models_dir(); print(d, sorted(os.listdir(d)))"
+```
+
+The `ocr-models` job stamps the companion's version from the tag so it tracks the
+`pdfspine` release it ships alongside, and the `publish` job uploads BOTH
+distributions through the same OIDC trusted-publishing call (each matched to its
+own pending publisher by project name).
+
+---
+
 > **Note on the `fitz`/`pymupdf` compat shims — RESOLVED (opt-in, option C).**
 > The shims now ship as **submodules of the package** (`pdfspine.fitz` /
 > `pdfspine.pymupdf`), not as top-level packages. A default install therefore
@@ -181,15 +233,18 @@ does a `--no-index` install + `import pdfspine` per OS on every push).
 
 ### F.1 PyPI (Trusted Publishing — preferred, no tokens)
 
-One-time setup in the PyPI web UI (do BEFORE the first publish):
+One-time setup in the PyPI web UI (do BEFORE the first publish). There are **two**
+PyPI projects (§D.1), so add the pending publisher **twice** — same Owner /
+Repository / Workflow / Environment, once per project name:
 
-1. **https://pypi.org** → account → **Publishing** → **Add a pending publisher**:
-   - Project name: `pdfspine`
+1. **https://pypi.org** → account → **Publishing** → **Add a pending publisher**
+   (do this for BOTH project names):
+   - Project name: `pdfspine`  **and**  `pdfspine-ocr-models`
    - Owner: `VoldemortGin`
    - Repository: `pdfspine`
    - Workflow: `release.yml`
    - Environment: `pypi`
-2. Repeat on **https://test.pypi.org** with Environment `testpypi` (for the dry run).
+2. Repeat both on **https://test.pypi.org** with Environment `testpypi` (dry run).
 3. GitHub repo → Settings → Environments → create `pypi` and `testpypi`
    (optionally add a required reviewer on `pypi`).
 
@@ -253,8 +308,9 @@ python -c "import pdfspine; print(pdfspine.__version__); print(pdfspine.open)"
 | B | Version bump `0.0.0` → `0.1.0a1` (+ optional CHANGELOG/community files) | USER-GATED |
 | C | Local folder rename `pypdf` → `pdfspine` + recreate `.venv` (**LAST build step**) | USER-GATED |
 | D | Build wheel matrix + sdist (`release.yml`) | READY |
+| D.1 | OCR = `pdfspine` (engine-in wheel) + `pdfspine-ocr-models` (data) — Option A (P0-5r) | READY |
 | E | Test-install wheels (TestPyPI dry run) | READY |
-| F.1 | PyPI Trusted Publishing setup + publish | USER-GATED |
+| F.1 | PyPI Trusted Publishing setup + publish (**two** pending publishers) | USER-GATED |
 | F.2 | crates.io — name reserved, NOT published (Python-first) | DONE (decided) |
 | G | Tag `v*` + flip repo public + push | USER-GATED |
 | H | Post-publish verification | READY |

@@ -59,6 +59,41 @@ def _raise_deferred(group: str, name: str) -> None:
     )
 
 
+_OCR_MODELS_ENV = "PDFSPINE_OCR_MODELS"
+
+
+def _ensure_ocr_models_env() -> None:
+    """Point the Rust PaddleOCR engine at the bundled model weights.
+
+    The published ``pdfspine`` wheel has the OCR *code* compiled in but ships no
+    models; the ~16 MB PP-OCRv4 ONNX weights live in the separate
+    ``pdfspine-ocr-models`` companion that the ``pdfspine[ocr]`` extra pulls in
+    (P0-5r / Option A). Before invoking the ``engine="paddle"`` path we export the
+    companion's directory as ``PDFSPINE_OCR_MODELS`` so the Rust ``models_dir()``
+    finds the weights with no network access.
+
+    Resolution order (lazy, cheap, idempotent, cross-platform):
+
+    1. ``PDFSPINE_OCR_MODELS`` already in the environment → leave it (user override);
+    2. else the installed ``pdfspine_ocr_models`` companion → set it from there;
+    3. else do nothing — the Rust side falls back to the in-repo
+       ``crates/pdf-ocr/models`` dev directory (source checkout), or raises a clear
+       ``PdfUnsupportedError`` pointing at ``pip install pdfspine[ocr]``.
+    """
+    if os.environ.get(_OCR_MODELS_ENV):
+        return
+    try:
+        import pdfspine_ocr_models
+    except ImportError:
+        return
+    try:
+        os.environ[_OCR_MODELS_ENV] = pdfspine_ocr_models.models_dir()
+    except Exception:
+        # A broken/partial companion install must not mask the engine's own clear
+        # error; leave the env unset and let the Rust side report.
+        pass
+
+
 def _rect(t: tuple[float, float, float, float]) -> Rect:
     return Rect(*t)
 
@@ -1440,6 +1475,8 @@ class Page:
         and it requires the opt-in OCR build, ``pip install pdfspine[ocr]``).
         Raises ``PdfUnsupportedError`` if the selected engine is unavailable.
         """
+        if engine == "paddle":
+            _ensure_ocr_models_env()
         return TextPage(
             self._page.get_textpage_ocr(flags, language, dpi, full, tessdata, engine)
         )
@@ -3157,6 +3194,8 @@ class Document:
         requires the opt-in OCR build, ``pip install pdfspine[ocr]``). Raises
         ``PdfUnsupportedError`` if the selected engine is unavailable.
         """
+        if engine == "paddle":
+            _ensure_ocr_models_env()
         return self._doc.pdfocr_tobytes(
             compress=compress, language=language, tessdata=tessdata, dpi=dpi, engine=engine
         )
@@ -3173,6 +3212,8 @@ class Document:
     ) -> None:
         """Writes a searchable OCR "sandwich" PDF to ``filename`` (PyMuPDF
         ``doc.pdfocr_save``). See :meth:`pdfocr_tobytes` for ``engine``."""
+        if engine == "paddle":
+            _ensure_ocr_models_env()
         self._doc.pdfocr_save(
             os.fspath(filename),
             compress=compress,

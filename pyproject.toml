@@ -43,16 +43,22 @@ Issues = "https://github.com/VoldemortGin/pdfspine/issues"
 
 [project.optional-dependencies]
 test = ["pytest>=8", "hypothesis>=6"]
-# Opt-in OCR (P0-5). The DEFAULT wheel is LEAN: it has NO PaddleOCR engine and
-# none of the ~16 MB ONNX models (those are compiled out via the default-OFF
-# `paddle-ocr` Cargo feature, and the models load from disk, never embedded). The
-# OCR-capable wheel is a SEPARATE artifact built with the Cargo feature on
-# (`maturin build --features ocr` / `maturin develop --features ocr`), and it
-# resolves the PP-OCR `*.onnx` models at runtime from the `PDFSPINE_OCR_MODELS`
-# directory (offline; no network download). Installing this extra is the
-# documented opt-in marker for OCR support; on a lean install, `engine="paddle"`
-# raises a clear `PdfUnsupportedError` telling the user to install `pdfspine[ocr]`.
-ocr = []
+# Opt-in OCR (P0-5r / Option A). There is ONE published `pdfspine` wheel and it
+# already CONTAINS the pure-Rust PaddleOCR engine (compiled in via the maturin
+# `ocr` feature above) — but NOT the ~16 MB PP-OCRv4 ONNX models, which are never
+# embedded. The models ship as a SEPARATE pure-data distribution,
+# `pdfspine-ocr-models` (import package `pdfspine_ocr_models`), and this extra is
+# what pulls it in: `pip install pdfspine[ocr]` ⇒ models present ⇒ OCR works fully
+# offline. A bare `pip install pdfspine` has the OCR code but no models.
+#
+# Runtime model resolution order (see `python/pdfspine/document.py`
+# `_ensure_ocr_models_env` and the Rust `models_dir()` in
+# `crates/pdf-ocr/src/paddle/model.rs`):
+#   1. `PDFSPINE_OCR_MODELS` env var, if already set (explicit user override);
+#   2. else the installed `pdfspine_ocr_models` companion (this extra);
+#   3. else the in-repo `crates/pdf-ocr/models` dev fallback (source checkout);
+#   4. else a clear `PdfUnsupportedError` pointing at `pip install pdfspine[ocr]`.
+ocr = ["pdfspine-ocr-models"]
 
 [project.scripts]
 pdfspine = "pdfspine.cli:main"
@@ -69,7 +75,14 @@ python-source = "python"
 # abi3 wheel covering CPython >= 3.11 (PRD §9.4 / §11.2). The 3.11 floor is
 # required by `Pixmap`'s zero-copy buffer protocol — the `bf_getbuffer` /
 # `bf_releasebuffer` stable-ABI slots were added in CPython 3.11.
-features = ["pyo3/abi3-py311"]
+#
+# `ocr` (the py-bindings crate's feature) compiles the pure-Rust PaddleOCR engine
+# INTO the published wheel (P0-5r / Option A). The ~16 MB ONNX models are NOT
+# embedded — they ship as the separate `pdfspine-ocr-models` data distribution
+# that the `[ocr]` extra pulls in, and are resolved at runtime (see the `ocr`
+# extra below). `cargo build` / `cargo test` stay lean (paddle-ocr is OFF in the
+# workspace default); ONLY maturin (this line) turns OCR on for the wheel.
+features = ["pyo3/abi3-py311", "ocr"]
 # Ship PEP 561 type information (.pyi stubs + py.typed markers) in sdist + wheel.
 include = [
     "python/pdfspine/py.typed",
