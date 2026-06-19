@@ -1209,6 +1209,25 @@ impl DocumentStore {
         !self.parse_was_repaired && !self.redaction_applied()
     }
 
+    /// The number of cross-reference **revisions** in the original document — the
+    /// `startxref`/`/Prev` chain length (PyMuPDF `Document.version_count`).
+    ///
+    /// `1` for a freshly authored / fully rewritten PDF; `+1` for each appended
+    /// incremental update. A **linearized** ("fast web view") PDF carries a
+    /// first-page cross-reference section chained at the front that MuPDF does
+    /// not count as a separate revision, so it is subtracted (never below `1`),
+    /// matching fitz. A repair-tainted parse (no walkable chain) reports `1`.
+    #[must_use]
+    pub fn version_count(&self) -> usize {
+        if self.parse_was_repaired {
+            return 1;
+        }
+        let sections =
+            crate::xref::count_xref_sections(&self.source, self.header_offset, &self.limits);
+        let linearization = usize::from(self.is_linearized());
+        sections.saturating_sub(linearization).max(1)
+    }
+
     /// Serializes an **incremental** update: appends only the changed objects and
     /// a new cross-reference section (whose `/Prev` chains to the prior
     /// `startxref`) to the original source bytes, guaranteeing

@@ -143,13 +143,14 @@ def test_font_deferred_member_raises_on_use(member) -> None:
 
 
 # ---------------------------------------------------------------------------
-# image_profile (module level) — the fitz shim raises PdfUnsupportedError
+# image_profile (module level) — now implemented; resolves via the fitz shim
 # ---------------------------------------------------------------------------
-def test_module_image_profile_raises_via_fitz_shim() -> None:
+def test_module_image_profile_resolves_via_fitz_shim() -> None:
     import pdfspine.fitz as fitz
 
-    with pytest.raises(PdfUnsupportedError):
-        fitz.image_profile
+    assert callable(fitz.image_profile)
+    # Unrecognized input returns None (fitz parity), never raises.
+    assert fitz.image_profile(b"not an image") is None
 
 
 # ---------------------------------------------------------------------------

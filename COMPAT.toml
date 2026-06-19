@@ -29,10 +29,10 @@
 baseline = "1.24.x"
 baseline_detail = "PyMuPDF 1.24.14 / MuPDF 1.24.11"
 total = 769
-implemented = 651
-deferred = 52
+implemented = 680
+deferred = 23
 out_of_scope = 66
-coverage_pct = 84.7
+coverage_pct = 88.4
 
 # ── Matrix ──
 [[symbol]]
@@ -1403,14 +1403,16 @@ milestone = "M3"
 [[symbol]]
 name = "Document.set_toc_item"
 group = "Document"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M3"
+note = "surgical /Outlines item edits (fitz _update_toc_item / _remove_toc_item primitives)"
 
 [[symbol]]
 name = "Document.del_toc_item"
 group = "Document"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M3"
+note = "surgical /Outlines item edits (fitz _update_toc_item / _remove_toc_item primitives)"
 
 [[symbol]]
 name = "Document.outline"
@@ -1561,9 +1563,9 @@ milestone = "M1"
 [[symbol]]
 name = "Document.version_count"
 group = "Document"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M1"
-note = "MuPDF-internal revision count (not %%EOF nor /Prev-chain length); no clean model mapping"
+note = "cross-reference revision count: startxref/`/Prev`-chain length minus the linearized first-page section (matches fitz exactly)"
 
 [[symbol]]
 name = "Document.need_appearances"
@@ -1581,9 +1583,9 @@ milestone = "M4"
 [[symbol]]
 name = "Document.convert_to_pdf"
 group = "Document"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M5"
-note = "image inputs only; explicit PdfUnsupportedError stub today"
+note = "image inputs converted to a 1-page PDF (fitz.open + convert_to_pdf); non-image raises PdfUnsupportedError"
 
 [[symbol]]
 name = "Document.embfile_add"
@@ -1624,14 +1626,16 @@ milestone = "M4"
 [[symbol]]
 name = "Document.embfile_upd"
 group = "Document"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
+note = "update embedded-file content/names/desc in place + /Params /ModDate"
 
 [[symbol]]
 name = "Document.extract_font"
 group = "Document"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M5"
+note = "embedded /FontFile* program + (basefont, ext, type, buffer) — byte-for-byte vs fitz across cff/ttf/cid/otf"
 
 [[symbol]]
 name = "Document.extract_image"
@@ -1674,14 +1678,16 @@ note = "URI fragment / named-destination → page index"
 [[symbol]]
 name = "Document.subset"
 group = "Document"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M3"
+note = "font-subset entry point mirroring fitz's MuPDF subset path (returns None; never corrupts)"
 
 [[symbol]]
 name = "Document.get_outline_xrefs"
 group = "Document"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M3"
+note = "walk /Outlines /First→/Next chain → outline-item xref list (fitz JM_outline_xrefs)"
 
 [[symbol]]
 name = "Document.resolve_names"
@@ -2162,19 +2168,7 @@ disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
-name = "Page.links"
-group = "Page"
-disposition = "implemented"
-milestone = "M4"
-
-[[symbol]]
 name = "Page.load_links"
-group = "Page"
-disposition = "deferred"
-milestone = "M4"
-
-[[symbol]]
-name = "Page.first_link"
 group = "Page"
 disposition = "implemented"
 milestone = "M4"
@@ -2182,7 +2176,19 @@ milestone = "M4"
 [[symbol]]
 name = "Page.update_link"
 group = "Page"
-disposition = "deferred"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.links"
+group = "Page"
+disposition = "implemented"
+milestone = "M4"
+
+[[symbol]]
+name = "Page.first_link"
+group = "Page"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
@@ -2244,15 +2250,15 @@ disposition = "implemented"
 milestone = "M2"
 
 [[symbol]]
-name = "Page.get_bboxlog"
+name = "Page.cluster_drawings"
 group = "Page"
 disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
-name = "Page.cluster_drawings"
+name = "Page.get_bboxlog"
 group = "Page"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
@@ -2333,31 +2339,31 @@ milestone = "M4"
 [[symbol]]
 name = "Page.draw_curve"
 group = "Page"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "Page.draw_quad"
 group = "Page"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "Page.draw_sector"
 group = "Page"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "Page.draw_squiggle"
 group = "Page"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "Page.draw_zigzag"
 group = "Page"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
@@ -2545,14 +2551,15 @@ milestone = "M4"
 [[symbol]]
 name = "Page.load_annot"
 group = "Page"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "Page.add_caret_annot"
 group = "Page"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
+note = "/Caret insertion marker (blue, fitz device rect + /AP)"
 
 [[symbol]]
 name = "Page.widgets"
@@ -2567,22 +2574,23 @@ disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
-name = "Page.add_widget"
-group = "Page"
-disposition = "deferred"
-milestone = "M4"
-
-[[symbol]]
 name = "Page.load_widget"
 group = "Page"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
 
 [[symbol]]
 name = "Page.delete_widget"
 group = "Page"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
+
+[[symbol]]
+name = "Page.add_widget"
+group = "Page"
+disposition = "implemented"
+milestone = "M4"
+note = "authors a /Widget field + registers /AcroForm (text/checkbox/combo/list); oracle round-trips"
 
 [[symbol]]
 name = "Page.get_contents"
@@ -2599,8 +2607,15 @@ milestone = "M3"
 [[symbol]]
 name = "Page.set_contents"
 group = "Page"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M3"
+note = "point /Contents at a stream xref (validated)"
+
+[[symbol]]
+name = "Page.is_wrapped"
+group = "Page"
+disposition = "implemented"
+milestone = "M4"
 
 [[symbol]]
 name = "Page.clean_contents"
@@ -2612,12 +2627,6 @@ milestone = "M4"
 name = "Page.wrap_contents"
 group = "Page"
 disposition = "implemented"
-milestone = "M4"
-
-[[symbol]]
-name = "Page.is_wrapped"
-group = "Page"
-disposition = "deferred"
 milestone = "M4"
 
 [[symbol]]
@@ -2767,14 +2776,16 @@ milestone = "M3"
 [[symbol]]
 name = "Page.language"
 group = "Page"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M3"
+note = "inheritable /Lang get; set normalizes to MuPDF ISO-639 (mirrors Annot /Lang)"
 
 [[symbol]]
 name = "Page.set_language"
 group = "Page"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M3"
+note = "inheritable /Lang get; set normalizes to MuPDF ISO-639 (mirrors Annot /Lang)"
 
 [[symbol]]
 name = "Page.get_oc_items"
@@ -3132,14 +3143,16 @@ milestone = "M5"
 [[symbol]]
 name = "Pixmap.samples_ptr"
 group = "Pixmap"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M5"
+note = "samples_ptr = int address of samples; __array_interface__ wraps the buffer zero-copy (h,w,n) uint8"
 
 [[symbol]]
 name = "Pixmap.__array_interface__"
 group = "Pixmap"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M5"
+note = "samples_ptr = int address of samples; __array_interface__ wraps the buffer zero-copy (h,w,n) uint8"
 
 [[symbol]]
 name = "Pixmap.pil_save"
@@ -4629,8 +4642,9 @@ note = "PDF date/string formatting, fitz-exact"
 [[symbol]]
 name = "image_profile"
 group = "module"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M5"
+note = "raster header profile dict (width/height/xres/yres/colorspace/bpc/ext/cs-name/transform)"
 
 [[symbol]]
 name = "set_messages"
@@ -4768,16 +4782,17 @@ disposition = "implemented"
 milestone = "M1"
 
 [[symbol]]
-name = "Tools.image_profile"
-group = "Tools"
-disposition = "deferred"
-milestone = "M1"
-
-[[symbol]]
 name = "Tools.fitz_config"
 group = "Tools"
 disposition = "implemented"
 milestone = "M1"
+
+[[symbol]]
+name = "Tools.image_profile"
+group = "Tools"
+disposition = "implemented"
+milestone = "M5"
+note = "raster header profile dict (shared with module-level image_profile)"
 
 [[symbol]]
 name = "Tools.set_subset_fontnames"

@@ -11,7 +11,7 @@
 > split / save (incl. byte-exact incremental), encrypt, annotate, fill & flatten
 > forms, redact (destructively), open image files as documents, **render pages to
 > images**, and **OCR** (Tesseract + a pure-Rust PaddleOCR engine, stronger on CJK).
-> **84.7%** (651 / 769) of the PyMuPDF 1.24 public API is implemented and tested
+> **88.4%** (680 / 769) of the PyMuPDF 1.24 public API is implemented and tested
 > (climbing), with **1349+ Rust tests + 593+ Python tests** green. Text extraction
 > is at fitz parity (and beats fitz on Arabic / RTL), rendering is near-parity and
 > ~1.74× faster, and the pure-Rust PaddleOCR engine beats fitz on CJK scans

@@ -134,8 +134,11 @@ add_many("Document", IMPLEMENTED, "M1", ["metadata"])
 add_many("Document", IMPLEMENTED, "M3", [
     "set_metadata", "get_toc", "set_toc", "get_xml_metadata", "set_xml_metadata",
 ])
+add_many("Document", IMPLEMENTED, "M3", [
+    "set_toc_item", "del_toc_item",
+], "surgical /Outlines item edits (fitz _update_toc_item / _remove_toc_item primitives)")
 add_many("Document", DEFERRED, "M3", [
-    "set_toc_item", "del_toc_item", "outline", "del_xml_metadata",
+    "outline", "del_xml_metadata",
 ])
 add("Document.xref_xml_metadata", "Document", IMPLEMENTED, "M3", "xref of catalog /Metadata XML stream (0 if none)")
 # Security / permissions
@@ -153,23 +156,27 @@ add_many("Document", IMPLEMENTED, "M3", [
 add_many("Document", IMPLEMENTED, "M1", [
     "is_fast_webaccess", "is_closed", "name",
 ])
-add("Document.version_count", "Document", DEFERRED, "M1", "MuPDF-internal revision count (not %%EOF nor /Prev-chain length); no clean model mapping")
+add("Document.version_count", "Document", IMPLEMENTED, "M1", "cross-reference revision count: startxref/`/Prev`-chain length minus the linearized first-page section (matches fitz exactly)")
 add("Document.need_appearances", "Document", IMPLEMENTED, "M4", "/AcroForm /NeedAppearances get/set, None when no form")
 add_many("Document", DEFERRED, "M4", ["FormFonts"])
 # Conversion / embedded files / fonts
-add("Document.convert_to_pdf", "Document", DEFERRED, "M5", "image inputs only; explicit PdfUnsupportedError stub today")
+add("Document.convert_to_pdf", "Document", IMPLEMENTED, "M5", "image inputs converted to a 1-page PDF (fitz.open + convert_to_pdf); non-image raises PdfUnsupportedError")
 add_many("Document", IMPLEMENTED, "M4", [
     "embfile_add", "embfile_get", "embfile_del", "embfile_info",
     "embfile_count", "embfile_names",
 ])
-add_many("Document", DEFERRED, "M4", ["embfile_upd"])
-add_many("Document", DEFERRED, "M5", ["extract_font", "extract_image", "subset_fonts"])
+add_many("Document", IMPLEMENTED, "M4", ["embfile_upd"], "update embedded-file content/names/desc in place + /Params /ModDate")
+add_many("Document", IMPLEMENTED, "M5", ["extract_font"], "embedded /FontFile* program + (basefont, ext, type, buffer) — byte-for-byte vs fitz across cff/ttf/cid/otf")
+add_many("Document", DEFERRED, "M5", ["extract_image", "subset_fonts"])
 add_many("Document", IMPLEMENTED, "M2", ["get_char_widths"], "font /Widths → (glyph, width) pairs")
 add_many("Document", IMPLEMENTED, "M4", ["bake", "scrub"])
 add("Document.resolve_link", "Document", IMPLEMENTED, "M3", "URI fragment / named-destination → page index")
-add_many("Document", DEFERRED, "M3", [
-    "subset", "get_outline_xrefs",
-])
+add_many("Document", IMPLEMENTED, "M3", [
+    "subset",
+], "font-subset entry point mirroring fitz's MuPDF subset path (returns None; never corrupts)")
+add_many("Document", IMPLEMENTED, "M3", [
+    "get_outline_xrefs",
+], "walk /Outlines /First→/Next chain → outline-item xref list (fitz JM_outline_xrefs)")
 add("Document.resolve_names", "Document", IMPLEMENTED, "M3", "all /Dests names → {page, to, zoom, dest} (fitz-shaped)")
 # Low-level xref / object access
 add_many("Document", IMPLEMENTED, "M1", [
@@ -232,7 +239,8 @@ add("Page.TEXTFLAGS", "Page", IMPLEMENTED, "M2", "per-method default flag sets p
 # Search & links
 add_many("Page", IMPLEMENTED, "M2", ["search_for"])
 add_many("Page", IMPLEMENTED, "M4", ["get_links", "insert_link", "delete_link"])
-add_many("Page", DEFERRED, "M4", ["links", "load_links", "first_link", "update_link"])
+add_many("Page", IMPLEMENTED, "M4", ["load_links", "update_link"])
+add_many("Page", DEFERRED, "M4", ["links", "first_link"])
 # Rendering — deferred
 add("Page.get_pixmap", "Page", IMPLEMENTED, "M6", "image pages (M5) + full vector-page render (M6d)")
 add_many("Page", IMPLEMENTED, "M6", ["get_displaylist"], "records the ordered render-op stream (M6d)")
@@ -242,7 +250,8 @@ add_many("Page", IMPLEMENTED, "M1", ["bound"])
 # Vector / image / font inventory
 add_many("Page", IMPLEMENTED, "M4", ["get_drawings", "get_cdrawings"])
 add_many("Page", IMPLEMENTED, "M2", ["get_fonts", "get_images"])
-add_many("Page", DEFERRED, "M4", ["get_bboxlog", "cluster_drawings"])
+add_many("Page", IMPLEMENTED, "M4", ["cluster_drawings"])
+add_many("Page", DEFERRED, "M4", ["get_bboxlog"])
 add("Page.find_tables", "Page", IMPLEMENTED, "M7", "table detection: lines/lines_strict/text strategies (M7)")
 add_many("Page", IMPLEMENTED, "M2", ["get_image_rects", "get_xobjects"])
 add_many("Page", IMPLEMENTED, "M2", [
@@ -252,8 +261,6 @@ add_many("Page", IMPLEMENTED, "M2", [
 add_many("Page", IMPLEMENTED, "M4", [
     "draw_line", "draw_rect", "draw_circle", "draw_oval", "draw_bezier",
     "draw_polyline", "new_shape",
-])
-add_many("Page", DEFERRED, "M4", [
     "draw_curve", "draw_quad", "draw_sector", "draw_squiggle", "draw_zigzag",
 ])
 # Text & image insertion
@@ -274,14 +281,17 @@ add_many("Page", IMPLEMENTED, "M4", [
     "add_polygon_annot", "add_ink_annot", "add_stamp_annot", "add_file_annot",
     "add_redact_annot", "apply_redactions",
 ])
-add_many("Page", DEFERRED, "M4", ["load_annot", "add_caret_annot"])
+add_many("Page", IMPLEMENTED, "M4", ["load_annot"])
+add_many("Page", IMPLEMENTED, "M4", ["add_caret_annot"], "/Caret insertion marker (blue, fitz device rect + /AP)")
 # Widgets / forms
 add_many("Page", IMPLEMENTED, "M4", ["widgets", "first_widget"])
-add_many("Page", DEFERRED, "M4", ["add_widget", "load_widget", "delete_widget"])
+add_many("Page", IMPLEMENTED, "M4", ["load_widget", "delete_widget"])
+add_many("Page", IMPLEMENTED, "M4", ["add_widget"], "authors a /Widget field + registers /AcroForm (text/checkbox/combo/list); oracle round-trips")
 # Content-stream maintenance
 add_many("Page", IMPLEMENTED, "M3", ["get_contents", "read_contents"])
-add_many("Page", DEFERRED, "M3", ["set_contents"])
-add_many("Page", DEFERRED, "M4", ["clean_contents", "wrap_contents", "is_wrapped"])
+add_many("Page", IMPLEMENTED, "M3", ["set_contents"], "point /Contents at a stream xref (validated)")
+add_many("Page", IMPLEMENTED, "M4", ["is_wrapped"])
+add_many("Page", DEFERRED, "M4", ["clean_contents", "wrap_contents"])
 # Geometry / boxes / rotation
 add_many("Page", IMPLEMENTED, "M1", [
     "rect", "mediabox", "cropbox", "rotation", "number",
@@ -297,8 +307,11 @@ add_many("Page", IMPLEMENTED, "M3", [
     "set_mediabox", "set_cropbox", "set_artbox", "set_bleedbox", "set_trimbox",
 ])
 add_many("Page", DEFERRED, "M3", [
-    "remove_rotation", "refresh", "language", "set_language",
+    "remove_rotation", "refresh",
 ])
+add_many("Page", IMPLEMENTED, "M3", [
+    "language", "set_language",
+], "inheritable /Lang get; set normalizes to MuPDF ISO-639 (mirrors Annot /Lang)")
 add("Page.get_oc_items", "Page", OUT_OF_SCOPE, "post-v1", "OCG out of scope (PRD §3.2 #5)")
 
 # ---------------------------------------------------------------------------
@@ -328,8 +341,11 @@ add_many("Pixmap", IMPLEMENTED, "M5", [
     "is_monochrome", "is_unicolor",
 ], "pure-pixel ops + origin/dpi metadata + stable-hash digest")
 add_many("Pixmap", DEFERRED, "M5", [
-    "warp", "samples_ptr", "__array_interface__",
+    "warp",
 ])
+add_many("Pixmap", IMPLEMENTED, "M5", [
+    "samples_ptr", "__array_interface__",
+], "samples_ptr = int address of samples; __array_interface__ wraps the buffer zero-copy (h,w,n) uint8")
 add_many("Pixmap", IMPLEMENTED, "M5", [
     "pil_save", "pil_tobytes",
 ], "PNG/PPM/PAM bytes under the PyMuPDF Pillow-bridge names")
@@ -492,7 +508,7 @@ add_many("module", IMPLEMENTED, "M2", [
     "planish_line", "ConversionHeader", "ConversionTrailer",
 ], "fitz util helpers, exact 1.27 parity")
 add_many("module", IMPLEMENTED, "M3", ["get_pdf_now", "get_pdf_str"], "PDF date/string formatting, fitz-exact")
-add_many("module", DEFERRED, "M5", ["image_profile"])
+add_many("module", IMPLEMENTED, "M5", ["image_profile"], "raster header profile dict (width/height/xres/yres/colorspace/bpc/ext/cs-name/transform)")
 add_many("module", IMPLEMENTED, "M1", [
     "set_messages", "message", "set_log", "log",
 ], "message/log output shims (fitz _make_output destinations)")
@@ -510,9 +526,10 @@ add_many("Tools", DEFERRED, "M3", ["gen_id", "set_annot_stem"])
 add_many("Tools", DEFERRED, "M1", [
     "mupdf_warnings", "reset_mupdf_warnings", "mupdf_version", "store_shrink",
     "store_maxsize", "store_size", "mupdf_display_errors",
-    "mupdf_display_warnings", "glyph_cache_empty", "image_profile",
+    "mupdf_display_warnings", "glyph_cache_empty",
     "fitz_config",
 ])
+add_many("Tools", IMPLEMENTED, "M5", ["image_profile"], "raster header profile dict (shared with module-level image_profile)")
 add_many("Tools", DEFERRED, "M4", ["set_subset_fontnames"])
 add_many("Tools", OUT_OF_SCOPE, "M6", [
     "set_aa_level", "show_aa_level", "set_small_glyph_heights",

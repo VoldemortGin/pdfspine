@@ -16,7 +16,7 @@ use crate::error::{Error, Result};
 
 // Re-export the value types the bindings need so they depend only on `pdf-api`.
 pub use pdf_image::getpixmap::ExtractedImage;
-pub use pdf_image::imagedoc::{ImageDocument, ImageFormat};
+pub use pdf_image::imagedoc::{ImageDocument, ImageFormat, ImageProfile};
 pub use pdf_image::pixmap::{Colorspace, Pixmap};
 
 /// The `Page.get_pixmap` request parameters (PyMuPDF, PRD §8.11). `matrix` and
@@ -205,6 +205,13 @@ pub fn open_image_document(bytes: &[u8]) -> Result<ImageDocument> {
 /// [`Error::Unsupported`] for non-image input (PyMuPDF `PdfUnsupportedError`).
 pub fn image_to_pdf(bytes: &[u8]) -> Result<Vec<u8>> {
     Ok(imagedoc::convert_to_pdf(bytes, None)?)
+}
+
+/// The header profile of a raster image (PyMuPDF `image_profile` /
+/// `Tools.image_profile`), or `None` for empty / unrecognized input.
+#[must_use]
+pub fn image_profile(bytes: &[u8]) -> Option<ImageProfile> {
+    imagedoc::image_profile(bytes)
 }
 
 /// A [`Pixmap`] for page `index` of an already-opened image document, by

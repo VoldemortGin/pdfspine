@@ -239,6 +239,42 @@ pub fn parse_xref_chain(
     Ok(table)
 }
 
+/// Counts the cross-reference **revisions** in `source` — the number of
+/// generations chained from the last `startxref` via `/Prev` (PyMuPDF
+/// `Document.version_count`).
+///
+/// A freshly authored / fully rewritten PDF has a single cross-reference section
+/// → `1`; each incremental update appends another section whose `/Prev` points
+/// at the prior one → `+1` per update. A hybrid-reference `/XRefStm` overlay is
+/// part of the *same* revision as its classic table, so it does **not** advance
+/// the count (only `/Prev` does), mirroring fitz's revision count.
+///
+/// Returns `1` (a single, current revision) when the chain cannot be read — a
+/// repaired / synthetic document has no walkable `/Prev` history.
+#[must_use]
+pub fn count_xref_sections(source: &Source, header_offset: usize, limits: &Limits) -> usize {
+    let Ok(start) = find_startxref(source) else {
+        return 1;
+    };
+    let mut visited = std::collections::HashSet::new();
+    let mut next = Some(absolute(start, header_offset));
+    let mut sections = 0usize;
+    while let Some(off) = next {
+        if !visited.insert(off) {
+            break; // `/Prev` cycle — stop cleanly.
+        }
+        sections += 1;
+        if sections >= MAX_XREF_SECTIONS {
+            break;
+        }
+        let Ok(section) = parse_section_at(source, off, header_offset, limits) else {
+            break;
+        };
+        next = section.prev().map(|p| absolute(p, header_offset));
+    }
+    sections.max(1)
+}
+
 /// Resolves a stored (header-relative, per spec convention) offset to an
 /// absolute file position. Saturating add keeps the result in range without
 /// overflow (PRD §9.6: checked/saturating arithmetic).

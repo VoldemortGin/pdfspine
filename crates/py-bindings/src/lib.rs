@@ -1682,6 +1682,28 @@ impl PyPage {
             .map_err(map_err)
     }
 
+    /// Points the page's `/Contents` at the stream object `xref` (PyMuPDF
+    /// `Page.set_contents`).
+    fn set_contents(&self, py: Python<'_>, xref: u32) -> PyResult<()> {
+        py.detach(|| pdf_api::page_set_contents(&self.page, xref))
+            .map_err(map_err)
+    }
+
+    /// The page's `/Lang` language identifier, read inheritably, or `None`
+    /// (PyMuPDF `Page.language`).
+    #[getter]
+    fn language(&self) -> Option<String> {
+        pdf_api::page_language(&self.page)
+    }
+
+    /// Sets the page's `/Lang` (PyMuPDF `Page.set_language`); an empty/invalid
+    /// tag removes it. The tag is normalized to MuPDF's compact ISO-639 form.
+    #[pyo3(signature = (language=None))]
+    fn set_language(&self, py: Python<'_>, language: Option<&str>) -> PyResult<()> {
+        py.detach(|| pdf_api::page_set_language(&self.page, language.unwrap_or("")))
+            .map_err(map_err)
+    }
+
     /// Deletes an image XObject by resource name or xref (PyMuPDF
     /// `Page.delete_image`); the placement is left intact.
     fn delete_image(&self, py: Python<'_>, name_or_xref: &str) -> PyResult<()> {
@@ -2343,6 +2365,41 @@ impl PyPage {
         ))
     }
 
+    /// Adds a `/Caret` annotation at `point` (PyMuPDF `Page.add_caret_annot`).
+    fn add_caret_annot(&self, point: (f64, f64)) -> PyResult<PyAnnot> {
+        wrap_annot(pdf_api::page_add_caret_annot(&self.page, point_of(point)))
+    }
+
+    /// Adds a `/Widget` (AcroForm field) annotation (PyMuPDF `Page.add_widget`).
+    /// The widget's fields are passed individually from the Python `Widget`.
+    #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (rect, field_name, field_type, field_value="", field_flags=0, choice_values=Vec::new(), text_color=(0.0,0.0,0.0), text_font="Helv", text_fontsize=0.0))]
+    fn add_widget(
+        &self,
+        rect: (f64, f64, f64, f64),
+        field_name: &str,
+        field_type: i32,
+        field_value: &str,
+        field_flags: i64,
+        choice_values: Vec<String>,
+        text_color: (f64, f64, f64),
+        text_font: &str,
+        text_fontsize: f64,
+    ) -> PyResult<PyAnnot> {
+        let spec = pdf_api::WidgetSpec {
+            rect: rect_of(rect),
+            field_name: field_name.to_string(),
+            field_type,
+            field_value: field_value.to_string(),
+            field_flags,
+            choice_values,
+            text_color,
+            text_font: text_font.to_string(),
+            text_fontsize,
+        };
+        wrap_annot(pdf_api::page_add_widget(&self.page, &spec))
+    }
+
     /// Adds a `/FileAttachment` annotation embedding `bytes` (PyMuPDF
     /// `Page.add_file_annot`).
     #[pyo3(signature = (point, bytes, filename, desc=None))]
@@ -2627,6 +2684,21 @@ impl PyDocument {
     /// (em-relative, i.e. `/Widths / 1000`).
     fn get_char_widths(&self, xref: u32) -> Vec<(i64, f64)> {
         self.doc.get_char_widths(xref)
+    }
+
+    /// Extracts the embedded font program + metadata for font object `xref`
+    /// (PyMuPDF `Document.extract_font`). Returns `(basefont, ext, type, buffer)`;
+    /// `buffer` is empty when `info_only`, when not embedded, or when `xref` is
+    /// not a font.
+    #[pyo3(signature = (xref=0, info_only=false))]
+    fn extract_font<'py>(
+        &self,
+        py: Python<'py>,
+        xref: u32,
+        info_only: bool,
+    ) -> (String, String, String, Bound<'py, PyBytes>) {
+        let (basefont, ext, ftype, buffer) = self.doc.extract_font(xref, info_only);
+        (basefont, ext, ftype, PyBytes::new(py, &buffer))
     }
 
     // --- undo/redo journal (PyMuPDF Document.journal_*) ------------------
@@ -3137,6 +3209,12 @@ impl PyDocument {
         self.doc.outline().map(|node| PyOutline { node })
     }
 
+    /// The outline-item object numbers in document order (PyMuPDF
+    /// `Document.get_outline_xrefs`). Empty when there is no outline.
+    fn get_outline_xrefs(&self) -> Vec<u32> {
+        self.doc.get_outline_xrefs()
+    }
+
     /// Builds the outline from a list of `[level, title, page]` (PyMuPDF
     /// `set_toc`). Raises on a level jump.
     fn set_toc(&self, toc: &Bound<'_, PyList>) -> PyResult<()> {
@@ -3158,6 +3236,37 @@ impl PyDocument {
     #[allow(non_snake_case)]
     fn setToC(&self, toc: &Bound<'_, PyList>) -> PyResult<()> {
         self.set_toc(toc)
+    }
+
+    /// Surgically updates the outline item at `xref` (PyMuPDF
+    /// `Document._update_toc_item`). `action` is the `/A` action body string;
+    /// `color` is an optional `(r, g, b)` in `[0, 1]`.
+    #[pyo3(signature = (xref, action=None, title=None, flags=0, collapse=None, color=None))]
+    fn update_toc_item(
+        &self,
+        xref: u32,
+        action: Option<&str>,
+        title: Option<&str>,
+        flags: i32,
+        collapse: Option<bool>,
+        color: Option<(f32, f32, f32)>,
+    ) -> PyResult<()> {
+        self.doc
+            .update_toc_item(
+                xref,
+                action,
+                title,
+                flags,
+                collapse,
+                color.map(|(r, g, b)| [r, g, b]),
+            )
+            .map_err(map_err)
+    }
+
+    /// "Removes" the outline item at `xref` by making it point nowhere (PyMuPDF
+    /// `Document._remove_toc_item`).
+    fn remove_toc_item(&self, xref: u32) -> PyResult<()> {
+        self.doc.remove_toc_item(xref).map_err(map_err)
     }
 
     // --- page ops + merge (PRD §8.7) -------------------------------------
@@ -3310,6 +3419,13 @@ impl PyDocument {
         self.doc.can_save_incrementally()
     }
 
+    /// The number of cross-reference revisions — the `startxref`/`/Prev` chain
+    /// length (PyMuPDF `Document.version_count`).
+    #[getter]
+    fn version_count(&self) -> usize {
+        self.doc.version_count()
+    }
+
     // --- forms (PRD §8.8) ------------------------------------------------
 
     /// Whether the document has an interactive form (PyMuPDF `is_form_pdf`).
@@ -3395,6 +3511,23 @@ impl PyDocument {
     /// The number of embedded files (PyMuPDF `Document.embfile_count`).
     fn embfile_count(&self) -> usize {
         self.doc.embfile_count()
+    }
+
+    /// Updates an existing embedded file `name` in place (PyMuPDF
+    /// `Document.embfile_upd`). Only the provided fields change.
+    #[pyo3(signature = (name, data=None, *, filename=None, ufilename=None, desc=None, mod_date=None))]
+    fn embfile_upd(
+        &self,
+        name: &str,
+        data: Option<Vec<u8>>,
+        filename: Option<&str>,
+        ufilename: Option<&str>,
+        desc: Option<&str>,
+        mod_date: Option<&str>,
+    ) -> PyResult<()> {
+        self.doc
+            .embfile_upd(name, data.as_deref(), filename, ufilename, desc, mod_date)
+            .map_err(map_err)
     }
 
     /// The metadata of embedded file `name` as a dict (PyMuPDF
@@ -3540,6 +3673,20 @@ fn open_bytes(py: Python<'_>, data: &[u8]) -> PyResult<PyDocument> {
         .detach(move || ApiDocument::open_bytes_with(owned, ParseMode::Lenient))
         .map_err(map_err)?;
     Ok(PyDocument { doc })
+}
+
+/// Converts an image input (PNG/JPEG/BMP/GIF/WEBP/TIFF bytes) to a single-/
+/// multi-page PDF and returns the PDF bytes (PyMuPDF `fitz.open(image)` /
+/// `Document.convert_to_pdf` for image inputs, PRD §8.10). The format is sniffed
+/// from `data`; a genuinely **non-image** input raises `PdfUnsupportedError`.
+/// The decode + encode runs with the GIL released (PRD §9.4).
+#[pyfunction]
+fn image_to_pdf<'py>(py: Python<'py>, data: &[u8]) -> PyResult<Bound<'py, PyBytes>> {
+    let owned = data.to_vec();
+    let pdf = py
+        .detach(move || pdf_api::image_to_pdf(&owned))
+        .map_err(map_err)?;
+    Ok(PyBytes::new(py, &pdf))
 }
 
 /// Returns the pdfspine version string.
@@ -3698,6 +3845,33 @@ impl PyPixmap {
     fn samples_mv<'py>(slf: Bound<'py, Self>, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let memoryview = py.import("builtins")?.getattr("memoryview")?;
         memoryview.call1((slf,))
+    }
+
+    /// The integer memory address of the first sample byte (PyMuPDF
+    /// `Pixmap.samples_ptr`). Matches `mupdf.fz_pixmap_samples_int`: the raw
+    /// `int` address of the backing buffer, suitable for `ctypes.from_address`.
+    #[getter]
+    fn samples_ptr(&self) -> usize {
+        self.pix.samples().as_ptr() as usize
+    }
+
+    /// The numpy array-interface descriptor (PyMuPDF `Pixmap.__array_interface__`).
+    /// Lets `numpy.array(pix, copy=False)` wrap the samples zero-copy as a
+    /// `(height, width, n)` `uint8` array via the raw `samples_ptr` address.
+    #[getter]
+    fn __array_interface__<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        let d = PyDict::new(py);
+        let shape = (
+            self.pix.height as usize,
+            self.pix.width as usize,
+            self.pix.n as usize,
+        );
+        d.set_item("shape", shape)?;
+        d.set_item("typestr", "|u1")?;
+        // (address, read-only) — numpy reads the bytes at this address.
+        d.set_item("data", (self.pix.samples().as_ptr() as usize, true))?;
+        d.set_item("version", 3)?;
+        Ok(d)
     }
 
     /// Reads pixel `(x, y)` as a tuple of `n` component ints (PyMuPDF
@@ -4591,9 +4765,59 @@ impl PyTools {
         value.unwrap_or(false)
     }
 
+    /// Basic header properties of a raster image (PyMuPDF `Tools.image_profile`):
+    /// a dict with `width`, `height`, `orientation`, `transform`, `xres`, `yres`,
+    /// `colorspace` (component count), `bpc`, `ext`, `cs-name`. `None` for
+    /// empty / unrecognized input. `keep_image` is accepted for signature parity
+    /// (pdfspine never returns the decoded image object).
+    #[pyo3(signature = (stream, keep_image=0))]
+    fn image_profile<'py>(
+        &self,
+        py: Python<'py>,
+        stream: &[u8],
+        keep_image: i64,
+    ) -> PyResult<Option<Bound<'py, PyDict>>> {
+        let _ = keep_image;
+        image_profile_dict(py, stream)
+    }
+
     fn __repr__(&self) -> &'static str {
         "Tools()"
     }
+}
+
+/// Builds the PyMuPDF `image_profile` dict from raster `stream` bytes, or `None`
+/// for empty / unrecognized input. Shared by `Tools.image_profile` and the
+/// module-level `image_profile`.
+fn image_profile_dict<'py>(py: Python<'py>, stream: &[u8]) -> PyResult<Option<Bound<'py, PyDict>>> {
+    let Some(prof) = pdf_api::image_profile(stream) else {
+        return Ok(None);
+    };
+    let d = PyDict::new(py);
+    d.set_item("width", prof.width)?;
+    d.set_item("height", prof.height)?;
+    d.set_item("orientation", prof.orientation)?;
+    d.set_item("transform", prof.matrix)?;
+    d.set_item("xres", prof.xres)?;
+    d.set_item("yres", prof.yres)?;
+    d.set_item("colorspace", prof.colorspace)?;
+    d.set_item("bpc", prof.bpc)?;
+    d.set_item("ext", prof.ext)?;
+    d.set_item("cs-name", prof.cs_name)?;
+    Ok(Some(d))
+}
+
+/// Basic header properties of a raster image (PyMuPDF module-level
+/// `image_profile`), delegating to `Tools.image_profile`.
+#[pyfunction]
+#[pyo3(signature = (stream, keep_image=0))]
+fn image_profile<'py>(
+    py: Python<'py>,
+    stream: &[u8],
+    keep_image: i64,
+) -> PyResult<Option<Bound<'py, PyDict>>> {
+    let _ = keep_image;
+    image_profile_dict(py, stream)
 }
 
 /// Builds a [`RenderArgs`] from the Python `get_pixmap` kwargs (matrix tuple,
@@ -4672,6 +4896,8 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(identity_matrix, m)?)?;
     m.add_function(wrap_pyfunction!(open, m)?)?;
     m.add_function(wrap_pyfunction!(open_bytes, m)?)?;
+    m.add_function(wrap_pyfunction!(image_to_pdf, m)?)?;
+    m.add_function(wrap_pyfunction!(image_profile, m)?)?;
 
     m.add_class::<PyDocument>()?;
     m.add_class::<PyPage>()?;

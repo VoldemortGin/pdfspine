@@ -339,6 +339,17 @@ def get_pdf_str(s: str) -> str:
     return "(" + r + ")"
 
 
+def image_profile(stream, keep_image: int = 0) -> dict | None:
+    """Basic header properties of a raster image (PyMuPDF ``image_profile``).
+
+    Returns a dict with ``width``, ``height``, ``orientation``, ``transform``,
+    ``xres``, ``yres``, ``colorspace`` (component count), ``bpc``, ``ext`` and
+    ``cs-name``, or ``None`` for empty / unrecognized input. ``keep_image`` is
+    accepted for signature parity (pdfspine never returns the decoded image).
+    """
+    return _core.image_profile(bytes(stream), keep_image)
+
+
 # ---------------------------------------------------------------------------
 # Text measurement
 # ---------------------------------------------------------------------------
@@ -593,6 +604,7 @@ __all__ = [
     "get_pdf_now",
     "get_pdf_str",
     "get_text_length",
+    "image_profile",
     "ConversionHeader",
     "ConversionTrailer",
     "set_messages",

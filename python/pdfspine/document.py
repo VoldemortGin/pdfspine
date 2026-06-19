@@ -36,9 +36,7 @@ from .geometry import FZ_MAX_INF_RECT, FZ_MIN_INF_RECT, Matrix, Point, Quad, Rec
 # the authoritative deferred set itself is the generated ``_compat_deferred``
 # module (derived from COMPAT.toml). Accessing any deferred symbol raises a
 # typed, catchable PdfUnsupportedError — never AttributeError (PRD §7 / §9.5).
-_DEFERRED_HINTS = {
-    "Document.convert_to_pdf": "image documents (M5)",
-}
+_DEFERRED_HINTS: dict[str, str] = {}
 
 
 def _deferred_members(group: str) -> frozenset[str]:
@@ -205,7 +203,7 @@ _ANNOT_TYPE_INT = {
     "FileAttachment": 17,
     "Sound": 18,
     "Movie": 19,
-    "Widget": 20,
+    "Widget": 21,
     "Redact": 25,
 }
 
@@ -226,6 +224,83 @@ def _rect_from_corners(t: tuple[float, ...]) -> Rect:
     xs = (t[0], t[2], t[4], t[6])
     ys = (t[1], t[3], t[5], t[7])
     return Rect(min(xs), min(ys), max(xs), max(ys))
+
+
+def _is_content_wrapped(content: bytes) -> bool:
+    """Whether a page content stream is already in a balanced graphics state.
+
+    Matches MuPDF's ``pdf_count_q_balance() == (0, 0)`` test used by PyMuPDF's
+    ``Page.is_wrapped``: the content is wrapped when it is empty, or when its
+    very first operator is ``q``, its very last is ``Q``, and that outermost
+    ``q … Q`` scope spans the *whole* stream (the running depth never returns to
+    zero before the final ``Q``) with overall-balanced ``q``/``Q`` operators.
+    ``q``/``Q`` bytes inside literal strings, hex strings and comments are
+    skipped so they aren't mistaken for operators.
+    """
+    i = 0
+    n = len(content)
+    depth = 0
+    seen_any = False  # any drawing/text content token at all
+    first_q = False  # the very first content token was a `q`
+    outside = False  # some content token sits outside the outermost q … Q scope
+    while i < n:
+        ch = content[i:i + 1]
+        if ch == b"%":  # comment to end of line
+            j = content.find(b"\n", i)
+            i = n if j < 0 else j + 1
+            continue
+        if ch == b"(":  # literal string (balanced parens, backslash escapes)
+            seen_any = True
+            if depth == 0:
+                outside = True
+            d = 1
+            i += 1
+            while i < n and d > 0:
+                c = content[i:i + 1]
+                if c == b"\\":
+                    i += 2
+                    continue
+                if c == b"(":
+                    d += 1
+                elif c == b")":
+                    d -= 1
+                i += 1
+            continue
+        if ch == b"<":  # hex string / dict — skip to its '>'
+            seen_any = True
+            if depth == 0:
+                outside = True
+            j = content.find(b">", i)
+            i = n if j < 0 else j + 1
+            continue
+        if ch in b" \t\r\n":
+            i += 1
+            continue
+        j = i
+        while j < n and content[j:j + 1] not in b" \t\r\n()<>[]{}/%":
+            j += 1
+        if j == i:  # a delimiter byte ([]{}/) etc.) — operand, not an operator
+            i += 1
+            continue
+        tok = content[i:j]
+        i = j
+        if not seen_any:
+            first_q = tok == b"q"
+        seen_any = True
+        if tok == b"q":
+            depth += 1
+            continue
+        if tok == b"Q":
+            depth -= 1
+            continue
+        # any other operator / number / name operand
+        if depth == 0:
+            outside = True
+    if not seen_any:  # genuinely empty content -> trivially balanced
+        return True
+    # Wrapped iff every content token lives inside a single, balanced q … Q whose
+    # `q` is the first token and which never re-opens at depth 0.
+    return first_q and depth == 0 and not outside
 
 
 class Annot:
@@ -567,20 +642,45 @@ class Widget:
     :meth:`update`. This wrapper buffers the pending value the same way.
     """
 
-    __slots__ = ("_widget", "_pending_value", "_has_pending", "next")
+    __slots__ = ("_widget", "_pending_value", "_has_pending", "next", "_new")
 
-    def __init__(self, core_widget: "_core.Widget") -> None:
+    def __init__(self, core_widget: "_core.Widget | None" = None) -> None:
         self._widget = core_widget
         self._pending_value = None
         self._has_pending = False
         #: The next widget on the page, or ``None`` (PyMuPDF ``widget.next``).
         #: Wired up by :meth:`Page.widgets` / :attr:`Page.first_widget`.
         self.next: "Widget | None" = None
+        # Authoring mode (``fitz.Widget()`` with no core widget): writable
+        # attributes buffered here until ``Page.add_widget`` materializes them.
+        self._new: dict | None = (
+            None
+            if core_widget is not None
+            else {
+                "rect": None,
+                "field_name": "",
+                "field_type": 0,
+                "field_value": "",
+                "field_flags": 0,
+                "choice_values": [],
+                "text_color": (0.0, 0.0, 0.0),
+                "text_font": "Helv",
+                "text_fontsize": 0.0,
+            }
+        )
 
     @property
     def rect(self) -> Rect:
         """The widget rectangle (PyMuPDF ``widget.rect``)."""
+        if self._new is not None:
+            return self._new["rect"]
         return _rect(self._widget.rect)
+
+    @rect.setter
+    def rect(self, value) -> None:
+        if self._new is None:
+            raise PdfUnsupportedError("widget.rect is read-only for an existing widget")
+        self._new["rect"] = value
 
     @property
     def xref(self) -> int:
@@ -590,7 +690,15 @@ class Widget:
     @property
     def field_type(self) -> int:
         """The PyMuPDF field-type int (PyMuPDF ``widget.field_type``)."""
+        if self._new is not None:
+            return self._new["field_type"]
         return self._widget.field_type
+
+    @field_type.setter
+    def field_type(self, value: int) -> None:
+        if self._new is None:
+            raise PdfUnsupportedError("widget.field_type is read-only for an existing widget")
+        self._new["field_type"] = int(value)
 
     @property
     def field_type_string(self) -> str:
@@ -600,7 +708,15 @@ class Widget:
     @property
     def field_name(self) -> str | None:
         """The fully-qualified field name (PyMuPDF ``widget.field_name``)."""
+        if self._new is not None:
+            return self._new["field_name"]
         return self._widget.field_name
+
+    @field_name.setter
+    def field_name(self, value: str) -> None:
+        if self._new is None:
+            raise PdfUnsupportedError("widget.field_name is read-only for an existing widget")
+        self._new["field_name"] = str(value)
 
     @property
     def field_label(self) -> str | None:
@@ -614,24 +730,45 @@ class Widget:
         Returns the pending (set-but-not-yet-updated) value if one was assigned,
         else the value read from the document.
         """
+        if self._new is not None:
+            return self._new["field_value"]
         if self._has_pending:
             return self._pending_value
         return self._widget.field_value
 
     @field_value.setter
     def field_value(self, value) -> None:
+        if self._new is not None:
+            self._new["field_value"] = value
+            return
         self._pending_value = value
         self._has_pending = True
 
     @property
     def field_flags(self) -> int:
         """The field flags bitfield (PyMuPDF ``widget.field_flags``)."""
+        if self._new is not None:
+            return self._new["field_flags"]
         return self._widget.field_flags
+
+    @field_flags.setter
+    def field_flags(self, value: int) -> None:
+        if self._new is None:
+            raise PdfUnsupportedError("widget.field_flags is read-only for an existing widget")
+        self._new["field_flags"] = int(value)
 
     @property
     def choice_values(self) -> list[str]:
         """The choice options for combo/list fields (PyMuPDF ``widget.choice_values``)."""
+        if self._new is not None:
+            return self._new["choice_values"]
         return self._widget.choice_values
+
+    @choice_values.setter
+    def choice_values(self, value) -> None:
+        if self._new is None:
+            raise PdfUnsupportedError("widget.choice_values is read-only for an existing widget")
+        self._new["choice_values"] = [str(v) for v in value]
 
     @property
     def button_states(self) -> list[str]:
@@ -666,17 +803,41 @@ class Widget:
     @property
     def text_color(self) -> list[float]:
         """The ``/DA`` text color components (PyMuPDF ``widget.text_color``)."""
+        if self._new is not None:
+            return list(self._new["text_color"])
         return self._widget.text_color
+
+    @text_color.setter
+    def text_color(self, value) -> None:
+        if self._new is None:
+            raise PdfUnsupportedError("widget.text_color is read-only for an existing widget")
+        self._new["text_color"] = tuple(float(c) for c in value)
 
     @property
     def text_font(self) -> str:
         """The ``/DA`` text font name (PyMuPDF ``widget.text_font``)."""
+        if self._new is not None:
+            return self._new["text_font"]
         return self._widget.text_font
+
+    @text_font.setter
+    def text_font(self, value: str) -> None:
+        if self._new is None:
+            raise PdfUnsupportedError("widget.text_font is read-only for an existing widget")
+        self._new["text_font"] = str(value)
 
     @property
     def text_fontsize(self) -> float:
         """The ``/DA`` text font size (PyMuPDF ``widget.text_fontsize``)."""
+        if self._new is not None:
+            return self._new["text_fontsize"]
         return self._widget.text_fontsize
+
+    @text_fontsize.setter
+    def text_fontsize(self, value: float) -> None:
+        if self._new is None:
+            raise PdfUnsupportedError("widget.text_fontsize is read-only for an existing widget")
+        self._new["text_fontsize"] = float(value)
 
     @property
     def text_maxlen(self) -> int:
@@ -1667,6 +1828,23 @@ class Page:
         ``page.read_contents``)."""
         return self._page.read_contents()
 
+    def set_contents(self, xref: int) -> None:
+        """Points the page's ``/Contents`` at the stream object ``xref`` (PyMuPDF
+        ``page.set_contents``). ``xref`` must be an existing stream object."""
+        self._page.set_contents(int(xref))
+
+    @property
+    def language(self) -> str | None:
+        """The page's ``/Lang`` (PyMuPDF ``page.language``), read inheritably, or
+        ``None`` when no ``/Lang`` is set."""
+        return self._page.language
+
+    def set_language(self, language: str | None = None) -> None:
+        """Sets the page's ``/Lang`` (PyMuPDF ``page.set_language``). The tag is
+        normalized to MuPDF's compact ISO-639 form; ``None`` / an empty / invalid
+        tag removes ``/Lang``."""
+        self._page.set_language(language)
+
     def clean_contents(self, *args, **kwargs) -> None:
         """Consolidates ``/Contents`` into a single stream (PyMuPDF
         ``page.clean_contents``)."""
@@ -1676,6 +1854,17 @@ class Page:
         """Wraps the page content in a balanced ``q … Q`` (PyMuPDF
         ``page.wrap_contents``)."""
         self._page.wrap_contents()
+
+    @property
+    def is_wrapped(self) -> bool:
+        """Whether ``/Contents`` is already in a balanced graphics state (PyMuPDF
+        ``page.is_wrapped``).
+
+        ``True`` once the content's ``q``/``Q`` operators are balanced — i.e. a
+        prior :meth:`wrap_contents` (or an empty page), so a later append starts
+        from the default graphics state.
+        """
+        return _is_content_wrapped(self.read_contents())
 
     def delete_image(self, name_or_xref, *_args, **_kwargs) -> None:
         """Deletes an image XObject by resource name or xref, replacing it with a
@@ -1848,6 +2037,25 @@ class Page:
         """Deletes a link annotation by its ``xref`` (PyMuPDF ``page.delete_link``)."""
         self._page.delete_link(int(link["xref"]))
 
+    def load_links(self) -> "Link | None":
+        """The first link on the page, or ``None`` (PyMuPDF ``page.load_links``).
+
+        PyMuPDF's ``load_links`` returns the first :class:`Link`; the remaining
+        links are reachable via its :attr:`Link.next` chain. Equivalent to
+        :attr:`first_link`.
+        """
+        return self.first_link
+
+    def update_link(self, link: dict) -> None:
+        """Updates an existing link annotation in place (PyMuPDF ``page.update_link``).
+
+        ``link`` is a ``get_links`` dict carrying the link's ``xref`` plus the new
+        ``kind``/``from``/``uri``/``page`` values. Implemented as a delete of the
+        old link by xref followed by re-insertion of the new spec.
+        """
+        self.delete_link(link)
+        self.insert_link(link)
+
     def get_label(self) -> str:
         """The page's label under ``/PageLabels`` (PyMuPDF ``page.get_label``)."""
         return self._page.get_label()
@@ -1997,6 +2205,56 @@ class Page:
             [_pt(p) for p in points], color=_color(color), width=float(width)
         )
 
+    def draw_curve(self, p1, p2, p3, *, color=(0, 0, 0), fill=None, width: float = 1.0,
+                   closePath: bool = False, **_ignored) -> Point:  # noqa: N803
+        """Draws a special Bézier curve from ``p1`` to ``p3`` with control points
+        derived from ``p2`` (PyMuPDF ``page.draw_curve``)."""
+        shape = self.new_shape()
+        q = shape.draw_curve3(p1, p2, p3)
+        shape.finish(color=color, fill=fill, width=float(width), closePath=closePath)
+        shape.commit()
+        return q
+
+    def draw_quad(self, quad, *, color=(0, 0, 0), fill=None, width: float = 1.0, **_ignored) -> Point:
+        """Draws a quadrilateral (PyMuPDF ``page.draw_quad``)."""
+        ul_x, ul_y, ur_x, ur_y, ll_x, ll_y, lr_x, lr_y = _quad(quad)
+        q_obj = Quad((ul_x, ul_y), (ur_x, ur_y), (ll_x, ll_y), (lr_x, lr_y))
+        shape = self.new_shape()
+        q = shape.draw_quad(q_obj)
+        shape.finish(color=color, fill=fill, width=float(width))
+        shape.commit()
+        return q
+
+    def draw_sector(self, center, point, beta, *, color=(0, 0, 0), fill=None,
+                    fullSector: bool = True, width: float = 1.0,  # noqa: N803
+                    closePath: bool = False, **_ignored) -> Point:  # noqa: N803
+        """Draws a circle sector / pie wedge from ``point`` sweeping ``beta``
+        degrees around ``center`` (PyMuPDF ``page.draw_sector``)."""
+        shape = self.new_shape()
+        q = shape.draw_sector(_pt(center), _pt(point), beta, fullSector=fullSector)
+        shape.finish(color=color, fill=fill, width=float(width), closePath=closePath)
+        shape.commit()
+        return q
+
+    def draw_squiggle(self, p1, p2, breadth: float = 2, *, color=(0, 0, 0),
+                      width: float = 1.0, **_ignored) -> Point:
+        """Draws a wavy / squiggly line from ``p1`` to ``p2`` (PyMuPDF
+        ``page.draw_squiggle``)."""
+        shape = self.new_shape()
+        q = shape.draw_squiggle(_pt(p1), _pt(p2), breadth=float(breadth))
+        shape.finish(color=color, width=float(width))
+        shape.commit()
+        return q
+
+    def draw_zigzag(self, p1, p2, breadth: float = 2, *, color=(0, 0, 0),
+                    width: float = 1.0, **_ignored) -> Point:
+        """Draws a zig-zag line from ``p1`` to ``p2`` (PyMuPDF ``page.draw_zigzag``)."""
+        shape = self.new_shape()
+        q = shape.draw_zigzag(_pt(p1), _pt(p2), breadth=float(breadth))
+        shape.finish(color=color, width=float(width))
+        shape.commit()
+        return q
+
     def new_shape(self) -> Shape:
         """Builds a reusable :class:`Shape` for this page (PyMuPDF ``page.new_shape``)."""
         return Shape(self._page.new_shape(), page=self, doc=self._parent)
@@ -2092,6 +2350,39 @@ class Page:
         """Adds a rubber-stamp annotation (PyMuPDF ``page.add_stamp_annot``)."""
         return Annot(self._page.add_stamp_annot(_rt(rect), stamp=stamp), parent=self)
 
+    def add_caret_annot(self, point) -> Annot:
+        """Adds a ``/Caret`` (text-insertion marker) at ``point`` (PyMuPDF
+        ``page.add_caret_annot``)."""
+        return Annot(self._page.add_caret_annot(_pt(point)), parent=self)
+
+    def add_widget(self, widget: Widget) -> Annot:
+        """Adds a form field ``/Widget`` described by ``widget`` (PyMuPDF
+        ``page.add_widget``).
+
+        ``widget`` is a :class:`Widget` built from scratch (``Widget()`` then
+        attribute assignment). The field is created on this page and registered
+        in the catalog ``/AcroForm``; the resulting annotation is returned."""
+        rect = widget.rect
+        if rect is None:
+            raise ValueError("widget.rect must be set before add_widget")
+        value = widget.field_value
+        if value is True:
+            value = "Yes"
+        elif value in (False, None):
+            value = ""
+        core = self._page.add_widget(
+            _rt(rect),
+            str(widget.field_name or ""),
+            int(widget.field_type),
+            field_value=str(value),
+            field_flags=int(widget.field_flags or 0),
+            choice_values=[str(v) for v in (widget.choice_values or [])],
+            text_color=tuple(widget.text_color) if widget.text_color else (0.0, 0.0, 0.0),
+            text_font=str(widget.text_font or "Helv"),
+            text_fontsize=float(widget.text_fontsize or 0.0),
+        )
+        return Annot(core, parent=self)
+
     def add_file_annot(self, point, buffer, filename: str, *, ufilename=None, desc=None, icon=None, **_ignored) -> Annot:
         """Adds a file-attachment annotation (PyMuPDF ``page.add_file_annot``)."""
         return Annot(self._page.add_file_annot(_pt(point), bytes(buffer), filename, desc=desc), parent=self)
@@ -2139,6 +2430,25 @@ class Page:
         xref = annot.xref if isinstance(annot, Annot) else int(annot)
         self._page.delete_annot(xref)
 
+    def load_annot(self, ident) -> Annot:
+        """Loads an annotation by name (``/NM``) or xref (PyMuPDF ``page.load_annot``).
+
+        ``ident`` is the annotation name (:class:`str`) or its ``xref``
+        (:class:`int`). Raises if ``ident`` is neither, or no matching annotation
+        exists on this page.
+        """
+        if isinstance(ident, str):
+            for annot in self.annots():
+                if annot.info["name"] == ident:
+                    return annot
+            raise ValueError(f"annot name {ident!r} is not an annot of this page")
+        if isinstance(ident, int) and not isinstance(ident, bool):
+            for annot in self.annots():
+                if annot.xref == ident:
+                    return annot
+            raise ValueError(f"xref {ident} is not an annot of this page")
+        raise ValueError("identifier must be a string or integer")
+
     def apply_redactions(self, *args, **kwargs) -> int:
         """Applies pending redaction annotations (PyMuPDF ``page.apply_redactions``).
 
@@ -2163,6 +2473,63 @@ class Page:
         Like :meth:`get_drawings` but leaves geometry as plain tuples (faster).
         """
         return self._page.get_cdrawings()
+
+    def cluster_drawings(
+        self, clip=None, drawings=None, x_tolerance: float = 3, y_tolerance: float = 3
+    ) -> list[Rect]:
+        """Joins the rectangles of neighboring vector-graphic items (PyMuPDF
+        ``page.cluster_drawings``).
+
+        Identifies clusters of line-art items (lines, curves, rectangles) that sit
+        close enough — within ``x_tolerance``/``y_tolerance`` — to form a common
+        drawing (table grids, charts, …), returning one wrapping :class:`Rect` per
+        cluster. ``clip`` restricts the considered area; ``drawings`` reuses a
+        prior :meth:`get_drawings` result. Only clusters wider and taller than the
+        tolerances are returned.
+        """
+        parea = self.rect if clip is None else Rect(clip)
+        delta_x = x_tolerance
+        delta_y = y_tolerance
+        if drawings is None:
+            drawings = self.get_drawings()
+
+        def are_neighbors(r1: Rect, r2: Rect) -> bool:
+            rr1_x0, rr1_x1 = (r1.x0, r1.x1) if r1.x1 > r1.x0 else (r1.x1, r1.x0)
+            rr1_y0, rr1_y1 = (r1.y0, r1.y1) if r1.y1 > r1.y0 else (r1.y1, r1.y0)
+            rr2_x0, rr2_x1 = (r2.x0, r2.x1) if r2.x1 > r2.x0 else (r2.x1, r2.x0)
+            rr2_y0, rr2_y1 = (r2.y0, r2.y1) if r2.y1 > r2.y0 else (r2.y1, r2.y0)
+            return not (
+                rr1_x1 < rr2_x0 - delta_x
+                or rr1_x0 > rr2_x1 + delta_x
+                or rr1_y1 < rr2_y0 - delta_y
+                or rr1_y0 > rr2_y1 + delta_y
+            )
+
+        paths = [
+            p for p in drawings
+            if p["rect"].x0 >= parea.x0 and p["rect"].x1 <= parea.x1
+            and p["rect"].y0 >= parea.y0 and p["rect"].y1 <= parea.y1
+        ]
+        prects = sorted((p["rect"] for p in paths), key=lambda r: (r.y1, r.x0))
+
+        new_rects: list[Rect] = []
+        while prects:
+            r = Rect(prects[0])
+            repeat = True
+            while repeat:
+                repeat = False
+                for i in range(len(prects) - 1, 0, -1):
+                    if are_neighbors(prects[i], r):
+                        r |= prects[i].tl
+                        r |= prects[i].br
+                        del prects[i]
+                        repeat = True
+            new_rects.append(r)
+            del prects[0]
+            prects = sorted(set(prects), key=lambda r: (r.y1, r.x0))
+
+        new_rects = sorted(set(new_rects), key=lambda r: (r.y1, r.x0))
+        return [r for r in new_rects if r.width > delta_x and r.height > delta_y]
 
     @staticmethod
     def _wrap_drawing(d: dict) -> dict:
@@ -2192,6 +2559,24 @@ class Page:
         for a, b in zip(ws, ws[1:]):
             a.next = b
         return ws
+
+    def load_widget(self, xref: int) -> Widget:
+        """Loads a form-field widget by its ``xref`` (PyMuPDF ``page.load_widget``)."""
+        for widget in self.widgets():
+            if widget.xref == int(xref):
+                return widget
+        raise ValueError(f"xref {int(xref)} is not a widget of this page")
+
+    def delete_widget(self, widget: Widget) -> "Widget | None":
+        """Deletes a form-field widget and returns the next one (PyMuPDF
+        ``page.delete_widget``).
+
+        Like PyMuPDF, the next widget on the page (the deleted widget's
+        :attr:`Widget.next`) is returned, or ``None`` if it was the last.
+        """
+        nextwidget = widget.next
+        self.delete_annot(widget.xref)
+        return nextwidget
 
     @property
     def first_widget(self) -> Widget | None:
@@ -2833,6 +3218,13 @@ class Document:
         return self._doc.is_repaired
 
     @property
+    def version_count(self) -> int:
+        """The number of cross-reference revisions — the ``startxref``/``/Prev``
+        chain length (PyMuPDF ``doc.version_count``). ``1`` for a freshly authored
+        or fully rewritten PDF; ``+1`` per appended incremental update."""
+        return self._doc.version_count
+
+    @property
     def is_encrypted(self) -> bool:
         return self._doc.is_encrypted
 
@@ -3085,6 +3477,16 @@ class Document:
         modifies the document and never raises."""
         return self._doc.subset_fonts(*args, **kwargs)
 
+    def subset(self, *args, **kwargs) -> None:
+        """Subsets the document's embedded fonts (PyMuPDF font-subset path).
+
+        Mirrors PyMuPDF's MuPDF-backed subsetting entry point: it scans the
+        embedded fonts and returns ``None`` (the MuPDF ``pdf_subset_fonts2``
+        return convention). Glyph-level rewriting is deferred, so the document
+        is never corrupted; this never raises."""
+        self._doc.subset_fonts(*args, **kwargs)
+        return None
+
     # --- extract_image (PRD §8.10) ---
     def extract_image(self, xref: int) -> dict:
         """The image XObject ``xref`` as a PyMuPDF-shaped dict (PyMuPDF
@@ -3170,6 +3572,19 @@ class Document:
         )
 
     write = tobytes
+
+    def convert_to_pdf(self, from_page: int = 0, to_page: int = -1, rotate: int = 0) -> bytes:
+        """Converts the document to PDF and returns the bytes (PyMuPDF
+        ``doc.convert_to_pdf``).
+
+        pdfspine documents are already PDF-backed — an image opened via
+        :func:`open` is converted to a single-page PDF at open time — so this
+        serializes the live document to PDF bytes that reparse cleanly via
+        :func:`open`. The ``from_page`` / ``to_page`` / ``rotate`` arguments are
+        accepted for PyMuPDF compatibility.
+        """
+        _ = (from_page, to_page, rotate)
+        return self.tobytes()
 
     def pdfocr_tobytes(
         self,
@@ -3267,6 +3682,11 @@ class Document:
         """The outline as ``[[level, title, page], …]`` (PyMuPDF ``doc.get_toc``)."""
         return [list(row) for row in self._doc.get_toc(simple)]
 
+    def get_outline_xrefs(self) -> list[int]:
+        """The outline-item object numbers in document order (PyMuPDF
+        ``doc.get_outline_xrefs``). Empty when there is no outline."""
+        return self._doc.get_outline_xrefs()
+
     def getToC(self, simple: bool = True) -> list[list]:  # noqa: N802
         return self.get_toc(simple)
 
@@ -3277,6 +3697,118 @@ class Document:
 
     def setToC(self, toc: list) -> None:  # noqa: N802
         self.set_toc(toc)
+
+    def set_toc_item(
+        self,
+        idx: int,
+        dest_dict: dict | None = None,
+        kind: int | None = None,
+        pno: int | None = None,
+        uri: str | None = None,
+        title: str | None = None,
+        to=None,
+        filename: str | None = None,
+        zoom: float = 0,
+    ) -> None:
+        """Updates the outline item at index ``idx`` (PyMuPDF ``doc.set_toc_item``).
+
+        Mirrors PyMuPDF: changes the item's title and/or link destination in
+        place (no full ``/Outlines`` rebuild). ``kind`` selects the link kind
+        (``LINK_GOTO`` 1, ``LINK_URI`` 2); ``kind=LINK_NONE`` (0) deletes the
+        item via :meth:`del_toc_item`. With ``kind=None`` only the title is
+        updated (a no-op when ``title`` is also ``None``). A ``dest_dict``
+        (as produced by ``get_toc(False)``) outranks the other parameters."""
+        xref = self._doc.get_outline_xrefs()[idx]
+        page_xref = 0
+        if isinstance(dest_dict, dict):
+            if dest_dict["kind"] == 1:  # LINK_GOTO
+                pno = dest_dict["page"]
+                page_xref = self.page_xref(pno)
+                page_height = self.page_cropbox(pno).height
+                to = dest_dict.get("to", Point(72, 36))
+                to = Point(to)
+                to.y = page_height - to.y
+                dest_dict["to"] = to
+            action = self._dest_action(page_xref, dest_dict)
+            if not action.startswith("/A"):
+                raise ValueError("bad bookmark dest")
+            color = dest_dict.get("color")
+            if color:
+                color = tuple(float(c) for c in color)
+                if len(color) != 3 or min(color) < 0 or max(color) > 1:
+                    raise ValueError("bad color value")
+            flags = int(bool(dest_dict.get("italic", False))) + 2 * int(
+                bool(dest_dict.get("bold", False))
+            )
+            self._doc.update_toc_item(
+                int(xref),
+                action=action[2:],
+                title=title,
+                flags=flags,
+                collapse=dest_dict.get("collapse"),
+                color=color,
+            )
+            return None
+
+        if kind == 0:  # LINK_NONE → delete
+            return self.del_toc_item(idx)
+        if kind is None and title is None:  # no-op
+            return None
+        if kind is None:  # title-only update
+            self._doc.update_toc_item(int(xref), action=None, title=title)
+            return None
+
+        if kind == 1:  # LINK_GOTO
+            if pno is None or pno not in range(1, self.page_count + 1):
+                raise ValueError("bad page number")
+            page_xref = self.page_xref(pno - 1)
+            page_height = self.page_cropbox(pno - 1).height
+            if to is None:
+                to = Point(72, page_height - 36)
+            else:
+                to = Point(to)
+                to.y = page_height - to.y
+
+        ddict = {
+            "kind": kind,
+            "to": to,
+            "uri": uri,
+            "page": pno,
+            "file": filename,
+            "zoom": zoom,
+        }
+        action = self._dest_action(page_xref, ddict)
+        if action == "" or not action.startswith("/A"):
+            raise ValueError("bad bookmark dest")
+        self._doc.update_toc_item(int(xref), action=action[2:], title=title)
+        return None
+
+    def setTocItem(self, idx: int, **kw) -> None:  # noqa: N802
+        return self.set_toc_item(idx, **kw)
+
+    def del_toc_item(self, idx: int) -> None:
+        """Deletes (neutralizes) the outline item at index ``idx`` (PyMuPDF
+        ``doc.del_toc_item``). The item is kept in the tree but its destination
+        is removed and it is dimmed grey, exactly like PyMuPDF."""
+        xref = self._doc.get_outline_xrefs()[idx]
+        self._doc.remove_toc_item(int(xref))
+
+    @staticmethod
+    def _dest_action(page_xref: int, ddict: dict) -> str:
+        """The PDF ``/A`` action body for a bookmark destination (PyMuPDF
+        ``getDestStr``). Supports ``LINK_GOTO`` / ``LINK_URI``; other kinds
+        yield ``""``."""
+        kind = ddict.get("kind", 0)
+        if kind == 0:  # LINK_NONE
+            return ""
+        if kind == 1:  # LINK_GOTO
+            to = ddict.get("to") or Point(0, 0)
+            left, top = to[0], to[1]
+            zoom = ddict.get("zoom", 0) or 0
+            return f"/A<</S/GoTo/D[{page_xref} 0 R/XYZ {left:g} {top:g} {zoom:g}]>>"
+        if kind == 2:  # LINK_URI
+            return f"/A<</S/URI/URI({ddict['uri']})>>"
+        return ""
 
     # --- page ops + merge (PRD §8.7) ---
     def insert_pdf(
@@ -3480,6 +4012,29 @@ class Document:
         (``/Widths`` value divided by 1000)."""
         return self._doc.get_char_widths(int(xref))
 
+    def extract_font(
+        self, xref: int = 0, info_only: int = 0, named: object = None
+    ) -> tuple[str, str, str, bytes] | dict:
+        """Extracts the embedded font program + metadata for font object ``xref``
+        (PyMuPDF ``doc.extract_font``).
+
+        Returns ``(basefont, ext, type, buffer)`` — the ``/BaseFont`` name, the
+        font-program format tag (``ttf`` / ``cff`` / ``cid`` / ``otf`` / ``pfa``
+        / ``n/a``), the font ``/Subtype``, and the decoded font program bytes.
+        ``buffer`` is empty when ``info_only`` is set, when the font is not
+        embedded, or when ``xref`` is not a font (which yields
+        ``("", "", "", b"")``). With ``named`` truthy, returns a dict
+        ``{"name", "ext", "type", "content"}`` instead."""
+        basefont, ext, ftype, buffer = self._doc.extract_font(int(xref), bool(info_only))
+        if named:
+            return {"name": basefont, "ext": ext, "type": ftype, "content": buffer}
+        return (basefont, ext, ftype, buffer)
+
+    def extractFont(  # noqa: N802
+        self, xref: int = 0, info_only: int = 0, named: object = None
+    ) -> tuple[str, str, str, bytes] | dict:
+        return self.extract_font(xref, info_only, named)
+
     def page_cropbox(self, pno: int) -> Rect:
         """The ``/CropBox`` of page ``pno`` as a :class:`Rect` (PyMuPDF ``doc.page_cropbox``)."""
         if pno < 0:
@@ -3585,6 +4140,41 @@ class Document:
     def embfile_info(self, name: str) -> dict:
         """The metadata of the embedded file ``name`` (PyMuPDF ``doc.embfile_info``)."""
         return self._doc.embfile_info(name)
+
+    def embfile_upd(
+        self,
+        item,
+        buffer=None,
+        filename: str | None = None,
+        ufilename: str | None = None,
+        desc: str | None = None,
+        **_ignored,
+    ) -> None:
+        """Updates an item of the embedded-files array (PyMuPDF ``doc.embfile_upd``).
+
+        ``item`` is the name or the zero-based index. Only the supplied
+        parameters change; the rest are left as-is. The item's
+        ``/Params/ModDate`` is stamped with the current time, matching fitz.
+        """
+        from .helpers import get_pdf_now
+
+        names = self._doc.embfile_names()
+        if isinstance(item, int):
+            if not 0 <= item < len(names):
+                raise ValueError(f"{item!r} not in EmbeddedFiles array.")
+            name = names[item]
+        else:
+            name = str(item)
+            if name not in names:
+                raise ValueError(f"{name!r} not in EmbeddedFiles array.")
+        self._doc.embfile_upd(
+            name,
+            None if buffer is None else bytes(buffer),
+            filename=filename,
+            ufilename=ufilename,
+            desc=desc,
+            mod_date=get_pdf_now(),
+        )
 
     # --- sanitize / bake (PRD §8.8) ---
     def scrub(
@@ -3771,6 +4361,21 @@ _BLANK_PDF = (
 )
 
 
+# File extensions PyMuPDF treats as raster image inputs (``fitz.open`` opens
+# these by converting each frame to a one-page PDF; PRD §8.10).
+_IMAGE_SUFFIXES = frozenset(
+    {".png", ".jpg", ".jpeg", ".jpe", ".jfif", ".bmp", ".gif", ".webp", ".tif", ".tiff"}
+)
+
+
+def _open_image_bytes(data: bytes, name: str | None) -> Document:
+    """Converts raster ``data`` to a single-/multi-page PDF :class:`Document`.
+
+    Raises :class:`~pdfspine._core.PdfUnsupportedError` for genuinely non-image
+    input (matching PyMuPDF ``fitz.open`` on an unknown stream)."""
+    return Document(_core.open_bytes(_core.image_to_pdf(bytes(data))), name=name)
+
+
 def open(
     filename: str | os.PathLike[str] | None = None,
     *,
@@ -3780,12 +4385,27 @@ def open(
     """Opens a document (PyMuPDF ``fitz.open``).
 
     Pass a path positionally, or in-memory bytes via ``stream=``. Called with no
-    arguments, returns a new, empty PDF (PyMuPDF ``fitz.open()``). The heavy parse
-    runs with the GIL released in the Rust core (PRD §9.4).
+    arguments, returns a new, empty PDF (PyMuPDF ``fitz.open()``). A raster image
+    input (PNG/JPEG/BMP/GIF/WEBP/TIFF — by ``filetype``, path suffix, or content
+    sniff) is transparently converted to a single-/multi-page PDF, matching
+    PyMuPDF (PRD §8.10). The heavy parse runs with the GIL released in the Rust
+    core (PRD §9.4).
     """
+    ft = filetype.lower().lstrip(".") if filetype else None
+    image_hint = ft is not None and f".{ft}" in _IMAGE_SUFFIXES
     if stream is not None:
-        return Document(_core.open_bytes(bytes(stream)))
+        data = bytes(stream)
+        if image_hint or not data.startswith(b"%PDF"):
+            try:
+                return _open_image_bytes(data, None)
+            except PdfError:
+                if image_hint:
+                    raise
+        return Document(_core.open_bytes(data))
     if filename is None:
         return Document(_core.open_bytes(_BLANK_PDF))
     path = os.fspath(filename)
+    if image_hint or os.path.splitext(path)[1].lower() in _IMAGE_SUFFIXES:
+        with builtins.open(path, "rb") as fh:
+            return _open_image_bytes(fh.read(), path)
     return Document(_core.open(path), name=path)

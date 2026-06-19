@@ -18,7 +18,7 @@ pub mod text;
 use std::path::Path;
 use std::sync::{Arc, RwLock};
 
-use pdf_core::object::{Name, Object};
+use pdf_core::object::{Dict, Name, Object};
 use pdf_core::pagetree;
 use pdf_core::source::MmapMode;
 use pdf_core::{DocumentStore, Limits, ObjRef};
@@ -35,7 +35,7 @@ pub use pdf_edit::{Link, LinkKind, OutlineNode, TocEntry};
 // (PRD §9.1). `Color` is constructed via [`Color::new`] at the tuple-color
 // boundary; the rest are returned/consumed by the M4 surface below.
 pub use pdf_edit::{
-    Align, AnnotType, Color, DrawItem, Drawing, EmbfileInfo, FieldType, ScrubOptions,
+    Align, AnnotType, Color, DrawItem, Drawing, EmbfileInfo, FieldType, ScrubOptions, WidgetSpec,
 };
 
 /// Encryption-authoring types for `save(encryption=…)` (PRD §8.4). Available only
@@ -55,10 +55,10 @@ pub use text::{
 // Image path (M5): `Pixmap`, `get_pixmap`, `extract_image`, image documents
 // (PRD §3.3 / §8.10). The bindings depend only on `pdf-api`.
 pub use image::{
-    document_extract_image, image_document_page_pixmap, image_to_pdf, open_image_document,
-    page_get_displaylist, page_get_pixmap, page_is_image_only, page_render, pixmap_blank,
-    pixmap_set_pixel, pixmap_tobytes, Colorspace, DisplayList, ExtractedImage, ImageDocument,
-    ImageFormat, Pixmap, RenderArgs,
+    document_extract_image, image_document_page_pixmap, image_profile, image_to_pdf,
+    open_image_document, page_get_displaylist, page_get_pixmap, page_is_image_only, page_render,
+    pixmap_blank, pixmap_set_pixel, pixmap_tobytes, Colorspace, DisplayList, ExtractedImage,
+    ImageDocument, ImageFormat, ImageProfile, Pixmap, RenderArgs,
 };
 
 // `pdf-text` types the bindings need so they only depend on `pdf-api` (PRD §9.1).
@@ -248,6 +248,14 @@ impl Document {
     pub fn version(&self) -> (u8, u8) {
         let v = self.store.version();
         (v.major, v.minor)
+    }
+
+    /// The number of cross-reference revisions — the `startxref`/`/Prev` chain
+    /// length (PyMuPDF `Document.version_count`). `1` for a freshly authored /
+    /// fully rewritten PDF; `+1` per appended incremental update.
+    #[must_use]
+    pub fn version_count(&self) -> usize {
+        self.store.version_count()
     }
 
     // --- encryption (PRD §8.4) -------------------------------------------
@@ -447,6 +455,142 @@ impl Document {
         false
     }
 
+    /// Extracts the embedded font program and metadata for font object `xref`
+    /// (PyMuPDF `Document.extract_font`).
+    ///
+    /// Returns `(basefont, ext, type, buffer)`:
+    /// * `basefont` — the `/BaseFont` name (subset tag retained);
+    /// * `ext` — the font-program format: `ttf` (`/FontFile2`), `cff` / `cid` /
+    ///   `otf` (`/FontFile3`, by its stream `/Subtype`: `Type1C` → `cff`,
+    ///   `CIDFontType0C` → `cid`, `OpenType` → `otf`), `pfa` (`/FontFile`,
+    ///   Type1), else `n/a`;
+    /// * `type` — the **top-level** font `/Subtype` (e.g. `Type1`, `TrueType`,
+    ///   `Type0`);
+    /// * `buffer` — the decoded font program bytes, or empty when `info_only`,
+    ///   when the font is not embedded, or when `xref` is not a font.
+    ///
+    /// A non-font / missing `xref` yields `("", "", "", [])`, matching fitz.
+    #[must_use]
+    pub fn extract_font(&self, xref: u32, info_only: bool) -> (String, String, String, Vec<u8>) {
+        let empty = || (String::new(), String::new(), String::new(), Vec::new());
+        let Ok(obj) = self.store.get_object(xref, 0) else {
+            return empty();
+        };
+        let Some(dict) = obj.as_dict() else {
+            return empty();
+        };
+        // Must be a font object.
+        if dict
+            .get(&Name::new("Type"))
+            .and_then(Object::as_name)
+            .map(Name::as_bytes)
+            != Some(b"Font")
+        {
+            return empty();
+        }
+        let basefont = dict
+            .get(&Name::new("BaseFont"))
+            .and_then(Object::as_name)
+            .map(|n| String::from_utf8_lossy(n.as_bytes()).into_owned())
+            .unwrap_or_default();
+        let ftype = dict
+            .get(&Name::new("Subtype"))
+            .and_then(Object::as_name)
+            .map(|n| String::from_utf8_lossy(n.as_bytes()).into_owned())
+            .unwrap_or_default();
+
+        // The descriptor carrying the `/FontFile*` program lives on this dict,
+        // or — for a Type0 composite — on its descendant CIDFont.
+        let descriptor = self.font_descriptor(dict);
+        let Some(descriptor) = descriptor else {
+            // Known font, no embedded program: fitz still returns name + type.
+            return (basefont, "n/a".to_string(), ftype, Vec::new());
+        };
+
+        let (ext, program_ref) = self.font_program(&descriptor);
+        let buffer = if info_only {
+            Vec::new()
+        } else {
+            program_ref
+                .and_then(|r| self.store.xref_stream(r.num).ok())
+                .unwrap_or_default()
+        };
+        (basefont, ext, ftype, buffer)
+    }
+
+    /// The `/FontDescriptor` dict for a font: the one on `dict`, or (for a Type0
+    /// composite) the one on its descendant CIDFont. `None` when not embedded.
+    fn font_descriptor(&self, dict: &Dict) -> Option<Dict> {
+        if let Ok(Some(desc)) = self
+            .store
+            .resolve_dict_key(dict, &Name::new("FontDescriptor"))
+        {
+            if let Some(d) = desc.as_dict() {
+                return Some(d.clone());
+            }
+        }
+        let descendants = self
+            .store
+            .resolve_dict_key(dict, &Name::new("DescendantFonts"))
+            .ok()
+            .flatten()?;
+        let arr = descendants.as_array()?;
+        for item in arr {
+            let cid = match item {
+                Object::Reference(r) => self.store.resolve(*r).ok()?,
+                other => Arc::new(other.clone()),
+            };
+            if let Some(cd) = cid.as_dict() {
+                if let Ok(Some(desc)) = self
+                    .store
+                    .resolve_dict_key(cd, &Name::new("FontDescriptor"))
+                {
+                    if let Some(d) = desc.as_dict() {
+                        return Some(d.clone());
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    /// The `(ext, program_ref)` for a font descriptor's embedded program. `ext`
+    /// is fitz's format tag; `program_ref` is the `/FontFile*` stream reference,
+    /// or `None` when there is no embedded program (`ext == "n/a"`).
+    fn font_program(&self, descriptor: &Dict) -> (String, Option<ObjRef>) {
+        if let Some(r) = descriptor
+            .get(&Name::new("FontFile2"))
+            .and_then(Object::as_reference)
+        {
+            return ("ttf".to_string(), Some(r));
+        }
+        if let Some(r) = descriptor
+            .get(&Name::new("FontFile3"))
+            .and_then(Object::as_reference)
+        {
+            let sub = self.store.resolve(r).ok().and_then(|o| {
+                o.as_dict().and_then(|d| {
+                    d.get(&Name::new("Subtype"))
+                        .and_then(Object::as_name)
+                        .map(|n| n.as_bytes().to_vec())
+                })
+            });
+            let ext = match sub.as_deref() {
+                Some(b"OpenType") => "otf",
+                Some(b"CIDFontType0C") => "cid",
+                _ => "cff",
+            };
+            return (ext.to_string(), Some(r));
+        }
+        if let Some(r) = descriptor
+            .get(&Name::new("FontFile"))
+            .and_then(Object::as_reference)
+        {
+            return ("pfa".to_string(), Some(r));
+        }
+        ("n/a".to_string(), None)
+    }
+
     // --- TOC (PRD §8.9) ---------------------------------------------------
 
     /// The document outline as `(level, title, page)` rows (PyMuPDF `get_toc`).
@@ -465,6 +609,13 @@ impl Document {
         pdf_edit::get_outline(&self.store)
     }
 
+    /// The outline-item object numbers in document order (PyMuPDF
+    /// `Document.get_outline_xrefs`). Empty when there is no `/Outlines`.
+    #[must_use]
+    pub fn get_outline_xrefs(&self) -> Vec<u32> {
+        pdf_edit::get_outline_xrefs(&self.store)
+    }
+
     /// Builds the `/Outlines` tree from a flat level list (PyMuPDF `set_toc`).
     ///
     /// # Errors
@@ -480,6 +631,37 @@ impl Document {
             })
             .collect();
         pdf_edit::set_toc(&self.store, &toc)?;
+        Ok(())
+    }
+
+    /// Surgically updates the outline item at `xref` (PyMuPDF
+    /// `Document._update_toc_item` — the primitive behind `set_toc_item`).
+    ///
+    /// # Errors
+    ///
+    /// [`Error`] when `xref` is not an outline item, `action` does not parse, or
+    /// an object edit fails.
+    pub fn update_toc_item(
+        &self,
+        xref: u32,
+        action: Option<&str>,
+        title: Option<&str>,
+        flags: i32,
+        collapse: Option<bool>,
+        color: Option<[f32; 3]>,
+    ) -> Result<()> {
+        pdf_edit::update_toc_item(&self.store, xref, action, title, flags, collapse, color)?;
+        Ok(())
+    }
+
+    /// "Removes" the outline item at `xref` by making it point nowhere (PyMuPDF
+    /// `Document._remove_toc_item` — the primitive behind `del_toc_item`).
+    ///
+    /// # Errors
+    ///
+    /// [`Error`] when `xref` is not an outline item or an object edit fails.
+    pub fn remove_toc_item(&self, xref: u32) -> Result<()> {
+        pdf_edit::remove_toc_item(&self.store, xref)?;
         Ok(())
     }
 
@@ -1156,6 +1338,34 @@ impl Document {
     /// [`Error::Syntax`] when no such file exists.
     pub fn embfile_info(&self, name: &str) -> Result<EmbfileInfo> {
         Ok(pdf_edit::embfile_info(&self.store, name)?)
+    }
+
+    /// Updates an existing embedded file under `name` in place (PyMuPDF
+    /// `embfile_upd`). Only the provided fields change; a `None` leaves that
+    /// field untouched. `mod_date` is written to `/Params /ModDate`.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Syntax`] when no such file exists; propagates object-edit errors.
+    pub fn embfile_upd(
+        &self,
+        name: &str,
+        bytes: Option<&[u8]>,
+        filename: Option<&str>,
+        ufilename: Option<&str>,
+        desc: Option<&str>,
+        mod_date: Option<&str>,
+    ) -> Result<()> {
+        pdf_edit::embfile::embfile_upd(
+            &self.store,
+            name,
+            bytes,
+            filename,
+            ufilename,
+            desc,
+            mod_date,
+        )?;
+        Ok(())
     }
 
     // --- sanitization (PRD §8.8, PyMuPDF `scrub` / `bake`) ---------------
@@ -3044,6 +3254,29 @@ pub fn page_add_stamp_annot(page: &Page, rect: Rect, stamp: &str) -> Result<Anno
     annot_handle(page, xref)
 }
 
+/// `page.add_caret_annot` — a `/Caret` (text-insertion marker) at `point`.
+///
+/// # Errors
+///
+/// A typed [`Error`] from the annotation path.
+pub fn page_add_caret_annot(page: &Page, point: Point) -> Result<AnnotHandle> {
+    let a = pdf_edit::add_caret_annot(page.document(), page.number(), point)?;
+    let xref = a.xref();
+    annot_handle(page, xref)
+}
+
+/// `page.add_widget` — a `/Widget` (AcroForm field) annotation described by
+/// `spec`, registered in the catalog `/AcroForm`.
+///
+/// # Errors
+///
+/// A typed [`Error`] from the annotation path.
+pub fn page_add_widget(page: &Page, spec: &pdf_edit::WidgetSpec) -> Result<AnnotHandle> {
+    let a = pdf_edit::add_widget(page.document(), page.number(), spec)?;
+    let xref = a.xref();
+    annot_handle(page, xref)
+}
+
 /// `page.add_file_annot` — a `/FileAttachment` at `point` embedding `bytes`.
 ///
 /// # Errors
@@ -3234,6 +3467,42 @@ pub fn page_clean_contents(page: &Page) -> Result<()> {
 /// Propagates resolve/decode/object-edit errors.
 pub fn page_wrap_contents(page: &Page) -> Result<()> {
     Ok(pdf_edit::wrap_contents(page.document(), page.number())?)
+}
+
+/// Points `page`'s `/Contents` at the stream object `xref` (PyMuPDF
+/// `Page.set_contents`).
+///
+/// # Errors
+///
+/// [`Error`] when `xref` is out of range or not a stream; object-edit errors
+/// propagate.
+pub fn page_set_contents(page: &Page, xref: u32) -> Result<()> {
+    Ok(pdf_edit::page_content::set_contents(
+        page.document(),
+        page.number(),
+        xref,
+    )?)
+}
+
+/// The page's `/Lang` language identifier, read inheritably, or `None` (PyMuPDF
+/// `Page.language`).
+#[must_use]
+pub fn page_language(page: &Page) -> Option<String> {
+    pdf_edit::page_content::language(page.document(), page.number())
+}
+
+/// Sets the page's `/Lang` (PyMuPDF `Page.set_language`); an empty / invalid tag
+/// removes `/Lang`. The tag is normalized to MuPDF's compact ISO-639 form.
+///
+/// # Errors
+///
+/// Object-edit errors propagate.
+pub fn page_set_language(page: &Page, lang: &str) -> Result<()> {
+    Ok(pdf_edit::page_content::set_language(
+        page.document(),
+        page.number(),
+        lang,
+    )?)
 }
 
 /// Deletes the image XObject named (or xref'd by) `name_or_xref` from `page`,

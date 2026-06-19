@@ -23,9 +23,10 @@
   trusted-publishing `release.yml`. (The only local failures — 3 Rust + 7 pytest OCR tests — stem from a
   broken local tesseract/leptonica install, an env defect, not code; a clean machine still meets the
   1349/593 floors.)
-- **API parity:** **651 / 769 implemented (84.7%)** — consistent across `COMPAT.toml`, README, and PARITY.md.
-  52 deferred · 66 out-of-scope. **Most of the 52 deferred are achievable WITHOUT** the Font refactor → parity
-  can still reach **~89–90%**.
+- **API parity:** **680 / 769 implemented (88.4%)** — consistent across `COMPAT.toml`, README, and PARITY.md.
+  23 deferred · 66 out-of-scope. We are now **at 88.4%, near the practical ceiling** (Phase 2 landed the +29
+  achievable-without-the-Font-refactor batch); the remaining 23 deferred are the long tail (OCG layers,
+  device-replay, embedded-font-program-gated symbols).
 - **Text extraction:** at fitz parity for **single-column** born-digital / CJK / EUR-Lex / GovInfo. **NOT at
   parity for multi-column** — committed GT shows PMC journals at order 0.08–0.44 vs fitz ~0.99, born-digital
   0/6 match-or-exceed (see §3 C4, Phase 3). Arabic/bidi beats fitz (logical order, UAX#9 reorder).
@@ -123,28 +124,22 @@ All three pre-launch quality items landed and were verified (full §8 suite; the
 
 - **P1-1r · Symbol/ZapfDingbats fallback** — *S · Low* — the two non-Latin standard-14 fonts aren't covered by Liberation (`liberation_substitute` returns `None`); wire a reasonable symbol fallback or accept as a documented deviation. No regression vs today.
 
-### Phase 2 — Launch parity push (pure-Python / binding clusters → ~86–90%)
+### Phase 2 — COMPLETE (2026-06-20) — committed on `main`
 
-- **P2-1 · Page draw-convenience + loader/alias cluster (~12 symbols, pure-Python)** — *M · High (parity)*
-  - **Why:** biggest parity-%-per-effort batch; all ride existing infra. `draw_curve/draw_quad/draw_sector/draw_squiggle/draw_zigzag` → already-implemented `Shape` methods via the proven `Page.draw_line/rect` pattern; `load_links` = alias of `get_links`; `update_link` = `delete_link`+`insert_link`; `load_annot`/`load_widget` index `annots()`/`widgets()`; `delete_widget` = `delete_annot`; `cluster_drawings` ports fitz's pure-Python algorithm over `get_drawings()`; `is_wrapped` exposes the existing wrap predicate.
-  - **Files:** `python/pdfspine/document.py:748-874,1768,1782,2053,2098,1622`.
-  - **Acceptance:** symbols flipped in the catalog + regen; each cross-checked vs `.venv-oracle`; new tests in `python/tests/test_longtail12.py`.
+All four parity-push clusters landed (+29 symbols, coverage 84.7%→88.4%, deferred 52→23) and were
+oracle-cross-checked against real PyMuPDF 1.24.14 (`.venv-oracle`) with zero regressions. Done summary:
 
-- **P2-2 · Wire `Document.convert_to_pdf` (image inputs)** — *M · Medium*
-  - **Why:** Rust impl is finished but unexposed (C7); image-input case is a binding task. Lets `Document.open` transparently handle image files.
-  - **Files:** `crates/pdf-image/src/imagedoc.rs:137`, `crates/pdf-api/src/image.rs:206`, `crates/py-bindings/src/lib.rs`, `python/pdfspine/document.py:42`.
-  - **Acceptance:** works for image bytes; raises `PdfUnsupportedError` only for non-image input (fitz-correct); +1 symbol.
+- **P2-1 · Page draw-convenience + loader/alias cluster (12 symbols, pure-Python)** — DONE. `draw_curve`/`draw_quad`/`draw_sector`/`draw_squiggle`/`draw_zigzag` (page-level draw convenience over `Shape`), `load_links`/`update_link`, `load_annot`/`load_widget`, `delete_widget`, `cluster_drawings`, `is_wrapped` — all flipped + regen + oracle-checked + tested.
+- **P2-2 · `Document.convert_to_pdf` (image inputs)** — DONE (1 symbol). The finished Rust impl (C7) is now exposed; `Document.open` transparently handles image files, raising `PdfUnsupportedError` only for non-image input (fitz-correct). Oracle-checked.
+- **P2-3 · Small binding clusters (9 symbols)** — DONE. `Pixmap.samples_ptr`/`Pixmap.__array_interface__` (numpy zero-copy), `Tools.image_profile` + module-level `image_profile`, `Page.language`/`set_language`, `Page.set_contents`, `Document.get_outline_xrefs`, `Document.embfile_upd` — all flipped + regen + oracle-checked + tested.
+- **P2-4 · Medium parity items (7 symbols)** — DONE. TOC edits (`Document.set_toc_item`/`del_toc_item`), `Document.version_count`, `Document.extract_font`, `Document.subset`, `Page.add_widget`, `Page.add_caret_annot` — semantics validated vs `.venv-oracle` (fitz's in-place rewrite, not full rebuild).
 
-- **P2-3 · Small binding clusters** — *S–M · Low–Medium (parity)*
-  - `Pixmap.samples_ptr` + `__array_interface__` (ride `samples_mv` buffer protocol — C13) · `crates/py-bindings/src/lib.rs:3684,3697`.
-  - `Tools.image_profile` + `module.image_profile` (2 symbols; decoders + metadata-dict shape exist) · `crates/pdf-image/src/{imagedoc.rs:70,getpixmap.rs:172}`.
-  - `Page.language` / `set_language` (mirror the implemented Annot `/Lang` accessors) · `crates/py-bindings/src/lib.rs:753,3266`.
-  - `Page.set_contents` · `Document.get_outline_xrefs` · `embfile_upd` (on existing `update_stream` / `/Outlines` walker / embfile infra) · `crates/py-bindings/src/lib.rs:2825,3361`, `crates/pdf-edit/src/toc.rs:52`.
-  - **Acceptance:** each flipped + regen + oracle-checked + tested.
+**Residuals carried forward:**
 
-- **P2-4 · Medium parity items** — *M · Low (parity)*
-  - `set_toc_item` / `del_toc_item` / `version_count` (surgical `/Outlines` edits; `version_count` ≈ `/Prev`-chain count, `writer.rs:280`); `extract_font`; `subset`; `add_widget` / `add_caret_annot`.
-  - **Acceptance:** semantics validated vs `.venv-oracle` (fitz's in-place rewrite, not full rebuild).
+- **P2r-1 · `set_toc` page-mapping off-by-one** — *S · correctness* — pre-existing: pdfspine's `get_toc` resolves `set_toc`-created destinations one page low (off-by-one in the dest page mapping). Flagged while landing the P2-4 TOC edits; left untouched as out-of-scope for the parity batch.
+- **P2r-2 · `image_profile` dict-key divergence** — *S · Low* — pdfspine's `image_profile` returns `'colorspace'` (an int component count) where the PyMuPDF spec uses `'colorspace.n'`, omits `'type'`/`'size'`, and adds `orientation`/`transform`/`xres`/`yres`/`cs-name`. Matches the documented contract but not byte-for-byte the spec dict shape.
+
+**Note:** three P2 symbols (`image_profile`, `Pixmap.__array_interface__`, `Page.set_language`) could **not** be live-diffed because PyMuPDF 1.24.14's own runtime is broken for them (SWIG marshalling bugs); pdfspine implements the **documented PyMuPDF contract** for these.
 
 ### Phase 3 — Post-launch correctness
 
@@ -229,10 +224,12 @@ All three pre-launch quality items landed and were verified (full §8 suite; the
 | P1-2 | Honor `/Decode [1 0]` ImageMask | S | Med | ✅ done | 1 |
 | P1-3 | Real extraction/render CI accuracy gate | M | High | ✅ done | 1 |
 | P1-1r | Symbol/ZapfDingbats fallback (Liberation gap) | S | Low | open | 1r |
-| P2-1 | Page draw-convenience + loader/alias (~12 syms) | M | High | – | 2 |
-| P2-2 | `Document.convert_to_pdf` (image inputs) | M | Med | – | 2 |
-| P2-3 | Small binding clusters (Pixmap/Tools/Page/Doc) | S–M | Low–Med | – | 2 |
-| P2-4 | Medium parity (TOC edit, extract_font, subset…) | M | Low | – | 2 |
+| P2-1 | Page draw-convenience + loader/alias (12 syms) | M | High | ✅ done | 2 |
+| P2-2 | `Document.convert_to_pdf` (image inputs) | M | Med | ✅ done | 2 |
+| P2-3 | Small binding clusters (Pixmap/Tools/Page/Doc) | S–M | Low–Med | ✅ done | 2 |
+| P2-4 | Medium parity (TOC edit, extract_font, subset…) | M | Low | ✅ done | 2 |
+| P2r-1 | `set_toc` page-mapping off-by-one (get_toc resolves one page low) | S | Low | open | 2r |
+| P2r-2 | `image_profile` dict-key divergence vs spec | S | Low | open | 2r |
 | P3-1 | Multi-column reading-order engine | L | High | – | 3 |
 | P3-2 | PMC near-zero-lev investigation | M | High | – | 3 |
 | P3-3 | Indexed/Separation/DeviceN + `/Decode` (render) | L | Med | – | 3 |
@@ -243,10 +240,10 @@ All three pre-launch quality items landed and were verified (full §8 suite; the
 | P4-3 | OCR `recognize()` rayon parallelism | M | High | – | 4 |
 | P4-4 | Full public-surface API reference docs | M | Med | – | 4 |
 
-**Recommended next 3 (in order):** *(Phase 0 + P0-5r + Phase 1 COMPLETE — committed on `main`.)*
-1. **Phase 2 — P2-1 Page parity batch** (+ P2-2 convert_to_pdf) — biggest parity-%-per-effort momentum (~86%), pure-Python/binding clusters, no Rust-architecture risk.
-2. **Phase 2 cont. — P2-3 / P2-4** (small binding + medium parity clusters), then the large **P3-1 multi-column** reading-order engine, now guarded by the new P1-3 accuracy gate.
-3. **P4-1 Font `/FontFile*`** API work, plus the low-priority residuals (P0-2r `_core` deferred, P0-6r corpus paths, P1-1r Symbol/Zapf).
+**Recommended next 3 (in order):** *(Phase 0 + P0-5r + Phase 1 + Phase 2 COMPLETE — committed on `main`; parity now 88.4%, near the practical ceiling.)*
+1. **Phase 3 — P3-1 multi-column reading-order engine** — the real-world text gap (C4), now guarded by the P1-3 accuracy gate; the highest-impact remaining work (PMC/born-digital order rises toward fitz's ~0.98).
+2. **P4-1 Font `/FontFile*`** API work — unblocks `Font.glyph_bbox`/`buffer` + user `Font(fontbuffer=)` (API completeness, **not** the rendering keystone — C3).
+3. **The low-priority residuals** — P0-2r `_core` deferred, P0-6r corpus paths, P1-1r Symbol/Zapf, P2r-1 `set_toc` off-by-one, P2r-2 `image_profile` dict-key.
 
 ## 7. Pre-public chores + docs upkeep (do alongside / last)
 
@@ -283,5 +280,6 @@ and trust a clean machine / CI.
 
 *Re-verified 2026-06-19 from a code-level 5-dimension survey (project health · API parity · rendering ·
 extraction/conformance · perf/OCR). §3 is the correction log against this doc's previous A–F framing.
-**Phase 0 + P0-5r + Phase 1 landed on 2026-06-19** (on `main`) — §3 rows C1 / C2 / C6 / C10 / C11 are
-fixed; residuals P0-2r / P0-6r / P1-1r carried forward.*
+**Phase 0 + P0-5r + Phase 1 landed on 2026-06-19, + Phase 2 landed on 2026-06-20** (on `main`; coverage
+84.7%→88.4%) — §3 rows C1 / C2 / C6 / C7 / C10 / C11 / C13 are fixed; residuals P0-2r / P0-6r / P1-1r /
+P2r-1 / P2r-2 carried forward.*

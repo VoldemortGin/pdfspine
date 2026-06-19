@@ -217,6 +217,99 @@ pub fn embfile_info(doc: &DocumentStore, name: &str) -> Result<EmbfileInfo> {
     })
 }
 
+/// Updates an existing embedded file in place (PyMuPDF `embfile_upd`).
+///
+/// Only the provided fields change; a `None` leaves that field untouched
+/// (matching fitz's "only provided parameters are changed" contract). `bytes`
+/// replaces the `/EmbeddedFile` stream content (refreshing `/Length`, `/DL` and
+/// `/Params /Size`); `filename`/`ufilename`/`desc` overwrite `/F`/`/UF`/`/Desc`
+/// on the filespec. `mod_date`, when given, is written to `/Params /ModDate`.
+///
+/// # Errors
+///
+/// Returns [`pdf_core::Error::InvalidArgument`] if no file is named `name`, or
+/// propagates resolve / object-edit errors.
+pub fn embfile_upd(
+    doc: &DocumentStore,
+    name: &str,
+    bytes: Option<&[u8]>,
+    filename: Option<&str>,
+    ufilename: Option<&str>,
+    desc: Option<&str>,
+    mod_date: Option<&str>,
+) -> Result<()> {
+    let fs_ref = lookup_ref(doc, name)?;
+    let mut fs = doc
+        .resolve(fs_ref)?
+        .as_dict()
+        .cloned()
+        .ok_or(pdf_core::Error::InvalidArgument("filespec is not a dict"))?;
+
+    // Replace the EmbeddedFile stream content, refreshing the byte-length params.
+    if let Some(new_bytes) = bytes {
+        let ef_ref = embeddedfile_ref(&fs).ok_or(pdf_core::Error::InvalidArgument(
+            "filespec has no /EF stream",
+        ))?;
+        let mut ef_dict = doc
+            .resolve(ef_ref)?
+            .as_stream()
+            .map(|s| s.dict.clone())
+            .ok_or(pdf_core::Error::InvalidArgument(
+                "embedded file is not a stream",
+            ))?;
+        let size = Object::Integer(new_bytes.len() as i64);
+        ef_dict.insert(Name::new("Length"), size.clone());
+        ef_dict.insert(Name::new("DL"), size.clone());
+        let mut params = ef_dict
+            .get(&Name::new("Params"))
+            .and_then(Object::as_dict)
+            .cloned()
+            .unwrap_or_default();
+        params.insert(Name::new("Size"), size);
+        ef_dict.insert(Name::new("Params"), Object::Dictionary(params));
+        doc.update_object(
+            ef_ref,
+            Object::Stream(StreamObj::new_encoded(ef_dict, new_bytes.to_vec())),
+        )?;
+    }
+
+    // Overwrite the provided filespec text fields (leaving the rest as-is).
+    if let Some(filename) = filename {
+        fs.insert(Name::new("F"), Object::String(text_string(filename)));
+    }
+    if let Some(ufilename) = ufilename {
+        fs.insert(Name::new("UF"), Object::String(text_string(ufilename)));
+    }
+    if let Some(desc) = desc {
+        fs.insert(Name::new("Desc"), Object::String(text_string(desc)));
+    }
+
+    // Stamp the modification date on the EmbeddedFile stream's /Params.
+    if let Some(mod_date) = mod_date {
+        if let Some(ef_ref) = embeddedfile_ref(&fs) {
+            if let Ok(obj) = doc.resolve(ef_ref) {
+                if let Some(stream) = obj.as_stream() {
+                    let mut ef_dict = stream.dict.clone();
+                    let body = doc.decode_stream(stream)?.into_decoded()?;
+                    let mut params = ef_dict
+                        .get(&Name::new("Params"))
+                        .and_then(Object::as_dict)
+                        .cloned()
+                        .unwrap_or_default();
+                    params.insert(Name::new("ModDate"), Object::String(text_string(mod_date)));
+                    ef_dict.insert(Name::new("Params"), Object::Dictionary(params));
+                    doc.update_object(
+                        ef_ref,
+                        Object::Stream(StreamObj::new_encoded(ef_dict, body)),
+                    )?;
+                }
+            }
+        }
+    }
+
+    doc.update_object(fs_ref, Object::Dictionary(fs))
+}
+
 // === Name-tree plumbing ===================================================
 
 /// Resolves `name` to its filespec reference via the general tree walk.

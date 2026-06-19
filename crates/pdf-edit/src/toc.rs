@@ -119,6 +119,69 @@ fn outline_uri(doc: &DocumentStore, d: &Dict) -> Option<String> {
     Some(String::from_utf8_lossy(uri.as_bytes()).into_owned())
 }
 
+/// The outline-item object numbers in document order (PyMuPDF
+/// `Document.get_outline_xrefs`).
+///
+/// Walks the `/Outlines /First` chain depth-first (`/First` then `/Next`),
+/// terminating on a circular reference or an item carrying a `/Type` key (the
+/// outline-root sentinel), mirroring fitz `JM_outline_xrefs`. Empty when there
+/// is no outline.
+#[must_use]
+pub fn get_outline_xrefs(doc: &DocumentStore) -> Vec<u32> {
+    let mut xrefs = Vec::new();
+    let Some(catalog) = catalog_dict(doc) else {
+        return xrefs;
+    };
+    let Some(olroot) = catalog
+        .get(&Name::new("Outlines"))
+        .map(|o| deref(doc, o))
+        .and_then(|o| o.as_dict().cloned())
+    else {
+        return xrefs;
+    };
+    let Some(first) = olroot
+        .get(&Name::new("First"))
+        .and_then(Object::as_reference)
+    else {
+        return xrefs;
+    };
+    collect_outline_xrefs(doc, first, &mut xrefs, 0);
+    xrefs
+}
+
+/// Recursively appends outline-item xrefs from `r`, following `/First` (down)
+/// then `/Next` (across). Stops on a repeat (cycle) or an item with a `/Type`
+/// key (chain top), and is depth-guarded.
+fn collect_outline_xrefs(doc: &DocumentStore, r: ObjRef, xrefs: &mut Vec<u32>, depth: usize) {
+    if depth > 200 {
+        return;
+    }
+    let mut current = r;
+    loop {
+        if xrefs.contains(&current.num) {
+            return;
+        }
+        let Ok(obj) = doc.resolve(current) else {
+            return;
+        };
+        let Some(d) = obj.as_dict() else {
+            return;
+        };
+        // A `/Type` key marks the chain top (outline root): terminate.
+        if d.get(&Name::new("Type")).is_some() {
+            return;
+        }
+        xrefs.push(current.num);
+        if let Some(first) = d.get(&Name::new("First")).and_then(Object::as_reference) {
+            collect_outline_xrefs(doc, first, xrefs, depth + 1);
+        }
+        match d.get(&Name::new("Next")).and_then(Object::as_reference) {
+            Some(next) => current = next,
+            None => return,
+        }
+    }
+}
+
 /// Reads the document outline as a flat ordered list (PRD §8.9). Empty when there
 /// is no `/Outlines`.
 #[must_use]
@@ -308,6 +371,94 @@ pub fn set_toc(doc: &DocumentStore, entries: &[TocEntry]) -> pdf_core::Result<()
     catalog.insert(Name::new("Outlines"), Object::Reference(outlines_ref));
     doc.update_object(root, Object::Dictionary(catalog))?;
     Ok(())
+}
+
+/// Surgically updates a single outline item dict at `xref` (PyMuPDF
+/// `Document._update_toc_item`). Mirrors fitz: an `action` (the `/A` action
+/// **body**, e.g. `<</S/GoTo/D[...]>>`) replaces `/A` and drops `/Dest`; a
+/// `title` replaces `/Title`; `/F` is set to `flags`; a `color` sets `/C`
+/// (a `Some([..])` writes the array, `None` is left untouched — pass an explicit
+/// empty to delete via the wrapper); `collapse` flips the sign of an existing
+/// `/Count` to open (`false`) / close (`true`).
+///
+/// # Errors
+///
+/// [`pdf_core::Error`] when `xref` is not an outline-item dictionary, the action
+/// string does not parse, or an object edit fails.
+pub fn update_toc_item(
+    doc: &DocumentStore,
+    xref: u32,
+    action: Option<&str>,
+    title: Option<&str>,
+    flags: i32,
+    collapse: Option<bool>,
+    color: Option<[f32; 3]>,
+) -> pdf_core::Result<()> {
+    let r = ObjRef::new(xref, 0);
+    let mut d = doc
+        .resolve(r)?
+        .as_dict()
+        .cloned()
+        .ok_or(pdf_core::Error::InvalidArgument(
+            "TOC item is not a dictionary",
+        ))?;
+
+    if let Some(t) = title {
+        d.insert(Name::new("Title"), Object::String(encode_text(t)));
+    }
+    if let Some(act) = action {
+        d.remove(&Name::new("Dest"));
+        let obj = pdf_core::object::parse::Parser::new(act.as_bytes())
+            .parse_object()
+            .map_err(|_| pdf_core::Error::InvalidArgument("bad bookmark dest action"))?;
+        d.insert(Name::new("A"), obj);
+    }
+    d.insert(Name::new("F"), Object::Integer(i64::from(flags)));
+    if let Some(c) = color {
+        d.insert(
+            Name::new("C"),
+            Object::Array(c.iter().map(|&v| Object::Real(f64::from(v))).collect()),
+        );
+    }
+    if let Some(close) = collapse {
+        if let Some(count) = d.get(&Name::new("Count")).and_then(Object::as_i64) {
+            if (count < 0 && !close) || (count > 0 && close) {
+                d.insert(Name::new("Count"), Object::Integer(-count));
+            }
+        }
+    }
+    doc.update_object(r, Object::Dictionary(d))
+}
+
+/// Surgically "removes" an outline item by making it point nowhere (PyMuPDF
+/// `Document._remove_toc_item`). Deletes `/Dest` and `/A` and sets `/C` to the
+/// fitz grey `[0.8 0.8 0.8]` so the (now non-clickable) item is visibly dimmed.
+/// The item itself stays in the tree — its title and structure are preserved.
+///
+/// # Errors
+///
+/// [`pdf_core::Error`] when `xref` is not an outline-item dictionary or an
+/// object edit fails.
+pub fn remove_toc_item(doc: &DocumentStore, xref: u32) -> pdf_core::Result<()> {
+    let r = ObjRef::new(xref, 0);
+    let mut d = doc
+        .resolve(r)?
+        .as_dict()
+        .cloned()
+        .ok_or(pdf_core::Error::InvalidArgument(
+            "TOC item is not a dictionary",
+        ))?;
+    d.remove(&Name::new("Dest"));
+    d.remove(&Name::new("A"));
+    d.insert(
+        Name::new("C"),
+        Object::Array(vec![
+            Object::Real(0.8),
+            Object::Real(0.8),
+            Object::Real(0.8),
+        ]),
+    );
+    doc.update_object(r, Object::Dictionary(d))
 }
 
 /// Validates the level sequence: first level must be 1, and no level may jump by

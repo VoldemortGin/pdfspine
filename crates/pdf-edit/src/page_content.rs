@@ -21,7 +21,7 @@
 //!   binding the whole page's content (used rarely) — see method docs.
 
 use pdf_core::error::{Error, Result};
-use pdf_core::object::{Dict, Name, ObjRef, Object, StreamObj};
+use pdf_core::object::{Dict, Name, ObjRef, Object, PdfString, StreamObj, StringKind};
 use pdf_core::{pagetree, DocumentStore};
 
 use crate::content::make_stream;
@@ -264,6 +264,82 @@ pub fn get_oc(doc: &DocumentStore, index: usize) -> u32 {
     }
 }
 
+/// The page's `/Lang` language identifier, read inheritably (leaf → `/Parent`
+/// chain), or `None` when no `/Lang` is set anywhere (PyMuPDF `Page.language`).
+#[must_use]
+pub fn language(doc: &DocumentStore, index: usize) -> Option<String> {
+    let leaf = page_leaf(doc, index).ok()?;
+    let mut current = leaf;
+    let mut depth = 0u32;
+    let max_depth = doc.limits().max_recursion_depth;
+    loop {
+        depth += 1;
+        if depth > max_depth {
+            return None;
+        }
+        let node = doc.resolve(current).ok()?;
+        let dict = node.as_dict()?;
+        if let Some(s) = dict.get(&Name::new("Lang")).and_then(Object::as_string) {
+            return Some(String::from_utf8_lossy(s.as_bytes()).into_owned());
+        }
+        match dict.get(&Name::new("Parent")) {
+            Some(Object::Reference(r)) => current = *r,
+            _ => return None,
+        }
+    }
+}
+
+/// Sets the page's `/Lang` (PyMuPDF `Page.set_language`). The tag is normalized
+/// via [`crate::catalog::normalize_language`] (MuPDF's compact ISO-639 form); an
+/// empty / invalid tag removes `/Lang` from the page leaf.
+///
+/// # Errors
+///
+/// Propagates object-edit errors.
+pub fn set_language(doc: &DocumentStore, index: usize, lang: &str) -> Result<()> {
+    let leaf = page_leaf(doc, index)?;
+    let mut dict = leaf_dict(doc, leaf)?;
+    match crate::catalog::normalize_language(lang) {
+        Some(norm) => {
+            dict.insert(
+                Name::new("Lang"),
+                Object::String(PdfString {
+                    bytes: norm.into_bytes(),
+                    kind: StringKind::Literal,
+                }),
+            );
+        }
+        None => {
+            dict.remove(&Name::new("Lang"));
+        }
+    }
+    doc.update_object(leaf, Object::Dictionary(dict))
+}
+
+/// Points the page's `/Contents` at the stream object `xref` (PyMuPDF
+/// `Page.set_contents`).
+///
+/// # Errors
+///
+/// [`Error::InvalidArgument`] if `xref` is out of range or not a stream object;
+/// object-edit errors propagate.
+pub fn set_contents(doc: &DocumentStore, index: usize, xref: u32) -> Result<()> {
+    if xref == 0 || xref >= doc.xref_length() {
+        return Err(Error::InvalidArgument("bad xref"));
+    }
+    let target = doc.resolve(ObjRef::new(xref, 0))?;
+    if target.as_stream().is_none() {
+        return Err(Error::InvalidArgument("xref is no stream"));
+    }
+    let leaf = page_leaf(doc, index)?;
+    let mut dict = leaf_dict(doc, leaf)?;
+    dict.insert(
+        Name::new("Contents"),
+        Object::Reference(ObjRef::new(xref, 0)),
+    );
+    doc.update_object(leaf, Object::Dictionary(dict))
+}
+
 /// Reads `(width, height, components)` from a JPEG's first SOF marker, or `None`
 /// for non-JPEG / truncated input (never panics). Mirrors `image::jpeg_info`.
 fn jpeg_dims(data: &[u8]) -> Option<(u32, u32, u8)> {
@@ -388,5 +464,50 @@ mod tests {
         ];
         assert_eq!(jpeg_dims(&jpeg), Some((2, 3, 3)));
         assert_eq!(jpeg_dims(b"not a jpeg"), None);
+    }
+
+    #[test]
+    fn set_contents_points_at_stream() {
+        let doc = make_doc(b"BT ET");
+        // Object 4 is the existing content stream.
+        set_contents(&doc, 0, 4).unwrap();
+        assert_eq!(page_get_contents_nums(&doc), vec![4]);
+    }
+
+    #[test]
+    fn set_contents_rejects_bad_or_non_stream_xref() {
+        let doc = make_doc(b"BT ET");
+        // Object 1 is the catalog (a dict, not a stream).
+        assert!(matches!(
+            set_contents(&doc, 0, 1),
+            Err(Error::InvalidArgument(_))
+        ));
+        // Object 0 is the free-list head / out of range.
+        assert!(matches!(
+            set_contents(&doc, 0, 0),
+            Err(Error::InvalidArgument(_))
+        ));
+    }
+
+    #[test]
+    fn language_get_set_normalizes_and_clears() {
+        let doc = make_doc(b"BT ET");
+        assert_eq!(language(&doc, 0), None);
+        set_language(&doc, 0, "en-US").unwrap();
+        assert_eq!(language(&doc, 0).as_deref(), Some("en"));
+        set_language(&doc, 0, "zh-CN").unwrap();
+        assert_eq!(language(&doc, 0).as_deref(), Some("zh-Hans"));
+        set_language(&doc, 0, "").unwrap();
+        assert_eq!(language(&doc, 0), None);
+    }
+
+    /// The page's `/Contents` object numbers (test helper).
+    fn page_get_contents_nums(doc: &DocumentStore) -> Vec<u32> {
+        let leaf = page_leaf(doc, 0).unwrap();
+        let dict = leaf_dict(doc, leaf).unwrap();
+        match dict.get(&Name::new("Contents")) {
+            Some(Object::Reference(r)) => vec![r.num],
+            _ => Vec::new(),
+        }
     }
 }

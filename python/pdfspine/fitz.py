@@ -61,6 +61,7 @@ from pdfspine import (
     csCMYK,
     csGRAY,
     csRGB,
+    image_profile,
     linkDest,
     open,
 )
@@ -99,6 +100,7 @@ __all__ = [
     "Outline",
     "Colorspace",
     "TextWriter",
+    "image_profile",
     "csGRAY",
     "csRGB",
     "csCMYK",

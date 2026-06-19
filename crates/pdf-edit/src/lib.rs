@@ -36,11 +36,11 @@ pub mod text;
 pub mod toc;
 
 pub use annot::{
-    add_circle_annot, add_file_annot, add_freetext_annot, add_highlight_annot, add_ink_annot,
-    add_line_annot, add_polygon_annot, add_polyline_annot, add_rect_annot, add_redact_annot,
-    add_squiggly_annot, add_stamp_annot, add_strikeout_annot, add_text_annot, add_underline_annot,
-    annot_count, annot_entries, annot_names, annot_refs, annots, delete_annot, first_annot, Annot,
-    AnnotType,
+    add_caret_annot, add_circle_annot, add_file_annot, add_freetext_annot, add_highlight_annot,
+    add_ink_annot, add_line_annot, add_polygon_annot, add_polyline_annot, add_rect_annot,
+    add_redact_annot, add_squiggly_annot, add_stamp_annot, add_strikeout_annot, add_text_annot,
+    add_underline_annot, add_widget, annot_count, annot_entries, annot_names, annot_refs, annots,
+    delete_annot, first_annot, Annot, AnnotType, WidgetSpec,
 };
 pub use catalog::{
     language, mark_info, normalize_language, page_layout, page_mode, set_language, set_mark_info,
@@ -76,4 +76,7 @@ pub use pagelabel::{get_label, get_label_rules, set_labels, LabelSpec};
 pub use redact::apply_redactions;
 pub use scrub::{bake, scrub, ScrubOptions};
 pub use text::{insert_text, insert_textbox, Align, TextOptions};
-pub use toc::{get_outline, get_toc, set_toc, OutlineNode, TocEntry};
+pub use toc::{
+    get_outline, get_outline_xrefs, get_toc, remove_toc_item, set_toc, update_toc_item,
+    OutlineNode, TocEntry,
+};

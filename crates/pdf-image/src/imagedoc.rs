@@ -140,6 +140,81 @@ pub fn convert_to_pdf(bytes: &[u8], format: Option<ImageFormat>) -> Result<Vec<u
     build_pdf(&frames)
 }
 
+/// Basic header properties of a raster image (PyMuPDF `image_profile` /
+/// `Tools.image_profile`), read from the leading frame without a full decode
+/// where the format allows it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ImageProfile {
+    /// Pixel width.
+    pub width: u32,
+    /// Pixel height.
+    pub height: u32,
+    /// EXIF/orientation code (`0` — pdfspine does not honor an EXIF rotation).
+    pub orientation: i32,
+    /// The orientation `(a, b, c, d, e, f)` matrix (identity for `orientation 0`).
+    pub matrix: (f64, f64, f64, f64, f64, f64),
+    /// Horizontal resolution in dpi (defaults to `96` when undeclared, per fitz).
+    pub xres: i32,
+    /// Vertical resolution in dpi (defaults to `96` when undeclared, per fitz).
+    pub yres: i32,
+    /// Number of color components (fitz `colorspace` key = `image.n()`).
+    pub colorspace: i32,
+    /// Bits per component (`8` for the formats pdfspine decodes).
+    pub bpc: i32,
+    /// MuPDF image-extension token (`"png"`, `"jpeg"`, `"gif"`, `"bmp"`,
+    /// `"tiff"`, n/a otherwise).
+    pub ext: String,
+    /// Colorspace name (`"DeviceGray"`/`"DeviceRGB"`), or `""` when none.
+    pub cs_name: String,
+}
+
+/// Reads the header profile of raster `bytes` (PyMuPDF `image_profile` /
+/// `Tools.image_profile`).
+///
+/// Returns `None` for empty / too-short / unrecognized input (fitz returns
+/// `None` there too). The format is sniffed from the magic bytes; the leading
+/// frame supplies width/height/components/dpi.
+#[must_use]
+pub fn image_profile(bytes: &[u8]) -> Option<ImageProfile> {
+    if bytes.len() < 8 {
+        return None;
+    }
+    let format = ImageFormat::sniff(bytes)?;
+    let frames = decode_frames(bytes, format).ok()?;
+    let frame = frames.into_iter().next()?;
+
+    let (colorspace, cs_name) = frame.colorspace_profile();
+    let (xres, yres) = match frame.dpi() {
+        Some((dx, dy)) if dx > 0.0 && dy > 0.0 => (dx.round() as i32, dy.round() as i32),
+        _ => (96, 96),
+    };
+    Some(ImageProfile {
+        width: frame.width(),
+        height: frame.height(),
+        orientation: 0,
+        matrix: (1.0, 0.0, 0.0, 1.0, 0.0, 0.0),
+        xres,
+        yres,
+        colorspace,
+        bpc: 8,
+        ext: image_extension(format).to_string(),
+        cs_name,
+    })
+}
+
+/// The MuPDF image-extension token for a container format (PyMuPDF
+/// `JM_image_extension`).
+fn image_extension(format: ImageFormat) -> &'static str {
+    match format {
+        ImageFormat::Png => "png",
+        ImageFormat::Jpeg => "jpeg",
+        ImageFormat::Tiff => "tiff",
+        ImageFormat::Gif => "gif",
+        ImageFormat::Bmp => "bmp",
+        ImageFormat::Webp => "n/a",
+    }
+}
+
 /// Resolves an explicit or sniffed format, mapping non-image input to
 /// [`Error::InvalidArgument`] (PRD §8.10 / §3.2 #2).
 fn resolve_format(bytes: &[u8], format: Option<ImageFormat>) -> Result<ImageFormat> {
@@ -216,6 +291,28 @@ impl Frame {
     fn dpi(&self) -> Option<(f64, f64)> {
         match self {
             Frame::Jpeg { dpi, .. } | Frame::Decoded { dpi, .. } => *dpi,
+        }
+    }
+
+    /// The `(n_components, colorspace_name)` for an [`ImageProfile`]: the count
+    /// fitz reports as its `colorspace` key plus the `DeviceGray`/`DeviceRGB`
+    /// device name. Palette frames resolve to their materialized RGB color.
+    fn colorspace_profile(&self) -> (i32, String) {
+        match self {
+            Frame::Jpeg { components, .. } => match components {
+                1 => (1, "DeviceGray".to_string()),
+                4 => (4, "DeviceCMYK".to_string()),
+                _ => (3, "DeviceRGB".to_string()),
+            },
+            Frame::Decoded { color, palette, .. } => {
+                if palette.is_some() {
+                    return (3, "DeviceRGB".to_string());
+                }
+                match color {
+                    DecodedColor::Gray => (1, "DeviceGray".to_string()),
+                    DecodedColor::Rgb => (3, "DeviceRGB".to_string()),
+                }
+            }
         }
     }
 

@@ -53,6 +53,8 @@ pub enum AnnotType {
     Ink,
     /// `/Stamp`.
     Stamp,
+    /// `/Caret` (text-insertion marker).
+    Caret,
     /// `/FileAttachment`.
     FileAttachment,
     /// `/Redact` (created only; applying is M4d).
@@ -83,6 +85,7 @@ impl AnnotType {
             AnnotType::PolyLine => "PolyLine",
             AnnotType::Ink => "Ink",
             AnnotType::Stamp => "Stamp",
+            AnnotType::Caret => "Caret",
             AnnotType::FileAttachment => "FileAttachment",
             AnnotType::Redact => "Redact",
             AnnotType::Link => "Link",
@@ -108,6 +111,7 @@ impl AnnotType {
             b"PolyLine" => AnnotType::PolyLine,
             b"Ink" => AnnotType::Ink,
             b"Stamp" => AnnotType::Stamp,
+            b"Caret" => AnnotType::Caret,
             b"FileAttachment" => AnnotType::FileAttachment,
             b"Redact" => AnnotType::Redact,
             b"Link" => AnnotType::Link,
@@ -1402,6 +1406,183 @@ pub fn add_stamp_annot<'a>(
     finalize_annot(doc, page, d, AnnotType::Stamp)
 }
 
+/// `page.add_caret_annot` — a `/Caret` (text-insertion marker) at `point`
+/// (top-left page space). Matches fitz: a ~20×14 pt blue caret anchored at the
+/// point (device rect `[point.x-1, point.y+0.5, point.x+19, point.y+14.5]`).
+///
+/// # Errors
+/// Propagates page-resolve / object-edit errors.
+pub fn add_caret_annot(doc: &DocumentStore, page: usize, point: Point) -> Result<Annot<'_>> {
+    let pc = PageContent::new(doc, page)?;
+    // Device-space caret box; converted to user space via the page matrix.
+    let dev = Rect::new(point.x - 1.0, point.y + 0.5, point.x + 19.0, point.y + 14.5);
+    let ur = pc.rect_to_user_space(dev);
+    let mut d = Dict::new();
+    d.insert(Name::new("Rect"), rect_array(&ur.normalize()));
+    d.insert(Name::new("C"), color_array(Color::new(0.0, 0.0, 1.0)));
+    finalize_annot(doc, page, d, AnnotType::Caret)
+}
+
+/// The parameters of a form widget to author (PyMuPDF `Page.add_widget`). Mirrors
+/// the load-bearing `fitz.Widget` fields; coordinates are in top-left page space.
+#[derive(Clone, Debug)]
+pub struct WidgetSpec {
+    /// The widget rectangle (top-left page space).
+    pub rect: Rect,
+    /// The fully-qualified field name (`/T`).
+    pub field_name: String,
+    /// The PyMuPDF field-type code: 1 button, 2 checkbox, 3 combobox,
+    /// 4 listbox, 5 radiobutton, 6 signature, 7 text.
+    pub field_type: i32,
+    /// The field value (`/V`); empty for none.
+    pub field_value: String,
+    /// The field flags bitfield (`/Ff`).
+    pub field_flags: i64,
+    /// The choice options for combo/list fields (`/Opt`).
+    pub choice_values: Vec<String>,
+    /// The `/DA` text color (r, g, b) in `[0, 1]`.
+    pub text_color: (f64, f64, f64),
+    /// The `/DA` font name (defaults to `Helv`).
+    pub text_font: String,
+    /// The `/DA` font size (`0` = auto).
+    pub text_fontsize: f64,
+}
+
+/// The PDF `/FT` name + default `/Ff` for a PyMuPDF widget-type code.
+fn widget_ft(field_type: i32) -> (&'static str, i64) {
+    match field_type {
+        2 | 5 => ("Btn", 0),  // checkbox / radio
+        3 => ("Ch", 131_072), // combobox (Combo flag)
+        4 => ("Ch", 0),       // listbox
+        6 => ("Sig", 0),      // signature
+        1 => ("Btn", 65_536), // pushbutton
+        _ => ("Tx", 0),       // text (default)
+    }
+}
+
+/// `page.add_widget` — a `/Widget` (AcroForm field) annotation (PyMuPDF
+/// `Page.add_widget`). Builds the widget dict (`/FT`, `/T`, `/Rect`, `/F 4`,
+/// `/BS`, `/DA`, `/Ff`, value), generates `/AP /N`, links it onto the page, and
+/// registers it in (creating if absent) the catalog `/AcroForm /Fields`.
+///
+/// # Errors
+/// Propagates page-resolve / object-edit errors.
+pub fn add_widget<'a>(doc: &'a DocumentStore, page: usize, spec: &WidgetSpec) -> Result<Annot<'a>> {
+    let pc = PageContent::new(doc, page)?;
+    let ur = pc.rect_to_user_space(spec.rect);
+    let (ft, default_ff) = widget_ft(spec.field_type);
+    let ff = if spec.field_flags != 0 {
+        spec.field_flags
+    } else {
+        default_ff
+    };
+
+    let mut d = Dict::new();
+    d.insert(Name::new("FT"), Object::Name(Name::new(ft)));
+    d.insert(Name::new("T"), text_string(&spec.field_name));
+    d.insert(Name::new("Rect"), rect_array(&ur.normalize()));
+    // /F 4 = Print (the fitz default for an authored widget).
+    d.insert(Name::new("F"), Object::Integer(4));
+    // /BS: a solid 0-width border, like fitz.
+    let mut bs = Dict::new();
+    bs.insert(Name::new("S"), Object::Name(Name::new("S")));
+    bs.insert(Name::new("W"), Object::Integer(0));
+    d.insert(Name::new("BS"), Object::Dictionary(bs));
+    // /DA default-appearance string (color + font + size), like fitz.
+    let (r, g, b) = spec.text_color;
+    let font = if spec.text_font.is_empty() {
+        "Helv"
+    } else {
+        spec.text_font.as_str()
+    };
+    let da = format!(
+        "{} {} {} rg /{} {} Tf",
+        fmt_num(r.clamp(0.0, 1.0)),
+        fmt_num(g.clamp(0.0, 1.0)),
+        fmt_num(b.clamp(0.0, 1.0)),
+        font,
+        fmt_num(spec.text_fontsize)
+    );
+    d.insert(Name::new("DA"), text_string(&da));
+    d.insert(Name::new("Ff"), Object::Integer(ff));
+    if !spec.choice_values.is_empty() {
+        d.insert(
+            Name::new("Opt"),
+            Object::Array(spec.choice_values.iter().map(|s| text_string(s)).collect()),
+        );
+    }
+    if !spec.field_value.is_empty() {
+        d.insert(Name::new("V"), text_string(&spec.field_value));
+    }
+
+    let annot = finalize_annot(doc, page, d, AnnotType::Widget)?;
+    register_acroform_field(doc, annot.obj)?;
+    Ok(annot)
+}
+
+/// Ensures the catalog `/AcroForm` exists (with a `/DR` font resource + `/DA`)
+/// and appends `field` to its `/Fields` array.
+fn register_acroform_field(doc: &DocumentStore, field: ObjRef) -> Result<()> {
+    let root = doc
+        .root()
+        .ok_or(Error::InvalidArgument("document has no /Root"))?;
+    let mut catalog = doc
+        .resolve(root)?
+        .as_dict()
+        .cloned()
+        .ok_or(Error::InvalidArgument("/Root is not a dictionary"))?;
+
+    // Resolve the existing AcroForm (inline or indirect), or build a fresh one.
+    let acro_ref = catalog
+        .get(&Name::new("AcroForm"))
+        .and_then(Object::as_reference);
+    let mut af = match catalog.get(&Name::new("AcroForm")) {
+        Some(Object::Dictionary(d)) => d.clone(),
+        Some(Object::Reference(r)) => doc.resolve(*r)?.as_dict().cloned().unwrap_or_default(),
+        _ => Dict::new(),
+    };
+
+    // Append to /Fields.
+    let mut fields = match af.get(&Name::new("Fields")) {
+        Some(Object::Array(a)) => a.clone(),
+        Some(Object::Reference(r)) => doc
+            .resolve(*r)?
+            .as_array()
+            .map(<[Object]>::to_vec)
+            .unwrap_or_default(),
+        _ => Vec::new(),
+    };
+    fields.push(Object::Reference(field));
+    af.insert(Name::new("Fields"), Object::Array(fields));
+
+    // A default /DA + a /DR with a Helv font, so viewers can render the field
+    // (fitz seeds these on first widget creation).
+    af.entry(Name::new("DA"))
+        .or_insert_with(|| text_string("0 0 0 rg /Helv 0 Tf"));
+    if let std::collections::btree_map::Entry::Vacant(slot) = af.entry(Name::new("DR")) {
+        let mut font = Dict::new();
+        font.insert(Name::new("Type"), Object::Name(Name::new("Font")));
+        font.insert(Name::new("Subtype"), Object::Name(Name::new("Type1")));
+        font.insert(Name::new("BaseFont"), Object::Name(Name::new("Helvetica")));
+        font.insert(Name::new("Name"), Object::Name(Name::new("Helv")));
+        let font_ref = doc.add_object(Object::Dictionary(font))?;
+        let mut fonts = Dict::new();
+        fonts.insert(Name::new("Helv"), Object::Reference(font_ref));
+        let mut dr = Dict::new();
+        dr.insert(Name::new("Font"), Object::Dictionary(fonts));
+        slot.insert(Object::Dictionary(dr));
+    }
+
+    // Write the AcroForm back where it lives (indirect ref or inline catalog).
+    if let Some(r) = acro_ref {
+        doc.update_object(r, Object::Dictionary(af))?;
+    } else {
+        catalog.insert(Name::new("AcroForm"), Object::Dictionary(af));
+        doc.update_object(root, Object::Dictionary(catalog))?;
+    }
+    Ok(())
+}
+
 /// `page.add_file_annot` — a `/FileAttachment` at `point` embedding `bytes` as a
 /// file named `filename`.
 ///
@@ -1811,6 +1992,20 @@ fn build_appearance(
         }
         AnnotType::FileAttachment => {
             emit_note_icon(&mut body, rect, stroke.unwrap_or(Color::new(1.0, 1.0, 0.0)));
+        }
+        AnnotType::Caret => {
+            // A filled caret: an upward triangle spanning the rect (fitz draws a
+            // small blue insertion caret). Default blue when no /C is set.
+            let color = stroke.unwrap_or(Color::new(0.0, 0.0, 1.0));
+            body.extend_from_slice(format!("{}\n", color.fill_op()).as_bytes());
+            let cx = (rect.x0 + rect.x1) / 2.0;
+            body.extend_from_slice(
+                format!("{} {} m\n", fmt_num(rect.x0), fmt_num(rect.y0)).as_bytes(),
+            );
+            body.extend_from_slice(format!("{} {} l\n", fmt_num(cx), fmt_num(rect.y1)).as_bytes());
+            body.extend_from_slice(
+                format!("{} {} l\nf\n", fmt_num(rect.x1), fmt_num(rect.y0)).as_bytes(),
+            );
         }
         AnnotType::Link | AnnotType::Widget | AnnotType::Other => {
             // No appearance (Link/Widget appearances are authored elsewhere).
