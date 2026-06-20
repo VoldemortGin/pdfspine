@@ -1,6 +1,6 @@
 # pdfspine — Objective Ground-Truth Accuracy Report
 
-_Generated: 2026-06-16T03:32:25.872111+00:00 • oracle (PyMuPDF/pdfminer) available: True_
+_Generated: 2026-06-20T00:29:56.968847+00:00 • oracle (PyMuPDF/pdfminer) available: True_
 
 Each extractor — **pdfspine**, **pymupdf** (fitz), and **pdfminer** — is scored against the SAME objective ground truth (`gt_text` or JATS `nxml` fulltext), not against another extractor. Cells show **mean / median**. Metrics: `lev` (edit similarity), `f1` (token F1), `jaccard` (word-set overlap), `order` (reading-order similarity). No PyMuPDF output is committed — only scores.
 
@@ -10,7 +10,7 @@ Corpus: **6** documents (6 with at least one extractor scored, 0 skipped).
 
 | extractor | docs | lev | f1 | jaccard | order |
 |---|---|---|---|---|---|
-| **pdfspine** | 6 | 0.530 / 0.487 | 0.854 / 0.883 | 0.717 / 0.744 | 0.610 / 0.551 |
+| **pdfspine** | 6 | 0.976 / 0.987 | 0.980 / 0.991 | 0.965 / 0.982 | 0.996 / 0.996 |
 | pymupdf | 6 | 0.980 / 0.991 | 0.980 / 0.991 | 0.965 / 0.982 | 1.000 / 1.000 |
 | pdfminer | 6 | 0.763 / 0.696 | 0.980 / 0.991 | 0.965 / 0.982 | 0.781 / 0.702 |
 
@@ -26,12 +26,12 @@ Over **6** documents scored by both pdfspine and fitz against ground truth, on t
 
 | doc | pdfspine order | fitz order | Δ |
 |---|---|---|---|
-| `3col.pdf` | 0.409 | 1.000 | -0.591 |
-| `2col.pdf` | 0.549 | 1.000 | -0.451 |
-| `2col-justified.pdf` | 0.550 | 1.000 | -0.450 |
-| `2col-with-header.pdf` | 0.553 | 1.000 | -0.447 |
-| `2col-narrow-gutter.pdf` | 0.604 | 1.000 | -0.397 |
-| `1col.pdf` | 0.995 | 0.999 | -0.004 |
+| `1col.pdf` | 0.993 | 1.000 | -0.007 |
+| `2col-narrow-gutter.pdf` | 0.995 | 1.000 | -0.005 |
+| `3col.pdf` | 0.996 | 1.000 | -0.004 |
+| `2col.pdf` | 0.997 | 1.000 | -0.003 |
+| `2col-justified.pdf` | 0.997 | 1.000 | -0.003 |
+| `2col-with-header.pdf` | 0.997 | 1.000 | -0.003 |
 
 ## 3. Per-document scores
 
@@ -39,12 +39,12 @@ Over **6** documents scored by both pdfspine and fitz against ground truth, on t
 
 | doc | subset | gt chars | o lev | f lev | p lev | o ord | f ord | p ord | notes |
 |---|---|---|---|---|---|---|---|---|---|
-| `1col.pdf` | manifest | 5120 | 0.918 | 0.925 | 0.918 | 0.995 | 0.999 | 0.992 |  |
-| `2col.pdf` | manifest | 5120 | 0.484 | 0.991 | 0.654 | 0.549 | 1.000 | 0.660 |  |
-| `2col-justified.pdf` | manifest | 5120 | 0.486 | 0.991 | 0.654 | 0.550 | 1.000 | 0.660 |  |
-| `3col.pdf` | manifest | 5120 | 0.286 | 0.991 | 0.962 | 0.409 | 1.000 | 0.970 |  |
-| `2col-with-header.pdf` | manifest | 5165 | 0.488 | 0.991 | 0.656 | 0.553 | 1.000 | 0.662 |  |
-| `2col-narrow-gutter.pdf` | manifest | 5120 | 0.515 | 0.992 | 0.735 | 0.604 | 1.000 | 0.741 |  |
+| `1col.pdf` | manifest | 5120 | 0.919 | 0.926 | 0.918 | 0.993 | 1.000 | 0.992 |  |
+| `2col.pdf` | manifest | 5120 | 0.987 | 0.991 | 0.654 | 0.997 | 1.000 | 0.660 |  |
+| `2col-justified.pdf` | manifest | 5120 | 0.988 | 0.991 | 0.654 | 0.997 | 1.000 | 0.660 |  |
+| `3col.pdf` | manifest | 5120 | 0.987 | 0.991 | 0.962 | 0.996 | 1.000 | 0.970 |  |
+| `2col-with-header.pdf` | manifest | 5165 | 0.988 | 0.991 | 0.656 | 0.997 | 1.000 | 0.662 |  |
+| `2col-narrow-gutter.pdf` | manifest | 5120 | 0.987 | 0.992 | 0.735 | 0.995 | 1.000 | 0.741 |  |
 
 ---
 

@@ -22,14 +22,26 @@ Pipeline per manifest entry:
 
 Emits a machine-readable JSON and a human GT-REPORT.md.
 
-Run from repo root::
+Run from repo root. The committed per-subset reports are regenerated with one
+invocation per corpus (each corpus's manifest lives next to its PDFs as
+``corpus-<subset>/manifest.json``)::
 
+    # PMC subset -> conformance/gt/GT-REPORT-pmc.md
     .venv/bin/python conformance/gt/run_gt.py \
-        --manifest conformance/gt/born_manifest.json \
-        --manifest conformance/gt/pmc_manifest.json \
-        --report conformance/gt/GT-REPORT.md \
-        --json conformance/gt/gt-results.json \
+        --manifest conformance/gt/corpus-pmc/manifest.json \
+        --report conformance/gt/GT-REPORT-pmc.md \
+        --json conformance/gt/gt-results-pmc.json \
         --oracle-python .venv-oracle/bin/python
+
+    # born-digital subset -> conformance/gt/GT-REPORT-born.md
+    .venv/bin/python conformance/gt/run_gt.py \
+        --manifest conformance/gt/corpus-born/manifest.json \
+        --report conformance/gt/GT-REPORT-born.md \
+        --json conformance/gt/gt-results-born.json \
+        --oracle-python .venv-oracle/bin/python
+
+(Pass multiple ``--manifest`` flags to combine subsets into one report; the
+``*-results.json`` outputs are gitignored — only the markdown is committed.)
 
 Self-test (no wheel, no network, no oracle needed)::
 
@@ -94,20 +106,45 @@ def _import_nxml_to_text():
     return nxml_to_text
 
 
+def _resolve_corpus_path(raw: str, manifest_dir: Path) -> Path | None:
+    """Resolve a manifest path to an existing file, robust to stale absolutes.
+
+    Resolution order, taking the first that exists:
+      1. the path as given (handles genuinely-valid absolute or relative paths);
+      2. the path re-based onto the manifest's own directory (relative paths);
+      3. the path's basename re-based onto the manifest's own directory.
+
+    Step 3 is what closes P0-6r: corpus manifests embed dead absolute paths from
+    a pre-rename checkout (``/.../pypdf/conformance/gt/corpus-pmc/X.pdf``); the
+    file actually lives next to the manifest under its basename, so re-basing the
+    basename recovers it without the harness depending on a frozen absolute path.
+
+    Returns the first existing candidate, or the most-specific candidate (for a
+    clear "not found" error) if none exist.
+    """
+    p = Path(raw)
+    candidates = [p]
+    if not p.is_absolute():
+        candidates.append(manifest_dir / p)
+    candidates.append(manifest_dir / p.name)
+    for c in candidates:
+        if c.exists():
+            return c
+    return candidates[-1]
+
+
 def resolve_ground_truth(entry: dict, manifest_dir: Path) -> str:
     """Return the ground-truth text for a manifest entry.
 
     Priority: explicit ``gt_text`` > ``nxml`` file -> jats_text.nxml_to_text.
-    Paths in the manifest are resolved relative to the manifest file's dir if
-    not absolute.
+    Manifest paths are resolved via :func:`_resolve_corpus_path`, which is robust
+    to stale absolute paths (it falls back to the basename next to the manifest).
     """
     if entry.get("gt_text") is not None:
         return str(entry["gt_text"])
     nxml = entry.get("nxml")
     if nxml:
-        p = Path(nxml)
-        if not p.is_absolute():
-            p = manifest_dir / p
+        p = _resolve_corpus_path(nxml, manifest_dir)
         nxml_to_text = _import_nxml_to_text()
         return nxml_to_text(p.read_bytes())
     raise ValueError("manifest entry has neither 'gt_text' nor 'nxml'")
@@ -252,12 +289,10 @@ def process_entry(
         rec["skipped"] = True
         rec["errors"]["pdf"] = "manifest entry has no 'pdf'/'path'/'file'"
         return rec
-    pdf = Path(pdf_raw)
-    if not pdf.is_absolute():
-        pdf = manifest_dir / pdf
-    if not pdf.exists():
+    pdf = _resolve_corpus_path(pdf_raw, manifest_dir)
+    if pdf is None or not pdf.exists():
         rec["skipped"] = True
-        rec["errors"]["pdf"] = f"pdf not found: {pdf}"
+        rec["errors"]["pdf"] = f"pdf not found: {pdf_raw}"
         return rec
 
     # Extract all three.
@@ -279,7 +314,10 @@ def process_entry(
         if t is None:
             continue
         try:
-            rec["scores"][ex] = normalize_scores(score_all(gt_text, t))
+            # score_all(hyp, ref): the extractor output `t` is the hypothesis,
+            # gt_text is the reference. (Symmetric metrics lev/f1/jaccard/order
+            # are unaffected; this keeps the asymmetric precision/recall right.)
+            rec["scores"][ex] = normalize_scores(score_all(t, gt_text))
         except Exception as exc:  # noqa: BLE001
             rec["errors"][ex] = (rec["errors"].get(ex, "") + f" | score: {exc}").strip(" |")
     return rec
@@ -594,11 +632,9 @@ def run_baseline(manifest: Path, min_order: float) -> dict:
             docs.append(rec)
             print(f"  [{i}/{len(entries)}] {doc_id} -> FAIL ({rec['error']})", flush=True)
             continue
-        pdf = Path(pdf_raw)
-        if not pdf.is_absolute():
-            pdf = manifest_dir / pdf
+        pdf = _resolve_corpus_path(pdf_raw, manifest_dir)
         if not pdf.exists():
-            rec["error"] = f"pdf not found: {pdf}"
+            rec["error"] = f"pdf not found: {pdf_raw}"
             all_ok = False
             docs.append(rec)
             print(f"  [{i}/{len(entries)}] {doc_id} -> FAIL ({rec['error']})", flush=True)

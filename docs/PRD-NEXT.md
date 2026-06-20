@@ -27,9 +27,11 @@
   23 deferred · 66 out-of-scope. We are now **at 88.4%, near the practical ceiling** (Phase 2 landed the +29
   achievable-without-the-Font-refactor batch); the remaining 23 deferred are the long tail (OCG layers,
   device-replay, embedded-font-program-gated symbols).
-- **Text extraction:** at fitz parity for **single-column** born-digital / CJK / EUR-Lex / GovInfo. **NOT at
-  parity for multi-column** — committed GT shows PMC journals at order 0.08–0.44 vs fitz ~0.99, born-digital
-  0/6 match-or-exceed (see §3 C4, Phase 3). Arabic/bidi beats fitz (logical order, UAX#9 reorder).
+- **Text extraction:** at fitz parity for **single-column AND multi-column**. The multi-column engine landed
+  (06-16 PM) and **P3-2 verified it** (2026-06-20, fresh GT): PMC order **0.965 / 0.995** vs fitz 0.975/0.997,
+  born-digital **0.996** vs 1.000 — within 0.000–0.009 per column doc (PMC212687 0.083→0.996, born 2col
+  0.549→0.997). CJK / EUR-Lex / GovInfo at parity; Arabic/bidi beats fitz (logical order, UAX#9 reorder). One
+  ordering-only residual: PMC212689 (order 0.645, tokens all present) → P3-1r.
 - **Rendering (`get_pixmap`):** prior SSIM **0.945 mean / 0.986 median** vs fitz was dragged down by the 3
   worst pages of **blank non-embedded standard-14 body text** — **fixed in P1-1** (Liberation OFL fallback;
   real-page ink coverage +5..+10 pts), so the true mean is now higher (fresh oracle re-measure pending —
@@ -56,16 +58,16 @@ Objective ground-truth + differential harness in `conformance/gt/` (scripts comm
 - `tables_diff.py` — find_tables vs fitz (currently fitz-**agreement** only, no gold GT — see Phase 3).
   `render_diff.py` — get_pixmap vs fitz (SSIM).
 - Real-corpus differential: `conformance/run_validation.py` + `fetch_corpus.py`.
-- **Venvs:** `.venv` (pdfspine wheel) is the engine under test; `.venv-oracle` (real fitz 1.27 + pdfminer +
+- **Venvs:** `.venv` (pdfspine wheel) is the engine under test; `.venv-oracle` (real fitz 1.24.14 + pdfminer +
   pypdfium2 + rapidocr) is the GROUND-TRUTH oracle. **In `.venv`, `import fitz` is the pdfspine SHIM** — for
-  true correctness always cross-check against `.venv-oracle`. No oracle output is ever committed. **Caveat:**
-  `.venv-oracle` is absent on this machine, so local oracle cross-checks are currently unavailable — re-create
-  it per this section to restore them.
-- **Reproducibility debt — resolved in P0-6:** the 7 committed manifests/reports no longer hard-code
-  `/workspace/pypdf` (de-absolutized to repo-relative; `run_gt.py` resolves corpora after a rename). **Minor
-  residual (→ P0-6r):** the gitignored/regenerable corpus manifests (`conformance/gt/corpus-*/manifest.json`)
-  still embed absolute paths — `fetch_corpus.py` should emit manifest-relative pdf paths so regenerations stay
-  rename-proof.
+  true correctness always cross-check against `.venv-oracle`. No oracle output is ever committed. **Set up
+  (2026-06-20):** `.venv-oracle` now holds real PyMuPDF **1.24.14 / MuPDF 1.24.11** (the COMPAT baseline) and is
+  the live fitz reference (`.venv-oracle/bin/python`). Regenerate via `.venv/bin/python -m venv .venv-oracle &&
+  .venv-oracle/bin/python -m pip install pymupdf==1.24.14 pdfminer.six pypdfium2`.
+- **Reproducibility debt — RESOLVED (P0-6 + P0-6r):** committed manifests/reports no longer hard-code
+  `/workspace/pypdf`, and `run_gt.py` now resolves each corpus pdf/nxml relative to its manifest dir (falling
+  back to the basename beside the manifest), so even the gitignored corpus manifests' stale absolute paths no
+  longer break scoring after a rename. (Closed while regenerating the GT reports during P3-2.)
 
 ## 3. Correction log — where the previous A–F framing was wrong
 
@@ -78,7 +80,7 @@ mis-stated the work. The phased plan in §4 replaces it. Key corrections (all ca
 | C1 | (silent) | **Version hard-pinned `0.0.0`**; no tag→version in `release.yml`. A tagged release ships a `0.0.0` wheel. **Hard blocker.** **✅ FIXED in Phase 0 (P0-1).** | `pyproject.toml:8`, `Cargo.toml:24`, `crates/py-bindings/src/lib.rs:33`, `.github/workflows/release.yml:48` |
 | C2 | §7: "always `PdfUnsupportedError`, never `AttributeError`" | **~50 of 56 deferred symbols raise bare `AttributeError`.** `_UNIMPLEMENTED_*` maps cover only 2; the guard never checks runtime behavior. **✅ FIXED in Phase 0 (P0-2)** for the 40 Page/Document deferred symbols; 12 deferred members on non-subclassable `_core` types still `AttributeError` (→ P0-2r). | `python/pdfspine/document.py:37,2276,3700`, `scripts/compat-symbol-guard.py` |
 | C3 | §F: Font-program refactor is the keystone that unblocks std-14 rendering | **False.** Renderer builds its own `GlyphFont` from `/FontFile*`; never consults `pdf_fonts::Font`. Std-14 fix = bundle a fallback family (independent). Refactor payoff = +2 API symbols only. | `crates/pdf-render/src/render.rs:497,528`, `crates/pdf-fonts/src/font.rs` |
-| C4 | §D: "text already at parity, diminishing returns" | **Overstated.** PMC 5/12 docs order 0.08–0.44 vs fitz ~0.99; born-digital 0/6 match-or-exceed. Parity holds **single-column only**. | `conformance/gt/GT-REPORT-pmc.md`, `GT-REPORT-born.md` |
+| C4 | §D: "text already at parity, diminishing returns" | Read as overstated off a **stale 06-16-morning report** (PMC 0.08–0.44, born 0/6); the multi-column engine landed 06-16 PM and **✅ P3-2 verified parity** (2026-06-20): PMC order 0.965/0.995, born 0.996 vs fitz, reports regenerated. Residual: PMC212689 ordering (→ P3-1r). | `conformance/gt/GT-REPORT-pmc.md`, `GT-REPORT-born.md` |
 | C5 | (an earlier draft claimed a 648-vs-647 count drift) | **No drift** — that "648" was a `grep` artifact counting the comment legend line. COMPAT body, `[meta]`, README, and PARITY are all consistent at **647 / 84.1%**. No doc-number change needed. | `COMPAT.toml:31`, `README.md:14`, `PARITY.md:40` |
 | C6 | 4 symbols listed deferred | `Page.links`, `Page.first_link`, `Document.outline`, `Document.extract_image` are **implemented + live** (missed by `_reconcile_batch34`). Free +4. **✅ FIXED in Phase 0 (P0-3)** — flipped + COMPAT regenerated to 651 / 84.7%. | `python/pdfspine/document.py:1513,1518,3206,3038` |
 | C7 | §3.B `convert_to_pdf` = "heavy ops" / stub | Rust impl **finished** (`imagedoc::convert_to_pdf`, `image_to_pdf`); just **unexposed** in py-bindings. Image-input case is a small binding task. | `crates/pdf-image/src/imagedoc.rs:137`, `crates/pdf-api/src/image.rs:206` |
@@ -143,15 +145,12 @@ oracle-cross-checked against real PyMuPDF 1.24.14 (`.venv-oracle`) with zero reg
 
 ### Phase 3 — Post-launch correctness
 
-- **P3-1 · Multi-column reading-order engine** — *L · High*
-  - **Why:** the real-world text gap (C4). The recursive XY-cut + gutter engine exists but mis-cuts browser-CSS-multicolumn and real 2-col journal gutters.
-  - **Files:** `crates/pdf-text/src/layout.rs:575,700,1050`.
-  - **Acceptance:** PMC + born-digital GT order rises from ~0.4–0.65 toward fitz's ~0.98 (`run_gt.py`); no single-column regression; the P1-3 gate guards it.
+- **P3-1 · Multi-column reading-order engine — ✅ EFFECTIVELY DONE (verified 2026-06-20)** — *was L · High*
+  - The recursive XY-cut + occupancy-valley gutter engine **already landed** (commits `9ff0e6a`/`e56bcb9`/`633f0f6`/`06d24c8`, 06-16 PM). Fresh GT (P3-2): PMC order **0.965/0.995** vs fitz 0.975/0.997, born-digital **0.996** vs 1.000 — within 0.000–0.009 per column doc (PMC212687 0.083→0.996, born 2col 0.549→0.997, 3col 0.409→0.996). No single-column regression; the P1-3 gate now guards it.
+  - **Residual → P3-1r** (*S · ordering-only*): PMC212689 scores order 0.645 vs fitz 0.749 — content at full parity (f1 0.940 / jaccard 0.868), only reading-order placement differs on this one real-world 2-col doc.
 
-- **P3-2 · Investigate PMC near-zero `lev` collapse** — *M · High*
-  - **Why:** large 2-col PMC papers score `lev` 0.000–0.003 with a 4× jaccard gap — suggests dropped content beyond ordering. Diagnose: render one page, diff `get_text` vs fitz to localize.
-  - **Files:** `crates/pdf-text/src/layout.rs:447`, `conformance/pdfspine_worker.py` (re-fetch via `pmc_fetch.py`).
-  - **Acceptance:** root cause identified; if a content bug, fixed with a regression test.
+- **P3-2 · PMC near-zero collapse — ✅ DONE (2026-06-20): diagnosed as a STALE REPORT, not a bug** — *M · High*
+  - Root cause: `GT-REPORT-pmc.md`/`GT-REPORT-born.md` were generated 06-16 **morning**, before the column engine landed that afternoon. Independently verified the current build is at fitz parity (PMC212687 pdfspine 69409 vs fitz 69385 chars, direct word-jaccard 0.987; born multi-column jaccard 1.0). **No content-dropping bug exists.** Both reports regenerated against the current build + oracle; `run_gt.py` stale-path resolution + score-arg-swap fixed (closing **P0-6r**).
 
 - **P3-3 · Expand Indexed/Separation/DeviceN colorspaces + apply `/Decode` (render path)** — *L · Medium*
   - **Why:** Indexed images render as raw palette indices and Separation/DeviceN as raw tint values (palette/tint transform never run); `/Decode` honored only inside DCT. Separately, vector `scn` for a 1-component Separation maps tint 1.0 → **white** (inverted for dark spot inks); `cs`/`CS` are no-ops. The `PdfFunction` evaluator already exists. (ICC is explicitly **out** — large/low-value, keep as a documented deviation.)
@@ -219,7 +218,7 @@ oracle-cross-checked against real PyMuPDF 1.24.14 (`.venv-oracle`) with zero reg
 | P0-6 | CHANGELOG + fix stale `/workspace/pypdf` paths | S | Low | ✅ done | 0 |
 | P0-2r | 12 `_core` PyO3 deferred members still AttributeError (Rust-core) | M | Med | open | 0r |
 | P0-5r | OCR publishing — model-data companion + OCR-in-wheel (Option A) | M | High | ✅ done | 0r |
-| P0-6r | `fetch_corpus.py` emits manifest-relative pdf paths | S | Low | open | 0r |
+| P0-6r | run_gt.py resolves stale-absolute corpus paths (rename-proof) | S | Low | ✅ done | 0r |
 | P1-1 | Liberation std-14 fallback fonts (blank body text) | M | High | ✅ done | 1 |
 | P1-2 | Honor `/Decode [1 0]` ImageMask | S | Med | ✅ done | 1 |
 | P1-3 | Real extraction/render CI accuracy gate | M | High | ✅ done | 1 |
@@ -230,8 +229,9 @@ oracle-cross-checked against real PyMuPDF 1.24.14 (`.venv-oracle`) with zero reg
 | P2-4 | Medium parity (TOC edit, extract_font, subset…) | M | Low | ✅ done | 2 |
 | P2r-1 | `set_toc` page-mapping off-by-one (get_toc resolves one page low) | S | Low | open | 2r |
 | P2r-2 | `image_profile` dict-key divergence vs spec | S | Low | open | 2r |
-| P3-1 | Multi-column reading-order engine | L | High | – | 3 |
-| P3-2 | PMC near-zero-lev investigation | M | High | – | 3 |
+| P3-1 | Multi-column reading-order engine (landed 06-16; verified) | L | High | ✅ done | 3 |
+| P3-2 | PMC collapse — diagnosed (stale report, no bug) + reports regen | M | High | ✅ done | 3 |
+| P3-1r | PMC212689 ordering-only residual (order 0.645 vs 0.749) | S | Low | open | 3r |
 | P3-3 | Indexed/Separation/DeviceN + `/Decode` (render) | L | Med | – | 3 |
 | P3-4 | Kangxi fold + edge-case tests + robustness rerun | S–M | Low–Med | – | 3 |
 | P3-5 | FinTabNet gold-table GT | M | Med | – | 3 |
@@ -240,10 +240,10 @@ oracle-cross-checked against real PyMuPDF 1.24.14 (`.venv-oracle`) with zero reg
 | P4-3 | OCR `recognize()` rayon parallelism | M | High | – | 4 |
 | P4-4 | Full public-surface API reference docs | M | Med | – | 4 |
 
-**Recommended next 3 (in order):** *(Phase 0 + P0-5r + Phase 1 + Phase 2 COMPLETE — committed on `main`; parity now 88.4%, near the practical ceiling.)*
-1. **Phase 3 — P3-1 multi-column reading-order engine** — the real-world text gap (C4), now guarded by the P1-3 accuracy gate; the highest-impact remaining work (PMC/born-digital order rises toward fitz's ~0.98).
-2. **P4-1 Font `/FontFile*`** API work — unblocks `Font.glyph_bbox`/`buffer` + user `Font(fontbuffer=)` (API completeness, **not** the rendering keystone — C3).
-3. **The low-priority residuals** — P0-2r `_core` deferred, P0-6r corpus paths, P1-1r Symbol/Zapf, P2r-1 `set_toc` off-by-one, P2r-2 `image_profile` dict-key.
+**Recommended next 3 (in order):** *(Phase 0 + P0-5r + Phase 1 + Phase 2 + P3-1/P3-2 COMPLETE — on `main`; parity 88.4%, multi-column at fitz parity.)*
+1. **Phase 3 — P3-3 Indexed/Separation/DeviceN colorspaces + `/Decode`** (*L · Med*) — the next real correctness gap (palette/tint transforms never run; a dark 1-component Separation fill renders white); the `PdfFunction` evaluator already exists.
+2. **P3-4 cheap correctness insurance** (*S–M*) — Kangxi CJK fold, vertical/Identity-V + ToUnicode-less Type0 edge tests, a 250+ GovDocs1/SafeDocs robustness rerun.
+3. **P4-1 Font `/FontFile*`** API work — unblocks `Font.glyph_bbox`/`buffer` + user `Font(fontbuffer=)` (API completeness, **not** the rendering keystone — C3). Then the low-priority residuals (P3-1r, P0-2r, P1-1r, P2r-1, P2r-2).
 
 ## 7. Pre-public chores + docs upkeep (do alongside / last)
 
@@ -280,6 +280,6 @@ and trust a clean machine / CI.
 
 *Re-verified 2026-06-19 from a code-level 5-dimension survey (project health · API parity · rendering ·
 extraction/conformance · perf/OCR). §3 is the correction log against this doc's previous A–F framing.
-**Phase 0 + P0-5r + Phase 1 landed on 2026-06-19, + Phase 2 landed on 2026-06-20** (on `main`; coverage
-84.7%→88.4%) — §3 rows C1 / C2 / C6 / C7 / C10 / C11 / C13 are fixed; residuals P0-2r / P0-6r / P1-1r /
-P2r-1 / P2r-2 carried forward.*
+**Phase 0 + P0-5r + Phase 1 on 2026-06-19; Phase 2 + P3-1/P3-2 (multi-column verified at fitz parity) on
+2026-06-20** (on `main`; coverage 84.7%→88.4%) — §3 rows C1 / C2 / C4 / C6 / C7 / C10 / C11 / C13 fixed +
+P0-6r closed; residuals P0-2r / P1-1r / P2r-1 / P2r-2 / P3-1r carried forward.*
