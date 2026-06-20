@@ -527,6 +527,191 @@ fn render_page_012_non_embedded_font_no_glyphs() {
 }
 
 // ============================================================================
+// RENDER-PAGE-CS-* (P3-3): Indexed / Separation / DeviceN colorspaces + /Decode.
+//
+// Each test builds a synthetic single-page PDF exercising one colorspace feature
+// and asserts the *rendered* pixel colors. The expected colors are the ones real
+// fitz produces for the same construct (palette lookup / tint transform run, dark
+// spot ink ≠ white, /Decode honored), cross-checked against `.venv-oracle`.
+// ============================================================================
+
+// RENDER-PAGE-CS-SEP-VECTOR (sub-problem 1): a 1-component Separation fill whose
+// tint transform maps tint 1.0 → a DARK CMYK ink must render DARK, not white.
+// Pre-P3-3 `scn` mapped tint 1.0 → gray(1.0) = white (the reported bug).
+#[test]
+fn render_page_cs_separation_vector_dark_not_white() {
+    // /Sep1: Separation over DeviceCMYK; tint transform t -> [0 0 0 t] (black ink).
+    // Fill a rect at tint 1.0 → must be black (0,0,0), NOT white.
+    let res = "<< /ColorSpace << /Sep1 20 0 R >> >>";
+    let content = b"/Sep1 cs 1 scn 50 50 100 100 re f";
+    let sep = b"[/Separation /Spot1 /DeviceCMYK 21 0 R]".to_vec();
+    let func = b"<< /FunctionType 2 /Domain [0 1] /C0 [0 0 0 0] \
+                 /C1 [0 0 0 1] /N 1 >>"
+        .to_vec();
+    let pdf = page_pdf_extra(content, res, 0, vec![(20, sep), (21, func)]);
+    let (doc, page) = open_page(pdf);
+    let pm = render(&doc, &page, &RenderOptions::default());
+    assert_eq!(
+        px(&pm, 100, 100),
+        (0, 0, 0),
+        "dark spot-color fill renders dark, not white"
+    );
+    // Outside the rect stays white.
+    assert_eq!(px(&pm, 10, 10), (255, 255, 255));
+}
+
+// RENDER-PAGE-CS-SEP-VECTOR-RGB: a Separation over DeviceRGB whose tint 1.0 maps
+// to a specific RGB (a colored spot ink), proving the alternate space is honored.
+#[test]
+fn render_page_cs_separation_vector_rgb_alt() {
+    // tint t -> [0.2*t 0.4*t 0.8*t]; at tint 1.0 → (51,102,204).
+    let res = "<< /ColorSpace << /Sep1 20 0 R >> >>";
+    let content = b"/Sep1 cs 1 scn 50 50 100 100 re f";
+    let sep = b"[/Separation /Blue /DeviceRGB 21 0 R]".to_vec();
+    let func = b"<< /FunctionType 2 /Domain [0 1] /C0 [0 0 0] \
+                 /C1 [0.2 0.4 0.8] /N 1 >>"
+        .to_vec();
+    let pdf = page_pdf_extra(content, res, 0, vec![(20, sep), (21, func)]);
+    let (doc, page) = open_page(pdf);
+    let pm = render(&doc, &page, &RenderOptions::default());
+    // 0.2*255=51, 0.4*255=102, 0.8*255=204.
+    assert_eq!(
+        px(&pm, 100, 100),
+        (51, 102, 204),
+        "tint transform → RGB alt"
+    );
+}
+
+// RENDER-PAGE-CS-INDEXED-IMAGE (sub-problem 2): an Indexed image must render the
+// palette colors, not the raw indices. Pre-P3-3 it rendered index bytes as gray.
+#[test]
+fn render_page_cs_indexed_image_palette_lookup() {
+    // 4x1 image, 8 bpc indices [0,0,1,1]; palette: 0=red(255,0,0), 1=green
+    // (0,255,0). Two solid texels per color so bilinear sampling at x=50/x=150
+    // stays inside a pure region. Indexed base DeviceRGB, hival 1, lookup=6 bytes.
+    let data = [0u8, 0u8, 1u8, 1u8];
+    let img = stream(
+        "/Type /XObject /Subtype /Image /Width 4 /Height 1 \
+         /ColorSpace [/Indexed /DeviceRGB 1 <FF0000 00FF00>] /BitsPerComponent 8",
+        &data,
+    );
+    // Map the 2x1 image across the page: left half = index 0, right half = index 1.
+    let content = b"q 200 0 0 200 0 0 cm /Im0 Do Q";
+    let pdf = page_pdf_extra(
+        content,
+        "<< /XObject << /Im0 20 0 R >> >>",
+        0,
+        vec![(20, img)],
+    );
+    let (doc, page) = open_page(pdf);
+    let pm = render(&doc, &page, &RenderOptions::default());
+    // Left column → palette entry 0 (red); right column → entry 1 (green).
+    // Sample inside each solid 2-texel region (avoids the bilinear seam at the
+    // exact midpoint). Left half → palette red; right half → palette green.
+    assert_eq!(px(&pm, 50, 100), (255, 0, 0), "indexed left = palette red");
+    assert_eq!(
+        px(&pm, 150, 100),
+        (0, 255, 0),
+        "indexed right = palette green"
+    );
+}
+
+// RENDER-PAGE-CS-SEP-IMAGE (sub-problem 3): a Separation image must run the tint
+// transform per pixel (tint → alternate → RGB), not render the raw tint as gray.
+#[test]
+fn render_page_cs_separation_image_tint_transform() {
+    // 4x1 image, 8 bpc tints [0,0,255,255] → normalized [0.0,0.0,1.0,1.0]. Tint
+    // transform t -> [0 0 0 t] over DeviceCMYK: tint 0 → white, tint 1 → black.
+    let data = [0u8, 0u8, 255u8, 255u8];
+    let img = stream(
+        "/Type /XObject /Subtype /Image /Width 4 /Height 1 \
+         /ColorSpace [/Separation /Spot1 /DeviceCMYK 21 0 R] /BitsPerComponent 8",
+        &data,
+    );
+    let func = b"<< /FunctionType 2 /Domain [0 1] /C0 [0 0 0 0] \
+                 /C1 [0 0 0 1] /N 1 >>"
+        .to_vec();
+    let content = b"q 200 0 0 200 0 0 cm /Im0 Do Q";
+    let pdf = page_pdf_extra(
+        content,
+        "<< /XObject << /Im0 20 0 R >> >>",
+        0,
+        vec![(20, img), (21, func)],
+    );
+    let (doc, page) = open_page(pdf);
+    let pm = render(&doc, &page, &RenderOptions::default());
+    assert_eq!(px(&pm, 50, 100), (255, 255, 255), "tint 0 → white");
+    assert_eq!(px(&pm, 150, 100), (0, 0, 0), "tint 1 → black ink");
+}
+
+// RENDER-PAGE-CS-DEVICEN-IMAGE (sub-problem 3): a 2-colorant DeviceN image runs
+// the N-input tint transform per pixel.
+#[test]
+fn render_page_cs_devicen_image_tint_transform() {
+    // 4x1 image, 2 components/pixel, 8 bpc. Texels 0-1 = (0,0) → black; texels
+    // 2-3 = (255,255) → white, via a 2x2x3 sampled tint transform over DeviceRGB.
+    let data = [0u8, 0u8, 0u8, 0u8, 255u8, 255u8, 255u8, 255u8];
+    let img = stream(
+        "/Type /XObject /Subtype /Image /Width 4 /Height 1 \
+         /ColorSpace [/DeviceN [/C1 /C2] /DeviceRGB 21 0 R] /BitsPerComponent 8",
+        &data,
+    );
+    // Type-0 sampled: 2 inputs, size [2 2], 3 outputs, 8 bps.
+    // table order (row-major over inputs): (0,0)=black,(0,1)=red,(1,0)=green,(1,1)=white
+    let samples = [
+        0u8, 0, 0, 255, 0, 0, // input0=0: (0,0),(0,1)
+        0, 255, 0, 255, 255, 255, // input0=1: (1,0),(1,1)
+    ];
+    let func = stream(
+        "/FunctionType 0 /Domain [0 1 0 1] /Range [0 1 0 1 0 1] \
+         /Size [2 2] /BitsPerSample 8",
+        &samples,
+    );
+    let content = b"q 200 0 0 200 0 0 cm /Im0 Do Q";
+    let pdf = page_pdf_extra(
+        content,
+        "<< /XObject << /Im0 20 0 R >> >>",
+        0,
+        vec![(20, img), (21, func)],
+    );
+    let (doc, page) = open_page(pdf);
+    let pm = render(&doc, &page, &RenderOptions::default());
+    assert_eq!(px(&pm, 50, 100), (0, 0, 0), "DeviceN (0,0) → black");
+    assert_eq!(px(&pm, 150, 100), (255, 255, 255), "DeviceN (1,1) → white");
+}
+
+// RENDER-PAGE-CS-DECODE-IMAGE (sub-problem 4): a /Decode [1 0] on a DeviceGray
+// image inverts the samples generally (not only inside DCT). A 0x00 sample with
+// /Decode [1 0] decodes to white; 0xFF decodes to black.
+#[test]
+fn render_page_cs_decode_inverts_gray_image() {
+    // 4x1 DeviceGray, 8 bpc: [0,0,255,255]. With /Decode [1 0]: 0→1.0 (white),
+    // 255→0.0 (black) — the inverse of the default. Two solid texels per region.
+    let data = [0u8, 0u8, 255u8, 255u8];
+    let img = stream(
+        "/Type /XObject /Subtype /Image /Width 4 /Height 1 \
+         /ColorSpace /DeviceGray /BitsPerComponent 8 /Decode [1 0]",
+        &data,
+    );
+    let content = b"q 200 0 0 200 0 0 cm /Im0 Do Q";
+    let pdf = page_pdf_extra(
+        content,
+        "<< /XObject << /Im0 20 0 R >> >>",
+        0,
+        vec![(20, img)],
+    );
+    let (doc, page) = open_page(pdf);
+    let pm = render(&doc, &page, &RenderOptions::default());
+    // Without /Decode, left would be black & right white; /Decode [1 0] swaps.
+    assert_eq!(
+        px(&pm, 50, 100),
+        (255, 255, 255),
+        "/Decode inverts: 0 → white"
+    );
+    assert_eq!(px(&pm, 150, 100), (0, 0, 0), "/Decode inverts: 255 → black");
+}
+
+// ============================================================================
 // RENDER-PAGE-PROP-001: arbitrary content never panics; always a Pixmap.
 // ============================================================================
 

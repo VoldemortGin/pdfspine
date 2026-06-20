@@ -175,11 +175,11 @@ fn func_stitching_eval() {
 fn func_sampled_eval() {
     // 2 samples of a 1-channel function: 0.0 at t=0, 1.0 at t=1.
     let f = PdfFunction::Sampled {
-        domain: [0.0, 1.0],
-        size: 2,
+        domain: vec![[0.0, 1.0]],
+        size: vec![2],
         bits_per_sample: 8,
         n_outputs: 1,
-        encode: [0.0, 1.0],
+        encode: vec![[0.0, 1.0]],
         decode: vec![[0.0, 1.0]],
         samples: vec![0, 255],
     };

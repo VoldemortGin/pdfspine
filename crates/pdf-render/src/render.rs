@@ -44,7 +44,7 @@ use std::collections::HashMap;
 
 use pdf_core::geom::{IRect, Matrix, Rect};
 use pdf_core::{Dict, DocumentStore, Name, ObjRef, Object, Page};
-use pdf_image::codecs::decode_image_stream;
+use pdf_image::codecs::{decode_image_stream, pixmap_from_decoded};
 use pdf_image::pixmap::{Colorspace, Pixmap};
 use pdf_text::{interpret_page_render, ImageOp, RenderOp, ShadingOp, TextRun};
 
@@ -1084,7 +1084,9 @@ fn draw_image_op(canvas: &mut Canvas, doc: &DocumentStore, img: &ImageOp) -> Res
     }
 
     // Regular image → Pixmap, optionally with an /SMask soft-mask alpha plane.
-    let mut pix = match Pixmap::from_decoded(&decoded) {
+    // Colorspace-aware: Indexed palette lookup, Separation/DeviceN tint
+    // transform, Lab, and the `/Decode` array are honored here (P3-3).
+    let mut pix = match pixmap_from_decoded(doc, &img.dict, &decoded) {
         Ok(p) => p,
         Err(_) => return Ok(()),
     };
@@ -1211,181 +1213,14 @@ fn shading_extend(dict: &Dict) -> (bool, bool) {
     }
 }
 
-/// Resolves a `/Function` object (a dict, a stream, or an array of single-output
-/// functions) into a [`PdfFunction`]. Supports types 0 (sampled), 2
-/// (exponential) and 3 (stitching); type 4 (PostScript) is deferred (`None`).
+/// Resolves a `/Function` object into a [`PdfFunction`] via the shared
+/// `pdf_core::colorspace` evaluator (types 0/2/3; type 4 deferred). Kept as a
+/// thin alias so the shading call sites read unchanged.
 fn resolve_function(doc: &DocumentStore, obj: &Object) -> Option<PdfFunction> {
-    let obj = resolve_obj(doc, obj)?;
-    match obj.as_ref() {
-        Object::Array(arr) => {
-            // An array of 1-output functions: combine into one multi-output
-            // function by sampling each at eval-time. We approximate by wrapping
-            // each as a sub-function and building a synthetic stitching-free
-            // combiner — but the renderer's `PdfFunction` is single-valued per
-            // call, so we instead merge n single-output exponentials/sampled into
-            // one exponential when all are type 2, else take the first.
-            combine_function_array(doc, arr)
-        }
-        Object::Dictionary(d) => function_from_dict(doc, d, None),
-        Object::Stream(s) => {
-            let data = doc.decode_stream(s).and_then(|o| o.into_decoded()).ok();
-            function_from_dict(doc, &s.dict, data.as_deref())
-        }
-        _ => None,
-    }
-}
-
-/// Combines an array of single-output `/Function`s into one multi-output
-/// [`PdfFunction`]. Common for separation/RGB ramps `[f_r f_g f_b]`. When every
-/// element is a type-2 exponential we merge into one exponential whose `c0`/`c1`
-/// concatenate the per-channel endpoints (the typical case); otherwise we fall
-/// back to the first function.
-fn combine_function_array(doc: &DocumentStore, arr: &[Object]) -> Option<PdfFunction> {
-    if arr.is_empty() {
-        return None;
-    }
-    let funcs: Vec<PdfFunction> = arr
-        .iter()
-        .filter_map(|o| resolve_function(doc, o))
-        .collect();
-    if funcs.is_empty() {
-        return None;
-    }
-    // Merge a vector of type-2 exponentials into one (concatenated outputs).
-    let mut c0 = Vec::new();
-    let mut c1 = Vec::new();
-    let mut domain = [0.0f32, 1.0];
-    let mut n = 1.0f32;
-    let mut all_exp = true;
-    for f in &funcs {
-        if let PdfFunction::Exponential {
-            domain: d,
-            c0: a,
-            c1: b,
-            n: e,
-        } = f
-        {
-            domain = *d;
-            n = *e;
-            c0.extend_from_slice(a);
-            c1.extend_from_slice(b);
-        } else {
-            all_exp = false;
-            break;
-        }
-    }
-    if all_exp && !c0.is_empty() {
-        return Some(PdfFunction::Exponential { domain, c0, c1, n });
-    }
-    funcs.into_iter().next()
-}
-
-/// Builds a [`PdfFunction`] from a function dict + optional decoded stream data
-/// (for a type-0 sampled function). `None` for type 4 or a malformed dict.
-fn function_from_dict(doc: &DocumentStore, d: &Dict, data: Option<&[u8]>) -> Option<PdfFunction> {
-    let ftype = d.get(&Name::new("FunctionType")).and_then(Object::as_i64)?;
-    let domain = read_pair(d, "Domain").unwrap_or([0.0, 1.0]);
-    match ftype {
-        2 => {
-            let c0 = read_floats(d, "C0").unwrap_or_else(|| vec![0.0]);
-            let c1 = read_floats(d, "C1").unwrap_or_else(|| vec![1.0]);
-            let n = d
-                .get(&Name::new("N"))
-                .and_then(Object::as_f64)
-                .unwrap_or(1.0) as f32;
-            Some(PdfFunction::Exponential { domain, c0, c1, n })
-        }
-        3 => {
-            let sub = d.get(&Name::new("Functions")).and_then(Object::as_array)?;
-            let functions: Vec<PdfFunction> = sub
-                .iter()
-                .filter_map(|o| resolve_function(doc, o))
-                .collect();
-            if functions.is_empty() {
-                return None;
-            }
-            let bounds = read_floats(d, "Bounds").unwrap_or_default();
-            let encode = read_pairs(d, "Encode");
-            Some(PdfFunction::Stitching {
-                domain,
-                functions,
-                bounds,
-                encode,
-            })
-        }
-        0 => {
-            let data = data?;
-            let size = d
-                .get(&Name::new("Size"))
-                .and_then(Object::as_array)
-                .and_then(|a| a.first())
-                .and_then(Object::as_i64)
-                .map(|v| v.max(0) as usize)?;
-            let bits_per_sample = d
-                .get(&Name::new("BitsPerSample"))
-                .and_then(Object::as_i64)? as u8;
-            let decode = read_pairs(d, "Decode");
-            let n_outputs = if decode.is_empty() { 1 } else { decode.len() };
-            let encode = read_pair(d, "Encode").unwrap_or([0.0, (size.max(1) - 1) as f32]);
-            let decode = if decode.is_empty() {
-                vec![[0.0, 1.0]; n_outputs]
-            } else {
-                decode
-            };
-            Some(PdfFunction::Sampled {
-                domain,
-                size,
-                bits_per_sample,
-                n_outputs,
-                encode,
-                decode,
-                samples: data.to_vec(),
-            })
-        }
-        _ => None, // type 4 (PostScript): deferred.
-    }
-}
-
-/// Reads a `[lo hi]` pair from a dict key.
-fn read_pair(d: &Dict, key: &str) -> Option<[f32; 2]> {
-    let a = d.get(&Name::new(key)).and_then(Object::as_array)?;
-    if a.len() < 2 {
-        return None;
-    }
-    Some([a[0].as_f64()? as f32, a[1].as_f64()? as f32])
-}
-
-/// Reads a flat float array from a dict key.
-fn read_floats(d: &Dict, key: &str) -> Option<Vec<f32>> {
-    let a = d.get(&Name::new(key)).and_then(Object::as_array)?;
-    Some(
-        a.iter()
-            .filter_map(|o| o.as_f64().map(|v| v as f32))
-            .collect(),
-    )
-}
-
-/// Reads a flat array as consecutive `[lo hi]` pairs.
-fn read_pairs(d: &Dict, key: &str) -> Vec<[f32; 2]> {
-    let Some(a) = d.get(&Name::new(key)).and_then(Object::as_array) else {
-        return Vec::new();
-    };
-    let flat: Vec<f32> = a
-        .iter()
-        .filter_map(|o| o.as_f64().map(|v| v as f32))
-        .collect();
-    flat.chunks_exact(2).map(|c| [c[0], c[1]]).collect()
+    pdf_core::parse_function(doc, obj)
 }
 
 // === small object helpers =================================================
-
-/// Resolves an indirect object reference (else returns the object as-is).
-fn resolve_obj(doc: &DocumentStore, obj: &Object) -> Option<std::sync::Arc<Object>> {
-    match obj {
-        Object::Reference(r) => doc.resolve(*r).ok(),
-        other => Some(std::sync::Arc::new(other.clone())),
-    }
-}
 
 /// A boolean dict value (default false).
 fn dict_bool(dict: &Dict, key: &str) -> bool {

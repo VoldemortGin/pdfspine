@@ -20,6 +20,8 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
+use pdf_core::colorspace::ColorSpace;
+
 use crate::codecs::DecodedImage;
 use crate::error::{Error, Result};
 
@@ -185,6 +187,97 @@ impl Pixmap {
         };
         let samples = upsample_to_8bit(&img.data, img.width, img.height, img.components, img.bits)?;
         Self::try_new(img.width, img.height, cs, false, samples)
+    }
+
+    /// Builds a [`Pixmap`] from a codec [`DecodedImage`] honoring the resolved
+    /// PDF `/ColorSpace` and `/Decode` array (PRD §8.10 / P3-3).
+    ///
+    /// - `Indexed` expands raw palette **indices** through the base-space lookup
+    ///   table → 8-bit RGB.
+    /// - `Separation` / `DeviceN` run the tint transform (1- or N-input) through
+    ///   the alternate space → 8-bit RGB.
+    /// - `Lab` is approximated → 8-bit RGB.
+    /// - Device spaces (`None`, or Gray/RGB/CMYK) keep the raw component layout;
+    ///   `/Decode` (if present) remaps each component's `0..=1` range.
+    ///
+    /// `decode` is the per-component `[lo, hi]` `/Decode` array (length =
+    /// component count) or empty for the default identity ranges.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Decode`] for an unsupported component count / bit depth or a
+    /// sample buffer too short for the declared geometry.
+    pub fn from_decoded_cs(
+        img: &DecodedImage,
+        cs: Option<&ColorSpace>,
+        decode: &[[f32; 2]],
+    ) -> Result<Self> {
+        let needs_expand = matches!(
+            cs,
+            Some(
+                ColorSpace::Indexed { .. }
+                    | ColorSpace::Separation { .. }
+                    | ColorSpace::DeviceN { .. }
+                    | ColorSpace::Lab
+            )
+        );
+        if let (true, Some(cs)) = (needs_expand, cs) {
+            return Self::expand_via_colorspace(img, cs, decode);
+        }
+        // Device space (or unresolved): the existing 8-bit interleaved path, plus
+        // `/Decode` remapping of each component when present.
+        let mut samples =
+            upsample_to_8bit(&img.data, img.width, img.height, img.components, img.bits)?;
+        if !decode.is_empty() {
+            apply_decode_device(&mut samples, img.components as usize, decode);
+        }
+        let space = match img.components {
+            1 => Colorspace::Gray,
+            3 => Colorspace::Rgb,
+            4 => Colorspace::Cmyk,
+            _ => return Err(Error::decode("Pixmap", "unsupported component count")),
+        };
+        Self::try_new(img.width, img.height, space, false, samples)
+    }
+
+    /// Expands an `Indexed`/`Separation`/`DeviceN`/`Lab` image to an 8-bit RGB
+    /// pixmap by reading **raw** native-bit-depth samples (indices/tints are not
+    /// rescaled to 0–255), applying `/Decode`, then mapping each pixel via `cs`.
+    fn expand_via_colorspace(
+        img: &DecodedImage,
+        cs: &ColorSpace,
+        decode: &[[f32; 2]],
+    ) -> Result<Self> {
+        let (w, h) = (img.width as usize, img.height as usize);
+        let comps = img.components as usize;
+        let max_index = ((1u32 << img.bits) - 1) as f32;
+        let raw = read_raw_samples(&img.data, img.width, img.height, img.components, img.bits)?;
+
+        let is_indexed = matches!(cs, ColorSpace::Indexed { .. });
+        let mut out = Vec::with_capacity(w * h * 3);
+        let mut comp_buf = vec![0f32; comps];
+        for px in raw.chunks_exact(comps) {
+            let rgb = if is_indexed {
+                // Raw index (already 0..hival); /Decode on an Indexed image maps
+                // [0, 2^bpc-1] → an index range — honor it if present.
+                let mut idx = f32::from(px[0]);
+                if let Some(d) = decode.first() {
+                    idx = d[0] + (idx / max_index) * (d[1] - d[0]);
+                }
+                cs.index_to_rgb(idx.round().max(0.0) as usize)
+            } else {
+                for (c, raw_v) in px.iter().enumerate() {
+                    let v = f32::from(*raw_v) / max_index;
+                    comp_buf[c] = match decode.get(c) {
+                        Some(d) => d[0] + v * (d[1] - d[0]),
+                        None => v,
+                    };
+                }
+                cs.to_rgb8(&comp_buf)
+            };
+            out.extend_from_slice(&rgb);
+        }
+        Self::try_new(img.width, img.height, Colorspace::Rgb, false, out)
     }
 
     /// Attaches a `DeviceGray` 8-bit soft-mask plane (`/SMask`) as an alpha
@@ -764,6 +857,83 @@ fn upsample_to_8bit(
             Ok(out)
         }
         _ => Err(Error::decode("Pixmap", "unsupported bit depth")),
+    }
+}
+
+/// Reads **raw** native-bit-depth samples (one `u16` per component, row-major,
+/// no row padding) **without** rescaling to 0–255 — the form an Indexed palette
+/// index or a Separation/DeviceN tint needs (the tint/index value is significant,
+/// not a 0–255 intensity). 16-bit samples are taken big-endian (PDF convention).
+fn read_raw_samples(
+    data: &[u8],
+    width: u32,
+    height: u32,
+    components: u8,
+    bits: u8,
+) -> Result<Vec<u16>> {
+    let w = width as usize;
+    let h = height as usize;
+    let comps = components as usize;
+    let per_row = w * comps;
+    let out_len = per_row
+        .checked_mul(h)
+        .ok_or(Error::LimitExceeded("pixmap sample size overflow"))?;
+    let mut out = Vec::with_capacity(out_len);
+    match bits {
+        8 => {
+            if data.len() < out_len {
+                return Err(Error::decode("Pixmap", "8-bit sample buffer too short"));
+            }
+            out.extend(data[..out_len].iter().map(|&b| u16::from(b)));
+        }
+        16 => {
+            let need = out_len
+                .checked_mul(2)
+                .ok_or(Error::LimitExceeded("pixmap sample size overflow"))?;
+            if data.len() < need {
+                return Err(Error::decode("Pixmap", "16-bit sample buffer too short"));
+            }
+            out.extend(
+                data.chunks_exact(2)
+                    .take(out_len)
+                    .map(|c| u16::from(c[0]) << 8 | u16::from(c[1])),
+            );
+        }
+        1 | 2 | 4 => {
+            let row_bytes = (per_row * bits as usize).div_ceil(8);
+            if data.len() < row_bytes * h {
+                return Err(Error::decode("Pixmap", "sub-byte sample buffer too short"));
+            }
+            for y in 0..h {
+                let row = &data[y * row_bytes..y * row_bytes + row_bytes];
+                let mut bit = 0usize;
+                for _ in 0..per_row {
+                    out.push(u16::from(read_bits(row, bit, bits as usize)));
+                    bit += bits as usize;
+                }
+            }
+        }
+        _ => return Err(Error::decode("Pixmap", "unsupported bit depth")),
+    }
+    Ok(out)
+}
+
+/// Applies a `/Decode` array to already-upsampled 8-bit **device** samples
+/// in place: each component byte `b` (a `0..=1` value) is remapped to
+/// `lo + (b/255)·(hi - lo)`, then re-quantized to `0..=255`. The common case is
+/// `/Decode [1 0 …]` (per-channel inversion).
+fn apply_decode_device(samples: &mut [u8], comps: usize, decode: &[[f32; 2]]) {
+    if comps == 0 {
+        return;
+    }
+    for px in samples.chunks_exact_mut(comps) {
+        for (c, byte) in px.iter_mut().enumerate() {
+            if let Some(d) = decode.get(c) {
+                let v = f32::from(*byte) / 255.0;
+                let mapped = d[0] + v * (d[1] - d[0]);
+                *byte = (mapped.clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
+            }
+        }
     }
 }
 

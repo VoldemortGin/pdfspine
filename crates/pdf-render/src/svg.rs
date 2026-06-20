@@ -43,8 +43,7 @@ use std::fmt::Write as _;
 use pdf_core::geom::{Matrix, Point, Rect};
 use pdf_core::Page;
 use pdf_core::{Dict, DocumentStore, Name, Object};
-use pdf_image::codecs::decode_image_stream;
-use pdf_image::pixmap::Pixmap;
+use pdf_image::codecs::{decode_image_stream, pixmap_from_decoded};
 use pdf_text::model::{PathItem, PositionedGlyph};
 use pdf_text::{interpret_page_render, ImageOp, RenderOp, ShadingOp, TextRun};
 use ttf_parser::{Face, GlyphId, OutlineBuilder};
@@ -518,7 +517,8 @@ fn write_image(doc: &DocumentStore, img: &ImageOp, body: &mut String) {
     if is_mask {
         return;
     }
-    let pix = match Pixmap::from_decoded(&decoded) {
+    // Colorspace-aware (Indexed / Separation / DeviceN / Lab + `/Decode`, P3-3).
+    let pix = match pixmap_from_decoded(doc, &img.dict, &decoded) {
         Ok(p) => p,
         Err(_) => return,
     };

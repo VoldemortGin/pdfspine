@@ -18,6 +18,7 @@
 //! `resolve()` once authenticated. Pages land in M1f per PRD §7.
 
 pub mod changeset;
+pub mod colorspace;
 pub mod document;
 #[cfg(feature = "encryption")]
 pub mod encrypt;
@@ -40,6 +41,7 @@ pub mod writer;
 pub mod xref;
 
 pub use changeset::{Change, ChangeSet};
+pub use colorspace::{parse_function, ColorSpace, PdfFunction, ShadingColor};
 pub use document::{DocumentStore, Version};
 pub use error::{Error, LimitKind, Result};
 pub use filters::{decode_stream, DecodeOutcome};

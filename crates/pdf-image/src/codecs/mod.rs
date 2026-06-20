@@ -28,6 +28,7 @@ pub mod jpx;
 
 use crate::error::{Error, Result};
 
+use pdf_core::colorspace::ColorSpace;
 use pdf_core::{decode_stream, DecodeOutcome, Dict, DocumentStore, Name, Object};
 
 /// Absolute ceiling on a decoded image's pixel count (width × height),
@@ -253,6 +254,101 @@ fn classify_colorspace_array(doc: &DocumentStore, arr: &[Object]) -> (u8, ColorS
         "Separation" => (1, ColorSpaceHint::Unknown),
         _ => (1, ColorSpaceHint::Unknown),
     }
+}
+
+/// Resolves an image stream's `/ColorSpace` (resolving an indirect ref) into a
+/// [`ColorSpace`] for the colorspace-aware pixmap path (Indexed / Separation /
+/// DeviceN / Lab expansion). `None` for an `/ImageMask`, an unresolvable space,
+/// or a plain Device/ICC space the byte-layout already matches (those keep the
+/// fast interleaved path).
+#[must_use]
+pub fn image_colorspace(doc: &DocumentStore, params: &Dict) -> Option<ColorSpace> {
+    let cs = resolved(doc, params, "ColorSpace").or_else(|| resolved(doc, params, "CS"))?;
+    ColorSpace::resolve(doc, &cs, None)
+}
+
+/// Reads an image stream's `/Decode` (or inline `/D`) array as per-component
+/// `[lo, hi]` pairs, or an empty `Vec` when absent / malformed (the default
+/// identity ranges).
+#[must_use]
+pub fn image_decode(doc: &DocumentStore, params: &Dict) -> Vec<[f32; 2]> {
+    let Some(arr) = resolved(doc, params, "Decode")
+        .or_else(|| resolved(doc, params, "D"))
+        .and_then(|o| o.as_array().map(<[Object]>::to_vec))
+    else {
+        return Vec::new();
+    };
+    let flat: Vec<f32> = arr
+        .iter()
+        .filter_map(|o| o.as_f64().map(|v| v as f32))
+        .collect();
+    flat.chunks_exact(2).map(|c| [c[0], c[1]]).collect()
+}
+
+/// Whether an image's terminal filter is a self-decoding pixel codec (DCT / JPX)
+/// that already yields device Gray/RGB/CMYK samples and applies `/Decode`
+/// (Adobe-inversion) internally — so the generic colorspace/`/Decode`
+/// post-processing in [`crate::pixmap::Pixmap::from_decoded_cs`] must be skipped
+/// for it (to avoid double-applying `/Decode`).
+#[must_use]
+fn is_self_decoding_filter(doc: &DocumentStore, params: &Dict) -> bool {
+    let f = resolved(doc, params, "Filter").or_else(|| resolved(doc, params, "F"));
+    let name = match f {
+        Some(Object::Name(n)) => n.as_str().map(str::to_string),
+        Some(Object::Array(a)) => a
+            .last()
+            .and_then(Object::as_name)
+            .and_then(Name::as_str)
+            .map(str::to_string),
+        _ => None,
+    };
+    matches!(
+        name.as_deref(),
+        Some("DCTDecode" | "DCT" | "JPXDecode" | "JPX")
+    )
+}
+
+/// Decodes an image XObject **stream** end-to-end to a [`crate::pixmap::Pixmap`],
+/// honoring its `/ColorSpace` (Indexed palette lookup, Separation/DeviceN tint
+/// transform, Lab) and `/Decode` array (PRD §8.10 / P3-3).
+///
+/// This is the single colorspace-aware decode path shared by `get_pixmap`, the
+/// renderer's image op, and the SVG sink, so palette/tint resolution lives in one
+/// place. For DCT/JPX (self-decoding) images the colorspace/`/Decode` are already
+/// resolved by the codec, so it falls back to the plain device pixmap.
+///
+/// # Errors
+///
+/// Propagates the codec's typed decode error, or [`Error::Decode`] for an
+/// unsupported component count / geometry.
+pub fn pixmap_from_stream(
+    doc: &DocumentStore,
+    params: &Dict,
+    raw: &[u8],
+) -> Result<crate::pixmap::Pixmap> {
+    let decoded = decode_image_stream(doc, params, raw)?;
+    if is_self_decoding_filter(doc, params) {
+        return crate::pixmap::Pixmap::from_decoded(&decoded);
+    }
+    let cs = image_colorspace(doc, params);
+    let decode = image_decode(doc, params);
+    crate::pixmap::Pixmap::from_decoded_cs(&decoded, cs.as_ref(), &decode)
+}
+
+/// Like [`pixmap_from_stream`] but for an already-decoded [`DecodedImage`] plus
+/// its source `params` (when the caller already ran the codec). Used by the
+/// render/SVG sinks that decode once and reuse the [`DecodedImage`].
+pub fn pixmap_from_decoded(
+    doc: &DocumentStore,
+    params: &Dict,
+    decoded: &DecodedImage,
+) -> Result<crate::pixmap::Pixmap> {
+    if is_self_decoding_filter(doc, params) {
+        return crate::pixmap::Pixmap::from_decoded(decoded);
+    }
+    let cs = image_colorspace(doc, params);
+    let decode = image_decode(doc, params);
+    crate::pixmap::Pixmap::from_decoded_cs(decoded, cs.as_ref(), &decode)
 }
 
 /// Interprets already-decompressed sample bytes (the output of pdf-core's

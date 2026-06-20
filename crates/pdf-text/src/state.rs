@@ -5,6 +5,9 @@
 //! and are **not** part of the saved graphics state (ISO §9.4.1) — they are
 //! initialized to identity at every `BT`.
 
+use std::sync::Arc;
+
+use pdf_core::colorspace::ColorSpace;
 use pdf_core::geom::Matrix;
 
 /// The text-state parameters (ISO §9.3) that persist across `BT`/`ET` and are
@@ -45,7 +48,7 @@ impl Default for TextState {
 }
 
 /// The full graphics state pushed/popped by `q`/`Q` (the subset M2b needs).
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct GraphicsState {
     /// The current transformation matrix (device-independent; user→page).
     pub ctm: Matrix,
@@ -53,6 +56,12 @@ pub struct GraphicsState {
     pub fill_color: u32,
     /// The current stroke color packed as `0x00RRGGBB`.
     pub stroke_color: u32,
+    /// The current **fill** colorspace set by `cs` (for `scn` tint transforms /
+    /// Separation/DeviceN/Indexed). `None` ⇒ a plain Device space (use the
+    /// `g`/`rg`/`k`/component-count heuristic). `Arc` keeps q/Q clones cheap.
+    pub fill_cs: Option<Arc<ColorSpace>>,
+    /// The current **stroke** colorspace set by `CS`.
+    pub stroke_cs: Option<Arc<ColorSpace>>,
     /// The current line width `w` (user-space units; default 1.0).
     pub line_width: f64,
     /// The current dash-pattern string (`"[…] phase"`), empty when solid.
@@ -75,6 +84,8 @@ impl GraphicsState {
             ctm,
             fill_color: 0x00_00_00_00,
             stroke_color: 0x00_00_00_00,
+            fill_cs: None,
+            stroke_cs: None,
             line_width: 1.0,
             dashes: String::new(),
             fill_alpha: 1.0,

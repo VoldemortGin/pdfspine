@@ -20,7 +20,7 @@ use std::collections::HashSet;
 
 use pdf_core::{Dict, DocumentStore, Name, ObjRef, Object, StreamObj};
 
-use crate::codecs::{decode_image_stream, DecodedImage};
+use crate::codecs::{decode_image_stream, pixmap_from_stream, DecodedImage};
 use crate::error::{Error, Result};
 use crate::pixmap::{Colorspace, Pixmap};
 
@@ -84,10 +84,11 @@ pub fn page_pixmap(doc: &DocumentStore, page: &Dict, scale: f64, alpha: bool) ->
         .first()
         .ok_or(Error::Unsupported("get_pixmap: no image"))?;
     let stream = resolve_stream(doc, first)?;
-    let decoded = decode_image_stream(doc, &stream.dict, &stream_raw(doc, &stream)?)?;
     let smask = decode_smask(doc, &stream.dict);
 
-    let mut pix = Pixmap::from_decoded(&decoded)?;
+    // Colorspace-aware decode: Indexed palette lookup, Separation/DeviceN tint
+    // transform, Lab, and the `/Decode` array are resolved in one place (P3-3).
+    let mut pix = pixmap_from_stream(doc, &stream.dict, &stream_raw(doc, &stream)?)?;
     if alpha {
         if let Some((mask, mw, mh)) = smask {
             pix = pix.with_smask_gray(&mask, mw, mh)?;

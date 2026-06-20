@@ -26,6 +26,7 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
+use pdf_core::colorspace::ColorSpace;
 use pdf_core::geom::{Matrix, Point, Rect};
 use pdf_core::{Dict, DocumentStore, Name, Object};
 use pdf_fonts::FontMapper;
@@ -681,22 +682,36 @@ impl<'a> ContentInterpreter<'a> {
                     gs.stroke_color = cmyk_rgb(c, m, y, kk);
                 }
             }
-            // `cs`/`sc`/`scn` set the fill colorspace/components. We approximate:
-            // map 1 comp → gray, 3 → rgb, 4 → cmyk; otherwise leave unchanged.
+            // `sc`/`scn` set the fill color in the current fill colorspace. When a
+            // Separation/DeviceN/Indexed/CIE colorspace was selected by `cs`, run
+            // its tint transform / palette lookup (so a dark 1-component
+            // Separation no longer renders white); otherwise fall back to the
+            // component-count heuristic (1→gray, 3→rgb, 4→cmyk).
             b"sc" | b"scn" => {
                 let comps: Vec<f64> = ops.iter().filter_map(Object::as_f64).collect();
-                if let Some(rgb) = approx_color(&comps) {
+                if let Some(rgb) = resolve_scn_color(gs.fill_cs.as_deref(), &comps) {
                     gs.fill_color = rgb;
                 }
             }
             b"SC" | b"SCN" => {
                 let comps: Vec<f64> = ops.iter().filter_map(Object::as_f64).collect();
-                if let Some(rgb) = approx_color(&comps) {
+                if let Some(rgb) = resolve_scn_color(gs.stroke_cs.as_deref(), &comps) {
                     gs.stroke_color = rgb;
                 }
             }
-            // `cs`/`CS` (colorspace selection) — no-op for color recording.
-            b"cs" | b"CS" => {}
+            // `cs`/`CS` select the fill/stroke colorspace (Device*, CIE, Indexed,
+            // Separation, DeviceN). Record it so the following `scn`/`SCN` can run
+            // the right tint transform / palette lookup. A plain Device space
+            // resets to the heuristic path (`None`); also reset the color to the
+            // colorspace's initial value (black for additive, per PDF §8.6.8).
+            b"cs" => {
+                gs.fill_cs = self.select_colorspace(ops, resources);
+                gs.fill_color = initial_cs_color(gs.fill_cs.as_deref());
+            }
+            b"CS" => {
+                gs.stroke_cs = self.select_colorspace(ops, resources);
+                gs.stroke_color = initial_cs_color(gs.stroke_cs.as_deref());
+            }
 
             // --- XObjects -------------------------------------------------
             b"Do" => {
@@ -716,6 +731,25 @@ impl<'a> ContentInterpreter<'a> {
             _ => {}
         }
         let _ = in_text; // text ops are valid outside BT in lenient mode too
+    }
+
+    /// Resolves the operand of a `cs`/`CS` operator (a colorspace name or inline
+    /// array) into a [`ColorSpace`], looking a name up in `/Resources /ColorSpace`
+    /// when it is not a device builtin. Returns `None` for a plain Device space
+    /// (the caller then uses the component-count heuristic) or an unresolvable /
+    /// unsupported space (e.g. `/Pattern`).
+    fn select_colorspace(&self, ops: &[Object], resources: &Dict) -> Option<Arc<ColorSpace>> {
+        let cs_obj = ops
+            .iter()
+            .find(|o| o.as_name().is_some() || o.as_array().is_some())?;
+        // A direct device builtin (`/DeviceRGB`, …) maps to the fast heuristic
+        // path, so we keep `None` for it: only carry the colorspace that actually
+        // needs a transform (Separation/DeviceN/Indexed/CIE).
+        let cs = ColorSpace::resolve(self.doc, cs_obj, Some(resources))?;
+        match cs {
+            ColorSpace::DeviceGray | ColorSpace::DeviceRgb | ColorSpace::DeviceCmyk => None,
+            other => Some(Arc::new(other)),
+        }
     }
 
     // --- text showing -----------------------------------------------------
@@ -1415,7 +1449,8 @@ fn cmyk_rgb(c: f64, m: f64, y: f64, k: f64) -> u32 {
     pack_rgb(r, g, b)
 }
 
-/// Approximates a packed sRGB from a generic `sc`/`scn` component list.
+/// Approximates a packed sRGB from a generic `sc`/`scn` component list (used when
+/// no explicit colorspace was selected by `cs`).
 fn approx_color(comps: &[f64]) -> Option<u32> {
     match comps.len() {
         1 => Some(gray_rgb(comps[0])),
@@ -1423,6 +1458,41 @@ fn approx_color(comps: &[f64]) -> Option<u32> {
         4 => Some(cmyk_rgb(comps[0], comps[1], comps[2], comps[3])),
         _ => None,
     }
+}
+
+/// Resolves an `scn`/`SCN` color: runs the selected colorspace's tint transform /
+/// palette lookup into packed sRGB; falls back to [`approx_color`] when no
+/// transforming colorspace is set or the component count does not match.
+fn resolve_scn_color(cs: Option<&ColorSpace>, comps: &[f64]) -> Option<u32> {
+    let Some(cs) = cs else {
+        return approx_color(comps);
+    };
+    if comps.is_empty() {
+        // A pattern `scn` (only a `/Name` operand) carries no components — leave
+        // the color unchanged rather than forcing black.
+        return None;
+    }
+    let f: Vec<f32> = comps.iter().map(|&v| v as f32).collect();
+    let [r, g, b] = match cs {
+        // Indexed `scn N`: the operand is a raw integer palette index.
+        ColorSpace::Indexed { .. } => cs.index_to_rgb(f[0].round().max(0.0) as usize),
+        _ => cs.to_rgb8(&f),
+    };
+    Some((u32::from(r) << 16) | (u32::from(g) << 8) | u32::from(b))
+}
+
+/// The initial color a `cs`/`CS` selection sets (PDF §8.6.8): black for the
+/// additive/subtractive device families and the tint-transform spaces (all
+/// tints 1.0 for Separation/DeviceN, index 0 for Indexed).
+fn initial_cs_color(cs: Option<&ColorSpace>) -> u32 {
+    let Some(cs) = cs else { return 0 };
+    let [r, g, b] = match cs {
+        ColorSpace::Indexed { .. } => cs.index_to_rgb(0),
+        ColorSpace::Separation { .. } => cs.to_rgb8(&[1.0]),
+        ColorSpace::DeviceN { n, .. } => cs.to_rgb8(&vec![1.0f32; *n]),
+        _ => [0, 0, 0],
+    };
+    (u32::from(r) << 16) | (u32::from(g) << 8) | u32::from(b)
 }
 
 /// Replaces non-finite coordinates with 0 so a glyph always has a usable point.
