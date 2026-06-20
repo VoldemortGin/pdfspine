@@ -595,11 +595,14 @@ _BATCH34_IMPLEMENTED = {
     "Font.is_serif", "Font.name", "Font.text_length", "Font.unicode_to_glyph_name",
     "Font.Base14_fontnames", "Font.is_writable",
     "Font.valid_codepoints",
-    # Font.buffer and Font.glyph_bbox stay DEFERRED: the pdfspine Font is a
-    # metrics-only Core-14 handle (built from a name; no embedded /FontFile*
-    # program, no per-glyph outlines). Shipping empty bytes / a constant
-    # font-level bbox would be misleading, so both raise PdfUnsupportedError
-    # until embedded-font programs / per-glyph outlines are available.
+    # Font.buffer and Font.glyph_bbox: IMPLEMENTED via the program-backed handle
+    # (P4-1). Font(fontfile=)/Font(fontbuffer=) load the REAL /FontFile* program
+    # (no silent Helvetica fallback), so buffer returns the program bytes and
+    # glyph_bbox returns the real per-glyph outline box; valid_codepoints reflects
+    # the program's true cmap. A metrics-only Core-14 handle (built from a name,
+    # no program) still raises PdfUnsupportedError for these two, since shipping
+    # empty bytes / a constant font-level bbox would be misleading.
+    "Font.buffer", "Font.glyph_bbox",
     "Link.border", "Link.colors", "Link.dest", "Link.flags",
     "Link.is_external", "Link.linkDest", "Link.next", "Link.page",
     "Link.rect", "Link.set_border", "Link.set_colors", "Link.set_flags",

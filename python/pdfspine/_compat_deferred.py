@@ -21,8 +21,6 @@ DEFERRED: frozenset[str] = frozenset(
         "Document.set_layer_ui_config",
         "Document.set_ocmd",
         "Document.switch_layer",
-        "Font.buffer",
-        "Font.glyph_bbox",
         "Page.extend_textpage",
         "Page.insert_font",
         "Page.refresh",

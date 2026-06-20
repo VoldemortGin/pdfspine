@@ -141,6 +141,11 @@ tiny-skia = { version = "0.11", default-features = false, features = ["std", "si
 # used for det/cls/rec preprocessing; the small morphology/connected-components
 # in detection are hand-rolled to avoid the heavy `imageproc`/`nalgebra` graph.
 tract-onnx = "0.21"
+# Data-parallel iterator for the per-box OCR recognition loop (P4-3). Pure-Rust,
+# MIT/Apache-2.0; already in the resolved graph (pulled by tract-onnx /
+# jpeg-decoder), so this only promotes it to a direct, feature-gated dep of
+# pdf-ocr — no new crate enters the wheel.
+rayon = "1"
 
 # --- shared dev-deps ---
 proptest = "1"

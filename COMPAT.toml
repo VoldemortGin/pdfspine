@@ -29,10 +29,10 @@
 baseline = "1.24.x"
 baseline_detail = "PyMuPDF 1.24.14 / MuPDF 1.24.11"
 total = 769
-implemented = 680
-deferred = 23
+implemented = 682
+deferred = 21
 out_of_scope = 66
-coverage_pct = 88.4
+coverage_pct = 88.7
 
 # ── Matrix ──
 [[symbol]]
@@ -4102,7 +4102,7 @@ milestone = "M2"
 [[symbol]]
 name = "Font.glyph_bbox"
 group = "Font"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M2"
 
 [[symbol]]
@@ -4168,7 +4168,7 @@ milestone = "M2"
 [[symbol]]
 name = "Font.buffer"
 group = "Font"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M2"
 
 [[symbol]]

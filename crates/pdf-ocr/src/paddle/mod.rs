@@ -24,6 +24,7 @@ mod preprocess;
 mod recognize;
 
 use pdf_core::geom::Rect;
+use rayon::prelude::*;
 
 use crate::engine::{OcrEngine, OcrWord};
 use crate::error::Result;
@@ -75,30 +76,44 @@ impl OcrEngine for PaddleOcr {
         let rgb = preprocess::pixmap_to_rgb(image);
         let boxes = detect::detect(&self.models, &rgb)?;
 
-        let mut words = Vec::with_capacity(boxes.len());
-        for b in boxes {
-            // Upright (~0°) boxes use the exact axis-aligned crop path as before;
-            // skewed boxes are de-rotated to horizontal via the rotated quad so
-            // the recognizer (which needs horizontal text) sees an upright line.
-            let crop = if b.angle.abs() <= UPRIGHT_ANGLE_RAD {
-                preprocess::crop(&rgb, b.x0, b.y0, b.x1, b.y1)
-            } else {
-                preprocess::crop_rotated(&rgb, &b.quad)
-            };
-            let oriented = classify::classify_and_orient(&self.models, crop)?;
-            let rec = recognize::recognize(&self.models, &oriented)?;
-            let text = rec.text.trim().to_string();
-            if text.is_empty() || rec.confidence < TEXT_SCORE {
-                continue;
-            }
-            words.push(OcrWord {
-                text,
-                bbox: Rect::new(b.x0 as f64, b.y0 as f64, b.x1 as f64, b.y1 as f64),
-                // Combine detection + recognition confidence onto the [0,100]
-                // Tesseract scale.
-                confidence: (rec.confidence * b.score * 100.0).clamp(0.0, 100.0),
-            });
-        }
-        Ok(words)
+        // Recognize each detected box in parallel. The work is CPU-bound (crop →
+        // classify → CRNN+CTC) and a scanned page yields dozens–hundreds of boxes,
+        // so `par_iter` near-linearly cuts wall time across cores. The shared
+        // runnable cache (`self.models`, `&self` + `Mutex`/`OnceLock`) is
+        // thread-safe to share, so no per-box state is duplicated.
+        //
+        // DETERMINISM: `par_iter().map(..).collect::<Vec<_>>()` is an *indexed*
+        // collect — output position equals input box index — so the per-box
+        // `Option<OcrWord>` vector is byte-identical to the sequential version
+        // regardless of completion order. We then drop the skipped (`None`) boxes
+        // in that same order. Any per-box error short-circuits the whole call.
+        let per_box: Vec<Option<OcrWord>> = boxes
+            .par_iter()
+            .map(|b| -> Result<Option<OcrWord>> {
+                // Upright (~0°) boxes use the exact axis-aligned crop path as before;
+                // skewed boxes are de-rotated to horizontal via the rotated quad so
+                // the recognizer (which needs horizontal text) sees an upright line.
+                let crop = if b.angle.abs() <= UPRIGHT_ANGLE_RAD {
+                    preprocess::crop(&rgb, b.x0, b.y0, b.x1, b.y1)
+                } else {
+                    preprocess::crop_rotated(&rgb, &b.quad)
+                };
+                let oriented = classify::classify_and_orient(&self.models, crop)?;
+                let rec = recognize::recognize(&self.models, &oriented)?;
+                let text = rec.text.trim().to_string();
+                if text.is_empty() || rec.confidence < TEXT_SCORE {
+                    return Ok(None);
+                }
+                Ok(Some(OcrWord {
+                    text,
+                    bbox: Rect::new(b.x0 as f64, b.y0 as f64, b.x1 as f64, b.y1 as f64),
+                    // Combine detection + recognition confidence onto the [0,100]
+                    // Tesseract scale.
+                    confidence: (rec.confidence * b.score * 100.0).clamp(0.0, 100.0),
+                }))
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        Ok(per_box.into_iter().flatten().collect())
     }
 }

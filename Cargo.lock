@@ -1093,6 +1093,7 @@ dependencies = [
  "pdf-core",
  "proptest",
  "smol_str",
+ "ttf-parser",
  "unicode-normalization",
 ]
 
@@ -1125,6 +1126,7 @@ dependencies = [
  "pdf-render",
  "pdf-text",
  "proptest",
+ "rayon",
  "thiserror",
  "tract-onnx",
 ]

@@ -4240,10 +4240,15 @@ struct PyFont {
 
 #[pymethods]
 impl PyFont {
-    /// Builds a font handle for the standard font `fontname` (a canonical key
-    /// like `"Helvetica"` or a PyMuPDF alias like `"helv"`). Embedded TTFs
-    /// (`fontfile`/`fontbuffer`) are not yet supported; an unknown name falls
-    /// back to Helvetica so the handle is always usable.
+    /// Builds a font handle (PyMuPDF `fitz.Font`).
+    ///
+    /// With a `fontfile=` path or `fontbuffer=` bytes, the **real** font program
+    /// (TrueType `/FontFile2` / OpenType-CFF `/FontFile3`) is loaded — no silent
+    /// Helvetica fallback — so `buffer` / `glyph_bbox` / `valid_codepoints` are
+    /// served from the outlines and `name` is the program's own name. Otherwise
+    /// `fontname` selects a Core-14 metrics handle (a canonical key like
+    /// `"Helvetica"` or an alias like `"helv"`); an unknown name falls back to
+    /// Helvetica so the handle is always usable.
     #[new]
     #[pyo3(signature = (fontname=None, fontfile=None, fontbuffer=None, *_args, **_kwargs))]
     fn py_new(
@@ -4253,16 +4258,33 @@ impl PyFont {
         _args: &Bound<'_, PyTuple>,
         _kwargs: Option<&Bound<'_, PyDict>>,
     ) -> PyResult<Self> {
-        let _ = (fontfile, fontbuffer);
         let name = fontname.unwrap_or("helv");
-        Ok(PyFont {
-            inner: pdf_api::Font::new(name),
-        })
+        // A user-supplied program (fontfile path or fontbuffer bytes) loads the
+        // real outlines; fontbuffer wins if both are given (matches fitz).
+        let program: Option<Vec<u8>> = match (fontbuffer, fontfile) {
+            (Some(buf), _) => Some(buf.to_vec()),
+            (None, Some(path)) => Some(
+                std::fs::read(path)
+                    .map_err(|e| PyOSError::new_err(format!("cannot open {path}: {e}")))?,
+            ),
+            (None, None) => None,
+        };
+        let inner = match program {
+            Some(bytes) => pdf_api::Font::from_program(&bytes, name).ok_or_else(|| {
+                PyValueError::new_err(
+                    "unsupported font program: not a TrueType (/FontFile2) or \
+                     OpenType-CFF (/FontFile3) sfnt",
+                )
+            })?,
+            None => pdf_api::Font::new(name),
+        };
+        Ok(PyFont { inner })
     }
 
-    /// The font's canonical name (PyMuPDF `Font.name`).
+    /// The font's name (PyMuPDF `Font.name`): the program's own name for a
+    /// program-backed handle, else the canonical Core-14 key.
     #[getter]
-    fn name(&self) -> &'static str {
+    fn name(&self) -> &str {
         self.inner.name()
     }
 
@@ -4401,19 +4423,23 @@ impl PyFont {
         self.inner.is_writable()
     }
 
-    /// The embedded font program bytes (PyMuPDF `Font.buffer`).
+    /// The font program bytes (PyMuPDF `Font.buffer`).
     ///
-    /// DEFERRED: pdfspine's `Font` is a Core-14 **metrics-only** handle (built from
-    /// a font name; it carries no `/FontFile*` program and has no access to an
-    /// embedded font's outline bytes). PyMuPDF returns a bundled TTF's bytes;
-    /// returning empty bytes would be a misleading non-implementation, so this
-    /// raises `PdfUnsupportedError` until embedded-font programs are wired up.
+    /// A **program-backed** handle (built from `fontfile=` / `fontbuffer=`, or an
+    /// embedded `/FontFile*`) returns the real program bytes. A metrics-only
+    /// Core-14 handle carries no `/FontFile*` program to expose (PyMuPDF
+    /// substitutes a bundled TTF and returns its bytes); rather than return
+    /// misleading empty bytes, it raises `PdfUnsupportedError`.
     #[getter]
-    fn buffer(&self) -> PyResult<Py<PyBytes>> {
-        Err(PdfUnsupportedError::new_err(
-            "Font.buffer is deferred: the pdfspine Font is a metrics-only Core-14 \
-             handle with no embedded /FontFile* program to expose",
-        ))
+    fn buffer<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyBytes>> {
+        match self.inner.buffer() {
+            Some(bytes) => Ok(PyBytes::new(py, bytes)),
+            None => Err(PdfUnsupportedError::new_err(
+                "Font.buffer: this is a metrics-only Core-14 handle with no \
+                 embedded /FontFile* program; load a fontfile=/fontbuffer= or an \
+                 embedded font to expose program bytes",
+            )),
+        }
     }
 
     /// The Unicode codepoints the font's encoding covers, ascending (PyMuPDF
@@ -4432,14 +4458,14 @@ impl PyFont {
         self.inner.valid_codepoints()
     }
 
-    /// The glyph bbox `(x0, y0, x1, y1)` for character `chr` (PyMuPDF
-    /// `Font.glyph_bbox(chr)`).
+    /// The glyph bbox `(x0, y0, x1, y1)` for character `chr` at font size 1
+    /// (PyMuPDF `Font.glyph_bbox(chr)`).
     ///
-    /// DEFERRED: the metrics-only Core-14 handle has no per-glyph outlines, so it
-    /// cannot compute each glyph's individual ink box. Returning the same
-    /// font-level bbox for every glyph would be a misleading constant, so this
-    /// raises `PdfUnsupportedError` until per-glyph outlines (embedded-font
-    /// programs / a bundled font) are available.
+    /// A **program-backed** handle returns the glyph's real per-glyph ink box
+    /// from the outlines (an empty box for whitespace or an uncovered scalar). A
+    /// metrics-only Core-14 handle has no per-glyph outlines, so returning the
+    /// same font-level bbox for every glyph would be a misleading constant; it
+    /// raises `PdfUnsupportedError` instead.
     #[pyo3(signature = (chr, *_args, **_kwargs))]
     fn glyph_bbox(
         &self,
@@ -4447,10 +4473,13 @@ impl PyFont {
         _args: &Bound<'_, PyTuple>,
         _kwargs: Option<&Bound<'_, PyDict>>,
     ) -> PyResult<(f64, f64, f64, f64)> {
-        let _ = chr;
+        if self.inner.buffer().is_some() {
+            return Ok(self.inner.glyph_bbox(chr));
+        }
         Err(PdfUnsupportedError::new_err(
-            "Font.glyph_bbox is deferred: the pdfspine Font is a metrics-only \
-             Core-14 handle with no per-glyph outlines (only a font-level bbox)",
+            "Font.glyph_bbox: this is a metrics-only Core-14 handle with no \
+             per-glyph outlines (only a font-level bbox); load a fontfile=/\
+             fontbuffer= or an embedded font to get real per-glyph boxes",
         ))
     }
 

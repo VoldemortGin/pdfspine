@@ -13,6 +13,11 @@ description = "Font parsing for mapping (encodings/ToUnicode/CMap/widths/glyph->
 pdf-core.workspace = true
 smol_str.workspace = true
 unicode-normalization.workspace = true
+# Glyph-outline parsing for an embedded / user-supplied font program: the same
+# crate the renderer's `GlyphFont` uses to read `/FontFile*` bytes (TrueType
+# `FontFile2` / OpenType-CFF `FontFile3`). Used here for the program-backed
+# `Font.buffer` / `Font.glyph_bbox` / `Font.valid_codepoints`.
+ttf-parser.workspace = true
 
 [dev-dependencies]
 proptest.workspace = true

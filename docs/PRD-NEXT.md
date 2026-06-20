@@ -23,10 +23,9 @@
   trusted-publishing `release.yml`. (The only local failures — 3 Rust + 7 pytest OCR tests — stem from a
   broken local tesseract/leptonica install, an env defect, not code; a clean machine still meets the
   1349/593 floors.)
-- **API parity:** **680 / 769 implemented (88.4%)** — consistent across `COMPAT.toml`, README, and PARITY.md.
-  23 deferred · 66 out-of-scope. We are now **at 88.4%, near the practical ceiling** (Phase 2 landed the +29
-  achievable-without-the-Font-refactor batch); the remaining 23 deferred are the long tail (OCG layers,
-  device-replay, embedded-font-program-gated symbols).
+- **API parity:** **682 / 769 implemented (88.7%)** — consistent across `COMPAT.toml`, README, and PARITY.md.
+  21 deferred · 66 out-of-scope. Phase 2 landed +29; **P4-1** then added `Font.buffer`/`glyph_bbox` (Font class
+  22/23). The remaining 21 deferred are the long tail (OCG layers, device-replay, a few Type0/Type3 edges).
 - **Text extraction:** at fitz parity for **single-column AND multi-column**. The multi-column engine landed
   (06-16 PM) and **P3-2 verified it** (2026-06-20, fresh GT): PMC order **0.965 / 0.995** vs fitz 0.975/0.997,
   born-digital **0.996** vs 1.000 — within 0.000–0.009 per column doc (PMC212687 0.083→0.996, born 2col
@@ -43,7 +42,7 @@
   models** (~7 MB compressed; the `cargo` build default stays lean), and the ~16 MB models ship as a separate
   `pdfspine-ocr-models` data distribution the `[ocr]` extra pulls in (`pip install pdfspine[ocr]`); models
   resolve at runtime `PDFSPINE_OCR_MODELS` → companion → in-repo dev fallback (offline, no download). The
-  per-box `recognize()` loop is still sequential (→ P4-3).
+  per-box `recognize()` loop is now **rayon-parallel** (P4-3 done: 3.49× on a 42-box page, byte-identical).
 - **Performance:** pdfspine **beats fitz on open (1.26×)** and **text (2.75×)** — the ops users actually
   call; render is 1.74× faster than before but still ~2.3× slower than pypdfium2 (a C engine, not the parity
   target). **All render-perf work is deferred** — see §5 "Deferred for v1".
@@ -168,19 +167,16 @@ oracle-cross-checked against real PyMuPDF 1.24.14 (`.venv-oracle`) with zero reg
 
 ### Phase 4 — Post-launch capability / strategic
 
-- **P4-1 · Font handle carries `/FontFile*` program bytes** — *L · Medium (API)* · **NOT the rendering keystone (C3)**
-  - **Why:** unblocks `Font.glyph_bbox`, `Font.buffer`, richer `valid_codepoints`, and user `Font(fontbuffer=)` for `insert_text` (+2 parity). Do it for **API completeness**, not rendering.
-  - **Files:** `crates/pdf-fonts/src/font.rs:185,341,376`, `crates/pdf-render/src/text.rs:68`, `crates/py-bindings/src/lib.rs:4081,4229`.
-  - **Acceptance:** `Font(fontfile=)` no longer silently falls back to Helvetica; `buffer`/`glyph_bbox` implemented + tested.
+- **P4-1 · Font handle carries `/FontFile*` program bytes — ✅ DONE (2026-06-21)** — *was L · Medium (API)* · NOT the rendering keystone (C3)
+  - New `Font::from_program` (via `ttf-parser`, sharing the renderer's infra): a program-backed `Font` (from `/FontFile*` or user `fontfile=`/`fontbuffer=`) now serves `buffer()` (program bytes), `glyph_bbox(chr)` (real per-glyph outline box), and a real-cmap `valid_codepoints()`. `Font(fontfile=)`/`Font(fontbuffer=)` load the real program (ValueError/OSError on bad input — **no silent Helvetica fallback**). Oracle-cross-checked on Liberation Sans (name / buffer-len / glyph_count exact). **+2 parity** (`Font.buffer`, `Font.glyph_bbox`) → 682/769, **88.7%**; Font class 22/23.
+  - Note: pdfspine's `glyph_bbox` returns the **real per-glyph** box; PyMuPDF returns the font-level FontBBox for every glyph (pdfspine strictly more correct). A metrics-only Core-14 handle still raises `PdfUnsupportedError` for `buffer`/`glyph_bbox` (no license-clean bundled substitute, per repo policy).
 
 - **P4-2 · Type1 charstring (PFB/PFA) support** — *L · Medium* (after P1-1)
   - **Why:** removes the literal worst page (eurlex `32006L0112_ES`, SSIM 0.527). Type1 embedding is rare, and once P1-1 lands, descriptor-flag substitution covers most blank Type1 fonts cheaply. Route: Type1→CFF, or a permissive pure-Rust Type1 outliner (respect the Apache-2.0 / pure-Rust positioning).
   - **Files:** `crates/pdf-render/src/text.rs:93`, `crates/pdf-render/src/render.rs:955`.
 
-- **P4-3 · OCR `recognize()` parallelism (rayon)** — *M · High (OCR latency)* · best perf-for-effort overall
-  - **Why:** the per-box loop is sequential and CPU-bound; a scanned page has dozens–hundreds of boxes. rayon `par_iter` near-linearly cuts OCR wall time (seconds/page). The runnable cache is already `&self` + `Mutex`-guarded (C14).
-  - **Files:** `crates/pdf-ocr/src/paddle/mod.rs:77`, `crates/pdf-ocr/src/paddle/model.rs:104,135`.
-  - **Acceptance:** deterministic result order (collect indexed, sort by box order); measurable multi-core speedup; no correctness change.
+- **P4-3 · OCR `recognize()` rayon parallelism — ✅ DONE (2026-06-21)** — *was M · High (OCR latency)*
+  - `PaddleOcr::recognize`'s per-box loop is now a rayon `par_iter` with an **indexed collect** → output byte-identical to the sequential version (deterministic, proven vs a captured baseline + a 1-thread-vs-N fingerprint). **3.49× speedup** on a 42-box page (16 cores: 2858ms → 819ms). The `&self`+`Mutex`/`OnceLock` model cache was already thread-safe (no `model.rs` change). `rayon` is a feature-gated (`paddle-ocr`) optional dep — **not** in the lean base wheel. No correctness change, no new symbols.
 
 - **P4-4 · API reference docs cover the full public surface** — *M · Medium*
   - **Why:** `docs/reference/` documents only 4 of ~20 public classes, hand-written (no mkdocstrings), so it drifts. Docstrings are already rich.
@@ -236,15 +232,15 @@ oracle-cross-checked against real PyMuPDF 1.24.14 (`.venv-oracle`) with zero reg
 | P3-4 | Kangxi fold + edge-case tests + robustness rerun | S–M | Low–Med | ✅ done | 3 |
 | P3-4r | vertical writing-mode (multi-column vertical reorders) | M | Low | open | 3r |
 | P3-5 | FinTabNet GriTS harness (infra done; score blocked on data) | M | Med | ⚠ blocked | 3 |
-| P4-1 | Font handle carries `/FontFile*` (API only) | L | Med | – | 4 |
+| P4-1 | Font carries `/FontFile*` (buffer/glyph_bbox, +2) | L | Med | ✅ done | 4 |
 | P4-2 | Type1 charstring (PFB/PFA) support | L | Med | – | 4 |
-| P4-3 | OCR `recognize()` rayon parallelism | M | High | – | 4 |
+| P4-3 | OCR `recognize()` rayon parallelism (3.49×) | M | High | ✅ done | 4 |
 | P4-4 | Full public-surface API reference docs | M | Med | – | 4 |
 
-**Recommended next 3 (in order):** *(Phase 0 + P0-5r + Phase 1 + Phase 2 + Phase 3 P3-1…P3-4 COMPLETE — on `main`; parity 88.4%; P3-5 infra done, score blocked on sandbox data egress.)*
-1. **P4-1 Font `/FontFile*`** (*L · Med*) — unblocks `Font.glyph_bbox`/`buffer` + user `Font(fontbuffer=)` (API completeness, **not** the rendering keystone — C3).
-2. **P4-3 OCR `recognize()` rayon parallelism** (*M · High*) — best perf-for-effort overall; near-linear OCR-latency win on multi-box scanned pages.
-3. **P4-4 API reference docs** + the low-priority residuals (P3-1r, P3-4r vertical, P3-3r CMYK, P0-2r, P1-1r, P2r-1, P2r-2).
+**Recommended next 3 (in order):** *(Phase 0 + P0-5r + Phases 1–3 + P4-1/P4-3 COMPLETE — on `main`; parity **88.7%**; P3-5 infra done, score blocked on sandbox data egress.)*
+1. **P4-4 API reference docs** (*M · Med*) — mkdocstrings the full public surface (only ~4 of ~20 classes documented today; docstrings are already rich). Good pre-public polish.
+2. **P4-2 Type1 charstring (PFB/PFA)** (*L · Med*) — removes the literal worst render page (eurlex `32006L0112_ES`, SSIM 0.527); the last big render-fidelity item.
+3. **The residuals** — P3-1r (PMC212689 order), P3-4r (vertical writing), P3-3r (CMYK), P0-2r (`_core` deferred), P1-1r (Symbol/Zapf), P2r-1, P2r-2 — plus re-running P3-5's GriTS from an unrestricted network.
 
 ## 7. Pre-public chores + docs upkeep (do alongside / last)
 
@@ -282,6 +278,7 @@ and trust a clean machine / CI.
 *Re-verified 2026-06-19 from a code-level 5-dimension survey (project health · API parity · rendering ·
 extraction/conformance · perf/OCR). §3 is the correction log against this doc's previous A–F framing.
 **Phase 0 + P0-5r + Phase 1 on 2026-06-19; Phase 2 + P3-1/P3-2/P3-3/P3-4 on 2026-06-20** (on `main`; coverage
-84.7%→88.4%; multi-column + colorspaces at fitz parity) — §3 rows C1 / C2 / C4 / C6 / C7 / C10 / C11 / C13
-fixed + P0-6r closed; P3-5 GriTS harness landed (score blocked on sandbox CDN egress); residuals P0-2r /
-P1-1r / P2r-1 / P2r-2 / P3-1r / P3-3r / P3-4r carried forward.*
+84.7%→**88.7%**; multi-column + colorspaces at parity; OCR `recognize()` parallel + Font program bytes) — §3
+rows C1 / C2 / C4 / C6 / C7 / C10 / C11 / C13 fixed + P0-6r closed; P3-5 GriTS harness landed (score blocked
+on sandbox CDN egress); residuals P0-2r / P1-1r / P2r-1 / P2r-2 / P3-1r / P3-3r / P3-4r carried forward.
+**P4-1 / P4-3 landed 2026-06-21.***

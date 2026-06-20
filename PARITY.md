@@ -34,15 +34,15 @@
 
 > **Snapshot (2026-06-20, after API batches 1–5 + P2-3 clusters).** Numbers below are recomputed from the
 > live `COMPAT.toml` per-symbol dispositions. `COMPAT.toml [meta]` is always the authoritative live figure;
-> the current remaining-work list (the 23 deferred symbols, grouped + prioritized) lives in
+> the current remaining-work list (the 21 deferred symbols, grouped + prioritized) lives in
 > [`docs/PRD-NEXT.md`](docs/PRD-NEXT.md) §3.B.
 
-**Overall: 680 / 769 implemented (88.4% coverage).**
+**Overall: 682 / 769 implemented (88.7% coverage).**
 
 | Disposition | Count | Share |
 |---|---:|---:|
-| **implemented** | **680** | **88.4%** |
-| deferred (planned, later milestone / post-v1) | 23 | 3.0% |
+| **implemented** | **682** | **88.7%** |
+| deferred (planned, later milestone / post-v1) | 21 | 2.7% |
 | out-of-scope (raises `PdfUnsupportedError`) | 66 | 8.6% |
 | **Total catalogued symbols** | **769** | 100% |
 
@@ -69,7 +69,7 @@
 | `Outline` | 11 | 11 | 0 | 0 | 100% |
 | `DisplayList` | 5 | 3 | 2 | 0 | 60% |
 | `Shape` | 24 | 24 | 0 | 0 | 100% |
-| `Font` | 23 | 20 | 2 | 1 | 87% |
+| `Font` | 23 | 22 | 0 | 1 | 96% |
 | `TextWriter` | 10 | 10 | 0 | 0 | 100% |
 | `Story` | 17 | 0 | 0 | 17 | 0% |
 | `Xml` | 4 | 0 | 0 | 4 | 0% |
@@ -79,7 +79,7 @@
 | Module-level functions | 32 | 29 | 0 | 3 | 91% |
 | `Tools` / `TOOLS` | 22 | 13 | 2 | 7 | 59% |
 | `exceptions` | 10 | 10 | 0 | 0 | 100% |
-| **Total** | **769** | **680** | **23** | **66** | **88.4%** |
+| **Total** | **769** | **682** | **21** | **66** | **88.7%** |
 
 ### Per-milestone breakdown
 
@@ -87,7 +87,7 @@
 > per-symbol `milestone` field, so it cannot be recomputed mechanically. Use the **per-class table
 > above** (recomputed from the live `COMPAT.toml`) + `docs/PRD-NEXT.md` §3.B for current status. By
 > milestone, all of M0–M8's headline paths are landed (geometry, parsing, text, edit/save, annot/forms,
-> image-docs/Pixmap, rendering near-parity, SVG/tables/OCG, OCR-via-Tesseract); the 23 deferred are the
+> image-docs/Pixmap, rendering near-parity, SVG/tables/OCG, OCR-via-Tesseract); the 21 deferred are the
 > long tails and the 66 out-of-scope are the HTML/CSS story engine + render-era knobs.
 
 ---
@@ -162,9 +162,12 @@ per-symbol truth (every name, disposition, milestone, note) is in [`COMPAT.toml`
 
 - [x] **`Link` (14/14)**, **`Outline` (11/11)**, **`TextWriter` (10/10)**, **`Colorspace` (6/6)** — the
   value-object / writer / colorspace surfaces are now fully implemented.
-- [x] **`Font` (20/23)** — metrics object (`text_length`/`char_lengths`/`glyph_advance`/`has_glyph`/
-  `valid_codepoints`/`is_writable`/`Base14_fontnames`/…). Only `glyph_bbox`/`buffer` deferred (pdfspine's
-  Font is a metrics-only handle with no embedded program); `css_for_pymupdf_font` is out-of-scope.
+- [x] **`Font` (22/23)** — metrics object (`text_length`/`char_lengths`/`glyph_advance`/`has_glyph`/
+  `valid_codepoints`/`is_writable`/`Base14_fontnames`/…) plus a program-backed handle:
+  `Font(fontfile=)`/`Font(fontbuffer=)` load the real `/FontFile*` program (no silent Helvetica
+  fallback), so `buffer` returns the program bytes and `glyph_bbox` the real per-glyph outline box.
+  A metrics-only Core-14 handle (built from a name) still raises for those two; `css_for_pymupdf_font`
+  is out-of-scope.
 - [x] **`Tools` / `TOOLS` (13/22)** — diagnostics/tuning singleton headline paths landed (incl.
   `image_profile`); `set_annot_stem`/`set_subset_fontnames` deferred,
   7 out-of-scope (render-era knobs, raw `mupdf.*` access).
@@ -177,14 +180,14 @@ per-symbol truth (every name, disposition, milestone, note) is in [`COMPAT.toml`
 
 ## Remaining work
 
-The authoritative, prioritised list of the **23 deferred** symbols (grouped, with quick-wins flagged)
+The authoritative, prioritised list of the **21 deferred** symbols (grouped, with quick-wins flagged)
 now lives in **[`docs/PRD-NEXT.md`](docs/PRD-NEXT.md) §3.B** — kept there to avoid two divergent lists.
 In brief the deferred set is: **Document (9)** OCG layer object ops
 (`add_layer`/`get_layers`/`get_oc`/`get_ocmd`/`set_ocmd`/`set_layer_ui_config`/`switch_layer`) +
 `insert_file` + `FormFonts`; **Page (6)** `write_text`/`insert_font`/`remove_rotation` +
 device-replay (`run`/`extend_textpage`/`refresh`); **DisplayList (2)** `run`/`get_textpage`
-(device-callback replay); **Font (2)** `glyph_bbox`/`buffer` (need an embedded-program handle);
-**Tools (2)** `set_annot_stem`/`set_subset_fontnames`; **Annot (1)** `get_textbox`; **Pixmap (1)** `warp`.
+(device-callback replay); **Tools (2)** `set_annot_stem`/`set_subset_fontnames`;
+**Annot (1)** `get_textbox`; **Pixmap (1)** `warp`.
 
 The **66 out-of-scope** symbols (raise `PdfUnsupportedError`) are dominated by `Story` / `Xml` /
 `Archive` (the HTML/CSS -> PDF layout engine, PRD §3.2 #2) + render-era `Tools` knobs + EPUB

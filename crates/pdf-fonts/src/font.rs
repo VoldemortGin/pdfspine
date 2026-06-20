@@ -6,11 +6,21 @@
 //! typefaces. Metrics (`ascender`, `descender`, `bbox`, advances) are the
 //! factual Adobe Core-14 AFM values (1000-unit glyph space normalized to a unit
 //! em), not the bundled-font substitutes MuPDF ships; the structure and ratios
-//! match. Embedded / user TTFs are out of this handle's scope (a later
-//! milestone); constructing from an unknown name falls back to Helvetica so the
+//! match. Constructing from an unknown name falls back to Helvetica so the
 //! handle is always usable.
+//!
+//! A handle may additionally carry a real **font program** — the bytes of an
+//! embedded `/FontFile*` stream, or a user-supplied `fontfile=` / `fontbuffer=`
+//! TrueType/OpenType program. When present (see [`Font::from_program`]), the
+//! handle parses it with the same `ttf-parser` infrastructure the renderer's
+//! `GlyphFont` uses, so [`Font::buffer`] returns the real bytes,
+//! [`Font::glyph_bbox`] reports the real per-glyph outline box, and
+//! [`Font::valid_codepoints`] reflects the program's actual `cmap` coverage.
+
+use std::sync::Arc;
 
 use smol_str::SmolStr;
+use ttf_parser::{name_id, Face, GlyphId};
 
 use crate::encodings::BaseEncoding;
 use crate::glyphlist::{glyph_name_to_unicode, unicode_to_glyph_name};
@@ -181,11 +191,50 @@ fn resolve_std_name(name: &str) -> &'static str {
     }
 }
 
-/// A Core-14 font handle (PyMuPDF `fitz.Font`).
+/// The program's human-readable display name (PyMuPDF `Font.name`).
+///
+/// PyMuPDF/MuPDF report `"<family> <subfamily>"` (sfnt `name` ids 1 + 2), e.g.
+/// `"Liberation Sans Regular"`. This builds that, falling back to the full-name
+/// record (id 4) and finally `None` when the program carries no usable name (the
+/// caller then keeps the requested font name).
+fn face_full_name(face: &Face) -> Option<SmolStr> {
+    let pick = |id: u16| -> Option<String> {
+        let names = face.names();
+        names
+            .into_iter()
+            .find(|n| n.name_id == id && n.is_unicode())
+            .or_else(|| names.into_iter().find(|n| n.name_id == id))
+            .and_then(|n| n.to_string())
+    };
+    if let Some(family) = pick(name_id::FAMILY) {
+        let combined = match pick(name_id::SUBFAMILY) {
+            Some(sub) if !sub.is_empty() => format!("{family} {sub}"),
+            _ => family,
+        };
+        return Some(SmolStr::new(combined));
+    }
+    pick(name_id::FULL_NAME).map(SmolStr::new)
+}
+
+/// A font handle (PyMuPDF `fitz.Font`).
+///
+/// Two flavors share one type:
+/// - a **Core-14 metrics-only** handle built from a name ([`Font::new`]) — no
+///   font program, metrics from the Adobe AFM tables;
+/// - a **program-backed** handle built from `/FontFile*` or a user
+///   `fontfile=` / `fontbuffer=` program ([`Font::from_program`]) — the parsed
+///   outlines drive `buffer` / `glyph_bbox` / `valid_codepoints`, while the
+///   Core-14 metric fields still back the name-keyed metric accessors.
 pub struct Font {
     std_name: &'static str,
+    /// The display name (PyMuPDF `Font.name`): the program's full-name record
+    /// when a program is loaded, else the resolved Core-14 key.
+    display_name: SmolStr,
     metrics: Core14Metrics,
     widths: &'static StandardWidths,
+    /// The embedded / user font-program bytes (`/FontFile*`), parsed on demand.
+    /// `None` for a metrics-only Core-14 handle.
+    program: Option<Arc<[u8]>>,
 }
 
 impl Font {
@@ -200,15 +249,63 @@ impl Font {
         });
         Font {
             std_name,
+            display_name: SmolStr::new(std_name),
             metrics: metrics(std_name),
             widths,
+            program: None,
         }
     }
 
-    /// The font's canonical name (e.g. `"Helvetica"`).
+    /// Builds a handle that carries a real font **program** (the bytes of an
+    /// embedded `/FontFile*` stream, or a user-supplied `fontfile=` /
+    /// `fontbuffer=` TrueType/OpenType program).
+    ///
+    /// The program is parsed with `ttf-parser` (the same path the renderer's
+    /// `GlyphFont` uses): on success the handle's display [`name`](Self::name) is
+    /// the program's full-name record (falling back to `fallback_name`), and
+    /// [`buffer`](Self::buffer) / [`glyph_bbox`](Self::glyph_bbox) /
+    /// [`valid_codepoints`](Self::valid_codepoints) are served from the outlines.
+    /// The name-keyed metric accessors still come from the Core-14 table chosen by
+    /// `fallback_name`, so a program-backed handle remains fully usable.
+    ///
+    /// Returns `None` when `program` is not a `ttf-parser`-parseable sfnt
+    /// (TrueType `FontFile2` / OpenType-CFF `FontFile3`) — e.g. a bare Type1 PFB
+    /// `/FontFile`, which has no outline parser here; the caller then falls back
+    /// to [`Font::new`].
     #[must_use]
-    pub fn name(&self) -> &'static str {
-        self.std_name
+    pub fn from_program(program: &[u8], fallback_name: &str) -> Option<Self> {
+        let face = Face::parse(program, 0).ok()?;
+        let std_name = resolve_std_name(fallback_name);
+        let widths = standard_font_widths(std_name).unwrap_or_else(|| {
+            standard_font_widths("Helvetica").expect("Helvetica metrics present")
+        });
+        // PyMuPDF's `Font.name` for a loaded program is the font's full-name
+        // record (name id 4), e.g. "Liberation Sans Regular"; fall back to the
+        // requested name when the program carries none.
+        let display_name = face_full_name(&face).unwrap_or_else(|| SmolStr::new(fallback_name));
+        Some(Font {
+            std_name,
+            display_name,
+            metrics: metrics(std_name),
+            widths,
+            program: Some(Arc::from(program.to_vec())),
+        })
+    }
+
+    /// Parses the carried program into a `ttf-parser` [`Face`], or `None` for a
+    /// metrics-only handle. Re-parses per call (cheap; only the program-backed
+    /// accessors use it).
+    fn face(&self) -> Option<Face<'_>> {
+        let bytes = self.program.as_ref()?;
+        Face::parse(bytes, 0).ok()
+    }
+
+    /// The font's name (PyMuPDF `Font.name`): the program's full-name record for
+    /// a program-backed handle, else the canonical Core-14 key (e.g.
+    /// `"Helvetica"`).
+    #[must_use]
+    pub fn name(&self) -> &str {
+        &self.display_name
     }
 
     /// The ascender, normalized to a unit em (PyMuPDF `Font.ascender`).
@@ -229,10 +326,15 @@ impl Font {
         self.metrics.bbox
     }
 
-    /// The number of glyphs the font defines (PyMuPDF `Font.glyph_count`).
+    /// The number of glyphs the font defines (PyMuPDF `Font.glyph_count`). For a
+    /// program-backed handle this is the program's real glyph count; otherwise
+    /// the Core-14 AFM glyph count.
     #[must_use]
     pub fn glyph_count(&self) -> u32 {
-        self.metrics.glyph_count
+        match self.face() {
+            Some(face) => u32::from(face.number_of_glyphs()),
+            None => self.metrics.glyph_count,
+        }
     }
 
     /// Whether the font is bold / italic / serifed / monospaced.
@@ -273,6 +375,10 @@ impl Font {
         let Some(c) = char::from_u32(cp) else {
             return false;
         };
+        // A program-backed handle answers from the program's real `cmap`.
+        if let Some(face) = self.face() {
+            return face.glyph_index(c).is_some();
+        }
         let v = c as u32;
         // Printable ASCII + Latin-1 supplement is what the Core-14 text fonts
         // carry; the pictographic fonts always answer for any nameable scalar.
@@ -333,25 +439,42 @@ impl Font {
 
     /// The embedded font program (`/FontFile*`) bytes (PyMuPDF `Font.buffer`).
     ///
-    /// The Core-14 handle is metrics-only — it carries no glyph-outline program
-    /// (PyMuPDF substitutes a bundled NimbusSans/Type1 TTF and returns its
-    /// bytes). With no program to expose, this returns an empty buffer. This is
-    /// a documented deviation: pdfspine's Core-14 handle has no font file.
+    /// A **program-backed** handle (built from `/FontFile*` or a user
+    /// `fontfile=` / `fontbuffer=`) returns the program bytes. A metrics-only
+    /// Core-14 handle carries no glyph-outline program (PyMuPDF substitutes a
+    /// bundled NimbusSans/Type1 TTF and returns its bytes); with no program to
+    /// expose, this returns `None` — a documented deviation.
     #[must_use]
-    pub fn buffer(&self) -> Vec<u8> {
-        Vec::new()
+    pub fn buffer(&self) -> Option<&[u8]> {
+        self.program.as_deref()
     }
 
     /// The Unicode codepoints the font's encoding covers, sorted ascending
     /// (PyMuPDF `Font.valid_codepoints` — an array of ints).
     ///
-    /// Derived from the handle's natural built-in encoding (WinAnsi for text
-    /// fonts; the font's own encoding for Symbol/ZapfDingbats), mapping each
-    /// encoded glyph name back to its AGL Unicode scalar. PyMuPDF reads the
-    /// bundled-font cmap, so its set is broader; this is the set this metrics
-    /// handle can actually place.
+    /// For a **program-backed** handle this is the program's real `cmap`
+    /// coverage (every Unicode scalar the font's character map resolves to a
+    /// glyph). For a metrics-only Core-14 handle it is derived from the natural
+    /// built-in encoding (WinAnsi for text fonts; the font's own encoding for
+    /// Symbol/ZapfDingbats), mapping each encoded glyph name back to its AGL
+    /// Unicode scalar — an honest subset of PyMuPDF's bundled-cmap set.
     #[must_use]
     pub fn valid_codepoints(&self) -> Vec<u32> {
+        if let Some(face) = self.face() {
+            let mut cps: Vec<u32> = Vec::new();
+            for sub in face.tables().cmap.into_iter().flat_map(|c| c.subtables) {
+                if sub.is_unicode() {
+                    sub.codepoints(|cp| {
+                        if sub.glyph_index(cp).is_some() {
+                            cps.push(cp);
+                        }
+                    });
+                }
+            }
+            cps.sort_unstable();
+            cps.dedup();
+            return cps;
+        }
         let table = self.base_encoding().table();
         let mut cps: Vec<u32> = table
             .iter()
@@ -368,17 +491,45 @@ impl Font {
     /// The glyph bounding box for Unicode scalar `cp` at font size 1, as
     /// `(x0, y0, x1, y1)` in em units (PyMuPDF `Font.glyph_bbox(chr)`).
     ///
-    /// The Core-14 handle has no per-glyph outlines, so it cannot report each
-    /// glyph's individual ink box the way PyMuPDF's bundled font does; it
-    /// returns the font-level bounding box for any covered scalar (a documented
-    /// approximation) and the empty box for scalars it does not cover.
+    /// A **program-backed** handle reports the glyph's real per-glyph ink box
+    /// from the outlines (the program's `cmap` resolves the scalar to a glyph,
+    /// whose outline bbox is scaled by `1/units_per_em`); a covered glyph with
+    /// an empty outline (e.g. space) reports the empty box. A metrics-only
+    /// Core-14 handle has no per-glyph outlines, so it returns the font-level
+    /// bounding box for any covered scalar (a documented approximation). Either
+    /// way an uncovered scalar reports the empty box.
     #[must_use]
     pub fn glyph_bbox(&self, cp: u32) -> (f64, f64, f64, f64) {
+        if let Some(face) = self.face() {
+            let Some(c) = char::from_u32(cp) else {
+                return (0.0, 0.0, 0.0, 0.0);
+            };
+            let Some(gid) = face.glyph_index(c) else {
+                return (0.0, 0.0, 0.0, 0.0);
+            };
+            return glyph_outline_bbox(&face, gid);
+        }
         if self.has_glyph(cp) {
             self.metrics.bbox
         } else {
             (0.0, 0.0, 0.0, 0.0)
         }
+    }
+}
+
+/// The glyph's per-glyph ink box scaled to a unit em (`÷ units_per_em`), as
+/// `(x0, y0, x1, y1)`. A glyph with no outline (whitespace) or no reported box
+/// yields the empty box.
+fn glyph_outline_bbox(face: &Face, gid: GlyphId) -> (f64, f64, f64, f64) {
+    let upem = f64::from(face.units_per_em().max(1));
+    match face.glyph_bounding_box(gid) {
+        Some(bb) => (
+            f64::from(bb.x_min) / upem,
+            f64::from(bb.y_min) / upem,
+            f64::from(bb.x_max) / upem,
+            f64::from(bb.y_max) / upem,
+        ),
+        None => (0.0, 0.0, 0.0, 0.0),
     }
 }
 
@@ -447,7 +598,7 @@ mod tests {
         let f = Font::new("helv");
         assert!(f.is_writable());
         // Metrics-only handle carries no embedded program.
-        assert!(f.buffer().is_empty());
+        assert!(f.buffer().is_none());
     }
 
     #[test]
@@ -472,5 +623,65 @@ mod tests {
         assert_eq!(f.glyph_bbox('A' as u32), f.bbox());
         // Uncovered → empty box.
         assert_eq!(f.glyph_bbox(0x1F600), (0.0, 0.0, 0.0, 0.0));
+    }
+
+    // ----- program-backed handle (real /FontFile* / user fontfile=) --------
+
+    /// A bundled, license-clean (SIL OFL 1.1) real TrueType program used to
+    /// exercise the program-backed path without fetching an external asset.
+    const LIBERATION_SANS: &[u8] = include_bytes!("../fonts/liberation/LiberationSans-Regular.ttf");
+
+    #[test]
+    fn from_program_carries_real_buffer_and_name() {
+        let f = Font::from_program(LIBERATION_SANS, "helv").expect("real sfnt parses");
+        // buffer() returns the exact program bytes (no silent Helvetica fallback).
+        assert_eq!(f.buffer(), Some(LIBERATION_SANS));
+        // name() is the program's full-name record, not the fallback "Helvetica".
+        assert_eq!(f.name(), "Liberation Sans Regular");
+        // glyph_count() is the program's real count (thousands), not the AFM 315.
+        assert!(f.glyph_count() > 1000, "got {}", f.glyph_count());
+    }
+
+    #[test]
+    fn from_program_glyph_bbox_is_real_per_glyph_outline() {
+        let f = Font::from_program(LIBERATION_SANS, "helv").unwrap();
+        // 'A' has a real ink box: positive width/height, ascender-ward top.
+        let (x0, y0, x1, y1) = f.glyph_bbox('A' as u32);
+        assert!(x1 > x0 && y1 > y0, "A bbox {:?}", (x0, y0, x1, y1));
+        assert!(y1 > 0.5 && y0.abs() < 0.05, "A sits on the baseline");
+        // Distinct glyphs have distinct ink boxes (not a constant font box):
+        // 'g' (a descender) reaches below the baseline where 'A' does not.
+        let (_, gy0, _, _) = f.glyph_bbox('g' as u32);
+        assert!(
+            gy0 < y0,
+            "descender 'g' dips below 'A' (gy0={gy0}, ay0={y0})"
+        );
+        // A space glyph has no outline → empty box.
+        assert_eq!(f.glyph_bbox(' ' as u32), (0.0, 0.0, 0.0, 0.0));
+        // An uncovered scalar → empty box.
+        assert_eq!(f.glyph_bbox(0x1F600), (0.0, 0.0, 0.0, 0.0));
+    }
+
+    #[test]
+    fn from_program_valid_codepoints_reflects_real_cmap() {
+        let f = Font::from_program(LIBERATION_SANS, "helv").unwrap();
+        let vc = f.valid_codepoints();
+        // Sorted, de-duplicated, and far broader than the WinAnsi-encoding subset
+        // (the bundled cmap covers thousands of scalars).
+        assert!(vc.windows(2).all(|w| w[0] < w[1]));
+        assert!(vc.len() > 1000, "got {}", vc.len());
+        assert!(vc.contains(&('A' as u32)));
+        assert!(vc.contains(&0x00E9)); // eacute
+                                       // has_glyph agrees with the cmap.
+        assert!(f.has_glyph('A' as u32));
+        assert!(!f.has_glyph(0x1F600));
+    }
+
+    #[test]
+    fn from_program_rejects_non_sfnt() {
+        // A bare Type1 PFB / random bytes are not ttf-parser-parseable → None,
+        // so the caller falls back to Font::new (no panic).
+        assert!(Font::from_program(b"%!PS-AdobeFont not an sfnt", "helv").is_none());
+        assert!(Font::from_program(&[0u8; 8], "helv").is_none());
     }
 }

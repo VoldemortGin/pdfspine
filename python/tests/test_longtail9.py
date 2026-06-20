@@ -45,22 +45,26 @@ DEVIATIONS from fitz (documented):
     its internal ``fz_pool`` allocator size, not portable outside MuPDF).
 
 FONT deviations / deferrals (documented):
-  - ``Font.glyph_bbox`` and ``Font.buffer`` are DEFERRED (raise
-    ``PdfUnsupportedError``): pdfspine's ``Font`` is a Core-14 metrics-only handle
-    (built from a font name; no embedded ``/FontFile*`` program, no per-glyph
-    outlines). A constant font-level bbox / empty buffer would be misleading, so
-    both honestly raise until embedded-font programs are wired up.
-  - ``Font.valid_codepoints`` reflects the font's built-in PDF encoding coverage
-    for a non-embedded (Core-14) handle (WinAnsi for text fonts; the font's own
-    encoding for Symbol/ZapfDingbats) — an honest STRICT SUBSET of PyMuPDF's
-    bundled-cmap set (no false positives; verified below). For an embedded font
-    the real cmap would be preferred.
+  - ``Font(fontfile=)`` / ``Font(fontbuffer=)`` now load the REAL ``/FontFile*``
+    program (no silent Helvetica fallback): ``Font.buffer`` returns the program
+    bytes, ``Font.glyph_bbox`` the real per-glyph outline box, and
+    ``Font.valid_codepoints`` the program's true cmap (verified below vs the
+    oracle, P4-1).
+  - For a metrics-only Core-14 handle (built from a font NAME; no program),
+    ``Font.glyph_bbox`` / ``Font.buffer`` stay DEFERRED (raise
+    ``PdfUnsupportedError``): there are no per-glyph outlines and no program
+    bytes, and a constant font-level bbox / empty buffer would be misleading.
+  - ``Font.valid_codepoints`` for a non-embedded (Core-14) handle reflects the
+    font's built-in PDF encoding coverage (WinAnsi for text fonts; the font's
+    own encoding for Symbol/ZapfDingbats) — an honest STRICT SUBSET of PyMuPDF's
+    bundled-cmap set (no false positives; verified below).
   - ``Base14_fontnames`` and ``is_writable`` match fitz exactly.
 """
 
 from __future__ import annotations
 
 import base64
+import os
 import xml.dom.minidom as minidom
 
 import fitz
@@ -470,12 +474,123 @@ def test_font_is_writable_matches_fitz():
         assert pdfspine.Font(nm).is_writable is True
 
 
-def test_font_buffer_deferred():
-    # DEFERRED: the metrics-only Core-14 handle carries no embedded /FontFile*
-    # program, so buffer honestly raises rather than returning misleading bytes.
+def test_font_buffer_deferred_for_metrics_only_handle():
+    # A metrics-only Core-14 handle carries no embedded /FontFile* program, so
+    # buffer / glyph_bbox honestly raise rather than returning misleading values.
     f = pdfspine.Font("helv")
     with pytest.raises(pdfspine.PdfUnsupportedError):
         _ = f.buffer
+    with pytest.raises(pdfspine.PdfUnsupportedError):
+        _ = f.glyph_bbox(ord("A"))
+
+
+# A bundled, license-clean (SIL OFL 1.1) real TrueType program used to exercise
+# the program-backed Font path without fetching an external asset.
+_LIBERATION_SANS = os.path.join(
+    os.path.dirname(__file__),
+    "..",
+    "..",
+    "crates",
+    "pdf-fonts",
+    "fonts",
+    "liberation",
+    "LiberationSans-Regular.ttf",
+)
+
+
+def test_font_fontfile_loads_real_program_no_helvetica_fallback():
+    # Font(fontfile=) loads the REAL program: name is the font's own name (not
+    # "Helvetica"), buffer is the exact file bytes, glyph_count is the real count.
+    f = pdfspine.Font(fontfile=_LIBERATION_SANS)
+    assert f.name == "Liberation Sans Regular"
+    with open(_LIBERATION_SANS, "rb") as fh:
+        data = fh.read()
+    assert bytes(f.buffer) == data
+    assert f.glyph_count > 1000
+
+
+def test_font_fontbuffer_loads_real_program():
+    with open(_LIBERATION_SANS, "rb") as fh:
+        data = fh.read()
+    f = pdfspine.Font(fontbuffer=data)
+    assert f.name == "Liberation Sans Regular"
+    assert bytes(f.buffer) == data
+    # fontbuffer wins over fontname (matches fitz: the embedded name is used).
+    f2 = pdfspine.Font("MyName", fontbuffer=data)
+    assert f2.name == "Liberation Sans Regular"
+
+
+def test_font_glyph_bbox_is_real_per_glyph_outline():
+    f = pdfspine.Font(fontfile=_LIBERATION_SANS)
+    a = f.glyph_bbox(ord("A"))
+    assert a[2] > a[0] and a[3] > a[1]  # positive width/height
+    assert a[3] > 0.5 and abs(a[1]) < 0.05  # caps sit on the baseline
+    # A descender 'g' dips below the baseline where 'A' does not (distinct boxes,
+    # not a constant font-level box).
+    g = f.glyph_bbox(ord("g"))
+    assert g[1] < a[1]
+    # A space glyph has no outline → empty box; an uncovered scalar → empty box.
+    assert f.glyph_bbox(ord(" ")) == (0.0, 0.0, 0.0, 0.0)
+    assert f.glyph_bbox(0x1F600) == (0.0, 0.0, 0.0, 0.0)
+
+
+def test_font_program_valid_codepoints_uses_real_cmap():
+    f = pdfspine.Font(fontfile=_LIBERATION_SANS)
+    vc = f.valid_codepoints()
+    # The bundled cmap is far broader than the WinAnsi-encoding subset.
+    assert vc == sorted(set(vc))
+    assert len(vc) > 1000
+    assert ord("A") in vc
+    assert 0x00E9 in vc  # é
+
+
+def test_font_bad_program_raises():
+    # Unparseable bytes → ValueError (no silent Helvetica fallback); a missing
+    # file path → OSError.
+    with pytest.raises(ValueError):
+        pdfspine.Font(fontbuffer=b"not a font program")
+    with pytest.raises(OSError):
+        pdfspine.Font(fontfile="/nonexistent/path/to/font.ttf")
+
+
+def test_font_fontfile_cross_check_oracle():
+    # Cross-check buffer / glyph_bbox / valid_codepoints vs REAL PyMuPDF
+    # (.venv-oracle) on the SAME font file.
+    import subprocess
+    import json
+
+    oracle = os.path.join(
+        os.path.dirname(__file__), "..", "..", ".venv-oracle", "bin", "python"
+    )
+    if not os.path.exists(oracle):
+        pytest.skip("real-PyMuPDF oracle not available")
+    code = (
+        "import fitz, json, sys;"
+        "f=fitz.Font(fontfile=sys.argv[1]);"
+        "print(json.dumps({"
+        "'name': f.name,"
+        "'buflen': len(f.buffer),"
+        "'glyph_count': f.glyph_count,"
+        "'vc_len': len(f.valid_codepoints()),"
+        "'has_A': f.has_glyph(ord('A')) >= 0,"
+        "}))"
+    )
+    out = subprocess.run(
+        [oracle, "-c", code, _LIBERATION_SANS],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    ref = json.loads(out)
+    f = pdfspine.Font(fontfile=_LIBERATION_SANS)
+    # Name + buffer length + glyph count are byte-for-byte / count-for-count.
+    assert f.name == ref["name"]
+    assert len(bytes(f.buffer)) == ref["buflen"]
+    assert f.glyph_count == ref["glyph_count"]
+    # valid_codepoints: pdfspine enumerates the real cmap; the count matches the
+    # oracle's cmap coverage within a small tolerance (both read the same cmap).
+    assert abs(len(f.valid_codepoints()) - ref["vc_len"]) <= 2
+    assert (f.has_glyph(ord("A")) >= 0) == ref["has_A"]
 
 
 def test_font_valid_codepoints_type_and_contents():
