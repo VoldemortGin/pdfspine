@@ -14,6 +14,7 @@
 //! operands are skipped, never panicking (PRD §8.5 defensive contract).
 
 use smol_str::SmolStr;
+use unicode_normalization::UnicodeNormalization;
 
 /// A codespace range: byte strings of width `n_bytes` whose value lies in
 /// `low..=high` are valid codes of that length (ISO 32000-1 §9.7.6.2).
@@ -176,11 +177,19 @@ impl CMap {
     /// (deterministic, and the conventional canonical representative). Codes
     /// that are not valid Unicode scalars (surrogates / out of range) are
     /// skipped. Never panics.
+    ///
+    /// A source code in the **Kangxi Radicals** block (U+2F00–U+2FDF) is folded
+    /// to its canonical CJK ideograph (e.g. ⼀ U+2F00 → 一 U+4E00) to match
+    /// PyMuPDF, which resolves this predefined-CMap path through the same
+    /// canonical-ideograph form (the CJK Radicals Supplement block U+2E80–U+2EFF
+    /// is **not** folded — PyMuPDF keeps it verbatim). The "smallest code wins"
+    /// dedup still ranks on the *original* source code.
     #[must_use]
     pub fn invert_to_cid_unicode(&self) -> CidUnicode {
         // Smallest Unicode code wins per CID. We scan ranges in order; an entry
-        // only overwrites a CID's mapping if its code is strictly smaller.
-        let mut map: std::collections::HashMap<u32, char> = std::collections::HashMap::new();
+        // only overwrites a CID's mapping if its source code is strictly smaller.
+        // The stored value is the folded char; the ranking key is the raw code.
+        let mut map: std::collections::HashMap<u32, (u32, char)> = std::collections::HashMap::new();
         for r in &self.cid_ranges {
             // Guard against absurd ranges (malformed data) blowing up memory.
             let span = r.hi.saturating_sub(r.lo);
@@ -193,22 +202,44 @@ impl CMap {
                 let Some(ch) = char::from_u32(code) else {
                     continue;
                 };
+                let ch = fold_cjk_radical(ch);
                 map.entry(cid)
-                    .and_modify(|existing| {
-                        if code < u32::from(*existing) {
-                            *existing = ch;
+                    .and_modify(|(existing_code, existing_ch)| {
+                        if code < *existing_code {
+                            *existing_code = code;
+                            *existing_ch = ch;
                         }
                     })
-                    .or_insert(ch);
+                    .or_insert((code, ch));
             }
         }
-        CidUnicode { map }
+        CidUnicode {
+            map: map.into_iter().map(|(cid, (_, ch))| (cid, ch)).collect(),
+        }
     }
 }
 
 /// Caps the number of codes expanded from a single inverted `cidrange` entry, so
 /// a malformed CMap with an absurd `lo..hi` span cannot exhaust memory.
 const MAX_INVERT_SPAN: u32 = 0x20_000;
+
+/// Folds a **Kangxi Radicals** code point (U+2F00–U+2FDF) to its canonical CJK
+/// ideograph (its single-scalar NFKC decomposition, e.g. ⼀ U+2F00 → 一 U+4E00),
+/// matching PyMuPDF's predefined-CMap text extraction. Every other code point —
+/// including the **CJK Radicals Supplement** block (U+2E80–U+2EFF), which
+/// PyMuPDF keeps verbatim — is returned unchanged. Never panics.
+fn fold_cjk_radical(ch: char) -> char {
+    if !('\u{2F00}'..='\u{2FDF}').contains(&ch) {
+        return ch;
+    }
+    // Every assigned Kangxi radical has a single-scalar NFKC decomposition (the
+    // ideograph); fall back to the original char if that ever fails to hold.
+    let mut it = ch.nfkc();
+    match (it.next(), it.next()) {
+        (Some(c), None) => c,
+        _ => ch,
+    }
+}
 
 /// A `CID → Unicode` index produced by [`CMap::invert_to_cid_unicode`]
 /// (predefined CJK encoding CMap → ToUnicode table).

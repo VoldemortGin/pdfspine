@@ -12,6 +12,7 @@ description = "Font parsing for mapping (encodings/ToUnicode/CMap/widths/glyph->
 [dependencies]
 pdf-core.workspace = true
 smol_str.workspace = true
+unicode-normalization.workspace = true
 
 [dev-dependencies]
 proptest.workspace = true

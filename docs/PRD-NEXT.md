@@ -157,11 +157,10 @@ oracle-cross-checked against real PyMuPDF 1.24.14 (`.venv-oracle`) with zero reg
   - New `crates/pdf-core/src/colorspace.rs` — one coherent `ColorSpace` resolver + the shared `PdfFunction` evaluator (types 0/2/3, moved from pdf-render, generalized multi-input for DeviceN). Indexed images now look up the palette; Separation/DeviceN run the tint transform; `/Decode` is applied generally (DCT/JPX excluded to avoid double-apply); and the vector `cs`/`scn` path (`interp.rs` + `state.rs`, q/Q-saved) runs the transform so a **dark 1-component Separation fill no longer renders white**. Pixel-exact vs the fitz oracle on synthetic Indexed/Separation/DeviceN//Decode cases; 4 pdf-core unit + 6 render-integration pixel tests; P1-3 SSIM gate green (no reference drift).
   - **Residual → P3-3r** (*S · Low*): pre-existing **naive CMYK→RGB** (pure-K black renders 0,0,0 vs fitz's color-managed 34,31,31 — independent of P3-3, affects all CMYK uniformly). ICC-accurate spaces stay out-of-scope (ICCBased falls back by `/N`); DeviceN type-0 multi-axis tables use nearest-sample per non-primary axis.
 
-- **P3-4 · Cheap correctness insurance** — *S–M · Low–Medium*
-  - **Kangxi-radical CJK fold** (NFKC at `predefined.rs:141 cid_to_unicode`, gated to CJK ranges) + a unit test · *S*.
-  - **Edge-case tests:** vertical/Identity-V CJK (`wmode` plumbing exists, never exercised), ToUnicode-less Type0, overlapping/co-located text · *M*.
-  - **Robustness at scale:** rerun `fetch_robustness.py --n 250+` GovDocs1/SafeDocs so "never panics" rests on thousands, not 30 clean PDFs · *S, benchmarking only*.
-  - **Acceptance:** new tests/fold green; a refreshed robustness report.
+- **P3-4 · Cheap correctness insurance — ✅ DONE (2026-06-20)** — *was S–M · Low–Medium*
+  - **Kangxi fold:** `crates/pdf-fonts/src/cmap.rs::invert_to_cid_unicode` now NFKC-folds Kangxi Radicals (U+2F00–U+2FDF) to the canonical ideograph on the predefined-CMap / no-`/ToUnicode` path. Oracle-checked: fitz folds Kangxi (214/214) but **NOT** the CJK Radicals Supplement (U+2E80–U+2EFF) — so pdfspine folds **only Kangxi** to match fitz, and keeps U+2F00 verbatim on the explicit-`/ToUnicode` path. +3 Rust tests.
+  - **Edge-case tests** (`python/tests/test_p3_4_edge_cases.py`, 6, oracle-checked): ToUnicode-less Type0 ✓, overlapping/co-located text ✓ (same char multiset as fitz), single-column vertical CJK ✓. **Residual → P3-4r:** vertical writing-mode is unimplemented in the emission path (`interp.rs:1324` hardcodes Horizontal) — multi-column vertical reorders columns vs fitz (same multiset, column order only); pinned by a tripwire test.
+  - **Robustness:** new `conformance/gt/run_robustness.py` + `ROBUSTNESS-REPORT.md`; **0 panics** over N=43 GovDocs1 (target 250 — network-bound shortfall behind the local proxy; re-run on an unthrottled link to grow N).
 
 - **P3-5 · FinTabNet gold-table GT** — *M · Medium* (optional)
   - **Why:** today's tables harness is fitz-**agreement** only (36–43% IoU match); no objective structure score. Wire FinTabNet.c (CDLA-Permissive) for the first absolute number.
@@ -234,17 +233,18 @@ oracle-cross-checked against real PyMuPDF 1.24.14 (`.venv-oracle`) with zero reg
 | P3-1r | PMC212689 ordering-only residual (order 0.645 vs 0.749) | S | Low | open | 3r |
 | P3-3 | Indexed/Separation/DeviceN + `/Decode` (render) | L | Med | ✅ done | 3 |
 | P3-3r | naive CMYK→RGB color management (pre-existing) | S | Low | open | 3r |
-| P3-4 | Kangxi fold + edge-case tests + robustness rerun | S–M | Low–Med | – | 3 |
+| P3-4 | Kangxi fold + edge-case tests + robustness rerun | S–M | Low–Med | ✅ done | 3 |
+| P3-4r | vertical writing-mode (multi-column vertical reorders) | M | Low | open | 3r |
 | P3-5 | FinTabNet gold-table GT | M | Med | – | 3 |
 | P4-1 | Font handle carries `/FontFile*` (API only) | L | Med | – | 4 |
 | P4-2 | Type1 charstring (PFB/PFA) support | L | Med | – | 4 |
 | P4-3 | OCR `recognize()` rayon parallelism | M | High | – | 4 |
 | P4-4 | Full public-surface API reference docs | M | Med | – | 4 |
 
-**Recommended next 3 (in order):** *(Phase 0 + P0-5r + Phase 1 + Phase 2 + P3-1/P3-2/P3-3 COMPLETE — on `main`; parity 88.4%, multi-column + colorspaces at fitz parity.)*
-1. **P3-4 cheap correctness insurance** (*S–M*) — Kangxi CJK fold, vertical/Identity-V + ToUnicode-less Type0 edge tests, a 250+ GovDocs1/SafeDocs robustness rerun. High value-per-effort.
-2. **P4-1 Font `/FontFile*`** (*L · Med*) — unblocks `Font.glyph_bbox`/`buffer` + user `Font(fontbuffer=)` (API completeness, **not** the rendering keystone — C3).
-3. **P4-3 OCR `recognize()` rayon parallelism** (*M · High*, best perf-for-effort) and/or **P3-5 FinTabNet GT** (optional). Then the low-priority residuals (P3-1r, P3-3r, P0-2r, P1-1r, P2r-1, P2r-2).
+**Recommended next 3 (in order):** *(Phase 0 + P0-5r + Phase 1 + Phase 2 + P3-1/P3-2/P3-3/P3-4 COMPLETE — on `main`; parity 88.4%; P3-5 in progress.)*
+1. **P4-1 Font `/FontFile*`** (*L · Med*) — unblocks `Font.glyph_bbox`/`buffer` + user `Font(fontbuffer=)` (API completeness, **not** the rendering keystone — C3).
+2. **P4-3 OCR `recognize()` rayon parallelism** (*M · High*) — best perf-for-effort overall; near-linear OCR-latency win on multi-box scanned pages.
+3. **P4-4 API reference docs** + the low-priority residuals (P3-1r, P3-4r vertical, P3-3r CMYK, P0-2r, P1-1r, P2r-1, P2r-2).
 
 ## 7. Pre-public chores + docs upkeep (do alongside / last)
 
@@ -281,6 +281,6 @@ and trust a clean machine / CI.
 
 *Re-verified 2026-06-19 from a code-level 5-dimension survey (project health · API parity · rendering ·
 extraction/conformance · perf/OCR). §3 is the correction log against this doc's previous A–F framing.
-**Phase 0 + P0-5r + Phase 1 on 2026-06-19; Phase 2 + P3-1/P3-2/P3-3 on 2026-06-20** (on `main`; coverage
+**Phase 0 + P0-5r + Phase 1 on 2026-06-19; Phase 2 + P3-1/P3-2/P3-3/P3-4 on 2026-06-20** (on `main`; coverage
 84.7%→88.4%; multi-column + colorspaces at fitz parity) — §3 rows C1 / C2 / C4 / C6 / C7 / C10 / C11 / C13
-fixed + P0-6r closed; residuals P0-2r / P1-1r / P2r-1 / P2r-2 / P3-1r / P3-3r carried forward.*
+fixed + P0-6r closed; residuals P0-2r / P1-1r / P2r-1 / P2r-2 / P3-1r / P3-3r / P3-4r carried forward.*

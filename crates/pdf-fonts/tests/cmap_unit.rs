@@ -102,6 +102,34 @@ fn cmap_007_cidchar_and_cidrange() {
 }
 
 #[test]
+fn cmap_007b_invert_folds_kangxi_radical_only() {
+    // Inverting a UCS2 *encoding* CMap (source code = Unicode scalar) folds a
+    // Kangxi-radical source code (U+2F00–U+2FDF) to its canonical CJK ideograph,
+    // matching PyMuPDF, but keeps the CJK Radicals Supplement block verbatim.
+    let src = b"3 begincidrange \
+                <2F00> <2F00> 10 \
+                <2E80> <2E80> 20 \
+                <4E00> <4E00> 30 \
+                endcidrange";
+    let inv = parse(src).invert_to_cid_unicode();
+    // ⼀ U+2F00 (Kangxi) → 一 U+4E00 (canonical ideograph).
+    assert_eq!(
+        inv.get(10).map(|s| s.to_string()).as_deref(),
+        Some("\u{4E00}")
+    );
+    // ⺀ U+2E80 (CJK Radicals Supplement) → kept verbatim.
+    assert_eq!(
+        inv.get(20).map(|s| s.to_string()).as_deref(),
+        Some("\u{2E80}")
+    );
+    // 一 U+4E00 (the ideograph itself) → unchanged.
+    assert_eq!(
+        inv.get(30).map(|s| s.to_string()).as_deref(),
+        Some("\u{4E00}")
+    );
+}
+
+#[test]
 fn cmap_008_usecmap_chaining() {
     // Parent supplies a cidrange; child supplies a codespacerange + usecmap.
     let parent_src = b"1 begincidrange <0000> <00FF> 0 endcidrange";

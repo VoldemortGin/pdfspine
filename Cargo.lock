@@ -1093,6 +1093,7 @@ dependencies = [
  "pdf-core",
  "proptest",
  "smol_str",
+ "unicode-normalization",
 ]
 
 [[package]]
