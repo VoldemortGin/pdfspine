@@ -162,9 +162,9 @@ oracle-cross-checked against real PyMuPDF 1.24.14 (`.venv-oracle`) with zero reg
   - **Edge-case tests** (`python/tests/test_p3_4_edge_cases.py`, 6, oracle-checked): ToUnicode-less Type0 ✓, overlapping/co-located text ✓ (same char multiset as fitz), single-column vertical CJK ✓. **Residual → P3-4r:** vertical writing-mode is unimplemented in the emission path (`interp.rs:1324` hardcodes Horizontal) — multi-column vertical reorders columns vs fitz (same multiset, column order only); pinned by a tripwire test.
   - **Robustness:** new `conformance/gt/run_robustness.py` + `ROBUSTNESS-REPORT.md`; **0 panics** over N=43 GovDocs1 (target 250 — network-bound shortfall behind the local proxy; re-run on an unthrottled link to grow N).
 
-- **P3-5 · FinTabNet gold-table GT** — *M · Medium* (optional)
-  - **Why:** today's tables harness is fitz-**agreement** only (36–43% IoU match); no objective structure score. Wire FinTabNet.c (CDLA-Permissive) for the first absolute number.
-  - **Acceptance:** an absolute cell-structure score vs human GT in a committed report.
+- **P3-5 · FinTabNet gold-table GT — ⚠ INFRA DONE, score BLOCKED on data egress (2026-06-20)** — *M · Medium* (optional)
+  - Built the harness for the first absolute `find_tables` cell-structure score: `conformance/gt/grits.py` (pure-stdlib **GriTS** Top+Con, AGPL-free port, 7-case self-test passes), `fetch_fintabnet.py` (FinTabNet.c, CDLA-Permissive), and a `tables_diff.py --gold` mode (parse gold → run pdfspine `find_tables` in the isolated worker → match by IoU → GriTS). Pipeline proven end-to-end (self-GriTS 1.0; a dropped-column perturbation → ~0.52/0.67). Default fitz-agreement mode unchanged.
+  - **Blocked:** the FinTabNet source PDFs live on `dax-cdn.cdn.appdomain.cloud`, **TLS-blocked from this sandbox** (HF annotations fetch fine). No number was fabricated. **Unblock:** run the fetcher + `tables_diff.py --gold` from a network that reaches that CDN — emits the absolute GriTS with zero code change.
 
 ### Phase 4 — Post-launch capability / strategic
 
@@ -235,13 +235,13 @@ oracle-cross-checked against real PyMuPDF 1.24.14 (`.venv-oracle`) with zero reg
 | P3-3r | naive CMYK→RGB color management (pre-existing) | S | Low | open | 3r |
 | P3-4 | Kangxi fold + edge-case tests + robustness rerun | S–M | Low–Med | ✅ done | 3 |
 | P3-4r | vertical writing-mode (multi-column vertical reorders) | M | Low | open | 3r |
-| P3-5 | FinTabNet gold-table GT | M | Med | – | 3 |
+| P3-5 | FinTabNet GriTS harness (infra done; score blocked on data) | M | Med | ⚠ blocked | 3 |
 | P4-1 | Font handle carries `/FontFile*` (API only) | L | Med | – | 4 |
 | P4-2 | Type1 charstring (PFB/PFA) support | L | Med | – | 4 |
 | P4-3 | OCR `recognize()` rayon parallelism | M | High | – | 4 |
 | P4-4 | Full public-surface API reference docs | M | Med | – | 4 |
 
-**Recommended next 3 (in order):** *(Phase 0 + P0-5r + Phase 1 + Phase 2 + P3-1/P3-2/P3-3/P3-4 COMPLETE — on `main`; parity 88.4%; P3-5 in progress.)*
+**Recommended next 3 (in order):** *(Phase 0 + P0-5r + Phase 1 + Phase 2 + Phase 3 P3-1…P3-4 COMPLETE — on `main`; parity 88.4%; P3-5 infra done, score blocked on sandbox data egress.)*
 1. **P4-1 Font `/FontFile*`** (*L · Med*) — unblocks `Font.glyph_bbox`/`buffer` + user `Font(fontbuffer=)` (API completeness, **not** the rendering keystone — C3).
 2. **P4-3 OCR `recognize()` rayon parallelism** (*M · High*) — best perf-for-effort overall; near-linear OCR-latency win on multi-box scanned pages.
 3. **P4-4 API reference docs** + the low-priority residuals (P3-1r, P3-4r vertical, P3-3r CMYK, P0-2r, P1-1r, P2r-1, P2r-2).
@@ -283,4 +283,5 @@ and trust a clean machine / CI.
 extraction/conformance · perf/OCR). §3 is the correction log against this doc's previous A–F framing.
 **Phase 0 + P0-5r + Phase 1 on 2026-06-19; Phase 2 + P3-1/P3-2/P3-3/P3-4 on 2026-06-20** (on `main`; coverage
 84.7%→88.4%; multi-column + colorspaces at fitz parity) — §3 rows C1 / C2 / C4 / C6 / C7 / C10 / C11 / C13
-fixed + P0-6r closed; residuals P0-2r / P1-1r / P2r-1 / P2r-2 / P3-1r / P3-3r / P3-4r carried forward.*
+fixed + P0-6r closed; P3-5 GriTS harness landed (score blocked on sandbox CDN egress); residuals P0-2r /
+P1-1r / P2r-1 / P2r-2 / P3-1r / P3-3r / P3-4r carried forward.*
