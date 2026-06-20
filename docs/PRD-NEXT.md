@@ -32,10 +32,11 @@
   born-digital **0.996** vs 1.000 — within 0.000–0.009 per column doc (PMC212687 0.083→0.996, born 2col
   0.549→0.997). CJK / EUR-Lex / GovInfo at parity; Arabic/bidi beats fitz (logical order, UAX#9 reorder). One
   ordering-only residual: PMC212689 (order 0.645, tokens all present) → P3-1r.
-- **Rendering (`get_pixmap`):** prior SSIM **0.945 mean / 0.986 median** vs fitz was dragged down by the 3
-  worst pages of **blank non-embedded standard-14 body text** — **fixed in P1-1** (Liberation OFL fallback;
-  real-page ink coverage +5..+10 pts), so the true mean is now higher (fresh oracle re-measure pending —
-  `.venv-oracle` absent). Symbol/ZapfDingbats fallback is a documented residual (→ P1-1r).
+- **Rendering (`get_pixmap`):** prior SSIM **0.945 mean / 0.986 median** vs fitz was dragged down by **blank
+  non-embedded standard-14 body text** (**fixed in P1-1**, Liberation OFL fallback, ink coverage +5..+10 pts).
+  **P3-3** then fixed Indexed/Separation/DeviceN colorspaces + `/Decode` (pixel-exact vs fitz on synthetic
+  cases). Residuals: Symbol/ZapfDingbats fallback (→ P1-1r); pre-existing naive CMYK→RGB (→ P3-3r). A fresh
+  aggregate SSIM re-measure against the now-present `.venv-oracle` is still worth doing.
 - **OCR:** Tesseract adapter + pure-Rust PaddleOCR (PP-OCRv4 via `tract`) both shipped, Python-selectable,
   scanned→searchable proven end-to-end, beats fitz on CJK. Wheel-bloat **resolved** and the publishing path
   is **decided + implemented** (P0-5r): the published `pdfspine` wheel compiles OCR in but embeds **no
@@ -152,10 +153,9 @@ oracle-cross-checked against real PyMuPDF 1.24.14 (`.venv-oracle`) with zero reg
 - **P3-2 · PMC near-zero collapse — ✅ DONE (2026-06-20): diagnosed as a STALE REPORT, not a bug** — *M · High*
   - Root cause: `GT-REPORT-pmc.md`/`GT-REPORT-born.md` were generated 06-16 **morning**, before the column engine landed that afternoon. Independently verified the current build is at fitz parity (PMC212687 pdfspine 69409 vs fitz 69385 chars, direct word-jaccard 0.987; born multi-column jaccard 1.0). **No content-dropping bug exists.** Both reports regenerated against the current build + oracle; `run_gt.py` stale-path resolution + score-arg-swap fixed (closing **P0-6r**).
 
-- **P3-3 · Expand Indexed/Separation/DeviceN colorspaces + apply `/Decode` (render path)** — *L · Medium*
-  - **Why:** Indexed images render as raw palette indices and Separation/DeviceN as raw tint values (palette/tint transform never run); `/Decode` honored only inside DCT. Separately, vector `scn` for a 1-component Separation maps tint 1.0 → **white** (inverted for dark spot inks); `cs`/`CS` are no-ops. The `PdfFunction` evaluator already exists. (ICC is explicitly **out** — large/low-value, keep as a documented deviation.)
-  - **Files:** `crates/pdf-image/src/pixmap.rs:179`, `crates/pdf-image/src/codecs/mod.rs:221,248`, `crates/pdf-text/src/interp.rs:684,698,1402`, `crates/pdf-render/src/render.rs:1012`.
-  - **Acceptance:** indexed + Separation/DeviceN images render with correct colors; dark spot-color fill no longer white; render_diff SSIM improves on affected govinfo/eurlex forms.
+- **P3-3 · Indexed/Separation/DeviceN colorspaces + `/Decode` — ✅ DONE (2026-06-20, `9b01deb`)** — *was L · Medium*
+  - New `crates/pdf-core/src/colorspace.rs` — one coherent `ColorSpace` resolver + the shared `PdfFunction` evaluator (types 0/2/3, moved from pdf-render, generalized multi-input for DeviceN). Indexed images now look up the palette; Separation/DeviceN run the tint transform; `/Decode` is applied generally (DCT/JPX excluded to avoid double-apply); and the vector `cs`/`scn` path (`interp.rs` + `state.rs`, q/Q-saved) runs the transform so a **dark 1-component Separation fill no longer renders white**. Pixel-exact vs the fitz oracle on synthetic Indexed/Separation/DeviceN//Decode cases; 4 pdf-core unit + 6 render-integration pixel tests; P1-3 SSIM gate green (no reference drift).
+  - **Residual → P3-3r** (*S · Low*): pre-existing **naive CMYK→RGB** (pure-K black renders 0,0,0 vs fitz's color-managed 34,31,31 — independent of P3-3, affects all CMYK uniformly). ICC-accurate spaces stay out-of-scope (ICCBased falls back by `/N`); DeviceN type-0 multi-axis tables use nearest-sample per non-primary axis.
 
 - **P3-4 · Cheap correctness insurance** — *S–M · Low–Medium*
   - **Kangxi-radical CJK fold** (NFKC at `predefined.rs:141 cid_to_unicode`, gated to CJK ranges) + a unit test · *S*.
@@ -232,7 +232,8 @@ oracle-cross-checked against real PyMuPDF 1.24.14 (`.venv-oracle`) with zero reg
 | P3-1 | Multi-column reading-order engine (landed 06-16; verified) | L | High | ✅ done | 3 |
 | P3-2 | PMC collapse — diagnosed (stale report, no bug) + reports regen | M | High | ✅ done | 3 |
 | P3-1r | PMC212689 ordering-only residual (order 0.645 vs 0.749) | S | Low | open | 3r |
-| P3-3 | Indexed/Separation/DeviceN + `/Decode` (render) | L | Med | – | 3 |
+| P3-3 | Indexed/Separation/DeviceN + `/Decode` (render) | L | Med | ✅ done | 3 |
+| P3-3r | naive CMYK→RGB color management (pre-existing) | S | Low | open | 3r |
 | P3-4 | Kangxi fold + edge-case tests + robustness rerun | S–M | Low–Med | – | 3 |
 | P3-5 | FinTabNet gold-table GT | M | Med | – | 3 |
 | P4-1 | Font handle carries `/FontFile*` (API only) | L | Med | – | 4 |
@@ -240,10 +241,10 @@ oracle-cross-checked against real PyMuPDF 1.24.14 (`.venv-oracle`) with zero reg
 | P4-3 | OCR `recognize()` rayon parallelism | M | High | – | 4 |
 | P4-4 | Full public-surface API reference docs | M | Med | – | 4 |
 
-**Recommended next 3 (in order):** *(Phase 0 + P0-5r + Phase 1 + Phase 2 + P3-1/P3-2 COMPLETE — on `main`; parity 88.4%, multi-column at fitz parity.)*
-1. **Phase 3 — P3-3 Indexed/Separation/DeviceN colorspaces + `/Decode`** (*L · Med*) — the next real correctness gap (palette/tint transforms never run; a dark 1-component Separation fill renders white); the `PdfFunction` evaluator already exists.
-2. **P3-4 cheap correctness insurance** (*S–M*) — Kangxi CJK fold, vertical/Identity-V + ToUnicode-less Type0 edge tests, a 250+ GovDocs1/SafeDocs robustness rerun.
-3. **P4-1 Font `/FontFile*`** API work — unblocks `Font.glyph_bbox`/`buffer` + user `Font(fontbuffer=)` (API completeness, **not** the rendering keystone — C3). Then the low-priority residuals (P3-1r, P0-2r, P1-1r, P2r-1, P2r-2).
+**Recommended next 3 (in order):** *(Phase 0 + P0-5r + Phase 1 + Phase 2 + P3-1/P3-2/P3-3 COMPLETE — on `main`; parity 88.4%, multi-column + colorspaces at fitz parity.)*
+1. **P3-4 cheap correctness insurance** (*S–M*) — Kangxi CJK fold, vertical/Identity-V + ToUnicode-less Type0 edge tests, a 250+ GovDocs1/SafeDocs robustness rerun. High value-per-effort.
+2. **P4-1 Font `/FontFile*`** (*L · Med*) — unblocks `Font.glyph_bbox`/`buffer` + user `Font(fontbuffer=)` (API completeness, **not** the rendering keystone — C3).
+3. **P4-3 OCR `recognize()` rayon parallelism** (*M · High*, best perf-for-effort) and/or **P3-5 FinTabNet GT** (optional). Then the low-priority residuals (P3-1r, P3-3r, P0-2r, P1-1r, P2r-1, P2r-2).
 
 ## 7. Pre-public chores + docs upkeep (do alongside / last)
 
@@ -280,6 +281,6 @@ and trust a clean machine / CI.
 
 *Re-verified 2026-06-19 from a code-level 5-dimension survey (project health · API parity · rendering ·
 extraction/conformance · perf/OCR). §3 is the correction log against this doc's previous A–F framing.
-**Phase 0 + P0-5r + Phase 1 on 2026-06-19; Phase 2 + P3-1/P3-2 (multi-column verified at fitz parity) on
-2026-06-20** (on `main`; coverage 84.7%→88.4%) — §3 rows C1 / C2 / C4 / C6 / C7 / C10 / C11 / C13 fixed +
-P0-6r closed; residuals P0-2r / P1-1r / P2r-1 / P2r-2 / P3-1r carried forward.*
+**Phase 0 + P0-5r + Phase 1 on 2026-06-19; Phase 2 + P3-1/P3-2/P3-3 on 2026-06-20** (on `main`; coverage
+84.7%→88.4%; multi-column + colorspaces at fitz parity) — §3 rows C1 / C2 / C4 / C6 / C7 / C10 / C11 / C13
+fixed + P0-6r closed; residuals P0-2r / P1-1r / P2r-1 / P2r-2 / P3-1r / P3-3r carried forward.*
