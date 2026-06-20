@@ -43,6 +43,14 @@ Issues = "https://github.com/VoldemortGin/pdfspine/issues"
 
 [project.optional-dependencies]
 test = ["pytest>=8", "hypothesis>=6"]
+# Build the documentation site (`mkdocs build`). mkdocstrings introspects the
+# INSTALLED `pdfspine`, so the reference auto-renders from docstrings — install
+# this extra into an env that also has pdfspine (e.g. the project .venv).
+docs = [
+    "mkdocs-material>=9.5",
+    "mkdocstrings[python]>=0.26",
+    "ruff>=0.6",  # mkdocstrings auto-uses it to wrap long signatures
+]
 # Opt-in OCR (P0-5r / Option A). There is ONE published `pdfspine` wheel and it
 # already CONTAINS the pure-Rust PaddleOCR engine (compiled in via the maturin
 # `ocr` feature above) — but NOT the ~16 MB PP-OCRv4 ONNX models, which are never

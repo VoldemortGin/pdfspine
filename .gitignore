@@ -54,6 +54,9 @@ conformance/gt/__pycache__/
 # the inlined-gt manifest ARE tracked (small + license-clean); only the live gate
 # JSON outputs above are transient. ssim-refs/ + ci_manifest.json are committed.
 
+# Docs (mkdocs build output)
+/site/
+
 # Editor / OS
 .DS_Store
 .idea/

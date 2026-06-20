@@ -46,6 +46,34 @@ markdown_extensions:
   - pymdownx.details
   - pymdownx.snippets
 
+plugins:
+  - search
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          # Introspect the installed `pdfspine` wheel (in .venv). Its public
+          # classes are pure-Python wrappers, so griffe reads their docstrings
+          # statically; the compiled `_core` exceptions fall back to dynamic
+          # collection automatically.
+          options:
+            docstring_style: sphinx
+            docstring_section_style: table
+            show_source: false
+            show_root_heading: true
+            show_root_full_path: false
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
+            show_if_no_docstring: true
+            members_order: source
+            filters:
+              - "!^_"
+            merge_init_into_class: true
+            separate_signature: true
+            show_signature_annotations: true
+            signature_crossrefs: true
+            heading_level: 3
+
 nav:
   - Home: index.md
   - Guide:
@@ -60,7 +88,16 @@ nav:
       - License: guide/license.md
   - API reference:
       - Overview: reference/index.md
-      - Document: reference/document.md
-      - Page: reference/page.md
-      - Pixmap: reference/pixmap.md
+      - Documents & pages: reference/document.md
+      - Text extraction: reference/textpage.md
+      - Rendering: reference/pixmap.md
+      - Annotations & forms: reference/annotations.md
+      - Drawing & text: reference/drawing.md
+      - Tables: reference/tables.md
+      - Navigation: reference/navigation.md
+      - Color: reference/color.md
+      - Tools: reference/tools.md
       - Geometry: reference/geometry.md
+      - Functions: reference/functions.md
+      - Exceptions: reference/exceptions.md
+      - Constants: reference/constants.md

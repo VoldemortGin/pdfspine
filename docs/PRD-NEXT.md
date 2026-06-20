@@ -178,10 +178,8 @@ oracle-cross-checked against real PyMuPDF 1.24.14 (`.venv-oracle`) with zero reg
 - **P4-3 · OCR `recognize()` rayon parallelism — ✅ DONE (2026-06-21)** — *was M · High (OCR latency)*
   - `PaddleOcr::recognize`'s per-box loop is now a rayon `par_iter` with an **indexed collect** → output byte-identical to the sequential version (deterministic, proven vs a captured baseline + a 1-thread-vs-N fingerprint). **3.49× speedup** on a 42-box page (16 cores: 2858ms → 819ms). The `&self`+`Mutex`/`OnceLock` model cache was already thread-safe (no `model.rs` change). `rayon` is a feature-gated (`paddle-ocr`) optional dep — **not** in the lean base wheel. No correctness change, no new symbols.
 
-- **P4-4 · API reference docs cover the full public surface** — *M · Medium*
-  - **Why:** `docs/reference/` documents only 4 of ~20 public classes, hand-written (no mkdocstrings), so it drifts. Docstrings are already rich.
-  - **Files:** `docs/reference/`, `mkdocs.yml`, `python/pdfspine/__init__.py:29`.
-  - **Acceptance:** every exported class/function documented (ideally auto-generated from docstrings).
+- **P4-4 · API reference docs cover the full public surface — ✅ DONE (2026-06-21)** — *was M · Medium*
+  - Wired **mkdocstrings** (python/griffe, sphinx docstring style) into `mkdocs.yml` + a `docs` extra in `pyproject.toml`; rewrote the drift-prone hand-written `docs/reference/` into 14 mkdocstrings-rendered pages auto-generated from the (already rich) docstrings, plus `scripts/gen_docs_constants.py` (constants value tables) + `scripts/check_docs_coverage.py` (acceptance gate). **307/307 public symbols** documented (= `pdfspine.__all__`); **`mkdocs build --strict` exit 0, no warnings**. `/site/` gitignored.
 
 ## 5. Deferred for v1 (do NOT spend effort here pre-release)
 
@@ -235,12 +233,12 @@ oracle-cross-checked against real PyMuPDF 1.24.14 (`.venv-oracle`) with zero reg
 | P4-1 | Font carries `/FontFile*` (buffer/glyph_bbox, +2) | L | Med | ✅ done | 4 |
 | P4-2 | Type1 charstring (PFB/PFA) support | L | Med | – | 4 |
 | P4-3 | OCR `recognize()` rayon parallelism (3.49×) | M | High | ✅ done | 4 |
-| P4-4 | Full public-surface API reference docs | M | Med | – | 4 |
+| P4-4 | Full public-surface API docs (mkdocstrings, 307/307) | M | Med | ✅ done | 4 |
 
-**Recommended next 3 (in order):** *(Phase 0 + P0-5r + Phases 1–3 + P4-1/P4-3 COMPLETE — on `main`; parity **88.7%**; P3-5 infra done, score blocked on sandbox data egress.)*
-1. **P4-4 API reference docs** (*M · Med*) — mkdocstrings the full public surface (only ~4 of ~20 classes documented today; docstrings are already rich). Good pre-public polish.
-2. **P4-2 Type1 charstring (PFB/PFA)** (*L · Med*) — removes the literal worst render page (eurlex `32006L0112_ES`, SSIM 0.527); the last big render-fidelity item.
-3. **The residuals** — P3-1r (PMC212689 order), P3-4r (vertical writing), P3-3r (CMYK), P0-2r (`_core` deferred), P1-1r (Symbol/Zapf), P2r-1, P2r-2 — plus re-running P3-5's GriTS from an unrestricted network.
+**Recommended next 3 (in order):** *(Phase 0 + P0-5r + Phases 1–3 + P4-1/P4-3/P4-4 COMPLETE — on `main`; parity **88.7%**; P4-2 Type1 in progress; P3-5 score blocked on sandbox data egress.)*
+1. **P4-2 Type1 charstring (PFB/PFA)** (*L · Med*, in progress) — removes the literal worst render page (eurlex `32006L0112_ES`, SSIM 0.527); the last big render-fidelity item.
+2. **The residuals** — P3-1r (PMC212689 order), P3-4r (vertical writing), P3-3r (CMYK), P0-2r (`_core` deferred), P1-1r (Symbol/Zapf), P2r-1, P2r-2.
+3. **Pre-public chores** (§7) — re-run P3-5's GriTS from an unrestricted network; refresh `docs/BENCHMARKS.md`; then flip the repo public + push (essentially feature-complete at 88.7% — multi-column, colorspaces, OCR, fonts all landed).
 
 ## 7. Pre-public chores + docs upkeep (do alongside / last)
 
@@ -281,4 +279,4 @@ extraction/conformance · perf/OCR). §3 is the correction log against this doc'
 84.7%→**88.7%**; multi-column + colorspaces at parity; OCR `recognize()` parallel + Font program bytes) — §3
 rows C1 / C2 / C4 / C6 / C7 / C10 / C11 / C13 fixed + P0-6r closed; P3-5 GriTS harness landed (score blocked
 on sandbox CDN egress); residuals P0-2r / P1-1r / P2r-1 / P2r-2 / P3-1r / P3-3r / P3-4r carried forward.
-**P4-1 / P4-3 landed 2026-06-21.***
+**P4-1 / P4-3 / P4-4 landed 2026-06-21** (full API reference auto-documented, 307/307).*
