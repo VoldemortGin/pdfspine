@@ -146,3 +146,8 @@ jobs:
       - name: Publish to PyPI
         if: github.event_name == 'push' || github.event.inputs.publish_target == 'pypi'
         uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          # API-token auth (the v0.1.0 release). Trusted Publishing (OIDC,
+          # tokenless) is preferred for future releases — drop this `with:`
+          # once pending publishers are configured on PyPI.
+          password: ${{ secrets.PYPI_API_TOKEN }}

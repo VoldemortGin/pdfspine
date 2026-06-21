@@ -11,8 +11,10 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
-This section captures the pre-public state of the project, prior to the first
-tagged release. The workspace version is `0.0.0` until that tag is cut.
+## [0.1.0] — 2026-06-21
+
+The first public release. The local/dev workspace version is `0.0.0`; the
+published wheel's version is set from the `v0.1.0` git tag at build time.
 
 ### Added
 
@@ -112,9 +114,5 @@ tagged release. The workspace version is `0.0.0` until that tag is cut.
   2858 ms → 819 ms). `rayon` is a feature-gated (`paddle-ocr`) optional dep and
   is not in the lean base wheel.
 
-## [0.1.0] - Unreleased
-
-_Placeholder for the first tagged release. No version has been published yet._
-
-[Unreleased]: https://github.com/pdfspine/pdfspine/compare/HEAD
-[0.1.0]: https://github.com/pdfspine/pdfspine/releases/tag/v0.1.0
+[Unreleased]: https://github.com/VoldemortGin/pdfspine/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/VoldemortGin/pdfspine/releases/tag/v0.1.0
