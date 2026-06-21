@@ -92,7 +92,11 @@ python-source = "python"
 # workspace default); ONLY maturin (this line) turns OCR on for the wheel.
 features = ["pyo3/abi3-py311", "ocr"]
 # Ship PEP 561 type information (.pyi stubs + py.typed markers) in sdist + wheel.
+# 根 LICENSE 也显式纳入:元数据声明 License-File: LICENSE,PyPI 要求它实际存在于分发包内,
+# 否则 sdist 上传报 400(maturin 默认不把根 LICENSE 打进 sdist)。
 include = [
+    "LICENSE",
+    "NOTICE",
     "python/pdfspine/py.typed",
     "python/pdfspine/*.pyi",
 ]
