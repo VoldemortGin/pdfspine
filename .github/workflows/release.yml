@@ -143,6 +143,7 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           repository-url: https://test.pypi.org/legacy/
+          skip-existing: true
       - name: Publish to PyPI
         if: github.event_name == 'push' || github.event.inputs.publish_target == 'pypi'
         uses: pypa/gh-action-pypi-publish@release/v1
@@ -151,3 +152,6 @@ jobs:
           # tokenless) is preferred for future releases — drop this `with:`
           # once pending publishers are configured on PyPI.
           password: ${{ secrets.PYPI_API_TOKEN }}
+          # 跳过已存在的文件:本地手动发过 0.0.1 的 macOS-arm64 wheel + sdist,
+          # 让 tag 重跑只补传缺的平台 wheel,不因重复文件而整批失败。
+          skip-existing: true
