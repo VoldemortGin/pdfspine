@@ -27,12 +27,14 @@
 //!   (`/FontFile3`) programs, and for **Type3** fonts (each glyph is a
 //!   content-stream `/CharProcs` procedure, drawn recursively through the
 //!   `FontMatrix · Trm` mapping — d0/d1, colored/uncolored, depth-guarded).
-//!   A **non-embedded standard-14** font (Helvetica / Times / Courier, or the
-//!   Arial / Times New Roman / Courier New aliases) falls back to the bundled
-//!   permissive **Liberation** substitute face (SIL OFL 1.1) so its body text
-//!   renders instead of going blank (advance widths stay authoritative). Bare
-//!   Type1 (`/FontFile` PFB) is still **not** rasterized (text stays
-//!   extractable), and Symbol / ZapfDingbats have no Liberation substitute.
+//!   A **non-embedded standard-14** font falls back to a bundled permissive OFL
+//!   substitute face so its text renders instead of going blank (advance widths
+//!   stay authoritative): **Liberation** (SIL OFL 1.1) for the Latin text
+//!   families (Helvetica / Times / Courier, or the Arial / Times New Roman /
+//!   Courier New aliases), and **Noto** (SIL OFL 1.1) for the two pictographic
+//!   fonts Symbol (Noto Sans Math + Symbols 2) and ZapfDingbats (Noto Sans
+//!   Symbols 2 + Symbols). Bare Type1 (`/FontFile` PFB) is still **not**
+//!   rasterized (text stays extractable).
 //! - Images: XObject + inline, Gray/RGB/CMYK, `/SMask` soft masks, stencil
 //!   `/ImageMask`. Tiling patterns and shading-pattern fills are deferred; the
 //!   bare `sh` operator paints axial/radial (types 2 & 3).
@@ -521,6 +523,28 @@ fn draw_text(
         }
     };
 
+    // For a non-embedded **symbolic** substitute (Symbol / ZapfDingbats), the
+    // primary Noto face does not carry every glyph in the repertoire; a second
+    // bundled face supplies the few it lacks (the five cross dingbats; `bullet`).
+    // Cache + parse that supplement once, fingerprint-keyed like any program; the
+    // per-glyph loop falls back to it when the primary yields no outline.
+    let supplement_idx = symbolic_supplement_face(doc, &run.font_dict).and_then(|bytes| {
+        let fp = fingerprint(bytes);
+        match cache.index.get(&fp) {
+            Some(slot) => *slot,
+            None => {
+                let slot = if GlyphFont::from_program(bytes, 0).is_ok() {
+                    cache.entries.push((fp, bytes.to_vec().into_boxed_slice()));
+                    Some(cache.entries.len() - 1)
+                } else {
+                    None
+                };
+                cache.index.insert(fp, slot);
+                slot
+            }
+        }
+    });
+
     // Split-borrow the cache: `font` borrows `entries[idx]` immutably while we
     // mutate `glyph_paths` (disjoint fields, so both borrows are valid at once).
     let FontCache {
@@ -528,6 +552,9 @@ fn draw_text(
         glyph_paths,
         ..
     } = cache;
+    // The optional supplement face, parsed alongside the primary. Resolving both
+    // borrows `entries` immutably (disjoint indices), valid simultaneously.
+    let supplement = supplement_idx.and_then(|s| GlyphFont::from_program(&entries[s].1, 0).ok());
     let font = match GlyphFont::from_program(&entries[idx].1, 0) {
         Ok(f) => f,
         Err(_) => return Ok(()),
@@ -568,17 +595,42 @@ fn draw_text(
     // Type0/CID vs simple decides the gid-resolution order (see `resolve_gid`).
     let is_cid = is_type0(&run.font_dict);
 
+    let sup_upem = supplement.as_ref().map(|f| f64::from(f.units_per_em()));
     for (i, (glyph, &gid)) in run.glyphs.iter().zip(run.gids.iter()).enumerate() {
         // Resolve the program glyph id (cmap / CFF charset / mapper gid — the
         // order depends on simple vs CID; see `resolve_gid`).
         let resolved = resolve_gid(&font, glyph, gid, is_cid);
         // The glyph outline is extracted once per `(font, gid)` and reused for
-        // every later occurrence (the per-render glyph-Path cache).
-        let path = glyph_paths
+        // every later occurrence (the per-render glyph-Path cache). Decide which
+        // cache key actually holds an outline — the primary face, or (when it has
+        // none and a symbolic supplement is present for Symbol / ZapfDingbats) the
+        // supplement, which carries the repertoire glyphs the primary lacks. Each
+        // cache probe is scoped so the two `&mut glyph_paths` borrows never
+        // overlap; the chosen face supplies its own `units_per_em`.
+        let primary_has = glyph_paths
             .entry((idx, resolved))
-            .or_insert_with(|| font.outline_path(resolved));
-        let Some(path) = path.as_ref() else {
+            .or_insert_with(|| font.outline_path(resolved))
+            .is_some();
+        let (key, glyph_upem) = if primary_has {
+            ((idx, resolved), upem)
+        } else if let (Some(sup), Some(sup_em), Some(sup_idx)) =
+            (supplement.as_ref(), sup_upem, supplement_idx)
+        {
+            let sup_gid = resolve_gid(sup, glyph, gid, is_cid);
+            let sup_has = glyph_paths
+                .entry((sup_idx, sup_gid))
+                .or_insert_with(|| sup.outline_path(sup_gid))
+                .is_some();
+            if sup_has {
+                ((sup_idx, sup_gid), sup_em)
+            } else {
+                continue; // in neither face: no draw.
+            }
+        } else {
             continue; // whitespace / missing / degenerate glyph: no draw.
+        };
+        let Some(path) = glyph_paths.get(&key).and_then(Option::as_ref) else {
+            continue;
         };
         // Per-glyph font-unit → device transform from the true Trm (or, for a
         // legacy run without `trms`, the origin+size reconstruction).
@@ -594,7 +646,7 @@ fn draw_text(
                 glyph.origin.y,
             )
         };
-        let Some(transform) = crate::text::glyph_transform_from_trm(trm, upem, base) else {
+        let Some(transform) = crate::text::glyph_transform_from_trm(trm, glyph_upem, base) else {
             continue; // singular transform (zero size / collapsed matrix): no draw.
         };
         crate::text::draw_glyph_path(
@@ -966,13 +1018,13 @@ fn font_program_ref(doc: &DocumentStore, font_dict: &Dict) -> Option<ObjRef> {
 /// Prefers the **embedded** program (`/FontFile2` TrueType, `/FontFile3`
 /// OpenType/CFF, or Type1 `/FontFile` PFB/PFA), decompressing the stream. When no
 /// embedded program is present and the font is a non-embedded **standard-14** (or
-/// a metric-compatible alias — Arial / Times New Roman / Courier New), falls back
-/// to the bundled permissive **Liberation** substitute face
-/// ([`liberation_substitute`]) so the renderer paints real glyphs instead of
-/// leaving body text blank.
+/// a metric-compatible alias — Arial / Times New Roman / Courier New, or the
+/// pictographic Symbol / ZapfDingbats), falls back to a bundled permissive OFL
+/// substitute face ([`std14_substitute`]: Liberation for the Latin text families,
+/// Noto for the symbol fonts) so the renderer paints real glyphs instead of
+/// leaving the text blank.
 ///
-/// `None` for a pictographic Symbol / ZapfDingbats (Liberation does not cover
-/// them) or any resolution failure.
+/// `None` for any resolution failure or a font with no substitutable base name.
 fn resolve_font_program(doc: &DocumentStore, font_dict: &Dict) -> Option<Vec<u8>> {
     if let Some(descriptor) = font_descriptor(doc, font_dict) {
         // Prefer FontFile2 (TrueType) / FontFile3 (CFF/OpenType); FontFile is the
@@ -993,36 +1045,67 @@ fn resolve_font_program(doc: &DocumentStore, font_dict: &Dict) -> Option<Vec<u8>
             }
         }
     }
-    // No embedded program: substitute a bundled Liberation face for a
-    // non-embedded standard-14 / aliased family (else leave the font untouched).
-    liberation_substitute(doc, font_dict).map(<[u8]>::to_vec)
+    // No embedded program: substitute a bundled OFL face for a non-embedded
+    // standard-14 / aliased family (else leave the font untouched).
+    std14_substitute(doc, font_dict).map(<[u8]>::to_vec)
 }
 
-/// The bundled permissive **Liberation** substitute program for a *non-embedded*
-/// standard-14 simple font, or `None` when no substitution applies.
-///
-/// Only fires for simple fonts (Type1 / TrueType) — Type0 composite and Type3
-/// fonts are excluded (their callers handle them separately). The face is chosen
-/// from `/BaseFont` (with subset-tag stripping + Arial/Times New Roman/Courier
-/// New aliasing) refined by the `/FontDescriptor` serif / fixed-pitch / italic /
-/// force-bold flags. Advance widths stay authoritative via the run's recorded
-/// `trms` (the substitute only supplies outlines, never metrics).
-fn liberation_substitute(doc: &DocumentStore, font_dict: &Dict) -> Option<&'static [u8]> {
-    // Composite (Type0) fonts resolve glyphs by CID against their own program;
-    // never substitute a simple Liberation face for them.
+/// The `/BaseFont` name of a simple (non-Type0/Type3) font, or `None` when the
+/// font is composite/Type3 — those resolve glyphs against their own program and
+/// must never receive a simple substitute face.
+fn simple_base_font(font_dict: &Dict) -> Option<&str> {
     if is_type0(font_dict) || is_type3(font_dict) {
         return None;
     }
-    let base_font = font_dict
-        .get(&Name::new("BaseFont"))
-        .and_then(Object::as_name)
-        .and_then(Name::as_str)
-        .unwrap_or_default();
+    Some(
+        font_dict
+            .get(&Name::new("BaseFont"))
+            .and_then(Object::as_name)
+            .and_then(Name::as_str)
+            .unwrap_or_default(),
+    )
+}
+
+/// The **primary** bundled permissive substitute program for a *non-embedded*
+/// standard-14 simple font, or `None` when no substitution applies.
+///
+/// Latin text families → **Liberation** (OFL); the two pictographic fonts
+/// **Symbol** / **ZapfDingbats** → the bundled **Noto** primary face (OFL). The
+/// face is chosen from `/BaseFont` (with subset-tag stripping + Arial / Times New
+/// Roman / Courier New aliasing) refined, for the Latin families, by the
+/// `/FontDescriptor` serif / fixed-pitch / italic / force-bold flags. Advance
+/// widths stay authoritative via the run's recorded `trms` (the substitute only
+/// supplies outlines, never metrics). The Noto symbol fonts additionally have a
+/// per-glyph supplement face; see [`symbolic_supplement_face`].
+fn std14_substitute(doc: &DocumentStore, font_dict: &Dict) -> Option<&'static [u8]> {
+    let base_font = simple_base_font(font_dict)?;
+    // Symbol / ZapfDingbats: the Noto primary (Math / Symbols 2).
+    if let Some([primary, _supplement]) = pdf_fonts::symbolic_fallback(base_font) {
+        return Some(primary);
+    }
+    // Latin text families: the metric-compatible Liberation face.
     let flags = font_descriptor(doc, font_dict)
         .and_then(|d| d.get(&Name::new("Flags")).and_then(Object::as_i64))
         .map(|f| f.max(0) as u32)
         .unwrap_or(0);
     pdf_fonts::liberation_fallback(base_font, flags)
+}
+
+/// The **supplement** Noto face for a non-embedded **Symbol** / **ZapfDingbats**
+/// font: the second face in the bundled chain, carrying the repertoire glyphs the
+/// primary lacks (the five `cross*` dingbats; `bullet`). `None` for any other
+/// font (including embedded ones — only used when a primary substitute applied).
+fn symbolic_supplement_face(doc: &DocumentStore, font_dict: &Dict) -> Option<&'static [u8]> {
+    // Only relevant when no embedded program is present (a substitute is in play).
+    if font_descriptor(doc, font_dict).is_some_and(|d| {
+        ["FontFile2", "FontFile3", "FontFile"]
+            .iter()
+            .any(|k| d.contains_key(&Name::new(k)))
+    }) {
+        return None;
+    }
+    let base_font = simple_base_font(font_dict)?;
+    pdf_fonts::symbolic_fallback(base_font).map(|[_primary, supplement]| supplement)
 }
 
 /// Resolves a font dict's `/FontDescriptor`, following the descendant CIDFont for

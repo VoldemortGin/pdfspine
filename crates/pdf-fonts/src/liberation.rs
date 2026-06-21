@@ -12,13 +12,15 @@
 //! so the renderer can paint real glyphs instead of leaving body text blank.
 //!
 //! Liberation does **not** cover Symbol or ZapfDingbats (pictographic fonts);
-//! [`liberation_fallback`] returns `None` for those, leaving them a documented
-//! residual rather than regressing them.
+//! those two base-14 fonts are served instead by the bundled **Noto** symbol
+//! faces (see [`symbol_faces`] / [`zapf_faces`] and `fonts/symbols/`), so
+//! [`liberation_fallback`] returns `None` for them while [`symbolic_fallback`]
+//! supplies their outlines.
 //!
 //! These are *rendering* assets (unlike the mapping data in `data/`): the bytes
 //! are real glyph outlines, not numeric facts. Their SIL OFL 1.1 license text
-//! and provenance live alongside the files in `fonts/liberation/`. See that
-//! directory's `LICENSE` and the crate `NOTICE`.
+//! and provenance live alongside the files in `fonts/liberation/` and
+//! `fonts/symbols/`. See those directories' `LICENSE` and the crate `NOTICE`.
 
 /// The three Liberation text families covering the base-14 text faces.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -75,10 +77,11 @@ pub fn liberation_face(family: LiberationFamily, bold: bool, italic: bool) -> &'
 /// absent); its serif (bit 2), fixed-pitch (bit 1), italic (bit 7) and
 /// force-bold (bit 19) bits refine the choice when the name is ambiguous.
 ///
-/// Returns `None` for Symbol / ZapfDingbats (not covered by Liberation) and for
-/// a name that does not normalize to a standard-14 text family **and** carries
-/// no family-distinguishing descriptor flag — i.e. only a genuinely standard or
-/// clearly-substitutable font gets a substitute.
+/// Returns `None` for Symbol / ZapfDingbats (the *pictographic* fonts, served by
+/// the Noto faces via [`symbolic_fallback`], not by Liberation) and for a name
+/// that does not normalize to a standard-14 text family **and** carries no
+/// family-distinguishing descriptor flag — i.e. only a genuinely standard or
+/// clearly-substitutable text font gets a Liberation substitute.
 #[must_use]
 pub fn liberation_fallback(base_font: &str, flags: u32) -> Option<&'static [u8]> {
     use LiberationFamily::{Mono, Sans, Serif};
@@ -133,6 +136,57 @@ pub fn liberation_fallback(base_font: &str, flags: u32) -> Option<&'static [u8]>
     };
 
     Some(liberation_face(family, bold, italic))
+}
+
+// === Symbol / ZapfDingbats (Noto OFL) ====================================
+//
+// Liberation has no pictographic glyphs, so the two *symbolic* base-14 fonts use
+// bundled **Noto** OFL faces instead. Each is a short fallback chain: a primary
+// face plus one supplement carrying the few glyphs the primary lacks. The
+// renderer resolves a code's Unicode (via the Symbol / ZapfDingbats built-in
+// encoding → glyph name → Unicode tables) against the chain in order. See
+// `fonts/symbols/PROVENANCE.md` for the verified repertoire coverage.
+
+/// Noto Sans Math — the Symbol primary (Greek letters + math operators + arrows).
+const SYMBOL_PRIMARY: &[u8] = include_bytes!("../fonts/symbols/NotoSansMath-Regular.ttf");
+/// Noto Sans Symbols 2 — ZapfDingbats primary; also the Symbol supplement (bullet).
+const SYMBOLS2: &[u8] = include_bytes!("../fonts/symbols/NotoSansSymbols2-Regular.ttf");
+/// Noto Sans Symbols — the ZapfDingbats supplement (the five `U+271D–U+2721`
+/// cross dingbats absent from Noto Sans Symbols 2).
+const SYMBOLS1: &[u8] = include_bytes!("../fonts/symbols/NotoSansSymbols-Regular.ttf");
+
+/// The bundled Noto fallback chain for a non-embedded **Symbol** font, in
+/// resolution order: Noto Sans Math (Greek + math), then Noto Sans Symbols 2
+/// (the `bullet` supplement). A glyph absent from both renders `.notdef`.
+#[must_use]
+pub fn symbol_faces() -> [&'static [u8]; 2] {
+    [SYMBOL_PRIMARY, SYMBOLS2]
+}
+
+/// The bundled Noto fallback chain for a non-embedded **ZapfDingbats** font, in
+/// resolution order: Noto Sans Symbols 2, then Noto Sans Symbols (the five
+/// `cross*` dingbats `U+271D–U+2721`). Together they cover the full repertoire.
+#[must_use]
+pub fn zapf_faces() -> [&'static [u8]; 2] {
+    [SYMBOLS2, SYMBOLS1]
+}
+
+/// The bundled permissive **Noto** substitute face chain for a non-embedded
+/// *symbolic* standard-14 font (**Symbol** or **ZapfDingbats**), or `None` when
+/// `base_font` is neither.
+///
+/// `base_font` is the font's `/BaseFont` name (a subset `TAG+` prefix is
+/// tolerated). The mechanism mirrors [`liberation_fallback`]: the substitute
+/// supplies only glyph **outlines**, while advance widths stay authoritative via
+/// [`crate::std_widths`]. Glyphs resolve by the character's Unicode (produced by
+/// the Symbol / ZapfDingbats built-in encoding tables) against the chain.
+#[must_use]
+pub fn symbolic_fallback(base_font: &str) -> Option<[&'static [u8]; 2]> {
+    match crate::widths::normalize_standard_font(base_font) {
+        Some("Symbol") => Some(symbol_faces()),
+        Some("ZapfDingbats") => Some(zapf_faces()),
+        _ => None,
+    }
 }
 
 #[cfg(test)]
@@ -193,9 +247,37 @@ mod tests {
     }
 
     #[test]
-    fn symbolic_fonts_not_covered() {
+    fn symbolic_fonts_not_in_liberation() {
+        // Liberation never covers the pictographic fonts...
         assert_eq!(liberation_fallback("Symbol", 0), None);
         assert_eq!(liberation_fallback("ZapfDingbats", 0), None);
+    }
+
+    #[test]
+    fn symbolic_fonts_use_noto_chain() {
+        // ...the Noto fallback supplies them instead, as a primary+supplement chain.
+        assert_eq!(
+            symbolic_fallback("Symbol"),
+            Some([SYMBOL_PRIMARY, SYMBOLS2])
+        );
+        assert_eq!(
+            symbolic_fallback("ZapfDingbats"),
+            Some([SYMBOLS2, SYMBOLS1])
+        );
+        // Subset tag + alias casing tolerated (normalize_standard_font handles it).
+        assert_eq!(symbolic_fallback("ABCDEF+Symbol"), Some(symbol_faces()));
+        assert_eq!(symbolic_fallback("ZapfDingbatsITC"), Some(zapf_faces()));
+        // A Latin family is not a symbolic font.
+        assert_eq!(symbolic_fallback("Helvetica"), None);
+    }
+
+    #[test]
+    fn symbol_faces_are_valid_sfnt() {
+        // Every Noto symbol face starts with the TrueType sfnt magic 0x00010000.
+        for face in symbol_faces().into_iter().chain(zapf_faces()) {
+            assert!(face.len() > 4);
+            assert_eq!(&face[0..4], &[0x00, 0x01, 0x00, 0x00]);
+        }
     }
 
     #[test]

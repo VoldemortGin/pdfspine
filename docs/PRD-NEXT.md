@@ -36,7 +36,7 @@
   **P3-3** then fixed Indexed/Separation/DeviceN colorspaces + `/Decode` (pixel-exact vs fitz on synthetic
   cases). **P3-3r** then fixed CMYK→RGB (SWOP-like K-axis black point across the 4 render paths — pure-K now
   renders 34,31,31 exact vs fitz, was 0,0,0; saturated-CMY primaries still differ, an inherent ICC limit).
-  Residual: Symbol/ZapfDingbats fallback (→ P1-1r, **blocked on an owner license decision**). A fresh
+  Residual: Symbol/ZapfDingbats fallback **fixed (P1-1r)** via bundled OFL Noto (approximate shapes). A fresh
   aggregate SSIM re-measure against the now-present `.venv-oracle` is still worth doing (→ §7 chore — the
   0.945/0.986 above predates the colorspace/Type1/std-14 fixes).
 - **OCR:** Tesseract adapter + pure-Rust PaddleOCR (PP-OCRv4 via `tract`) both shipped, Python-selectable,
@@ -121,20 +121,13 @@ All six blockers landed and were verified (full §8 suite). Done summary:
 
 All three pre-launch quality items landed and were verified (full §8 suite; the new accuracy gate green). Done summary:
 
-- **P1-1 · Liberation std-14 fallback fonts** — DONE. Bundled the 12 base-14-covering **Liberation 2.1.5** faces (**SIL OFL 1.1**, ~4.2 MB) under `crates/pdf-fonts/fonts/liberation/`; `render.rs::liberation_substitute` maps standard-14 names (+ Arial/Times New Roman/Courier New aliases, refined by `/FontDescriptor` serif/fixed-pitch/italic/force-bold) to them when a simple font has no embedded `/FontFile*`. Non-embedded Helvetica/Times/Courier body text now renders real glyphs instead of blank (real-page ink coverage +5..+10 pts; a bare `/Helvetica` with no `/FontDescriptor` also covered). `std_widths` stays authoritative for advances. NOTICE + per-dir PROVENANCE + `docs/guide/license.md` carry the OFL provenance. **Residual → P1-1r** (Symbol/ZapfDingbats not covered — no regression).
+- **P1-1 · Liberation std-14 fallback fonts** — DONE. Bundled the 12 base-14-covering **Liberation 2.1.5** faces (**SIL OFL 1.1**, ~4.2 MB) under `crates/pdf-fonts/fonts/liberation/`; `render.rs::liberation_substitute` maps standard-14 names (+ Arial/Times New Roman/Courier New aliases, refined by `/FontDescriptor` serif/fixed-pitch/italic/force-bold) to them when a simple font has no embedded `/FontFile*`. Non-embedded Helvetica/Times/Courier body text now renders real glyphs instead of blank (real-page ink coverage +5..+10 pts; a bare `/Helvetica` with no `/FontDescriptor` also covered). `std_widths` stays authoritative for advances. NOTICE + per-dir PROVENANCE + `docs/guide/license.md` carry the OFL provenance. **Residual → P1-1r — ✅ FIXED 2026-06-21** (Symbol/ZapfDingbats now render via bundled OFL Noto fonts).
 - **P1-2 · `/Decode [1 0]` ImageMask** — DONE. `draw_image_mask` reads `/Decode` (or inline `/D`) and inverts which sample paints; an inverted stencil no longer fills solid. Regression test added.
 - **P1-3 · CI accuracy/SSIM regression gate** — DONE. Three tiny clean-room **CC0-1.0** born-digital fixtures (`fixtures/born/`, reproducible via `conformance/gt/make_ci_fixtures.py`, manifest-lint-cleared); `run_gt.py` gained a **no-oracle** reading-order gate vs inlined `gt_text` (`ci_manifest.json`) and `render_diff.py` a **committed-reference SSIM** gate (`conformance/gt/ssim-refs/`, captured post-fix). New `ci.yml` `accuracy-gate` job fails on regression. Thresholds carry margin (order 0.90, SSIM 0.97); both fail-paths verified. **Note:** with `.venv-oracle` absent, the SSIM gate is self-referential against committed buffers (still catches any renderer change — the requested no-oracle design).
 
 **Residual carried forward:**
 
-- **P1-1r · Symbol/ZapfDingbats fallback — BLOCKED on an owner LICENSE DECISION** — *S · Low* — the two
-  non-Latin standard-14 fonts aren't covered by Liberation (`liberation_substitute` returns `None`). The only
-  complete Symbol+ZapfDingbats substitutes are URW base-35 (StandardSymbolsPS + D050000L), **AGPL-3.0** whose
-  font exception covers embedding-in-OUTPUT-documents only — **NOT** bundling the font program into the
-  Apache-2.0 crate shipped on crates.io/PyPI. No clean OFL/Apache/public-domain Symbol+Dingbats font exists.
-  **Owner options:** (a) ship Symbol/Dingbats as an OPT-IN, separately-licensed extra package (not in the
-  Apache crate); (b) source/commission a true OFL Symbol+Dingbats; (c) keep non-embedded Symbol/Dingbats as a
-  documented blank residual (current). **Stays OPEN — needs license decision.** No regression vs today.
+- **P1-1r · Symbol/ZapfDingbats fallback — ✅ DONE (2026-06-21)** — *was S · Low* — bundled 3 **OFL (SIL OFL 1.1)** Noto faces under `crates/pdf-fonts/fonts/symbols/` (~1.4 MB: NotoSansMath for Symbol's Greek/math, NotoSansSymbols2 for the ZapfDingbats block, NotoSansSymbols for the 5 crosses). `render.rs::std14_substitute` returns them for non-embedded Symbol/ZapfDingbats, reusing the existing Symbol/ZapfDingbats encoding→Unicode tables + `std_widths` for advances. Coverage **ZapfDingbats 94/94; Symbol 95/97**. Chose OFL over the AGPL URW drop-in to keep the crate Apache-clean — the tradeoff is the glyph SHAPES differ from Adobe's, so SSIM vs fitz is **<1.0 on these (rare) pages** (Symbol 0.61, ZapfDingbats 0.16) — correct semantic glyphs, not blank. **Residual:** `Euro` (U+20AC) + `radicalex` (U+F8E5 PUA) render `.notdef` (2 rare codes, documented in the font PROVENANCE).
 
 ### Phase 2 — COMPLETE (2026-06-20) — committed on `main`
 
@@ -240,7 +233,7 @@ oracle-cross-checked against real PyMuPDF 1.24.14 (`.venv-oracle`) with zero reg
 | P1-1 | Liberation std-14 fallback fonts (blank body text) | M | High | ✅ done | 1 |
 | P1-2 | Honor `/Decode [1 0]` ImageMask | S | Med | ✅ done | 1 |
 | P1-3 | Real extraction/render CI accuracy gate | M | High | ✅ done | 1 |
-| P1-1r | Symbol/ZapfDingbats fallback (Liberation gap) | S | Low | open · needs license decision | 1r |
+| P1-1r | Symbol/ZapfDingbats fallback (OFL Noto, approx shapes) | S | Low | ✅ done | 1r |
 | P2-1 | Page draw-convenience + loader/alias (12 syms) | M | High | ✅ done | 2 |
 | P2-2 | `Document.convert_to_pdf` (image inputs) | M | Med | ✅ done | 2 |
 | P2-3 | Small binding clusters (Pixmap/Tools/Page/Doc) | S–M | Low–Med | ✅ done | 2 |
@@ -261,20 +254,14 @@ oracle-cross-checked against real PyMuPDF 1.24.14 (`.venv-oracle`) with zero reg
 | P4-3 | OCR `recognize()` rayon parallelism (3.49×) | M | High | ✅ done | 4 |
 | P4-4 | Full public-surface API docs (mkdocstrings, 307/307) | M | Med | ✅ done | 4 |
 
-**Recommended next 3 (in order):** *(**Phases 0–4 + the residual sweep ALL LANDED 2026-06-21** — on `main`;
-parity **88.7%**; the residual sweep cleared P0-2r / P2r-1 / P3-3r / P3-4r / P4-2r and resolved P2r-2 as
-not-a-bug. Only an owner decision, an accepted won't-fix, and pre-public chores remain. P3-5 score blocked on
-sandbox data egress.)*
-1. **Owner license decision for P1-1r** — pick (a) opt-in separately-licensed Symbol/Dingbats extra,
-   (b) a commissioned/sourced OFL Symbol+Dingbats, or (c) keep the documented blank residual. The URW base-35
-   AGPL font exception does **not** permit bundling into the Apache-2.0 crate, so this is a policy call, not a
-   coding task.
-2. **Pre-public chores** (§7) — re-run `render_diff.py` for a fresh aggregate render-SSIM (the 0.945/0.986 in
-   `docs/BENCHMARKS.md` is date-noted "as of 2026-06-17", before the colorspace/Type1/std-14 fixes); re-run
+**Recommended next (in order):** *(**Phases 0–4 + the residual sweep + P1-1r ALL LANDED 2026-06-21** — on `main`;
+parity **88.7%**; every actionable residual is now fixed or flagged. P3-5 score blocked on sandbox data egress.)*
+1. **Pre-public chores** (§7) — re-run `render_diff.py` for a fresh aggregate render-SSIM (the 0.945/0.986 in
+   `docs/BENCHMARKS.md` is date-noted "as of 2026-06-17", before the colorspace/Type1/std-14/Symbol fixes); re-run
    P3-5's GriTS from an unrestricted network for the absolute table number; then **flip the repo public + push**
    (feature-complete at 88.7% — multi-column, colorspaces, OCR parallelism, embedded fonts incl. Type1, vertical
-   CJK all landed).
-3. **Accepted / further work** — P3-1r is an accepted won't-fix (inherent content-vs-geometric-order tradeoff,
+   CJK, Symbol/Dingbats all landed).
+2. **Accepted / further work** — P3-1r is an accepted won't-fix (inherent content-vs-geometric-order tradeoff,
    `layout.rs` == HEAD); the 21 remaining deferred are the genuinely-blocked long tail (OCG/layers,
    device-replay, a few Type0/Type3 edges).
 
@@ -320,8 +307,8 @@ extraction/conformance · perf/OCR). §3 is the correction log against this doc'
 84.7%→**88.7%**; multi-column + colorspaces at parity; OCR `recognize()` parallel + Font program bytes) — §3
 rows C1 / C2 / C4 / C6 / C7 / C10 / C11 / C13 fixed + P0-6r closed; P3-5 GriTS harness landed (score blocked
 on sandbox CDN egress). **P4-1 / P4-3 / P4-4 / P4-2 landed 2026-06-21**, and a **residuals-clearing sweep the
-same day (2026-06-21)** fixed P0-2r / P2r-1 / P3-3r / P3-4r / P4-2r and resolved P2r-2 as not-a-bug
-(all oracle-cross-checked; cargo/clippy clean, pytest 721, P1-3 gate green, parity unchanged 88.7%).
-**Phases 0–4 + the residual sweep all complete** — remaining open = **P1-1r** (needs an owner license
-decision), **P3-1r** (accepted won't-fix), the render-SSIM re-measure, the **P3-5** score (network-blocked),
-and the pre-public flip-to-public.*
+same day (2026-06-21)** fixed P0-2r / P2r-1 / P3-3r / P3-4r / P4-2r / **P1-1r** (Symbol/ZapfDingbats via OFL
+Noto) and resolved P2r-2 as not-a-bug (all oracle-cross-checked; cargo/clippy clean, pytest 721, P1-3 gate
+green, parity 88.7%). **Phases 0–4 + every actionable residual complete** — remaining = **P3-1r** (accepted
+won't-fix), the render-SSIM re-measure, the **P3-5** score (network-blocked), and the pre-public
+flip-to-public.*

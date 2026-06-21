@@ -51,7 +51,10 @@ pub use cmap::{CMap, CidUnicode, CodespaceRange};
 pub use encodings::BaseEncoding;
 pub use font::{Font, BASE14_FONTNAMES};
 pub use glyphlist::{glyph_name_to_unicode, unicode_to_glyph_name};
-pub use liberation::{liberation_face, liberation_fallback, LiberationFamily};
+pub use liberation::{
+    liberation_face, liberation_fallback, symbol_faces, symbolic_fallback, zapf_faces,
+    LiberationFamily,
+};
 pub use mapper::{CodeIter, FontKind, FontMapper};
 pub use predefined::{BundledCjk, PredefinedKind};
 pub use std_widths::{standard_font_widths, string_advance, StandardWidths};

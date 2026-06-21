@@ -50,9 +50,20 @@ A small amount of third-party data is bundled and carries its own attribution:
   Roman / Courier New aliases). The fonts are shipped unmodified. (Source:
   [liberationfonts/liberation-fonts](https://github.com/liberationfonts/liberation-fonts).)
 
+- **Noto symbol fonts** (Noto Sans Math, Noto Sans Symbols, Noto Sans Symbols 2)
+  — Copyright 2022 The Noto Project Authors / Google LLC, licensed under the
+  **SIL Open Font License, Version 1.1** (`OFL-1.1`). The renderer uses these
+  faces as substitute glyph outlines for the non-embedded *pictographic*
+  standard-14 fonts **Symbol** (Noto Sans Math + Symbols 2) and **ZapfDingbats**
+  (Noto Sans Symbols 2 + Symbols); the glyph shapes are Noto's, not Adobe URW's
+  (whose Symbol/Dingbats faces are AGPL and intentionally not used). The fonts
+  are shipped unmodified. (Source:
+  [notofonts](https://github.com/notofonts).)
+
 The authoritative, per-file provenance and full license headers live in the
-repository under `crates/pdf-fonts/data/` and `crates/pdf-fonts/fonts/liberation/`
-(see each directory's `NOTICE` and `PROVENANCE.md`).
+repository under `crates/pdf-fonts/data/`, `crates/pdf-fonts/fonts/liberation/`,
+and `crates/pdf-fonts/fonts/symbols/` (see each directory's `NOTICE` and
+`PROVENANCE.md`).
 
 ## Relationship to PyMuPDF
 

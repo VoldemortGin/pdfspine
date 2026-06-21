@@ -62,8 +62,10 @@ f17db8af71e24d2066b587546021d4f0b296be389512b658dec3c09affeb11a7  LiberationSeri
 058ea80864aef09a23f45cbec2bb5400bc3dfbdea01c3f10538a21fcb497fb74  LiberationSerif-Regular.ttf
 ```
 
-## Residual (not covered)
+## Symbol / ZapfDingbats (covered elsewhere)
 
 Liberation does **not** cover the two pictographic base-14 fonts **Symbol** and
-**ZapfDingbats**; `liberation_fallback` returns `None` for them, leaving them a
-documented residual (no substitute, but no regression either).
+**ZapfDingbats**; `liberation_fallback` returns `None` for them. They are served
+instead by the bundled permissive **Noto** OFL faces in `../symbols/` (Noto Sans
+Math + Noto Sans Symbols 2 for Symbol; Noto Sans Symbols 2 + Noto Sans Symbols
+for ZapfDingbats) — see `../symbols/PROVENANCE.md`.

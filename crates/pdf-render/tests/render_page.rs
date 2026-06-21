@@ -249,6 +249,116 @@ fn render_page_std14_non_embedded_helvetica_not_blank() {
 }
 
 // ============================================================================
+// RENDER-PAGE-SYMBOLIC-FALLBACK (P1-1r): the two NON-embedded pictographic
+// standard-14 fonts (Symbol, ZapfDingbats) now render real glyphs via bundled
+// permissive Noto OFL substitute faces — previously a documented residual (blank,
+// because Liberation has no Symbol/ZapfDingbats glyphs). Glyphs resolve through
+// the Symbol / ZapfDingbats built-in encoding → glyph name → Unicode tables, then
+// the substitute face's cmap by that Unicode. A few glyphs come from the *primary*
+// Noto face and a few from the *supplement*, exercising the fallback chain.
+//
+// NOTE on fidelity: the glyph SHAPES are Noto's, not Adobe URW's (which are AGPL
+// and intentionally unused), so a full-page SSIM vs a URW-based renderer on these
+// pages is expected to be < 1.0. This test asserts the correct SEMANTICS — that
+// each pictographic font now inks real glyphs instead of leaving the page blank,
+// at the right positions — not pixel identity.
+// ============================================================================
+
+/// A non-embedded `/Symbol` simple font (object 10): no `/FontFile*`, no
+/// `/Encoding` (so the Symbol built-in encoding applies).
+fn non_embedded_symbol_objs() -> Vec<(u32, Vec<u8>)> {
+    vec![(
+        10,
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Symbol >>".to_vec(),
+    )]
+}
+
+/// A non-embedded `/ZapfDingbats` simple font (object 10): no `/FontFile*`, no
+/// `/Encoding` (so the ZapfDingbats built-in encoding applies).
+fn non_embedded_zapf_objs() -> Vec<(u32, Vec<u8>)> {
+    vec![(
+        10,
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /ZapfDingbats >>".to_vec(),
+    )]
+}
+
+/// Counts non-white (inked) pixels in a pixmap.
+fn inked_pixels(pm: &Pixmap) -> usize {
+    let n = pm.n as usize;
+    pm.samples()
+        .chunks_exact(n)
+        .filter(|c| c[0] != 255 || c[1] != 255 || c[2] != 255)
+        .count()
+}
+
+#[test]
+fn render_page_symbol_non_embedded_renders_glyphs() {
+    // Symbol codes: 0x61 a, 0x62 b, 0x67 g, 0x70 p → alpha/beta/gamma/pi (Greek,
+    // from the Noto Sans Math primary), then 0xB7 (\267) → bullet (U+2022, from
+    // the Noto Sans Symbols 2 supplement). All five must ink real glyphs.
+    let content = b"BT /F1 80 Tf 20 90 Td (abgp\\267) Tj ET";
+    let pdf = page_pdf_extra(
+        content,
+        "<< /Font << /F1 10 0 R >> >>",
+        0,
+        non_embedded_symbol_objs(),
+    );
+    let (doc, page) = open_page(pdf);
+    let pm = render(&doc, &page, &RenderOptions::default());
+    assert_eq!((pm.width, pm.height), (200, 200));
+    // Pre-P1-1r this page was entirely blank (Liberation returned None for Symbol).
+    let inked = inked_pixels(&pm);
+    assert!(
+        inked > 100,
+        "non-embedded Symbol must render Greek + bullet glyphs (Noto fallback), got {inked} inked"
+    );
+}
+
+#[test]
+fn render_page_zapfdingbats_non_embedded_renders_glyphs() {
+    // ZapfDingbats codes: 0x21 a1 → U+2701 (scissors, Noto Sans Symbols 2 primary)
+    // and 0x3D '=' a6 → U+271D (latin cross, from the Noto Sans Symbols supplement
+    // — absent from Symbols 2). Both must ink, proving the supplement chain works.
+    let content = b"BT /F1 80 Tf 20 90 Td (!=) Tj ET";
+    let pdf = page_pdf_extra(
+        content,
+        "<< /Font << /F1 10 0 R >> >>",
+        0,
+        non_embedded_zapf_objs(),
+    );
+    let (doc, page) = open_page(pdf);
+    let pm = render(&doc, &page, &RenderOptions::default());
+    assert_eq!((pm.width, pm.height), (200, 200));
+    let inked = inked_pixels(&pm);
+    assert!(
+        inked > 100,
+        "non-embedded ZapfDingbats must render dingbat glyphs (Noto fallback), got {inked} inked"
+    );
+}
+
+/// The ZapfDingbats supplement glyph (U+271D cross, code 0x3D) is absent from the
+/// primary Noto Sans Symbols 2 face — this asserts the *chain* actually inks it
+/// (not just the primary), so the supplement is genuinely exercised end-to-end.
+#[test]
+fn render_page_zapfdingbats_supplement_cross_inks() {
+    // Only the supplement-served cross (code 0x3D = '=').
+    let content = b"BT /F1 120 Tf 20 50 Td (=) Tj ET";
+    let pdf = page_pdf_extra(
+        content,
+        "<< /Font << /F1 10 0 R >> >>",
+        0,
+        non_embedded_zapf_objs(),
+    );
+    let (doc, page) = open_page(pdf);
+    let pm = render(&doc, &page, &RenderOptions::default());
+    let inked = inked_pixels(&pm);
+    assert!(
+        inked > 100,
+        "ZapfDingbats cross (U+271D) must ink via the supplement face, got {inked}"
+    );
+}
+
+// ============================================================================
 // RENDER-PAGE-TYPE1 (P4-2): an embedded Adobe Type1 (`/FontFile`) simple font
 // now rasterizes real glyph outlines through the first-party `type1` outliner.
 // Pre-P4-2 `resolve_font_program` skipped `/FontFile` (Type1 PFB not parseable

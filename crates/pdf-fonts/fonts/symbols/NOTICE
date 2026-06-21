@@ -1,0 +1,29 @@
+pdfspine — bundled Noto symbol fonts NOTICE
+===========================================
+
+This product includes three Noto font faces, embedded into the renderer as
+permissive substitute glyph outlines for the two non-embedded *pictographic*
+standard-14 fonts (Symbol and ZapfDingbats):
+
+  - Noto Sans Math      (Regular) — Symbol primary
+  - Noto Sans Symbols 2 (Regular) — ZapfDingbats primary; Symbol supplement
+  - Noto Sans Symbols   (Regular) — ZapfDingbats supplement
+
+  Noto Sans Symbols / Noto Sans Symbols 2
+  Copyright 2022 The Noto Project Authors
+    (https://github.com/notofonts/symbols)
+
+  Noto Sans Math
+  Copyright 2022 Google LLC. All Rights Reserved.
+    (https://github.com/notofonts/math)
+
+  Licensed under the SIL Open Font License, Version 1.1.
+  SPDX-License-Identifier: OFL-1.1
+  Source: https://github.com/notofonts (mirror: notofonts.github.io)
+
+The full SIL Open Font License 1.1 text is retained verbatim in the `LICENSE`
+file in this directory. The OFL body is byte-identical across the Noto projects;
+the bundled copy is the `notofonts/symbols` `OFL.txt`. The font files are shipped
+unmodified. See `PROVENANCE.md` for per-file provenance, SHA-256 checksums, and
+the Symbol / ZapfDingbats glyph-repertoire coverage (94/94 ZapfDingbats; 95/97
+Symbol — `Euro`/`radicalex` residual).

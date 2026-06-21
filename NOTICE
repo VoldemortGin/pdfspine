@@ -37,6 +37,22 @@ per-file provenance and full license headers are retained in
   Per-file provenance and SHA-256 checksums are retained in
   `crates/pdf-fonts/fonts/liberation/PROVENANCE.md` and `NOTICE`.
 
+* Noto symbol fonts (Noto Sans Math, Noto Sans Symbols, Noto Sans Symbols 2)
+  (`crates/pdf-fonts/fonts/symbols/NotoSans*.ttf`)
+  Copyright 2022 The Noto Project Authors
+  (https://github.com/notofonts/symbols) — Noto Sans Symbols / Symbols 2.
+  Copyright 2022 Google LLC. All Rights Reserved. — Noto Sans Math.
+  Licensed under the SIL Open Font License, Version 1.1 (SPDX: OFL-1.1). The
+  full OFL-1.1 text is retained verbatim in
+  `crates/pdf-fonts/fonts/symbols/LICENSE`. The renderer uses these faces as
+  substitute glyph outlines for the non-embedded pictographic standard-14
+  fonts Symbol (Noto Sans Math + Symbols 2) and ZapfDingbats (Noto Sans
+  Symbols 2 + Symbols). The font files are shipped unmodified.
+  Source: https://github.com/notofonts (mirror: notofonts.github.io)
+  Per-file provenance, SHA-256 checksums, and the verified Symbol /
+  ZapfDingbats repertoire coverage are retained in
+  `crates/pdf-fonts/fonts/symbols/PROVENANCE.md` and `NOTICE`.
+
 * PaddleOCR PP-OCR models and recognition dictionary
   (`crates/pdf-ocr/models/ppocrv4_det.onnx`,
   `crates/pdf-ocr/models/ppocrv4_rec.onnx`,
