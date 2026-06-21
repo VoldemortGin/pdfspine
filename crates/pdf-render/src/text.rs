@@ -10,9 +10,9 @@
 //!
 //! - **Embedded TrueType (`FontFile2`)** and **embedded OpenType/CFF
 //!   (`FontFile3`)** parse through `ttf-parser` and rasterize fully.
-//! - **Type1 (`FontFile`, PFB)** is not parseable by `ttf-parser` — documented
-//!   gap (text stays extractable; not rasterized) unless the producer re-embeds
-//!   as CFF.
+//! - **Embedded Type1 (`FontFile`, PFB/PFA)** is not parseable by `ttf-parser`,
+//!   so it rasterizes through the first-party [`crate::type1`] outliner
+//!   (eexec-decrypt + charstring interpreter), feeding the same `PathSink`.
 //! - **Type3 fonts** (each glyph is a mini content stream) are not handled in
 //!   this outline pipeline; the page driver ([`crate::render`]) renders them by
 //!   recursively interpreting each glyph's `/CharProcs` procedure.
@@ -41,7 +41,7 @@ use crate::canvas::Canvas;
 use crate::error::{Error, Result};
 use crate::vector::{Paint, StrokeStyle};
 
-/// A parsed embedded font program, either sfnt-wrapped or bare CFF.
+/// A parsed embedded font program: sfnt-wrapped, bare CFF, or Adobe Type1.
 ///
 /// - [`Sfnt`](FontProgram::Sfnt): a `ttf-parser` [`Face`] — `FontFile2`
 ///   TrueType, or `FontFile3` OpenType/CFF (`OTTO` sfnt).
@@ -49,14 +49,21 @@ use crate::vector::{Paint, StrokeStyle};
 ///   `/Subtype /Type1C` (simple) or `/CIDFontType0C` (CID-keyed). These are raw
 ///   CFF data with no sfnt directory, so `Face::parse` rejects them
 ///   (`UnknownMagic`); `ttf-parser`'s public `cff` table parses them directly.
+/// - [`Type1`](FontProgram::Type1): an eexec-encrypted Adobe **Type1** program —
+///   `FontFile` (PFB/PFA). `ttf-parser` cannot parse it; the first-party
+///   [`crate::type1`] outliner does (PRD-NEXT P4-2).
 ///
-/// Both variants are boxed: `Face` and `cff::Table` are large structs (hundreds
-/// of bytes), so an unboxed enum would size every value to the larger variant
-/// (clippy `large_enum_variant`). Each box costs one allocation per font (built
-/// once per page replay) — negligible.
+/// All variants are boxed: `Face` / `cff::Table` / `Type1Font` are large structs,
+/// so an unboxed enum would size every value to the largest variant (clippy
+/// `large_enum_variant`). Each box costs one allocation per font (built once per
+/// page replay) — negligible.
 enum FontProgram<'a> {
     Sfnt(Box<Face<'a>>),
     Cff(Box<ttf_parser::cff::Table<'a>>),
+    /// An eexec-encrypted Adobe **Type1** program (`FontFile`, PFB/PFA), parsed
+    /// by the first-party [`crate::type1`] outliner — `ttf-parser` cannot parse
+    /// it. Owns its parsed charstrings (it does not borrow `'a`).
+    Type1(Box<crate::type1::Type1Font>),
 }
 
 /// A parsed embedded font program ready for glyph rasterization.
@@ -88,8 +95,8 @@ impl<'a> GlyphFont<'a> {
     ///
     /// # Errors
     ///
-    /// [`Error::Unsupported`] if the bytes are neither a `ttf-parser`-parseable
-    /// sfnt nor a bare CFF (e.g. a Type1 PFB `FontFile`).
+    /// [`Error::Unsupported`] if the bytes are none of: a `ttf-parser`-parseable
+    /// sfnt, a bare CFF, or an eexec-encrypted Type1 (`FontFile`) program.
     pub fn from_program(data: &'a [u8], index: u32) -> Result<Self> {
         if let Ok(face) = Face::parse(data, index) {
             let upem = face.units_per_em().max(1);
@@ -115,6 +122,16 @@ impl<'a> GlyphFont<'a> {
                 cid_to_gid,
             });
         }
+        // Adobe Type1 (`FontFile`, PFB/PFA): eexec-encrypted, not parseable by
+        // `ttf-parser`. Parse with the first-party outliner (PRD-NEXT P4-2).
+        if let Some(t1) = crate::type1::Type1Font::parse(data) {
+            let upem = t1.units_per_em();
+            return Ok(Self {
+                program: FontProgram::Type1(Box::new(t1)),
+                upem,
+                cid_to_gid: None,
+            });
+        }
         Err(Error::Unsupported("text::GlyphFont program"))
     }
 
@@ -131,6 +148,7 @@ impl<'a> GlyphFont<'a> {
         match &self.program {
             FontProgram::Sfnt(face) => face.number_of_glyphs(),
             FontProgram::Cff(cff) => cff.number_of_glyphs(),
+            FontProgram::Type1(t1) => t1.num_glyphs(),
         }
     }
 
@@ -145,7 +163,8 @@ impl<'a> GlyphFont<'a> {
     pub fn glyph_for_char(&self, c: char) -> Option<u16> {
         match &self.program {
             FontProgram::Sfnt(face) => face.glyph_index(c).map(|g| g.0),
-            FontProgram::Cff(_) => None,
+            // Bare CFF / Type1 have no Unicode cmap; resolve via the name path.
+            FontProgram::Cff(_) | FontProgram::Type1(_) => None,
         }
     }
 
@@ -162,6 +181,7 @@ impl<'a> GlyphFont<'a> {
         match &self.program {
             FontProgram::Sfnt(face) => face.glyph_index_by_name(name).map(|g| g.0),
             FontProgram::Cff(cff) => cff.glyph_index_by_name(name).map(|g| g.0),
+            FontProgram::Type1(t1) => t1.glyph_for_name(name),
         }
     }
 
@@ -201,6 +221,11 @@ impl<'a> GlyphFont<'a> {
             }
             FontProgram::Cff(cff) => {
                 cff.outline(GlyphId(gid), &mut sink).ok()?;
+            }
+            FontProgram::Type1(t1) => {
+                if !t1.outline(gid, &mut sink) {
+                    return None;
+                }
             }
         }
         sink.builder.finish()

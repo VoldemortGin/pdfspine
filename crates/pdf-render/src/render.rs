@@ -933,14 +933,14 @@ fn fingerprint(bytes: &[u8]) -> u64 {
 }
 
 /// Returns the **indirect reference** of a font dict's embedded program stream
-/// (`/FontFile2` or `/FontFile3`) without decoding it. Used as a cheap,
-/// decode-free cache key so a repeated text run on the same font skips
-/// re-decompressing the (FlateDecode) program stream. Returns `None` when the
-/// program is inline (a direct stream value, no indirect ref) or absent — the
-/// caller then falls back to the fingerprint path.
+/// (`/FontFile2`, `/FontFile3`, or Type1 `/FontFile`) without decoding it. Used
+/// as a cheap, decode-free cache key so a repeated text run on the same font
+/// skips re-decompressing the (FlateDecode) program stream. Returns `None` when
+/// the program is inline (a direct stream value, no indirect ref) or absent —
+/// the caller then falls back to the fingerprint path.
 fn font_program_ref(doc: &DocumentStore, font_dict: &Dict) -> Option<ObjRef> {
     let descriptor = font_descriptor(doc, font_dict)?;
-    for key in ["FontFile2", "FontFile3"] {
+    for key in ["FontFile2", "FontFile3", "FontFile"] {
         if let Some(r) = descriptor
             .get(&Name::new(key))
             .and_then(Object::as_reference)
@@ -953,21 +953,21 @@ fn font_program_ref(doc: &DocumentStore, font_dict: &Dict) -> Option<ObjRef> {
 
 /// Resolves a font dict's program bytes for the outline pipeline.
 ///
-/// Prefers the **embedded** program (`/FontFile2` TrueType or `/FontFile3`
-/// OpenType/CFF), decompressing the stream. When no embedded program is present
-/// and the font is a non-embedded **standard-14** (or a metric-compatible alias
-/// — Arial / Times New Roman / Courier New), falls back to the bundled
-/// permissive **Liberation** substitute face ([`liberation_substitute`]) so the
-/// renderer paints real glyphs instead of leaving body text blank.
+/// Prefers the **embedded** program (`/FontFile2` TrueType, `/FontFile3`
+/// OpenType/CFF, or Type1 `/FontFile` PFB/PFA), decompressing the stream. When no
+/// embedded program is present and the font is a non-embedded **standard-14** (or
+/// a metric-compatible alias — Arial / Times New Roman / Courier New), falls back
+/// to the bundled permissive **Liberation** substitute face
+/// ([`liberation_substitute`]) so the renderer paints real glyphs instead of
+/// leaving body text blank.
 ///
-/// `None` for a bare Type1 `/FontFile` (PFB — not parseable by the outline
-/// pipeline), a pictographic Symbol / ZapfDingbats (Liberation does not cover
-/// them), or any resolution failure.
+/// `None` for a pictographic Symbol / ZapfDingbats (Liberation does not cover
+/// them) or any resolution failure.
 fn resolve_font_program(doc: &DocumentStore, font_dict: &Dict) -> Option<Vec<u8>> {
     if let Some(descriptor) = font_descriptor(doc, font_dict) {
-        // Prefer FontFile2 (TrueType) / FontFile3 (CFF/OpenType); FontFile
-        // (Type1 PFB) is not parseable by ttf-parser, so we skip it (gap).
-        for key in ["FontFile2", "FontFile3"] {
+        // Prefer FontFile2 (TrueType) / FontFile3 (CFF/OpenType); FontFile is the
+        // eexec-encrypted Type1 program, parsed by the first-party type1 outliner.
+        for key in ["FontFile2", "FontFile3", "FontFile"] {
             if let Some(obj) = doc
                 .resolve_dict_key(&descriptor, &Name::new(key))
                 .ok()

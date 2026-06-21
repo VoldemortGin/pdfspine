@@ -24,9 +24,11 @@
 //! - [`error`]  — the crate [`Error`]/[`Result`] types (shared).
 //!
 //! There is no `todo!()`/`unimplemented!()`/`panic!` anywhere — arbitrary input
-//! never panics and is honored under `Limits` (PRD §8.1 / §9.6.2). Unsupported
-//! constructs (Type1/Type3 glyphs, mesh shadings, tiling patterns) degrade to a
-//! safe no-op rather than an error, so a page always renders what it can.
+//! never panics and is honored under `Limits` (PRD §8.1 / §9.6.2). Embedded
+//! Type1 (`FontFile`) programs rasterize through the first-party [`type1`]
+//! outliner; remaining unsupported constructs (Type3 glyphs, mesh shadings,
+//! tiling patterns) degrade to a safe no-op rather than an error, so a page
+//! always renders what it can.
 
 pub mod canvas;
 pub mod error;
@@ -34,6 +36,7 @@ pub mod image;
 pub mod render;
 pub mod svg;
 pub mod text;
+pub mod type1;
 pub mod vector;
 
 pub use canvas::Canvas;

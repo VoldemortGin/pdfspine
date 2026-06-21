@@ -249,6 +249,71 @@ fn render_page_std14_non_embedded_helvetica_not_blank() {
 }
 
 // ============================================================================
+// RENDER-PAGE-TYPE1 (P4-2): an embedded Adobe Type1 (`/FontFile`) simple font
+// now rasterizes real glyph outlines through the first-party `type1` outliner.
+// Pre-P4-2 `resolve_font_program` skipped `/FontFile` (Type1 PFB not parseable
+// by ttf-parser) → the page was blank for Type1-only text. This proves it inks.
+// ============================================================================
+
+/// An embedded `/Type1` simple font (resource `/F1`) backed by a synthetic
+/// Type1 `/FontFile` program (objects 10 font, 11 descriptor, 12 FontFile).
+/// Maps `'A'` (WinAnsi) → the box glyph named `A`.
+fn embedded_type1_objs() -> Vec<(u32, Vec<u8>)> {
+    let t1 = synth::type1();
+    let len = t1.len();
+    vec![
+        (
+            10,
+            b"<< /Type /Font /Subtype /Type1 /BaseFont /BoxT1 \
+              /FirstChar 65 /LastChar 65 /Widths [700] \
+              /FontDescriptor 11 0 R /Encoding /WinAnsiEncoding >>"
+                .to_vec(),
+        ),
+        (
+            11,
+            b"<< /Type /FontDescriptor /FontName /BoxT1 /Flags 4 \
+              /FontBBox [50 0 650 700] /ItalicAngle 0 /Ascent 700 /Descent 0 \
+              /CapHeight 700 /StemV 80 /FontFile 12 0 R >>"
+                .to_vec(),
+        ),
+        // Flat (uncompressed) Type1 program. /Length1 = cleartext, /Length2 =
+        // binary, /Length3 = trailer; the renderer hands the raw bytes to the
+        // type1 outliner regardless, so exact segment lengths are not critical.
+        (
+            12,
+            stream(&format!("/Length1 {len} /Length2 0 /Length3 0"), &t1),
+        ),
+    ]
+}
+
+#[test]
+fn render_page_type1_embedded_glyph_pixels() {
+    // Black 'A' at size 120, origin user (20,40): the box glyph fills the cell.
+    let content = b"BT /F1 120 Tf 20 40 Td (A) Tj ET";
+    let pdf = page_pdf_extra(
+        content,
+        "<< /Font << /F1 10 0 R >> >>",
+        0,
+        embedded_type1_objs(),
+    );
+    let (doc, page) = open_page(pdf);
+    let pm = render(&doc, &page, &RenderOptions::default());
+    assert_eq!((pm.width, pm.height), (200, 200));
+    // The embedded Type1 box glyph must paint many dark pixels — pre-P4-2 this
+    // page was entirely blank (FontFile skipped → no outline).
+    let n = pm.n as usize;
+    let dark = pm
+        .samples()
+        .chunks_exact(n)
+        .filter(|c| c[0] < 128 && c[1] < 128 && c[2] < 128)
+        .count();
+    assert!(
+        dark > 200,
+        "embedded Type1 glyph must paint many dark pixels (got {dark})"
+    );
+}
+
+// ============================================================================
 // RENDER-PAGE-002: a filled rect paints its fill color; white elsewhere.
 // ============================================================================
 

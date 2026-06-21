@@ -171,9 +171,9 @@ oracle-cross-checked against real PyMuPDF 1.24.14 (`.venv-oracle`) with zero reg
   - New `Font::from_program` (via `ttf-parser`, sharing the renderer's infra): a program-backed `Font` (from `/FontFile*` or user `fontfile=`/`fontbuffer=`) now serves `buffer()` (program bytes), `glyph_bbox(chr)` (real per-glyph outline box), and a real-cmap `valid_codepoints()`. `Font(fontfile=)`/`Font(fontbuffer=)` load the real program (ValueError/OSError on bad input — **no silent Helvetica fallback**). Oracle-cross-checked on Liberation Sans (name / buffer-len / glyph_count exact). **+2 parity** (`Font.buffer`, `Font.glyph_bbox`) → 682/769, **88.7%**; Font class 22/23.
   - Note: pdfspine's `glyph_bbox` returns the **real per-glyph** box; PyMuPDF returns the font-level FontBBox for every glyph (pdfspine strictly more correct). A metrics-only Core-14 handle still raises `PdfUnsupportedError` for `buffer`/`glyph_bbox` (no license-clean bundled substitute, per repo policy).
 
-- **P4-2 · Type1 charstring (PFB/PFA) support** — *L · Medium* (after P1-1)
-  - **Why:** removes the literal worst page (eurlex `32006L0112_ES`, SSIM 0.527). Type1 embedding is rare, and once P1-1 lands, descriptor-flag substitution covers most blank Type1 fonts cheaply. Route: Type1→CFF, or a permissive pure-Rust Type1 outliner (respect the Apache-2.0 / pure-Rust positioning).
-  - **Files:** `crates/pdf-render/src/text.rs:93`, `crates/pdf-render/src/render.rs:955`.
+- **P4-2 · Type1 charstring (PFB/PFA) support — ✅ DONE (2026-06-21)** — *was L · Medium*
+  - New first-party, dependency-free `crates/pdf-render/src/type1.rs` (~912 lines): eexec-decrypt (R=55665) + per-charstring decrypt + a Type1 charstring interpreter (hsbw/sbw, the moveto/lineto/curveto family, closepath, callsubr, `seac` accent composition, `flex` via OtherSubrs) feeding the same `PathSink` as the CFF/TrueType paths. `resolve_font_program` now includes `/FontFile`, so an **embedded Type1 font renders real glyphs** instead of blank. Verified **pixel-exact vs the fitz oracle** on a synthetic Type1 `/FontFile` PDF (byte diff 0/120000, SSIM 1.0; was blank pre-P4-2); 2 unit + 1 render-integration test. cargo/clippy/pytest(711)/P1-3 gate all green. Apache-2.0 / pure-Rust (no FreeType).
+  - **Residual → P4-2r** (*S · Low*): the font's builtin charstring `/Encoding` isn't parsed (glyph resolution uses the PDF `/Encoding` + AGL names — exact for standard names, same as the bare-CFF path); hint-replacement (OtherSubr 3) and Multiple-Master blend (OtherSubrs ≥14) degrade safely to no-ops (MM renders the default master). No corpus fixture exercises these; all degrade safely, never panic.
 
 - **P4-3 · OCR `recognize()` rayon parallelism — ✅ DONE (2026-06-21)** — *was M · High (OCR latency)*
   - `PaddleOcr::recognize`'s per-box loop is now a rayon `par_iter` with an **indexed collect** → output byte-identical to the sequential version (deterministic, proven vs a captured baseline + a 1-thread-vs-N fingerprint). **3.49× speedup** on a 42-box page (16 cores: 2858ms → 819ms). The `&self`+`Mutex`/`OnceLock` model cache was already thread-safe (no `model.rs` change). `rayon` is a feature-gated (`paddle-ocr`) optional dep — **not** in the lean base wheel. No correctness change, no new symbols.
@@ -231,14 +231,15 @@ oracle-cross-checked against real PyMuPDF 1.24.14 (`.venv-oracle`) with zero reg
 | P3-4r | vertical writing-mode (multi-column vertical reorders) | M | Low | open | 3r |
 | P3-5 | FinTabNet GriTS harness (infra done; score blocked on data) | M | Med | ⚠ blocked | 3 |
 | P4-1 | Font carries `/FontFile*` (buffer/glyph_bbox, +2) | L | Med | ✅ done | 4 |
-| P4-2 | Type1 charstring (PFB/PFA) support | L | Med | – | 4 |
+| P4-2 | Type1 charstring (PFB/PFA) support | L | Med | ✅ done | 4 |
+| P4-2r | Type1 builtin-Encoding / hint-replace / MM (safe no-ops) | S | Low | open | 4r |
 | P4-3 | OCR `recognize()` rayon parallelism (3.49×) | M | High | ✅ done | 4 |
 | P4-4 | Full public-surface API docs (mkdocstrings, 307/307) | M | Med | ✅ done | 4 |
 
-**Recommended next 3 (in order):** *(Phase 0 + P0-5r + Phases 1–3 + P4-1/P4-3/P4-4 COMPLETE — on `main`; parity **88.7%**; P4-2 Type1 in progress; P3-5 score blocked on sandbox data egress.)*
-1. **P4-2 Type1 charstring (PFB/PFA)** (*L · Med*, in progress) — removes the literal worst render page (eurlex `32006L0112_ES`, SSIM 0.527); the last big render-fidelity item.
-2. **The residuals** — P3-1r (PMC212689 order), P3-4r (vertical writing), P3-3r (CMYK), P0-2r (`_core` deferred), P1-1r (Symbol/Zapf), P2r-1, P2r-2.
-3. **Pre-public chores** (§7) — re-run P3-5's GriTS from an unrestricted network; refresh `docs/BENCHMARKS.md`; then flip the repo public + push (essentially feature-complete at 88.7% — multi-column, colorspaces, OCR, fonts all landed).
+**Recommended next 3 (in order):** *(**Phases 0–4 ALL COMPLETE** — on `main`; parity **88.7%**; only low-priority residuals + pre-public chores remain. P3-5 score blocked on sandbox data egress.)*
+1. **Pre-public chores** (§7) — refresh `docs/BENCHMARKS.md` + `PARITY.md`; re-run P3-5's GriTS from an unrestricted network for the absolute table number; then **flip the repo public + push** (feature-complete at 88.7% — multi-column, colorspaces, OCR parallelism, embedded fonts incl. Type1 all landed).
+2. **The residuals** (all low-priority, none blocking): P3-1r (PMC212689 order), P3-4r (vertical writing), P3-3r (CMYK color management), P4-2r (Type1 builtin-encoding/MM edge cases), P0-2r (`_core` deferred), P1-1r (Symbol/Zapf), P2r-1, P2r-2.
+3. **Further parity** (optional) — the 21 remaining deferred are the genuinely-blocked long tail (OCG/layers, device-replay, a few Type0/Type3 edges).
 
 ## 7. Pre-public chores + docs upkeep (do alongside / last)
 
@@ -279,4 +280,4 @@ extraction/conformance · perf/OCR). §3 is the correction log against this doc'
 84.7%→**88.7%**; multi-column + colorspaces at parity; OCR `recognize()` parallel + Font program bytes) — §3
 rows C1 / C2 / C4 / C6 / C7 / C10 / C11 / C13 fixed + P0-6r closed; P3-5 GriTS harness landed (score blocked
 on sandbox CDN egress); residuals P0-2r / P1-1r / P2r-1 / P2r-2 / P3-1r / P3-3r / P3-4r carried forward.
-**P4-1 / P4-3 / P4-4 landed 2026-06-21** (full API reference auto-documented, 307/307).*
+**P4-1 / P4-3 / P4-4 / P4-2 landed 2026-06-21 — Phases 0–4 all complete** (88.7% parity; embedded Type1 renders; API docs 307/307).*

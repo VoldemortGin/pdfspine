@@ -237,3 +237,98 @@ pub fn ttf() -> Vec<u8> {
     out[head_off + 8..head_off + 12].copy_from_slice(&adj.to_be_bytes());
     out
 }
+
+// ===========================================================================
+// A minimal, authored Adobe **Type1** (`/FontFile`, PFA/flat) program with one
+// box glyph named `A`. Used to prove the first-party `type1` outliner renders
+// an embedded Type1 program (PRD-NEXT P4-2). License-clean (authored in-code).
+// ===========================================================================
+
+const T1_C1: u16 = 52845;
+const T1_C2: u16 = 22719;
+
+/// Encrypt (eexec / charstring) — the inverse of the renderer's decrypt.
+fn t1_encrypt(plain: &[u8], r0: u16) -> Vec<u8> {
+    let mut r = r0;
+    let mut out = Vec::with_capacity(plain.len());
+    for &p in plain {
+        let c = p ^ (r >> 8) as u8;
+        r = (u16::from(c).wrapping_add(r))
+            .wrapping_mul(T1_C1)
+            .wrapping_add(T1_C2);
+        out.push(c);
+    }
+    out
+}
+
+/// Encodes a Type1 charstring integer operand.
+fn t1_int(out: &mut Vec<u8>, v: i32) {
+    if (-107..=107).contains(&v) {
+        out.push((v + 139) as u8);
+    } else if (108..=1131).contains(&v) {
+        let v = v - 108;
+        out.push((v / 256 + 247) as u8);
+        out.push((v % 256) as u8);
+    } else if (-1131..=-108).contains(&v) {
+        let v = -v - 108;
+        out.push((v / 256 + 251) as u8);
+        out.push((v % 256) as u8);
+    } else {
+        out.push(255);
+        out.extend_from_slice(&v.to_be_bytes());
+    }
+}
+
+/// A box-glyph charstring (`hsbw rmoveto rlineto×3 closepath endchar`) drawing a
+/// `w`×`h` box at sidebearing `sb`, in 1000-unit glyph space.
+fn t1_box_charstring(sb: i32, w: i32, h: i32) -> Vec<u8> {
+    let mut cs = Vec::new();
+    t1_int(&mut cs, sb);
+    t1_int(&mut cs, w + 2 * sb);
+    cs.push(13); // hsbw
+    t1_int(&mut cs, 0);
+    t1_int(&mut cs, 0);
+    cs.push(21); // rmoveto → (sb, 0)
+    t1_int(&mut cs, w);
+    t1_int(&mut cs, 0);
+    cs.push(5); // rlineto
+    t1_int(&mut cs, 0);
+    t1_int(&mut cs, h);
+    cs.push(5); // rlineto
+    t1_int(&mut cs, -w);
+    t1_int(&mut cs, 0);
+    cs.push(5); // rlineto
+    cs.push(9); // closepath
+    cs.push(14); // endchar
+    cs
+}
+
+/// Builds a self-contained Type1 `/FontFile` (flat/PFA) embedding glyph `A` as a
+/// 600×700 box (sidebearing 50), `/FontMatrix [0.001 …]` → upem 1000.
+pub fn type1() -> Vec<u8> {
+    let len_iv = 4usize;
+    let cs = t1_box_charstring(50, 600, 700);
+    let mut enc_cs = vec![0u8; len_iv];
+    enc_cs.extend_from_slice(&cs);
+    let enc_cs = t1_encrypt(&enc_cs, 4330);
+
+    let mut priv_clear = Vec::new();
+    priv_clear.extend_from_slice(b"0000"); // 4 random eexec lead bytes
+    priv_clear.extend_from_slice(b"dup /Private 1 dict dup begin\n");
+    priv_clear.extend_from_slice(b"/lenIV 4 def\n");
+    priv_clear.extend_from_slice(b"/Subrs 0 array\n");
+    priv_clear.extend_from_slice(b"/CharStrings 1 dict dup begin\n");
+    priv_clear.extend_from_slice(format!("/A {} RD ", enc_cs.len()).as_bytes());
+    priv_clear.extend_from_slice(&enc_cs);
+    priv_clear.extend_from_slice(b" ND\nend\nend\n");
+
+    let enc_priv = t1_encrypt(&priv_clear, 55665);
+
+    let mut out = Vec::new();
+    out.extend_from_slice(b"%!FontType1-1.0: BoxT1\n");
+    out.extend_from_slice(b"/FontMatrix [0.001 0 0 0.001 0 0] readonly def\n");
+    out.extend_from_slice(b"currentfile eexec\n");
+    out.extend_from_slice(&enc_priv);
+    out.extend_from_slice(b"\n0000000000000000\ncleartomark\n");
+    out
+}
