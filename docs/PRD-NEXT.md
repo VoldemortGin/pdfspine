@@ -34,8 +34,11 @@
 - **Rendering (`get_pixmap`):** prior SSIM **0.945 mean / 0.986 median** vs fitz was dragged down by **blank
   non-embedded standard-14 body text** (**fixed in P1-1**, Liberation OFL fallback, ink coverage +5..+10 pts).
   **P3-3** then fixed Indexed/Separation/DeviceN colorspaces + `/Decode` (pixel-exact vs fitz on synthetic
-  cases). Residuals: Symbol/ZapfDingbats fallback (→ P1-1r); pre-existing naive CMYK→RGB (→ P3-3r). A fresh
-  aggregate SSIM re-measure against the now-present `.venv-oracle` is still worth doing.
+  cases). **P3-3r** then fixed CMYK→RGB (SWOP-like K-axis black point across the 4 render paths — pure-K now
+  renders 34,31,31 exact vs fitz, was 0,0,0; saturated-CMY primaries still differ, an inherent ICC limit).
+  Residual: Symbol/ZapfDingbats fallback (→ P1-1r, **blocked on an owner license decision**). A fresh
+  aggregate SSIM re-measure against the now-present `.venv-oracle` is still worth doing (→ §7 chore — the
+  0.945/0.986 above predates the colorspace/Type1/std-14 fixes).
 - **OCR:** Tesseract adapter + pure-Rust PaddleOCR (PP-OCRv4 via `tract`) both shipped, Python-selectable,
   scanned→searchable proven end-to-end, beats fitz on CJK. Wheel-bloat **resolved** and the publishing path
   is **decided + implemented** (P0-5r): the published `pdfspine` wheel compiles OCR in but embeds **no
@@ -78,7 +81,7 @@ mis-stated the work. The phased plan in §4 replaces it. Key corrections (all ca
 | # | Old framing said | Verified reality | Where |
 |---|---|---|---|
 | C1 | (silent) | **Version hard-pinned `0.0.0`**; no tag→version in `release.yml`. A tagged release ships a `0.0.0` wheel. **Hard blocker.** **✅ FIXED in Phase 0 (P0-1).** | `pyproject.toml:8`, `Cargo.toml:24`, `crates/py-bindings/src/lib.rs:33`, `.github/workflows/release.yml:48` |
-| C2 | §7: "always `PdfUnsupportedError`, never `AttributeError`" | **~50 of 56 deferred symbols raise bare `AttributeError`.** `_UNIMPLEMENTED_*` maps cover only 2; the guard never checks runtime behavior. **✅ FIXED in Phase 0 (P0-2)** for the 40 Page/Document deferred symbols; 12 deferred members on non-subclassable `_core` types still `AttributeError` (→ P0-2r). | `python/pdfspine/document.py:37,2276,3700`, `scripts/compat-symbol-guard.py` |
+| C2 | §7: "always `PdfUnsupportedError`, never `AttributeError`" | **~50 of 56 deferred symbols raise bare `AttributeError`.** `_UNIMPLEMENTED_*` maps cover only 2; the guard never checks runtime behavior. **✅ FIXED in Phase 0 (P0-2)** for the 40 Page/Document deferred symbols; the 5 deferred members on non-subclassable `_core` types then **✅ FIXED in P0-2r** (Rust `__getattr__`). | `python/pdfspine/document.py:37,2276,3700`, `scripts/compat-symbol-guard.py` |
 | C3 | §F: Font-program refactor is the keystone that unblocks std-14 rendering | **False.** Renderer builds its own `GlyphFont` from `/FontFile*`; never consults `pdf_fonts::Font`. Std-14 fix = bundle a fallback family (independent). Refactor payoff = +2 API symbols only. | `crates/pdf-render/src/render.rs:497,528`, `crates/pdf-fonts/src/font.rs` |
 | C4 | §D: "text already at parity, diminishing returns" | Read as overstated off a **stale 06-16-morning report** (PMC 0.08–0.44, born 0/6); the multi-column engine landed 06-16 PM and **✅ P3-2 verified parity** (2026-06-20): PMC order 0.965/0.995, born 0.996 vs fitz, reports regenerated. Residual: PMC212689 ordering (→ P3-1r). | `conformance/gt/GT-REPORT-pmc.md`, `GT-REPORT-born.md` |
 | C5 | (an earlier draft claimed a 648-vs-647 count drift) | **No drift** — that "648" was a `grep` artifact counting the comment legend line. COMPAT body, `[meta]`, README, and PARITY are all consistent at **647 / 84.1%**. No doc-number change needed. | `COMPAT.toml:31`, `README.md:14`, `PARITY.md:40` |
@@ -110,7 +113,7 @@ All six blockers landed and were verified (full §8 suite). Done summary:
 
 **Residuals carried forward:**
 
-- **P0-2r · 12 `_core` PyO3 deferred members still raise `AttributeError`** — *Rust-core* — the deferred members on non-subclassable `_core` types (Pixmap / DisplayList / Tools) can't route through the Python `__getattr__` path; making them raise `PdfUnsupportedError` needs a Rust-core change (outside the Python-scoped P0-2). Tracked as xfail + a COMPAT note.
+- **P0-2r · `_core` PyO3 deferred members raised `AttributeError`** — *Rust-core* — **✅ FIXED (2026-06-21).** A Rust `__getattr__` on Pixmap / DisplayList / Tools makes their 5 deferred members (Pixmap.warp, DisplayList.get_textpage/run, Tools.set_annot_stem/set_subset_fontnames) raise `PdfUnsupportedError` on instance access (not `AttributeError`); xfails flipped to real asserts + a drift guard added. (The deferred set is **5 members**, not the 12 an earlier estimate carried.)
 - **P0-5r · OCR publishing — ✅ RESOLVED (2026-06-19, commit `ff6495c`)** — chose **Option A: a model-data companion + the OCR feature compiled into the published wheel**. The published `pdfspine` wheel compiles the `ocr` feature in (via `[tool.maturin] features`) but embeds no models; the ~16 MB models ship as a new `pdfspine-ocr-models` data distribution (`packages/pdfspine-ocr-models/`, hatchling force-include from `crates/pdf-ocr/models` — no git duplication) that the `[ocr]` extra depends on. `document.py` sets `PDFSPINE_OCR_MODELS` from the installed companion for `engine="paddle"`; resolution order PDFSPINE_OCR_MODELS → companion → in-repo dev fallback → clear `PdfUnsupportedError`. `release.yml` publishes both dists via OIDC trusted publishing; `docs/RELEASE-PYPI.md` §D.1 documents the flow.
 - **P0-6r · `fetch_corpus.py` relative paths** — the gitignored/regenerable corpus manifests (`conformance/gt/corpus-*/manifest.json`) still embed absolute paths; `fetch_corpus.py` should emit manifest-relative pdf paths so future regenerations stay rename-proof.
 
@@ -124,7 +127,14 @@ All three pre-launch quality items landed and were verified (full §8 suite; the
 
 **Residual carried forward:**
 
-- **P1-1r · Symbol/ZapfDingbats fallback** — *S · Low* — the two non-Latin standard-14 fonts aren't covered by Liberation (`liberation_substitute` returns `None`); wire a reasonable symbol fallback or accept as a documented deviation. No regression vs today.
+- **P1-1r · Symbol/ZapfDingbats fallback — BLOCKED on an owner LICENSE DECISION** — *S · Low* — the two
+  non-Latin standard-14 fonts aren't covered by Liberation (`liberation_substitute` returns `None`). The only
+  complete Symbol+ZapfDingbats substitutes are URW base-35 (StandardSymbolsPS + D050000L), **AGPL-3.0** whose
+  font exception covers embedding-in-OUTPUT-documents only — **NOT** bundling the font program into the
+  Apache-2.0 crate shipped on crates.io/PyPI. No clean OFL/Apache/public-domain Symbol+Dingbats font exists.
+  **Owner options:** (a) ship Symbol/Dingbats as an OPT-IN, separately-licensed extra package (not in the
+  Apache crate); (b) source/commission a true OFL Symbol+Dingbats; (c) keep non-embedded Symbol/Dingbats as a
+  documented blank residual (current). **Stays OPEN — needs license decision.** No regression vs today.
 
 ### Phase 2 — COMPLETE (2026-06-20) — committed on `main`
 
@@ -138,8 +148,13 @@ oracle-cross-checked against real PyMuPDF 1.24.14 (`.venv-oracle`) with zero reg
 
 **Residuals carried forward:**
 
-- **P2r-1 · `set_toc` page-mapping off-by-one** — *S · correctness* — pre-existing: pdfspine's `get_toc` resolves `set_toc`-created destinations one page low (off-by-one in the dest page mapping). Flagged while landing the P2-4 TOC edits; left untouched as out-of-scope for the parity batch.
-- **P2r-2 · `image_profile` dict-key divergence** — *S · Low* — pdfspine's `image_profile` returns `'colorspace'` (an int component count) where the PyMuPDF spec uses `'colorspace.n'`, omits `'type'`/`'size'`, and adds `orientation`/`transform`/`xres`/`yres`/`cs-name`. Matches the documented contract but not byte-for-byte the spec dict shape.
+- **P2r-1 · `set_toc`/`get_toc` page-mapping off-by-one** — *S · correctness* — **✅ FIXED (2026-06-21).**
+  Fixed at the py-bindings boundary: PyMuPDF TOC pages are 1-based while the core `TocEntry.page` is 0-based;
+  `get_toc` now `+1` / `set_toc` now `-1` with fitz clamping. Oracle-verified (`test_pytoc_004`).
+- **P2r-2 · `image_profile` dict-key divergence — RESOLVED, NOT-A-BUG (2026-06-21)** — *S · Low* — **closed.**
+  The earlier "divergence" premise was wrong: pdfspine's `image_profile` **already** matches the authoritative
+  PyMuPDF `JM_image_profile` dict shape (`colorspace` as an int + a `cs-name`; no `type`/`size`/`colorspace.n`).
+  No change needed.
 
 **Note:** three P2 symbols (`image_profile`, `Pixmap.__array_interface__`, `Page.set_language`) could **not** be live-diffed because PyMuPDF 1.24.14's own runtime is broken for them (SWIG marshalling bugs); pdfspine implements the **documented PyMuPDF contract** for these.
 
@@ -147,18 +162,28 @@ oracle-cross-checked against real PyMuPDF 1.24.14 (`.venv-oracle`) with zero reg
 
 - **P3-1 · Multi-column reading-order engine — ✅ EFFECTIVELY DONE (verified 2026-06-20)** — *was L · High*
   - The recursive XY-cut + occupancy-valley gutter engine **already landed** (commits `9ff0e6a`/`e56bcb9`/`633f0f6`/`06d24c8`, 06-16 PM). Fresh GT (P3-2): PMC order **0.965/0.995** vs fitz 0.975/0.997, born-digital **0.996** vs 1.000 — within 0.000–0.009 per column doc (PMC212687 0.083→0.996, born 2col 0.549→0.997, 3col 0.409→0.996). No single-column regression; the P1-3 gate now guards it.
-  - **Residual → P3-1r** (*S · ordering-only*): PMC212689 scores order 0.645 vs fitz 0.749 — content at full parity (f1 0.940 / jaccard 0.868), only reading-order placement differs on this one real-world 2-col doc.
+  - **Residual → P3-1r — ACCEPTED / WON'T-FIX (2026-06-21)** (*ordering-only, inherent tradeoff*): PMC212689
+    scores order 0.645 vs fitz 0.749 — content at full parity (f1 0.940 / jaccard 0.868), only reading-order
+    placement differs on this one real-world 2-col doc. A decisive experiment showed any ordering change that
+    helps PMC212689 (+0.10, beats fitz) regresses PMC212688 (−0.19) and PMC176547 (−0.02); fitz itself is
+    content-order-based (scores only 0.749 here too). Reverted — `layout.rs` == HEAD. Accepted as an inherent
+    content-vs-geometric-order tradeoff, not an open todo.
 
 - **P3-2 · PMC near-zero collapse — ✅ DONE (2026-06-20): diagnosed as a STALE REPORT, not a bug** — *M · High*
   - Root cause: `GT-REPORT-pmc.md`/`GT-REPORT-born.md` were generated 06-16 **morning**, before the column engine landed that afternoon. Independently verified the current build is at fitz parity (PMC212687 pdfspine 69409 vs fitz 69385 chars, direct word-jaccard 0.987; born multi-column jaccard 1.0). **No content-dropping bug exists.** Both reports regenerated against the current build + oracle; `run_gt.py` stale-path resolution + score-arg-swap fixed (closing **P0-6r**).
 
 - **P3-3 · Indexed/Separation/DeviceN colorspaces + `/Decode` — ✅ DONE (2026-06-20, `9b01deb`)** — *was L · Medium*
   - New `crates/pdf-core/src/colorspace.rs` — one coherent `ColorSpace` resolver + the shared `PdfFunction` evaluator (types 0/2/3, moved from pdf-render, generalized multi-input for DeviceN). Indexed images now look up the palette; Separation/DeviceN run the tint transform; `/Decode` is applied generally (DCT/JPX excluded to avoid double-apply); and the vector `cs`/`scn` path (`interp.rs` + `state.rs`, q/Q-saved) runs the transform so a **dark 1-component Separation fill no longer renders white**. Pixel-exact vs the fitz oracle on synthetic Indexed/Separation/DeviceN//Decode cases; 4 pdf-core unit + 6 render-integration pixel tests; P1-3 SSIM gate green (no reference drift).
-  - **Residual → P3-3r** (*S · Low*): pre-existing **naive CMYK→RGB** (pure-K black renders 0,0,0 vs fitz's color-managed 34,31,31 — independent of P3-3, affects all CMYK uniformly). ICC-accurate spaces stay out-of-scope (ICCBased falls back by `/N`); DeviceN type-0 multi-axis tables use nearest-sample per non-primary axis.
+  - **Residual → P3-3r — ✅ FIXED (2026-06-21)** (*was S · Low*): added a **SWOP-like K-axis black point**
+    across the 4 render paths, so pure-K (`0 0 0 1 k`) now renders **(34,31,31)** exact vs fitz (was 0,0,0).
+    Saturated-CMY primaries still differ (an inherent ICC limitation, documented in code); ICC-accurate spaces
+    stay out-of-scope (ICCBased falls back by `/N`); DeviceN type-0 multi-axis tables use nearest-sample per
+    non-primary axis. Minor documented inconsistency: the `pdf-edit/src/annot.rs` annotation-appearance
+    authoring path was left on the naive transform (out of render scope).
 
 - **P3-4 · Cheap correctness insurance — ✅ DONE (2026-06-20)** — *was S–M · Low–Medium*
   - **Kangxi fold:** `crates/pdf-fonts/src/cmap.rs::invert_to_cid_unicode` now NFKC-folds Kangxi Radicals (U+2F00–U+2FDF) to the canonical ideograph on the predefined-CMap / no-`/ToUnicode` path. Oracle-checked: fitz folds Kangxi (214/214) but **NOT** the CJK Radicals Supplement (U+2E80–U+2EFF) — so pdfspine folds **only Kangxi** to match fitz, and keeps U+2F00 verbatim on the explicit-`/ToUnicode` path. +3 Rust tests.
-  - **Edge-case tests** (`python/tests/test_p3_4_edge_cases.py`, 6, oracle-checked): ToUnicode-less Type0 ✓, overlapping/co-located text ✓ (same char multiset as fitz), single-column vertical CJK ✓. **Residual → P3-4r:** vertical writing-mode is unimplemented in the emission path (`interp.rs:1324` hardcodes Horizontal) — multi-column vertical reorders columns vs fitz (same multiset, column order only); pinned by a tripwire test.
+  - **Edge-case tests** (`python/tests/test_p3_4_edge_cases.py`, 6, oracle-checked): ToUnicode-less Type0 ✓, overlapping/co-located text ✓ (same char multiset as fitz), single-column vertical CJK ✓. **Residual → P3-4r — ✅ FIXED (2026-06-21):** vertical writing-mode (wmode 1) now reads `/W2`+`/DW2` metrics and applies a −y advance, so multi-column vertical CJK reads columns right-to-left like fitz (oracle-verified); the P3-4 tripwire test now asserts the correct order.
   - **Robustness:** new `conformance/gt/run_robustness.py` + `ROBUSTNESS-REPORT.md`; **0 panics** over N=43 GovDocs1 (target 250 — network-bound shortfall behind the local proxy; re-run on an unthrottled link to grow N).
 
 - **P3-5 · FinTabNet gold-table GT — ⚠ INFRA DONE, score BLOCKED on data egress (2026-06-20)** — *M · Medium* (optional)
@@ -173,7 +198,7 @@ oracle-cross-checked against real PyMuPDF 1.24.14 (`.venv-oracle`) with zero reg
 
 - **P4-2 · Type1 charstring (PFB/PFA) support — ✅ DONE (2026-06-21)** — *was L · Medium*
   - New first-party, dependency-free `crates/pdf-render/src/type1.rs` (~912 lines): eexec-decrypt (R=55665) + per-charstring decrypt + a Type1 charstring interpreter (hsbw/sbw, the moveto/lineto/curveto family, closepath, callsubr, `seac` accent composition, `flex` via OtherSubrs) feeding the same `PathSink` as the CFF/TrueType paths. `resolve_font_program` now includes `/FontFile`, so an **embedded Type1 font renders real glyphs** instead of blank. Verified **pixel-exact vs the fitz oracle** on a synthetic Type1 `/FontFile` PDF (byte diff 0/120000, SSIM 1.0; was blank pre-P4-2); 2 unit + 1 render-integration test. cargo/clippy/pytest(711)/P1-3 gate all green. Apache-2.0 / pure-Rust (no FreeType).
-  - **Residual → P4-2r** (*S · Low*): the font's builtin charstring `/Encoding` isn't parsed (glyph resolution uses the PDF `/Encoding` + AGL names — exact for standard names, same as the bare-CFF path); hint-replacement (OtherSubr 3) and Multiple-Master blend (OtherSubrs ≥14) degrade safely to no-ops (MM renders the default master). No corpus fixture exercises these; all degrade safely, never panic.
+  - **Residual → P4-2r — ✅ FIXED (2026-06-21)** (*was S · Low*): the outliner now parses the cleartext builtin `/Encoding` (`dup <code> /<name> put`), and `resolve_gid` gains a code→name→GID fallback for non-AGL builtin encodings used without a PDF `/Encoding`. Multiple-Master / hint-replacement (OtherSubr 3 / OtherSubrs ≥14) remain documented safe no-ops (MM renders the default master); all degrade safely, never panic.
 
 - **P4-3 · OCR `recognize()` rayon parallelism — ✅ DONE (2026-06-21)** — *was M · High (OCR latency)*
   - `PaddleOcr::recognize`'s per-box loop is now a rayon `par_iter` with an **indexed collect** → output byte-identical to the sequential version (deterministic, proven vs a captured baseline + a 1-thread-vs-N fingerprint). **3.49× speedup** on a 42-box page (16 cores: 2858ms → 819ms). The `&self`+`Mutex`/`OnceLock` model cache was already thread-safe (no `model.rs` change). `rayon` is a feature-gated (`paddle-ocr`) optional dep — **not** in the lean base wheel. No correctness change, no new symbols.
@@ -209,42 +234,57 @@ oracle-cross-checked against real PyMuPDF 1.24.14 (`.venv-oracle`) with zero reg
 | P0-4 | Implement/delete 3 fake CI guards | M | Med | ✅ done | 0 |
 | P0-5 | OCR wheel-bloat decision (opt-in extra) | M | Med | ✅ done | 0 |
 | P0-6 | CHANGELOG + fix stale `/workspace/pypdf` paths | S | Low | ✅ done | 0 |
-| P0-2r | 12 `_core` PyO3 deferred members still AttributeError (Rust-core) | M | Med | open | 0r |
+| P0-2r | `_core` PyO3 deferred members → PdfUnsupportedError (Rust `__getattr__`, 5 members) | M | Med | ✅ done | 0r |
 | P0-5r | OCR publishing — model-data companion + OCR-in-wheel (Option A) | M | High | ✅ done | 0r |
 | P0-6r | run_gt.py resolves stale-absolute corpus paths (rename-proof) | S | Low | ✅ done | 0r |
 | P1-1 | Liberation std-14 fallback fonts (blank body text) | M | High | ✅ done | 1 |
 | P1-2 | Honor `/Decode [1 0]` ImageMask | S | Med | ✅ done | 1 |
 | P1-3 | Real extraction/render CI accuracy gate | M | High | ✅ done | 1 |
-| P1-1r | Symbol/ZapfDingbats fallback (Liberation gap) | S | Low | open | 1r |
+| P1-1r | Symbol/ZapfDingbats fallback (Liberation gap) | S | Low | open · needs license decision | 1r |
 | P2-1 | Page draw-convenience + loader/alias (12 syms) | M | High | ✅ done | 2 |
 | P2-2 | `Document.convert_to_pdf` (image inputs) | M | Med | ✅ done | 2 |
 | P2-3 | Small binding clusters (Pixmap/Tools/Page/Doc) | S–M | Low–Med | ✅ done | 2 |
 | P2-4 | Medium parity (TOC edit, extract_font, subset…) | M | Low | ✅ done | 2 |
-| P2r-1 | `set_toc` page-mapping off-by-one (get_toc resolves one page low) | S | Low | open | 2r |
-| P2r-2 | `image_profile` dict-key divergence vs spec | S | Low | open | 2r |
+| P2r-1 | `set_toc`/`get_toc` page-mapping off-by-one (1-based vs 0-based) | S | Low | ✅ done | 2r |
+| P2r-2 | `image_profile` dict-key — NOT-A-BUG (already matches JM_image_profile) | S | Low | ✅ resolved | 2r |
 | P3-1 | Multi-column reading-order engine (landed 06-16; verified) | L | High | ✅ done | 3 |
 | P3-2 | PMC collapse — diagnosed (stale report, no bug) + reports regen | M | High | ✅ done | 3 |
-| P3-1r | PMC212689 ordering-only residual (order 0.645 vs 0.749) | S | Low | open | 3r |
+| P3-1r | PMC212689 ordering-only residual (order 0.645 vs 0.749) | S | Low | accepted · won't-fix | 3r |
 | P3-3 | Indexed/Separation/DeviceN + `/Decode` (render) | L | Med | ✅ done | 3 |
-| P3-3r | naive CMYK→RGB color management (pre-existing) | S | Low | open | 3r |
+| P3-3r | CMYK→RGB K-axis black point (pure-K 34,31,31 vs fitz) | S | Low | ✅ done | 3r |
 | P3-4 | Kangxi fold + edge-case tests + robustness rerun | S–M | Low–Med | ✅ done | 3 |
-| P3-4r | vertical writing-mode (multi-column vertical reorders) | M | Low | open | 3r |
+| P3-4r | vertical writing-mode (wmode 1, `/W2`+`/DW2`, −y advance) | M | Low | ✅ done | 3r |
 | P3-5 | FinTabNet GriTS harness (infra done; score blocked on data) | M | Med | ⚠ blocked | 3 |
 | P4-1 | Font carries `/FontFile*` (buffer/glyph_bbox, +2) | L | Med | ✅ done | 4 |
 | P4-2 | Type1 charstring (PFB/PFA) support | L | Med | ✅ done | 4 |
-| P4-2r | Type1 builtin-Encoding / hint-replace / MM (safe no-ops) | S | Low | open | 4r |
+| P4-2r | Type1 builtin `/Encoding` parse (hint-replace / MM stay safe no-ops) | S | Low | ✅ done | 4r |
 | P4-3 | OCR `recognize()` rayon parallelism (3.49×) | M | High | ✅ done | 4 |
 | P4-4 | Full public-surface API docs (mkdocstrings, 307/307) | M | Med | ✅ done | 4 |
 
-**Recommended next 3 (in order):** *(**Phases 0–4 ALL COMPLETE** — on `main`; parity **88.7%**; only low-priority residuals + pre-public chores remain. P3-5 score blocked on sandbox data egress.)*
-1. **Pre-public chores** (§7) — refresh `docs/BENCHMARKS.md` + `PARITY.md`; re-run P3-5's GriTS from an unrestricted network for the absolute table number; then **flip the repo public + push** (feature-complete at 88.7% — multi-column, colorspaces, OCR parallelism, embedded fonts incl. Type1 all landed).
-2. **The residuals** (all low-priority, none blocking): P3-1r (PMC212689 order), P3-4r (vertical writing), P3-3r (CMYK color management), P4-2r (Type1 builtin-encoding/MM edge cases), P0-2r (`_core` deferred), P1-1r (Symbol/Zapf), P2r-1, P2r-2.
-3. **Further parity** (optional) — the 21 remaining deferred are the genuinely-blocked long tail (OCG/layers, device-replay, a few Type0/Type3 edges).
+**Recommended next 3 (in order):** *(**Phases 0–4 + the residual sweep ALL LANDED 2026-06-21** — on `main`;
+parity **88.7%**; the residual sweep cleared P0-2r / P2r-1 / P3-3r / P3-4r / P4-2r and resolved P2r-2 as
+not-a-bug. Only an owner decision, an accepted won't-fix, and pre-public chores remain. P3-5 score blocked on
+sandbox data egress.)*
+1. **Owner license decision for P1-1r** — pick (a) opt-in separately-licensed Symbol/Dingbats extra,
+   (b) a commissioned/sourced OFL Symbol+Dingbats, or (c) keep the documented blank residual. The URW base-35
+   AGPL font exception does **not** permit bundling into the Apache-2.0 crate, so this is a policy call, not a
+   coding task.
+2. **Pre-public chores** (§7) — re-run `render_diff.py` for a fresh aggregate render-SSIM (the 0.945/0.986 in
+   `docs/BENCHMARKS.md` is date-noted "as of 2026-06-17", before the colorspace/Type1/std-14 fixes); re-run
+   P3-5's GriTS from an unrestricted network for the absolute table number; then **flip the repo public + push**
+   (feature-complete at 88.7% — multi-column, colorspaces, OCR parallelism, embedded fonts incl. Type1, vertical
+   CJK all landed).
+3. **Accepted / further work** — P3-1r is an accepted won't-fix (inherent content-vs-geometric-order tradeoff,
+   `layout.rs` == HEAD); the 21 remaining deferred are the genuinely-blocked long tail (OCG/layers,
+   device-replay, a few Type0/Type3 edges).
 
 ## 7. Pre-public chores + docs upkeep (do alongside / last)
 
 - Reword any historical commit messages that contain backticks (shell substitutes them).
 - **Keep `PARITY.md` + `docs/BENCHMARKS.md` current** — they drift as batches land; refresh after each.
+- **Fresh aggregate render-SSIM re-measure** (`render_diff.py`) — *open chore* — `docs/BENCHMARKS.md`'s SSIM
+  0.945 / 0.986 is date-noted "as of 2026-06-17", **before** the colorspace (P3-3/P3-3r), Type1 (P4-2/P4-2r),
+  and std-14 (P1-1) fixes; re-run against `.venv-oracle` and update the numbers.
 - Docs-site completeness pass (`docs/guide`, `docs/reference`, `index.md`) — see P4-4.
 - PyPI publish runbook: `docs/RELEASE-PYPI.md` (gated on P0-1 + P0-5); optional name trademark.
 - The PyPI runbook **encodes the P0-5r OCR-distribution decision** (✅ done) — the published `pdfspine` wheel compiles the `ocr` feature in (no embedded models) and the `[ocr]` extra pulls the `pdfspine-ocr-models` data distribution; see `docs/RELEASE-PYPI.md` §D.1.
@@ -279,5 +319,9 @@ extraction/conformance · perf/OCR). §3 is the correction log against this doc'
 **Phase 0 + P0-5r + Phase 1 on 2026-06-19; Phase 2 + P3-1/P3-2/P3-3/P3-4 on 2026-06-20** (on `main`; coverage
 84.7%→**88.7%**; multi-column + colorspaces at parity; OCR `recognize()` parallel + Font program bytes) — §3
 rows C1 / C2 / C4 / C6 / C7 / C10 / C11 / C13 fixed + P0-6r closed; P3-5 GriTS harness landed (score blocked
-on sandbox CDN egress); residuals P0-2r / P1-1r / P2r-1 / P2r-2 / P3-1r / P3-3r / P3-4r carried forward.
-**P4-1 / P4-3 / P4-4 / P4-2 landed 2026-06-21 — Phases 0–4 all complete** (88.7% parity; embedded Type1 renders; API docs 307/307).*
+on sandbox CDN egress). **P4-1 / P4-3 / P4-4 / P4-2 landed 2026-06-21**, and a **residuals-clearing sweep the
+same day (2026-06-21)** fixed P0-2r / P2r-1 / P3-3r / P3-4r / P4-2r and resolved P2r-2 as not-a-bug
+(all oracle-cross-checked; cargo/clippy clean, pytest 721, P1-3 gate green, parity unchanged 88.7%).
+**Phases 0–4 + the residual sweep all complete** — remaining open = **P1-1r** (needs an owner license
+decision), **P3-1r** (accepted won't-fix), the render-SSIM re-measure, the **P3-5** score (network-blocked),
+and the pre-public flip-to-public.*

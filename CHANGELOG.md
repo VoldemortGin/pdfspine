@@ -27,7 +27,8 @@ tagged release. The workspace version is `0.0.0` until that tag is cut.
   Core-14 AFM widths, and predefined CJK CMaps for CID → Unicode extraction.
 - **Text (`pdf-text`):** content-stream interpreter producing positioned glyphs,
   layout reconstruction into a PyMuPDF-shaped `TextPage`, `get_text` serializers
-  with `TEXTFLAGS`, search, inventory, and UAX#9 bidi reordering for RTL/Arabic.
+  with `TEXTFLAGS`, search, inventory, UAX#9 bidi reordering for RTL/Arabic, and
+  Kangxi-radical CJK folding for compatibility ideographs.
 - **Editing (`pdf-edit`):** content insertion with font embedding, the
   annotation family with `/AP` appearance streams, AcroForm forms and the
   `Widget` API, destructive multi-surface redaction, `get_drawings`, page
@@ -40,7 +41,9 @@ tagged release. The workspace version is `0.0.0` until that tag is cut.
   blend) on a `Canvas`, text glyph rendering (ttf-parser outlines via
   tiny-skia, including Type3 CharProc recursion and bare-CFF / CID-keyed CFF
   parsing), image compositing, axial/radial shadings, full-page rendering to
-  `get_pixmap` via a `DisplayList`, and standalone SVG export.
+  `get_pixmap` via a `DisplayList`, and standalone SVG export. Indexed /
+  Separation / DeviceN colorspaces and `/Decode` arrays render (pixel-exact vs
+  fitz on synthetic cases).
 - **Tables & layers:** `find_tables` (line and text strategies) with merged-cell
   detection and `Table.to_html()`; Optional Content Groups (OCG / layers)
   read and write.
@@ -59,7 +62,23 @@ tagged release. The workspace version is `0.0.0` until that tag is cut.
   ground truth, plus rendering, table-extraction, CJK, multilingual (EUR-Lex),
   GovInfo domain-breadth and GovDocs1 robustness differentials. The `COMPAT.toml`
   disposition matrix and `compat-symbol-guard` track API parity (currently
-  **84.1%**, 647 / 769 of the PyMuPDF 1.24 public API implemented and tested).
+  **88.7%**, 682 / 769 of the PyMuPDF 1.24 public API implemented and tested;
+  21 deferred, 66 out-of-scope).
+- **API parity push (+29 symbols to 88.7%):** a
+  Page/Document/Annot/Widget/Shape/TextPage batch added +29 PyMuPDF symbols
+  (84.7% → 88.4%), then `Font.buffer` / `Font.glyph_bbox` backed by the real
+  `/FontFile*` program (Font class 22/23) brought parity to **88.7%**
+  (682/769). See `PARITY.md`.
+- **Font fallback & embedded programs:** non-embedded standard-14 fonts now fall
+  back to the OFL Liberation families (no more blank body text), and embedded
+  **Type1** programs (`/FontFile`, PFB/PFA) rasterize via their charstrings.
+- **Full API reference:** the complete public surface is documented via
+  mkdocstrings (307/307 symbols).
+- **OCR distribution:** the published `pdfspine` wheel compiles OCR in but embeds
+  **no models** (lean base wheel); the ~16 MB PP-OCRv4 models ship as a separate
+  `pdfspine-ocr-models` data distribution pulled in by the `[ocr]` extra
+  (`pip install pdfspine[ocr]`), resolved offline at runtime via
+  `PDFSPINE_OCR_MODELS` → companion → in-repo dev fallback (no download).
 
 ### Changed
 
@@ -72,6 +91,10 @@ tagged release. The workspace version is `0.0.0` until that tag is cut.
 
 ### Fixed
 
+- **Multi-column reading order** — verified at fitz parity against fresh ground
+  truth: born-digital column corpus `order` 0.996 (jaccard 0.965, dead-even with
+  fitz) and PMC scientific corpus `order` 0.965 mean / 0.995 median (fitz
+  0.975 / 0.997). See `docs/BENCHMARKS.md`.
 - UAX#9 bidi reordering for RTL lines — Arabic text extraction is now
   byte-perfect and beats fitz on RTL.
 - Resolved CID-keyed CFF glyphs via charset (un-blanked CIDFontType0C text).
@@ -84,6 +107,10 @@ tagged release. The workspace version is `0.0.0` until that tag is cut.
 
 - Cached font programs by `ObjRef`, making rendering ~1.74× faster; open is
   ~1.26× and text extraction ~2.75× faster than fitz in the bundled benchmark.
+- OCR `recognize()` runs its per-box loop with a rayon `par_iter` (indexed
+  collect → byte-identical output): **3.49× faster** on a 42-box page (16 cores,
+  2858 ms → 819 ms). `rayon` is a feature-gated (`paddle-ocr`) optional dep and
+  is not in the lean base wheel.
 
 ## [0.1.0] - Unreleased
 
