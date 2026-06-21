@@ -125,7 +125,8 @@ def test_fitz_link_alias() -> None:
 
 def test_outline_tree() -> None:
     d = _doc_with_pages()
-    d.set_toc([[1, "Chapter 1", 0], [2, "Section 1.1", 1], [1, "Chapter 2", 2]])
+    # set_toc takes 1-based pages; Outline.page is the 0-based index (fitz).
+    d.set_toc([[1, "Chapter 1", 1], [2, "Section 1.1", 2], [1, "Chapter 2", 3]])
     ol = d.outline
     assert ol is not None
     assert ol.title == "Chapter 1"
@@ -142,7 +143,7 @@ def test_outline_tree() -> None:
 
 def test_outline_walk() -> None:
     d = _doc_with_pages()
-    d.set_toc([[1, "A", 0], [1, "B", 1], [1, "C", 2]])
+    d.set_toc([[1, "A", 1], [1, "B", 2], [1, "C", 3]])
     titles = []
     ol = d.outline
     while ol:
@@ -158,7 +159,7 @@ def test_outline_none() -> None:
 
 def test_outline_dest() -> None:
     d = _doc_with_pages()
-    d.set_toc([[1, "A", 0]])
+    d.set_toc([[1, "A", 1]])
     dest = d.outline.dest
     assert dest.page == 0
     assert dest.kind == 1

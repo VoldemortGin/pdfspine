@@ -148,8 +148,10 @@ def test_pymeta_003_xml():
 
 
 def test_pytoc_001_roundtrip():
+    # PyMuPDF TOC pages are 1-based: set_toc then get_toc must round-trip to
+    # the SAME 1-based page numbers (cross-checked vs PyMuPDF 1.24.14).
     doc = _open(["AAA", "BBB", "CCC"])
-    toc = [[1, "Chapter 1", 0], [2, "Section 1.1", 1], [1, "Chapter 2", 2]]
+    toc = [[1, "Chapter 1", 1], [2, "Section 1.1", 2], [1, "Chapter 2", 3]]
     doc.set_toc(toc)
     re = pdfspine.open(stream=doc.tobytes())
     assert re.get_toc() == toc
@@ -157,14 +159,27 @@ def test_pytoc_001_roundtrip():
 
 def test_pytoc_002_deprecated_aliases():
     doc = _open(["AAA", "BBB"])
-    doc.setToC([[1, "A", 0], [1, "B", 1]])
-    assert doc.getToC() == [[1, "A", 0], [1, "B", 1]]
+    doc.setToC([[1, "A", 1], [1, "B", 2]])
+    assert doc.getToC() == [[1, "A", 1], [1, "B", 2]]
 
 
 def test_pytoc_003_level_jump_raises():
     doc = _open(["AAA", "BBB"])
     with pytest.raises(pdfspine.PdfError):
-        doc.set_toc([[1, "A", 0], [3, "C", 1]])
+        doc.set_toc([[1, "A", 1], [3, "C", 2]])
+
+
+def test_pytoc_004_page_base_is_one_based():
+    # PyMuPDF TOC pages are 1-based and round-trip identically (no off-by-one):
+    # entry pages 1..5 on a 5-page doc come back unchanged (oracle-verified).
+    doc = _open(["P1", "P2", "P3", "P4", "P5"])
+    toc = [[1, "Ch1", 1], [2, "Sec", 2], [1, "Ch2", 3], [1, "Ch5", 5]]
+    doc.set_toc(toc)
+    assert doc.get_toc() == toc
+    # A page < 1 means "no destination" (fitz's -1); an over-range page clamps
+    # to the last page.
+    doc.set_toc([[1, "ext", -1], [1, "over", 99]])
+    assert doc.get_toc() == [[1, "ext", -1], [1, "over", 5]]
 
 
 # --- merge + page ops ----------------------------------------------------
@@ -280,10 +295,10 @@ def test_pyfitz_edit_aliases():
 
     doc = fitz.open(stream=multi_page_pdf(["AAA", "BBB"]))
     doc.set_metadata({"title": "Shim"})
-    doc.set_toc([[1, "Top", 0]])
+    doc.set_toc([[1, "Top", 1]])
     data = doc.tobytes()
     re = fitz.open(stream=data)
     assert re.metadata["title"] == "Shim"
-    assert re.get_toc() == [[1, "Top", 0]]
+    assert re.get_toc() == [[1, "Top", 1]]
     # Encryption constants surface through the shim.
     assert fitz.PDF_ENCRYPT_AES_256 == pdfspine.PDF_ENCRYPT_AES_256

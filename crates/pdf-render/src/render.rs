@@ -909,7 +909,17 @@ fn resolve_gid(
             }
         }
     }
-    // 3) last resort: the raw code clamped (symbolic TrueType indexed by code).
+    // 3) embedded Type1 builtin /Encoding by raw code (P4-2r): a Type1 font with
+    //    a non-AGL builtin encoding used without a PDF /Encoding resolves only
+    //    through the code → name map declared inside the font program.
+    if let Ok(code) = u8::try_from(glyph.code) {
+        if let Some(g) = font.glyph_for_code(code) {
+            if g != 0 {
+                return g;
+            }
+        }
+    }
+    // 4) last resort: the raw code clamped (symbolic TrueType indexed by code).
     let g = u16::try_from(mapper_gid).unwrap_or(0);
     if g != 0 && g < font.num_glyphs() {
         return g;

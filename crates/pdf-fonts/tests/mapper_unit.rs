@@ -510,6 +510,64 @@ fn fontmap_003_identity_v_resolved() {
     let codes: Vec<(u32, u8)> = m.iter_codes(&[0x12, 0x34]).collect();
     assert_eq!(codes, vec![(0x1234, 2)]);
     assert_eq!(m.cid(0x1234), 0x1234);
+    // Identity-V selects vertical writing.
+    assert_eq!(m.wmode(), 1);
+    // No /DW2 → spec defaults: vy = 880, w1y = -1000, vx = w0/2 (w0 = DW = 1000).
+    assert_eq!(m.vertical_displacement(0x1234), -1000.0);
+    assert_eq!(m.vertical_position(0x1234), (500.0, 880.0));
+}
+
+#[test]
+fn fontmap_wmode_horizontal_default_for_identity_h() {
+    let (doc, font) = identity_h_doc();
+    let m = mapper_for(&doc, font);
+    // Horizontal writing → no vertical metrics surface.
+    assert_eq!(m.wmode(), 0);
+    assert_eq!(m.vertical_displacement(0x0041), 0.0);
+    assert_eq!(m.vertical_position(0x0041), (0.0, 0.0));
+}
+
+#[test]
+fn fontmap_vertical_metrics_dw2_and_w2() {
+    // Identity-V with custom /DW2 and a per-CID /W2 override.
+    let mut d = FontDoc::new();
+    let descendant = d.add(Object::Dictionary(dict([
+        ("Type", name_obj("Font")),
+        ("Subtype", name_obj("CIDFontType2")),
+        ("BaseFont", name_obj("X")),
+        ("DW", Object::Integer(1000)),
+        (
+            "DW2",
+            Object::Array(vec![Object::Integer(820), Object::Integer(-1100)]),
+        ),
+        // CID 5 overrides: w1y=-900, v=(450, 750).
+        (
+            "W2",
+            Object::Array(vec![
+                Object::Integer(5),
+                Object::Array(vec![
+                    Object::Integer(-900),
+                    Object::Integer(450),
+                    Object::Integer(750),
+                ]),
+            ]),
+        ),
+    ])));
+    let font = d.add(Object::Dictionary(dict([
+        ("Type", name_obj("Font")),
+        ("Subtype", name_obj("Type0")),
+        ("Encoding", name_obj("Identity-V")),
+        ("DescendantFonts", Object::Array(vec![rref(descendant, 0)])),
+    ])));
+    let doc = d.open();
+    let m = mapper_for(&doc, font);
+    assert_eq!(m.wmode(), 1);
+    // CID 5 uses the /W2 override.
+    assert_eq!(m.vertical_displacement(5), -900.0);
+    assert_eq!(m.vertical_position(5), (450.0, 750.0));
+    // Any other CID falls back to /DW2 (w1y=-1100) and default vx = w0/2 = 500.
+    assert_eq!(m.vertical_displacement(6), -1100.0);
+    assert_eq!(m.vertical_position(6), (500.0, 820.0));
 }
 
 #[test]

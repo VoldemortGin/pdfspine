@@ -72,18 +72,15 @@ def _page(pdf: bytes) -> "pdfspine.Page":
 # =====================================================================
 #
 # Real PyMuPDF on a single-column Identity-V CJK run extracts the characters in
-# logical order ("中文字"). pdfspine matches that text+order for a single column
-# (its writing-mode geometry is horizontal — wmode/dir/bbox diverge — but the
-# *characters and their order* are correct, which is what get_text() promises).
+# logical order ("中文字"). pdfspine matches that text+order for a single column.
 #
-# KNOWN LIMITATION (flagged, not fixed — a medium change, out of scope for this
-# cheap-insurance task): vertical writing is not implemented in the glyph
-# emission path (crates/pdf-text/src/interp.rs always sets
-# WritingDir::Horizontal and advances along +x). For a *single* vertical column
-# the extracted text+order still matches PyMuPDF; for *multiple* vertical
-# columns the reading order diverges (PyMuPDF reads columns right-to-left,
-# pdfspine treats them as left-to-right horizontal runs). See
-# test_vertical_002_multicolumn_known_divergence.
+# Vertical writing (wmode 1) is implemented in the glyph emission path
+# (crates/pdf-text/src/interp.rs): the writing mode is threaded from the font's
+# `/Encoding` (Identity-V / a `-V` predefined name / an embedded CMap `/WMode`)
+# into the FontMapper, `/W2`+`/DW2` supply the vertical metrics, and glyphs
+# advance along −y so a vertical run reads top-to-bottom and multi-column
+# vertical reads columns right-to-left — matching PyMuPDF (wmode/dir and reading
+# order agree; see test_vertical_002_multicolumn).
 
 
 def _vertical_cjk_pdf(content: bytes) -> bytes:
@@ -134,23 +131,24 @@ def test_vertical_001_single_column_text_and_order():
     assert text == "中文字"
 
 
-def test_vertical_002_multicolumn_known_divergence():
+def test_vertical_002_multicolumn():
     # Right column (x=400) 中文, left column (x=300) 字書. PyMuPDF reads vertical
-    # columns right-to-left -> "中文\n字書"; pdfspine has no vertical writing mode
-    # so it orders the two runs left-to-right as horizontal text. The set of
-    # characters is identical (nothing dropped/duplicated); only column order
-    # differs. This asserts the *current* (flagged-limitation) behavior so a
-    # future vertical-writing implementation has a tripwire.
+    # columns right-to-left -> "中文\n字書"; pdfspine's vertical writing mode now
+    # matches that reading order (cross-checked vs .venv-oracle PyMuPDF 1.24.14).
     content = (
         b"BT /F0 24 Tf 400 700 Td <00010002> Tj ET "
         b"BT /F0 24 Tf 300 700 Td <00030004> Tj ET"
     )
-    text = _page(_vertical_cjk_pdf(content)).get_text()
+    page = _page(_vertical_cjk_pdf(content))
+    text = page.get_text()
     # No glyph dropped or duplicated vs PyMuPDF (same character multiset).
     assert Counter(text.replace("\n", "").replace(" ", "")) == Counter("中文字書")
-    # Current pdfspine order (horizontal L->R columns). PyMuPDF would give
-    # "中文\n字書" (R->L vertical columns) — the documented divergence.
-    assert text.split() == ["字書", "中文"]
+    # Columns read right-to-left, exactly like PyMuPDF: "中文\n字書".
+    assert text.split() == ["中文", "字書"]
+    # Each line carries vertical writing mode + the (0, 1) device direction.
+    lines = [l for b in page.get_text("dict")["blocks"] for l in b.get("lines", [])]
+    assert all(l["wmode"] == 1 for l in lines)
+    assert all(l["dir"] == (0.0, 1.0) for l in lines)
 
 
 # =====================================================================

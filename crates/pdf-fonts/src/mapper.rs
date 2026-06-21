@@ -20,7 +20,7 @@ use crate::cmap::{CMap, CodespaceRange};
 use crate::encodings::BaseEncoding;
 use crate::glyphlist::glyph_name_to_unicode;
 use crate::predefined::{self, BundledCjk, PredefinedKind};
-use crate::widths::{self, CidWidths, SimpleWidths};
+use crate::widths::{self, CidWidths, SimpleWidths, VerticalMetrics};
 
 /// The broad font-program kind (drives the build path).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -72,6 +72,12 @@ pub struct FontMapper {
     /// Stored for completeness / future rasterization; mapping uses it to
     /// validate a CID is present but width/unicode key on CID directly.
     cid_to_gid: Option<Vec<u16>>,
+    /// Writing mode (`0` horizontal, `1` vertical): set from the Type0
+    /// `/Encoding` (predefined `-V` name or an embedded CMap's `/WMode`). Always
+    /// `0` for simple fonts.
+    wmode: u8,
+    /// Vertical metrics (`/W2` + `/DW2`) — only meaningful when `wmode == 1`.
+    vertical: VerticalMetrics,
 }
 
 impl FontMapper {
@@ -135,6 +141,8 @@ impl FontMapper {
             cid_encoding: None,
             cid_widths: CidWidths::default(),
             cid_to_gid: None,
+            wmode: 0,
+            vertical: VerticalMetrics::default(),
         }
     }
 
@@ -144,6 +152,9 @@ impl FontMapper {
         // `/Encoding`: name (Identity / predefined) or embedded CMap stream.
         let cid_encoding = resolve_cid_encoding(font, doc);
 
+        // Writing mode from the `/Encoding` (predefined `-V` name / CMap `/WMode`).
+        let wmode = resolve_wmode(font, doc);
+
         // Descendant CIDFont (single-element array).
         let descendant = resolve_descendant(font, doc);
 
@@ -151,6 +162,12 @@ impl FontMapper {
         let cid_widths = match &descendant {
             Some(d) => build_cid_widths(d, doc),
             None => CidWidths::default(),
+        };
+
+        // `/W2` + `/DW2` vertical metrics (only consulted when `wmode == 1`).
+        let vertical = match &descendant {
+            Some(d) if wmode == 1 => build_vertical_metrics(d, doc),
+            _ => VerticalMetrics::default(),
         };
 
         // CIDToGIDMap (Identity or stream) from the descendant.
@@ -167,6 +184,8 @@ impl FontMapper {
             cid_encoding: Some(cid_encoding),
             cid_widths,
             cid_to_gid,
+            wmode,
+            vertical,
         }
     }
 
@@ -262,6 +281,37 @@ impl FontMapper {
                 self.cid_widths.width(cid)
             }
         }
+    }
+
+    /// The writing mode: `0` horizontal (default), `1` vertical. Driven by the
+    /// Type0 `/Encoding` (predefined `-V` name or an embedded CMap's `/WMode`).
+    #[must_use]
+    pub fn wmode(&self) -> u8 {
+        self.wmode
+    }
+
+    /// The vertical position vector `v = (vx, vy)` for `code` (1000-unit text
+    /// space; PRD §8.6 / ISO 32000-1 §9.7.4.3) — the offset from the horizontal
+    /// glyph origin to the vertical glyph origin. `(0, 0)` outside vertical
+    /// writing (a simple or horizontal font).
+    #[must_use]
+    pub fn vertical_position(&self, code: u32) -> (f64, f64) {
+        if self.wmode != 1 || self.kind != FontKind::Type0 {
+            return (0.0, 0.0);
+        }
+        let cid = self.code_to_cid(code);
+        self.vertical.position(cid, self.cid_widths.width(cid))
+    }
+
+    /// The vertical displacement `w1y` for `code` (1000-unit text space; the
+    /// advance along −y, normally negative). `0` outside vertical writing (a
+    /// simple or horizontal font).
+    #[must_use]
+    pub fn vertical_displacement(&self, code: u32) -> f64 {
+        if self.wmode != 1 || self.kind != FontKind::Type0 {
+            return 0.0;
+        }
+        self.vertical.displacement(self.code_to_cid(code))
     }
 
     /// Maps a Type0 character code to a CID via the encoding CMap. For Identity
@@ -566,6 +616,66 @@ fn resolve_cid_encoding(font: &Dict, doc: &DocumentStore) -> CidEncoding {
             }
         }
         _ => CidEncoding::Identity,
+    }
+}
+
+/// Resolves the Type0 writing mode from `/Encoding`: `1` for a predefined name
+/// whose orientation suffix is `-V` (Identity-V, the UCS2 `-V` families, the
+/// recognized legacy `…-V` names) or an embedded CMap stream carrying
+/// `/WMode 1`; `0` otherwise.
+fn resolve_wmode(font: &Dict, doc: &DocumentStore) -> u8 {
+    let Some(enc) = doc
+        .resolve_dict_key(font, &Name::new("Encoding"))
+        .ok()
+        .flatten()
+    else {
+        return 0;
+    };
+    match enc.as_ref() {
+        Object::Name(n) => u8::from(name_is_vertical(n.as_bytes())),
+        // Embedded CMap stream: `/WMode` lives in the stream dict (and may also
+        // be declared in the program, but the dict entry is authoritative and
+        // cheap to read).
+        Object::Stream(s) => match s.dict.get(&Name::new("WMode")).and_then(Object::as_i64) {
+            Some(1) => 1,
+            _ => 0,
+        },
+        _ => 0,
+    }
+}
+
+/// Whether a predefined `/Encoding` name selects vertical writing — its
+/// orientation suffix is `-V` (e.g. `Identity-V`, `UniGB-UCS2-V`, `90ms-RKSJ-V`).
+fn name_is_vertical(name: &[u8]) -> bool {
+    name == b"Identity-V" || name.ends_with(b"-V")
+}
+
+/// Builds the vertical metrics table from the descendant `/W2` + `/DW2`.
+fn build_vertical_metrics(descendant: &Dict, doc: &DocumentStore) -> VerticalMetrics {
+    let dw2 = descendant
+        .get(&Name::new("DW2"))
+        .and_then(Object::as_array)
+        .filter(|a| a.len() == 2)
+        .and_then(|a| Some((a[0].as_f64()?, a[1].as_f64()?)));
+    let w2 = doc
+        .resolve_dict_key(descendant, &Name::new("W2"))
+        .ok()
+        .flatten();
+    match w2.as_deref().and_then(Object::as_array) {
+        Some(arr) => {
+            let resolved: Vec<Object> = arr
+                .iter()
+                .map(|o| match o {
+                    Object::Reference(r) => doc
+                        .resolve(*r)
+                        .map(|a| (*a).clone())
+                        .unwrap_or(Object::Null),
+                    other => other.clone(),
+                })
+                .collect();
+            VerticalMetrics::new(&resolved, dw2)
+        }
+        None => VerticalMetrics::new(&[], dw2),
     }
 }
 

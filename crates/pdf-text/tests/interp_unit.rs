@@ -222,9 +222,10 @@ fn interp_018_fill_color() {
     // g gray 0.5 → 128,128,128.
     let res = run_with_font(font_w500(), b"BT /F1 10 Tf 0.5 g (A) Tj ET");
     assert_eq!(res.glyphs[0].color, 0x0080_8080);
-    // k black (0 0 0 1) → 0,0,0.
+    // k pure process black (0 0 0 1): the SWOP-like black point lands at fitz's
+    // darkest-K (34,31,31), not pure (0,0,0) (P3-3r).
     let res = run_with_font(font_w500(), b"BT /F1 10 Tf 0 0 0 1 k (A) Tj ET");
-    assert_eq!(res.glyphs[0].color, 0x0000_0000);
+    assert_eq!(res.glyphs[0].color, 0x0022_1F1F);
 }
 
 // === INTERP-019: multiple /Contents streams concatenated ==================
@@ -259,6 +260,35 @@ fn interp_020_type0_identity_h() {
     assert_eq!(res.glyphs[0].unicode.as_str(), "X");
     assert_eq!(res.glyphs[0].code, 1);
     // origin (0, 0); next-glyph advance would be 600/1000*10 = 6 (not asserted).
+}
+
+#[test]
+fn interp_021_type0_identity_v_vertical_writing() {
+    // Identity-V → vertical writing: two stacked glyphs advance along −y, carry
+    // WritingDir::Vertical, and offset the cell by the position vector v.
+    // /DW 1000 (w0 = 1.0 @ size 24), /DW2 [880 -1000] → vx = w0/2 = 0.5, vy =
+    // 0.88, w1y = -1.0 (text units after /1000, at size 24 → scaled below).
+    let tounicode: &[u8] = b"/CIDInit /ProcSet findresource begin 12 dict begin begincmap \
+        1 begincodespacerange <0000> <FFFF> endcodespacerange \
+        2 beginbfchar <0001> <4E2D> <0002> <6587> endbfchar endcmap end end";
+    let (doc, page) = build_type0_vertical_doc(tounicode);
+    let res = ContentInterpreter::new(&doc).run_page(&page);
+    assert_eq!(res.glyphs.len(), 2);
+    let (g0, g1) = (&res.glyphs[0], &res.glyphs[1]);
+    assert_eq!(g0.unicode.as_str(), "中");
+    assert_eq!(g1.unicode.as_str(), "文");
+    assert_eq!(g0.writing_dir, WritingDir::Vertical);
+    assert_eq!(g1.writing_dir, WritingDir::Vertical);
+    // Pen starts at Td (300, 700); both glyphs share x (single column).
+    assert!((g0.origin.x - 300.0).abs() < 1e-6);
+    assert!((g1.origin.x - 300.0).abs() < 1e-6);
+    // Advance along −y by |w1y|·Tfs = 1.0 * 24 = 24: second glyph is 24 below.
+    assert!((g0.origin.y - 700.0).abs() < 1e-6);
+    assert!((g1.origin.y - (700.0 - 24.0)).abs() < 1e-6);
+    // The cell is offset from the pen by −v: with vx = 0.5·w0 = 0.5 (text units)
+    // at size 24 the cell's left edge is pen.x − vx·24 = 300 − 12 = 288.
+    assert!((g0.bbox.x0 - 288.0).abs() < 1e-6);
+    assert!((g0.bbox.x1 - 312.0).abs() < 1e-6); // width w0·24 = 24
 }
 
 /// Builds a doc whose page shows a 2-byte Identity-H code `<0001>` once.
@@ -306,6 +336,50 @@ fn build_type0_doc(tounicode: &[u8]) -> (pdf_core::DocumentStore, pdf_core::Dict
     let (doc, page) = pd
         .font("F1", type0)
         .content(b"BT /F1 10 Tf 0 0 Td <0001> Tj ET")
+        .open();
+    (doc, page)
+}
+
+/// Builds an Identity-V Type0 doc showing two stacked 2-byte codes at (300,700).
+fn build_type0_vertical_doc(tounicode: &[u8]) -> (pdf_core::DocumentStore, pdf_core::Dict) {
+    let mut pd = PageDoc::new();
+    let tu_num = pd.add(raw_stream([], tounicode));
+    let cidfont = Object::Dictionary(dict([
+        ("Type", name_obj("Font")),
+        ("Subtype", name_obj("CIDFontType2")),
+        ("BaseFont", name_obj("Sub+Font")),
+        (
+            "CIDSystemInfo",
+            Object::Dictionary(dict([
+                (
+                    "Registry",
+                    Object::String(pdf_core::PdfString::literal("Adobe")),
+                ),
+                (
+                    "Ordering",
+                    Object::String(pdf_core::PdfString::literal("Identity")),
+                ),
+                ("Supplement", Object::Integer(0)),
+            ])),
+        ),
+        ("DW", Object::Integer(1000)),
+        (
+            "DW2",
+            Object::Array(vec![Object::Integer(880), Object::Integer(-1000)]),
+        ),
+    ]));
+    let cid_num = pd.add(cidfont);
+    let type0 = Object::Dictionary(dict([
+        ("Type", name_obj("Font")),
+        ("Subtype", name_obj("Type0")),
+        ("BaseFont", name_obj("Sub+Font")),
+        ("Encoding", name_obj("Identity-V")),
+        ("DescendantFonts", Object::Array(vec![rref(cid_num, 0)])),
+        ("ToUnicode", rref(tu_num, 0)),
+    ]));
+    let (doc, page) = pd
+        .font("F1", type0)
+        .content(b"BT /F1 24 Tf 300 700 Td <00010002> Tj ET")
         .open();
     (doc, page)
 }

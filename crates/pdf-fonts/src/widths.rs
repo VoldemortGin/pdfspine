@@ -24,6 +24,17 @@ pub fn sanitize(w: f64) -> f64 {
     }
 }
 
+/// Sanitizes a *signed* metric (vertical displacement / position component,
+/// which is routinely negative): non-finite or absurd-magnitude → `0`.
+#[must_use]
+fn sanitize_signed(v: f64) -> f64 {
+    if !v.is_finite() || v.abs() > MAX_SANE_WIDTH {
+        0.0
+    } else {
+        v
+    }
+}
+
 /// Simple-font width table: `/Widths` indexed by `code - /FirstChar`, with a
 /// `/MissingWidth` fallback for out-of-range codes (ISO 32000-1 §9.2.4).
 #[derive(Clone, Debug, Default)]
@@ -158,6 +169,130 @@ impl CidWidths {
     #[must_use]
     pub fn default_width(&self) -> f64 {
         self.dw
+    }
+}
+
+/// Type0 vertical metrics from `/W2` plus the `/DW2` default (ISO 32000-1
+/// §9.7.4.3). For a CID the vertical glyph carries:
+///
+/// - a **position vector** `v = (vx, vy)` (1000-unit text space) giving the
+///   offset from the horizontal glyph origin to the vertical glyph origin, and
+/// - a **vertical displacement** `w1y` (the advance along −y; usually negative).
+///
+/// `/DW2` is `[vy w1y]` and supplies the defaults `vx = w0/2`, `vy`, `w1y`.
+/// `/W2` overrides per CID with two interleaved forms:
+///
+/// - `c [w1y_0 vx_0 vy_0  w1y_1 vx_1 vy_1 …]` — CIDs `c, c+1, …`.
+/// - `c_first c_last w1y vx vy` — CIDs `c_first..=c_last` all share the triple.
+#[derive(Clone, Debug)]
+pub struct VerticalMetrics {
+    /// Per-CID `(w1y, vx, vy)` overrides.
+    individual: HashMap<u32, (f64, f64, f64)>,
+    /// Range `(lo, hi, w1y, vx, vy)` overrides.
+    ranges: Vec<(u32, u32, f64, f64, f64)>,
+    /// `/DW2[0]` — the default position-vector y (text space; default 880).
+    default_vy: f64,
+    /// `/DW2[1]` — the default vertical displacement w1y (default −1000).
+    default_w1y: f64,
+}
+
+impl Default for VerticalMetrics {
+    fn default() -> Self {
+        VerticalMetrics {
+            individual: HashMap::new(),
+            ranges: Vec::new(),
+            default_vy: 880.0,
+            default_w1y: -1000.0,
+        }
+    }
+}
+
+impl VerticalMetrics {
+    /// Parses a `/W2` array (already resolved to direct objects) with the given
+    /// `/DW2` pair (`None` → the spec defaults `[880 -1000]`).
+    #[must_use]
+    pub fn new(w2: &[Object], dw2: Option<(f64, f64)>) -> Self {
+        let mut vm = VerticalMetrics::default();
+        if let Some((vy, w1y)) = dw2 {
+            vm.default_vy = sanitize_signed(vy);
+            vm.default_w1y = sanitize_signed(w1y);
+        }
+        let mut i = 0;
+        while i < w2.len() {
+            let Some(c) = w2[i].as_f64().map(|v| v as i64) else {
+                i += 1;
+                continue;
+            };
+            match w2.get(i + 1) {
+                // Array form: `c [w1y vx vy  w1y vx vy …]`.
+                Some(Object::Array(list)) => {
+                    if c >= 0 {
+                        let mut cid = c as u32;
+                        for triple in list.chunks_exact(3) {
+                            let w1y = sanitize_signed(triple[0].as_f64().unwrap_or(0.0));
+                            let vx = sanitize_signed(triple[1].as_f64().unwrap_or(0.0));
+                            let vy = sanitize_signed(triple[2].as_f64().unwrap_or(0.0));
+                            vm.individual.insert(cid, (w1y, vx, vy));
+                            cid = cid.wrapping_add(1);
+                        }
+                    }
+                    i += 2;
+                }
+                // Range form: `c_first c_last w1y vx vy`.
+                Some(obj_last) => {
+                    let last = obj_last.as_f64().map(|v| v as i64);
+                    let w1y = w2.get(i + 2).and_then(Object::as_f64);
+                    let vx = w2.get(i + 3).and_then(Object::as_f64);
+                    let vy = w2.get(i + 4).and_then(Object::as_f64);
+                    if let (Some(last), Some(w1y), Some(vx), Some(vy)) = (last, w1y, vx, vy) {
+                        if c >= 0 && last >= c {
+                            vm.ranges.push((
+                                c as u32,
+                                last as u32,
+                                sanitize_signed(w1y),
+                                sanitize_signed(vx),
+                                sanitize_signed(vy),
+                            ));
+                        }
+                        i += 5;
+                    } else {
+                        i += 1;
+                    }
+                }
+                None => i += 1,
+            }
+        }
+        vm
+    }
+
+    /// The position vector `v = (vx, vy)` for `cid` (1000-unit text space).
+    /// `w0` is the CID's horizontal advance, used for the default `vx = w0/2`.
+    #[must_use]
+    pub fn position(&self, cid: u32, w0: f64) -> (f64, f64) {
+        if let Some(&(_, vx, vy)) = self.individual.get(&cid) {
+            return (vx, vy);
+        }
+        for &(lo, hi, _, vx, vy) in self.ranges.iter().rev() {
+            if cid >= lo && cid <= hi {
+                return (vx, vy);
+            }
+        }
+        (w0 / 2.0, self.default_vy)
+    }
+
+    /// The vertical displacement `w1y` for `cid` (1000-unit text space; the
+    /// advance along −y, normally negative).
+    #[must_use]
+    pub fn displacement(&self, cid: u32) -> f64 {
+        if let Some(&(w1y, _, _)) = self.individual.get(&cid) {
+            return w1y;
+        }
+        for &(lo, hi, w1y, _, _) in self.ranges.iter().rev() {
+            if cid >= lo && cid <= hi {
+                return w1y;
+            }
+        }
+        self.default_w1y
     }
 }
 

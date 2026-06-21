@@ -606,7 +606,10 @@ fn render_page_012_non_embedded_font_no_glyphs() {
 #[test]
 fn render_page_cs_separation_vector_dark_not_white() {
     // /Sep1: Separation over DeviceCMYK; tint transform t -> [0 0 0 t] (black ink).
-    // Fill a rect at tint 1.0 → must be black (0,0,0), NOT white.
+    // Fill a rect at tint 1.0 → process black. With the P3-3r SWOP black point
+    // this lands at fitz's darkest-K (34,31,31), NOT pure (0,0,0) and NOT white.
+    // Oracle (.venv-oracle PyMuPDF 1.24.14) renders this exact construct as
+    // (34,31,31); see crates/pdf-core/src/colorspace.rs cmyk_to_rgb.
     let res = "<< /ColorSpace << /Sep1 20 0 R >> >>";
     let content = b"/Sep1 cs 1 scn 50 50 100 100 re f";
     let sep = b"[/Separation /Spot1 /DeviceCMYK 21 0 R]".to_vec();
@@ -618,8 +621,8 @@ fn render_page_cs_separation_vector_dark_not_white() {
     let pm = render(&doc, &page, &RenderOptions::default());
     assert_eq!(
         px(&pm, 100, 100),
-        (0, 0, 0),
-        "dark spot-color fill renders dark, not white"
+        (34, 31, 31),
+        "dark spot-color fill renders dark (fitz SWOP black point), not white"
     );
     // Outside the rect stays white.
     assert_eq!(px(&pm, 10, 10), (255, 255, 255));
@@ -706,7 +709,14 @@ fn render_page_cs_separation_image_tint_transform() {
     let (doc, page) = open_page(pdf);
     let pm = render(&doc, &page, &RenderOptions::default());
     assert_eq!(px(&pm, 50, 100), (255, 255, 255), "tint 0 → white");
-    assert_eq!(px(&pm, 150, 100), (0, 0, 0), "tint 1 → black ink");
+    // tint 1 → process black, mapped to fitz's SWOP black point (34,31,31)
+    // by the P3-3r CMYK black-point model (oracle PyMuPDF renders ~(35,31,32)
+    // for the bilinear-sampled image pixel; the solid texel is (34,31,31)).
+    assert_eq!(
+        px(&pm, 150, 100),
+        (34, 31, 31),
+        "tint 1 → black ink (fitz SWOP black point)"
+    );
 }
 
 // RENDER-PAGE-CS-DEVICEN-IMAGE (sub-problem 3): a 2-colorant DeviceN image runs

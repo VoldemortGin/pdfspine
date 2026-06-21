@@ -683,7 +683,21 @@ fn quant(v: f32) -> u8 {
     (clamp(v, 0.0, 1.0) * 255.0 + 0.5) as u8
 }
 
-/// CMYK (each `0..=1`) → 8-bit sRGB (naive multiplicative conversion).
+/// CMYK (each `0..=1`) → 8-bit sRGB.
+///
+/// Analytic (non-ICC) multiplicative conversion with a SWOP-like **black
+/// point**: the naive `(1-ink)*(1-k)` model drives pure process black
+/// (`0 0 0 1 k`) to `(0,0,0)`, but a color-managed renderer (PyMuPDF/fitz, via
+/// US Web Coated SWOP) never reaches pure black from CMYK — its darkest K is
+/// `~(34,31,31)`. We model that by remapping the K axis from white down to a
+/// per-channel ink **floor** instead of to zero, then multiplying by the CMY
+/// ink complement. With a zero floor this reduces exactly to the old naive
+/// transform, so only the neutral/black region shifts toward fitz.
+///
+/// This matches fitz's pure-K ramp (incl. the `(34,31,31)` floor), registration
+/// black (`1 1 1 1 k → (0,0,0)`) and white; the saturated CMY primaries still
+/// differ (a true ICC profile is required to capture per-ink absorption — that
+/// remains deferred). Cross-checked against `.venv-oracle` `get_pixmap`.
 fn cmyk_to_rgb(c: f32, m: f32, y: f32, k: f32) -> [u8; 3] {
     let (c, m, y, k) = (
         c.clamp(0.0, 1.0),
@@ -691,10 +705,15 @@ fn cmyk_to_rgb(c: f32, m: f32, y: f32, k: f32) -> [u8; 3] {
         y.clamp(0.0, 1.0),
         k.clamp(0.0, 1.0),
     );
+    // Per-channel K floor (fitz SWOP darkest-K `(34,31,31)`, normalized).
+    let ch = |ink: f32, floor: f32| {
+        let k_axis = floor + (1.0 - floor) * (1.0 - k);
+        quant(k_axis * (1.0 - ink))
+    };
     [
-        quant((1.0 - c) * (1.0 - k)),
-        quant((1.0 - m) * (1.0 - k)),
-        quant((1.0 - y) * (1.0 - k)),
+        ch(c, 34.0 / 255.0),
+        ch(m, 31.0 / 255.0),
+        ch(y, 31.0 / 255.0),
     ]
 }
 
@@ -794,8 +813,29 @@ mod tests {
                 n: 1.0,
             }),
         };
-        assert_eq!(cs.to_rgb8(&[1.0]), [0, 0, 0]); // not white
+        // Full process black: the SWOP-like black point lands at fitz's
+        // darkest-K `(34,31,31)`, not pure `(0,0,0)` (P3-3r).
+        assert_eq!(cs.to_rgb8(&[1.0]), [34, 31, 31]);
         assert_eq!(cs.to_rgb8(&[0.0]), [255, 255, 255]);
+    }
+
+    #[test]
+    fn cmyk_black_point_matches_fitz() {
+        let cmyk = ColorSpace::DeviceCmyk;
+        // Pure process black `0 0 0 1 k` → fitz SWOP darkest-K, not (0,0,0).
+        assert_eq!(cmyk.to_rgb8(&[0.0, 0.0, 0.0, 1.0]), [34, 31, 31]);
+        // Registration black `1 1 1 1 k` (full ink) still → (0,0,0).
+        assert_eq!(cmyk.to_rgb8(&[1.0, 1.0, 1.0, 1.0]), [0, 0, 0]);
+        // No ink → white (unchanged).
+        assert_eq!(cmyk.to_rgb8(&[0.0, 0.0, 0.0, 0.0]), [255, 255, 255]);
+        // Pure CMY primaries: the K axis is untouched, so the floor does not
+        // shift them — they keep the naive complement (matches fitz to ±1 on
+        // the inkless channels; saturated-ink channels need ICC, deferred).
+        assert_eq!(cmyk.to_rgb8(&[1.0, 0.0, 0.0, 0.0]), [0, 255, 255]);
+        assert_eq!(cmyk.to_rgb8(&[0.0, 0.0, 1.0, 0.0]), [255, 255, 0]);
+        // Pure-K midtone tracks fitz's near-linear gray ramp (fitz: 147/149/151).
+        let mid = cmyk.to_rgb8(&[0.0, 0.0, 0.0, 0.5]);
+        assert!(mid.iter().all(|&v| (143..=151).contains(&v)), "mid={mid:?}");
     }
 
     #[test]

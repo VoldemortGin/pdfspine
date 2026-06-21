@@ -13,9 +13,9 @@ each owner can give:
   *call* (handled in the Rust core); accessing it does not raise, calling it
   does.
 * ``Pixmap`` / ``DisplayList`` / ``Tools`` — non-subclassable ``_core`` aliases
-  whose deferred members are simply absent; they raise ``AttributeError`` and
-  can only be made to raise ``PdfUnsupportedError`` in the Rust core (tracked in
-  COMPAT.toml). Asserted via ``xfail`` so the gap is visible, not hidden.
+  whose deferred members are absent from the type; a Rust-side ``__getattr__``
+  (P0-2r) turns *instance* access of one into ``PdfUnsupportedError`` (an unknown
+  attribute still raises a plain ``AttributeError``).
 * ``image_profile`` (module level) — covered by the ``fitz`` shim's module
   ``__getattr__``, which raises ``PdfUnsupportedError``.
 """
@@ -154,7 +154,8 @@ def test_module_image_profile_resolves_via_fitz_shim() -> None:
 
 
 # ---------------------------------------------------------------------------
-# _core aliases — absent members, fixable only in Rust. xfail keeps it visible.
+# _core aliases — a Rust-side __getattr__ raises PdfUnsupportedError on a
+# deferred member of a live Pixmap / DisplayList / Tools instance (P0-2r).
 # ---------------------------------------------------------------------------
 _CORE_ALIAS_DEFERRED = sorted(
     sym
@@ -164,15 +165,47 @@ _CORE_ALIAS_DEFERRED = sorted(
 )
 
 
-@pytest.mark.xfail(
-    reason="_core aliases (Pixmap/DisplayList/Tools) are non-subclassable PyO3 "
-    "types; their deferred members are absent and raise AttributeError. "
-    "PdfUnsupportedError for these requires a Rust-core change (tracked in COMPAT.toml).",
-    strict=False,
-)
+def _core_alias_instance(group: str):
+    """A live instance of a non-subclassable ``_core`` alias type."""
+    if group == "Pixmap":
+        return pdfspine.Pixmap(pdfspine.csRGB, (0, 0, 4, 3), False)
+    if group == "DisplayList":
+        doc = pdfspine.open()
+        return doc.new_page().get_displaylist()
+    if group == "Tools":
+        return pdfspine.TOOLS
+    raise AssertionError(f"unexpected alias group {group!r}")
+
+
 @pytest.mark.parametrize("sym", _CORE_ALIAS_DEFERRED)
 def test_core_alias_deferred_symbol_raises_unsupported(sym) -> None:
     group, _, member = sym.partition(".")
-    cls = getattr(pdfspine, group)
-    with pytest.raises(PdfUnsupportedError):
-        getattr(cls, member)
+    obj = _core_alias_instance(group)
+    with pytest.raises(PdfUnsupportedError) as exc:
+        getattr(obj, member)
+    msg = str(exc.value)
+    assert member in msg and "deferred" in msg
+
+
+@pytest.mark.parametrize("group", ["Pixmap", "DisplayList", "Tools"])
+def test_core_alias_unknown_attribute_is_plain_attributeerror(group) -> None:
+    """A genuinely-unknown attribute on a ``_core`` alias is still AttributeError."""
+    obj = _core_alias_instance(group)
+    with pytest.raises(AttributeError):
+        obj.definitely_not_a_real_symbol
+
+
+def test_core_alias_deferred_set_matches_rust() -> None:
+    """The Rust-side deferred sets (one ``__getattr__`` per alias type) cover
+    exactly the deferred ``Pixmap`` / ``DisplayList`` / ``Tools`` members — a
+    guard against the Rust list drifting from ``_compat_deferred.DEFERRED``."""
+    for group in ("Pixmap", "DisplayList", "Tools"):
+        members = sorted(
+            sym.split(".", 1)[1]
+            for sym in DEFERRED
+            if sym.startswith(f"{group}.")
+        )
+        obj = _core_alias_instance(group)
+        for member in members:
+            with pytest.raises(PdfUnsupportedError):
+                getattr(obj, member)

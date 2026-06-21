@@ -241,15 +241,21 @@ fn premul(c: u8, a: u8) -> u8 {
     ((c as u16 * a as u16 + 127) / 255) as u8
 }
 
-/// Naive CMYK → RGB (additive complement), matching `pdf_image`'s viewer
-/// approximation. ICC-accurate conversion is deferred.
+/// CMYK → RGB, analytic (non-ICC) with a SWOP-like **black point**, matching
+/// the `pdf_core::colorspace` vector path: the K axis maps white → a per-channel
+/// ink floor (fitz's darkest-K `(34,31,31)`) rather than → 0, then is scaled by
+/// the CMY ink complement. A zero floor reduces this to the prior naive additive
+/// complement, so only the neutral/black region shifts toward fitz. Full
+/// ICC-accurate conversion (saturated-primary absorption) is deferred.
 #[inline]
 fn cmyk_to_rgb(c: u8, m: u8, y: u8, k: u8) -> (u8, u8, u8) {
-    let inv = |comp: u8| -> u8 {
-        let v = (255u16 - comp as u16) * (255u16 - k as u16) / 255;
-        v as u8
+    // Per-channel K floor (fitz SWOP darkest-K `(34,31,31)`).
+    let ch = |ink: u8, floor: u16| -> u8 {
+        // k_axis = floor + (255-floor)*(255-k)/255, in 0..=255.
+        let k_axis = floor + (255 - floor) * (255 - k as u16) / 255;
+        (k_axis * (255 - ink as u16) / 255) as u8
     };
-    (inv(c), inv(m), inv(y))
+    (ch(c, 34), ch(m, 31), ch(y, 31))
 }
 
 // === Shadings (sh operator + shading patterns, types 2 & 3) ================
@@ -434,5 +440,24 @@ fn clamp(v: f32, lo: f32, hi: f32) -> f32 {
         hi
     } else {
         v
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::cmyk_to_rgb;
+
+    #[test]
+    fn cmyk_black_point_matches_fitz() {
+        // Pure process black → fitz SWOP darkest-K `(34,31,31)` (P3-3r), not
+        // pure black — matches the `pdf_core::colorspace` vector path.
+        assert_eq!(cmyk_to_rgb(0, 0, 0, 255), (34, 31, 31));
+        // Registration black (full ink) still → (0,0,0).
+        assert_eq!(cmyk_to_rgb(255, 255, 255, 255), (0, 0, 0));
+        // No ink → white.
+        assert_eq!(cmyk_to_rgb(0, 0, 0, 0), (255, 255, 255));
+        // Pure CMY primaries keep the naive complement (K axis untouched).
+        assert_eq!(cmyk_to_rgb(255, 0, 0, 0), (0, 255, 255));
+        assert_eq!(cmyk_to_rgb(0, 0, 255, 0), (255, 255, 0));
     }
 }

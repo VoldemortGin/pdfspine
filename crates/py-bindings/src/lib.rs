@@ -24,7 +24,9 @@ use pdf_api::{
     TableOptions, TextOutput, WidgetHandle,
 };
 use pyo3::create_exception;
-use pyo3::exceptions::{PyFileNotFoundError, PyIndexError, PyOSError, PyValueError};
+use pyo3::exceptions::{
+    PyAttributeError, PyFileNotFoundError, PyIndexError, PyOSError, PyValueError,
+};
 use pyo3::ffi;
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict, PyList, PyTuple};
@@ -62,6 +64,35 @@ fn map_err(e: ApiError) -> PyErr {
         "redaction" => PdfRedactionError::new_err(msg),
         _ => PdfSyntaxError::new_err(msg),
     }
+}
+
+/// Deferred baseline members on the non-subclassable `_core` PyO3 types
+/// (`Pixmap` / `DisplayList` / `Tools`). These mirror the `deferred` disposition
+/// in COMPAT.toml (the same source as `python/pdfspine/_compat_deferred.py`); a
+/// `__getattr__` on each class turns access of one of these into the typed,
+/// catchable `PdfUnsupportedError` the §7 fitz-migration contract promises,
+/// instead of a bare `AttributeError`. `test_core_alias_deferred_set_matches_rust`
+/// guards this list against drift from `_compat_deferred.DEFERRED`.
+const PIXMAP_DEFERRED: &[&str] = &["warp"];
+const DISPLAYLIST_DEFERRED: &[&str] = &["get_textpage", "run"];
+const TOOLS_DEFERRED: &[&str] = &["set_annot_stem", "set_subset_fontnames"];
+
+/// Raises `PdfUnsupportedError` when `name` is a deferred member of `group`, else
+/// the plain `AttributeError` Python expects for a genuinely unknown attribute.
+/// Shared by the `_core` aliases' `__getattr__` (mirrors the Python-side
+/// `_raise_deferred` message so the contract is identical across owners). Always
+/// returns `Err`, so a `__getattr__` (only ever invoked after normal lookup has
+/// already failed) propagates the chosen exception.
+fn deferred_getattr(group: &str, deferred: &[&str], name: &str) -> PyResult<Py<PyAny>> {
+    if deferred.contains(&name) {
+        return Err(PdfUnsupportedError::new_err(format!(
+            "{group}.{name} is deferred / not yet implemented. \
+             See the pdfspine parity matrix (COMPAT.toml)."
+        )));
+    }
+    Err(PyAttributeError::new_err(format!(
+        "'{group}' object has no attribute '{name}'"
+    )))
 }
 
 /// Maps a PyMuPDF `encryption` constant + passwords/permissions to an
@@ -3177,12 +3208,17 @@ impl PyDocument {
     // --- TOC (PRD §8.9) ---------------------------------------------------
 
     /// The outline as a list of `[level, title, page]` (PyMuPDF `get_toc`).
+    ///
+    /// PyMuPDF reports outline pages **1-based**; the Rust core resolves them as
+    /// 0-based physical indices, so add one here (leaving the `-1` "no
+    /// destination" sentinel untouched).
     #[pyo3(signature = (simple=true))]
     fn get_toc<'py>(&self, py: Python<'py>, simple: bool) -> PyResult<Bound<'py, PyList>> {
         let _ = simple;
         let rows = self.doc.get_toc();
         let list = PyList::empty(py);
         for (level, title, page) in rows {
+            let page = if page >= 0 { page + 1 } else { page };
             let row = PyList::new(
                 py,
                 [
@@ -3217,7 +3253,13 @@ impl PyDocument {
 
     /// Builds the outline from a list of `[level, title, page]` (PyMuPDF
     /// `set_toc`). Raises on a level jump.
+    ///
+    /// PyMuPDF outline pages are **1-based**; the Rust core wants a 0-based
+    /// physical index, so map `page` → `page - 1` here. Matching fitz, a `page < 1`
+    /// yields no destination (the core's `-1` sentinel) and an over-range page is
+    /// clamped to the last page.
     fn set_toc(&self, toc: &Bound<'_, PyList>) -> PyResult<()> {
+        let last = self.doc.page_count().saturating_sub(1) as i32;
         let mut entries: Vec<(i32, String, i32)> = Vec::with_capacity(toc.len());
         for item in toc.iter() {
             let seq: Vec<Bound<'_, PyAny>> = item.extract()?;
@@ -3227,6 +3269,7 @@ impl PyDocument {
             let level: i32 = seq[0].extract()?;
             let title: String = seq[1].extract()?;
             let page: i32 = seq[2].extract()?;
+            let page = if page < 1 { -1 } else { (page - 1).min(last) };
             entries.push((level, title, page));
         }
         self.doc.set_toc(&entries).map_err(map_err)
@@ -3752,6 +3795,12 @@ impl PyPixmap {
 
 #[pymethods]
 impl PyPixmap {
+    /// A deferred baseline member (e.g. `warp`) raises `PdfUnsupportedError`
+    /// instead of leaking a bare `AttributeError` (PRD §7 / §9.5).
+    fn __getattr__(&self, name: &str) -> PyResult<Py<PyAny>> {
+        deferred_getattr("Pixmap", PIXMAP_DEFERRED, name)
+    }
+
     /// `Pixmap(colorspace, irect, alpha)` — a blank pixmap. `colorspace` is a
     /// component count (1=gray, 3=rgb, 4=cmyk) or a name string; `irect` is the
     /// `(x0, y0, x1, y1)` bounds. Matches the common PyMuPDF constructor shape.
@@ -4190,6 +4239,12 @@ struct PyDisplayList {
 
 #[pymethods]
 impl PyDisplayList {
+    /// A deferred baseline member (e.g. `get_textpage` / `run`) raises
+    /// `PdfUnsupportedError` instead of a bare `AttributeError` (PRD §7 / §9.5).
+    fn __getattr__(&self, name: &str) -> PyResult<Py<PyAny>> {
+        deferred_getattr("DisplayList", DISPLAYLIST_DEFERRED, name)
+    }
+
     /// The source rect (the page CropBox), as a `(x0, y0, x1, y1)` tuple
     /// (PyMuPDF `DisplayList.rect`).
     #[getter]
@@ -4692,6 +4747,13 @@ impl PyTools {
             counter: std::sync::atomic::AtomicI64::new(0),
             small_glyph_heights: std::sync::atomic::AtomicBool::new(false),
         }
+    }
+
+    /// A deferred baseline member (e.g. `set_annot_stem` /
+    /// `set_subset_fontnames`) raises `PdfUnsupportedError` instead of a bare
+    /// `AttributeError` (PRD §7 / §9.5).
+    fn __getattr__(&self, name: &str) -> PyResult<Py<PyAny>> {
+        deferred_getattr("Tools", TOOLS_DEFERRED, name)
     }
 
     /// A fresh, process-unique positive id (PyMuPDF `Tools.gen_id`).

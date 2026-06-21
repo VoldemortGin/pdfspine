@@ -207,9 +207,11 @@ fn pixmap_cmyk_001_png_rgb() {
     let png = pm.to_png_bytes().unwrap();
     let img = image::load_from_memory_with_format(&png, image::ImageFormat::Png).unwrap();
     let rgb = img.to_rgb8().into_raw();
-    // cyan: C=255 → R=0; black: K=255 → all 0
+    // cyan: C=255 → R=0 (K axis untouched, naive complement preserved).
     assert_eq!(&rgb[0..3], &[0, 255, 255]);
-    assert_eq!(&rgb[3..6], &[0, 0, 0]);
+    // pure process black (K=255): SWOP-like black point → fitz darkest-K
+    // (34,31,31), not pure (0,0,0) (P3-3r).
+    assert_eq!(&rgb[3..6], &[34, 31, 31]);
 }
 
 // --- PIXMAP-COPY-001: copy is independent (copy-on-write) -----------------

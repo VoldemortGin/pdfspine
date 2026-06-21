@@ -185,6 +185,18 @@ impl<'a> GlyphFont<'a> {
         }
     }
 
+    /// Looks up the glyph id for a 1-byte character `code` via an embedded
+    /// **Type1** program's builtin `/Encoding` (P4-2r). Only Type1 programs
+    /// carry a code-keyed builtin encoding here; all other program kinds return
+    /// `None` (they resolve by Unicode `cmap` or by AGL name instead).
+    #[must_use]
+    pub fn glyph_for_code(&self, code: u8) -> Option<u16> {
+        match &self.program {
+            FontProgram::Type1(t1) => t1.glyph_for_code(code),
+            FontProgram::Sfnt(_) | FontProgram::Cff(_) => None,
+        }
+    }
+
     /// Whether this program is a **CID-keyed CFF** (`CIDFontType0C`), i.e. it
     /// carries a `CID → GID` charset that PDF CIDs must be translated through.
     #[must_use]

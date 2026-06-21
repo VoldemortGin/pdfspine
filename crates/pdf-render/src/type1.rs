@@ -45,6 +45,10 @@ pub struct Type1Font {
     gid_names: Vec<String>,
     /// Glyph name → synthetic GID (inverse of `gid_names`).
     name_to_gid: HashMap<String, u16>,
+    /// Builtin `/Encoding` (cleartext): code → glyph name. Sparse — only codes
+    /// the font program assigns. `None` when the program omits a custom array
+    /// (e.g. `/Encoding StandardEncoding def`, handled by the caller's AGL path).
+    builtin_encoding: Option<Box<[Option<String>; 256]>>,
     /// `FontMatrix` x-scale → design grid size (`round(1/sx)`, default 1000).
     upem: u16,
 }
@@ -73,6 +77,7 @@ impl Type1Font {
         }
 
         let upem = parse_font_matrix_upem(clear);
+        let builtin_encoding = parse_builtin_encoding(clear);
 
         // Synthetic GID order: declaration order in /CharStrings, with .notdef
         // forced to GID 0 if present (mirrors sfnt/CFF convention).
@@ -94,6 +99,7 @@ impl Type1Font {
             subrs,
             gid_names,
             name_to_gid,
+            builtin_encoding,
             upem,
         })
     }
@@ -114,6 +120,18 @@ impl Type1Font {
     #[must_use]
     pub fn glyph_for_name(&self, name: &str) -> Option<u16> {
         self.name_to_gid.get(name).copied()
+    }
+
+    /// Looks up the synthetic GID for a 1-byte character `code` via the font's
+    /// **builtin** `/Encoding` (P4-2r): the code → glyph-name array declared in
+    /// the cleartext program. This is the authoritative code→glyph map for a
+    /// Type1 font whose builtin encoding is non-standard (non-AGL) and that the
+    /// PDF uses *without* its own `/Encoding` override. Returns `None` when the
+    /// program has no custom encoding array or the code is unassigned / absent.
+    #[must_use]
+    pub fn glyph_for_code(&self, code: u8) -> Option<u16> {
+        let name = self.builtin_encoding.as_ref()?[code as usize].as_deref()?;
+        self.glyph_for_name(name)
     }
 
     /// Interprets glyph `gid`'s charstring into `builder` (font units, y-up).
@@ -810,6 +828,62 @@ fn parse_font_matrix_upem(clear: &[u8]) -> u16 {
     1000
 }
 
+/// Parses the cleartext builtin `/Encoding` array (P4-2r): the entries are
+/// `dup <code> /<name> put` statements between `/Encoding` and the following
+/// `readonly def` / `def`. Returns the dense code → glyph-name table, or `None`
+/// when the program declares a named predefined encoding (e.g.
+/// `/Encoding StandardEncoding def`) with no `dup ... put` overrides — those are
+/// covered by the caller's StandardEncoding + AGL path, so there is nothing
+/// font-specific to record.
+fn parse_builtin_encoding(clear: &[u8]) -> Option<Box<[Option<String>; 256]>> {
+    let start = find(clear, b"/Encoding")?;
+    // Bound the scan to this /Encoding statement: stop at the terminating `def`
+    // so we never wander into unrelated `dup`s elsewhere in the cleartext.
+    let region = &clear[start..];
+    let end = find(region, b" def").unwrap_or(region.len());
+    let region = &region[..end];
+
+    let mut table: [Option<String>; 256] = std::array::from_fn(|_| None);
+    let mut any = false;
+    let mut data = region;
+    // Each override is `dup <code> /<name> put`.
+    while let Some(dp) = find(data, b"dup ") {
+        let after = &data[dp + 4..];
+        let Some((code, rest)) = read_int_adv(after) else {
+            data = &data[dp + 4..];
+            continue;
+        };
+        // The glyph name token: a `/name` literal.
+        let rest = skip_ws(rest);
+        if rest.first() != Some(&b'/') {
+            data = rest;
+            continue;
+        }
+        let name_bytes = &rest[1..];
+        let n = name_bytes
+            .iter()
+            .position(|&b| is_ps_delim(b))
+            .unwrap_or(name_bytes.len());
+        let advance = 1 + n;
+        if n > 0 && (0..=255).contains(&code) {
+            let name = String::from_utf8_lossy(&name_bytes[..n]).into_owned();
+            table[code as usize] = Some(name);
+            any = true;
+        }
+        data = &rest[advance..];
+    }
+    any.then(|| Box::new(table))
+}
+
+/// Skips leading ASCII whitespace.
+fn skip_ws(data: &[u8]) -> &[u8] {
+    let mut i = 0;
+    while i < data.len() && data[i].is_ascii_whitespace() {
+        i += 1;
+    }
+    &data[i..]
+}
+
 // ----- tiny byte-scanning helpers ----------------------------------------
 
 /// Whether `b` is a Type1 / PostScript token delimiter.
@@ -1056,6 +1130,28 @@ mod tests {
         out
     }
 
+    /// Like [`build_type1`] but emits a custom builtin `/Encoding` array of
+    /// `(code, glyph-name)` overrides in the cleartext header (P4-2r).
+    fn build_type1_with_encoding(glyphs: &[(&str, Vec<u8>)], encoding: &[(u8, &str)]) -> Vec<u8> {
+        let base = build_type1(glyphs);
+        // Splice the encoding array into the cleartext, before `currentfile eexec`.
+        let mut enc = Vec::new();
+        enc.extend_from_slice(b"/Encoding 256 array\n");
+        enc.extend_from_slice(b"0 1 255 {1 index exch /.notdef put} for\n");
+        for (code, name) in encoding {
+            enc.extend_from_slice(format!("dup {code} /{name} put\n").as_bytes());
+        }
+        enc.extend_from_slice(b"readonly def\n");
+
+        let marker = b"currentfile eexec\n";
+        let pos = super::find(&base, marker).expect("eexec marker present");
+        let mut out = Vec::with_capacity(base.len() + enc.len());
+        out.extend_from_slice(&base[..pos]);
+        out.extend_from_slice(&enc);
+        out.extend_from_slice(&base[pos..]);
+        out
+    }
+
     /// A box glyph charstring: `hsbw`, `rmoveto`, 3 `rlineto`, `closepath`,
     /// `endchar`. Draws a `w`×`h` box at sidebearing `sb`.
     fn box_charstring(sb: i32, w: i32, h: i32) -> Vec<u8> {
@@ -1133,5 +1229,44 @@ mod tests {
         // The accent sits high (ady=600) so the composite is taller than the base
         // box alone (top 700 + accent height 150 region above the base).
         assert!(b.max.1 > 700.0, "accent extends above the base box");
+    }
+
+    /// TYPE1-ENC-001 (P4-2r): a Type1 program whose builtin `/Encoding` maps a
+    /// code to a *non-AGL* glyph name resolves that code → glyph via the parsed
+    /// builtin encoding (the name is not derivable from AGL / Unicode).
+    #[test]
+    fn type1_builtin_encoding_resolves_code() {
+        // Glyph "ornament" is not an AGL name; only the builtin /Encoding (code
+        // 0x61 → /ornament) connects code 0x61 to its outline.
+        let prog = build_type1_with_encoding(
+            &[("ornament", box_charstring(0, 500, 500))],
+            &[(0x61, "ornament")],
+        );
+        let font = Type1Font::parse(&prog).expect("parse with custom encoding");
+
+        // The builtin encoding resolves code 0x61 → the ornament GID.
+        let gid = font
+            .glyph_for_code(0x61)
+            .expect("code 0x61 maps via builtin");
+        assert_eq!(font.glyph_for_name("ornament"), Some(gid));
+        // An unassigned code yields nothing.
+        assert_eq!(font.glyph_for_code(0x62), None);
+
+        // The resolved glyph outlines a real contour.
+        let mut b = CountBuilder::default();
+        assert!(font.outline(gid, &mut b), "ornament outlines");
+        assert!(b.drawn(), "builtin-encoded glyph is not blank");
+    }
+
+    /// A program with no custom `/Encoding` array (named predefined encoding)
+    /// records no builtin table — the caller's StandardEncoding+AGL path covers
+    /// it, so `glyph_for_code` returns `None` rather than a spurious match.
+    #[test]
+    fn type1_named_encoding_has_no_builtin_table() {
+        let prog = build_type1(&[("A", box_charstring(0, 400, 700))]);
+        let font = Type1Font::parse(&prog).expect("parse");
+        assert_eq!(font.glyph_for_code(0x41), None);
+        // The glyph is still reachable by name (the normal path).
+        assert!(font.glyph_for_name("A").is_some());
     }
 }

@@ -54,6 +54,10 @@ struct CachedFont {
     ascent: f64,
     /// Descent in 1000-unit glyph space (bottom of the cell; usually negative).
     descent: f64,
+    /// Writing mode (`0` horizontal, `1` vertical), hoisted out of the per-glyph
+    /// hot path (the mapper's `wmode()` is a trivial getter, but caching it keeps
+    /// the show-op loop branch-predictable and avoids a method call per glyph).
+    wmode: u8,
     /// The resolved font dictionary (only needed by the render sink to find the
     /// embedded `/FontFile*` program; cheap `Dict` clone, built once per font).
     dict: Dict,
@@ -824,7 +828,7 @@ impl<'a> ContentInterpreter<'a> {
     }
 
     /// Shows a `TJ` array: strings emit glyphs; numbers displace Tm by
-    /// `-adj/1000·Tfs·Th` (horizontal writing).
+    /// `-adj/1000·Tfs·Th` along the writing axis (+x horizontal, −y vertical).
     fn show_text_array(
         &mut self,
         arr: &[Object],
@@ -833,6 +837,20 @@ impl<'a> ContentInterpreter<'a> {
         resources: &Dict,
         font_cache: &mut std::collections::HashMap<SmolStr, Option<CachedFont>>,
     ) {
+        // The number-adjustment axis follows the current font's writing mode; the
+        // font is the same for the whole array, so resolve its wmode once.
+        let vertical = gs
+            .text
+            .font_name
+            .as_ref()
+            .map(|name| {
+                self.ensure_font(name, resources, font_cache);
+                font_cache
+                    .get(name)
+                    .and_then(Option::as_ref)
+                    .is_some_and(|c| c.wmode == 1)
+            })
+            .unwrap_or(false);
         for item in arr {
             match item {
                 Object::String(s) => {
@@ -840,8 +858,14 @@ impl<'a> ContentInterpreter<'a> {
                 }
                 Object::Integer(_) | Object::Real(_) => {
                     let adj = item.as_f64().unwrap_or(0.0);
-                    let tx = -adj / 1000.0 * gs.text.font_size * gs.text.h_scale;
-                    *tm = Matrix::concat(&Matrix::translate(tx, 0.0), tm);
+                    // Vertical: displace along −y (no `Th`); horizontal: along +x.
+                    let d = -adj / 1000.0 * gs.text.font_size;
+                    let t = if vertical {
+                        Matrix::translate(0.0, d)
+                    } else {
+                        Matrix::translate(d * gs.text.h_scale, 0.0)
+                    };
+                    *tm = Matrix::concat(&t, tm);
                 }
                 _ => {}
             }
@@ -881,10 +905,12 @@ impl<'a> ContentInterpreter<'a> {
         let font_dict = font_obj.as_dict()?;
         let mapper = FontMapper::from_dict(font_dict, self.doc);
         let (ascent, descent) = self.font_vmetrics(font_dict);
+        let wmode = mapper.wmode();
         Some(CachedFont {
             mapper,
             ascent,
             descent,
+            wmode,
             dict: font_dict.clone(),
         })
     }
@@ -1299,7 +1325,7 @@ fn emit_glyph_into(
         trms.push(trm);
     }
 
-    // Glyph origin = (0,0) · Trm.
+    // Glyph origin = (0,0) · Trm (the pen position in user space).
     let origin = Point::new(0.0, 0.0).transform(&trm);
 
     // Glyph cell in 1000-unit glyph space → text space is /1000, then params
@@ -1307,6 +1333,43 @@ fn emit_glyph_into(
     // params operates on: x ∈ [0, w0], y ∈ [descent/1000, ascent/1000].
     let asc = cached.ascent / 1000.0;
     let desc = cached.descent / 1000.0;
+    let is_space = n_bytes == 1 && code == 0x20;
+    let tw = if is_space { ts.word_spacing } else { 0.0 };
+
+    if cached.wmode == 1 {
+        // Vertical writing (PRD §8.6; ISO 32000-1 §9.4.4 / §9.7.4.3). The pen is
+        // the glyph's *vertical* origin; the glyph cell is laid out around the
+        // *horizontal* origin, offset from the pen by the position vector
+        // `v = (vx, vy)` (1000-unit glyph space → /1000 here). So the cell spans
+        // x ∈ [-vx, w0-vx] and y ∈ [desc-vy, asc-vy].
+        let (vx, vy) = cached.mapper.vertical_position(code);
+        let (vx, vy) = (vx / 1000.0, vy / 1000.0);
+        let cell = Rect::new(-vx, desc - vy, w0 - vx, asc - vy);
+        let bbox = cell.transform(&trm);
+
+        out.push(PositionedGlyph {
+            unicode,
+            code,
+            origin: sanitize_point(origin),
+            bbox: sanitize_rect(bbox),
+            font_name: font_name.clone(),
+            size: ts.font_size,
+            color: gs.fill_color,
+            render_mode: ts.render_mode,
+            writing_dir: WritingDir::Vertical,
+            ascender: asc,
+            descender: desc,
+        });
+
+        // Advance along −y: ty = w1y·Tfs + Tc + Tw (ISO 32000-1 §9.4.4; w1y
+        // already /1000 and normally negative). Horizontal scaling `Th` does not
+        // apply to the vertical advance.
+        let w1y = cached.mapper.vertical_displacement(code) / 1000.0;
+        let ty = w1y * ts.font_size + ts.char_spacing + tw;
+        *tm = Matrix::concat(&Matrix::translate(0.0, ty), tm);
+        return;
+    }
+
     let cell = Rect::new(0.0, desc, w0, asc);
     // Transform the cell by Trm and take the axis-aligned envelope (correct
     // for rotated Tm).
@@ -1327,8 +1390,6 @@ fn emit_glyph_into(
     });
 
     // Advance: tx = ((w0)·Tfs + Tc + Tw_if_space)·Th  (w0 already /1000).
-    let is_space = n_bytes == 1 && code == 0x20;
-    let tw = if is_space { ts.word_spacing } else { 0.0 };
     let tx = (w0 * ts.font_size + ts.char_spacing + tw) * ts.h_scale;
     *tm = Matrix::concat(&Matrix::translate(tx, 0.0), tm);
 }
@@ -1438,15 +1499,29 @@ fn gray_rgb(g: f64) -> u32 {
 }
 
 /// CMYK → packed sRGB (naive conversion; sufficient for span color recording).
+/// CMYK → packed sRGB, analytic (non-ICC) with a SWOP-like **black point**
+/// (P3-3r). The naive `(1-ink)*(1-k)` drives pure process black to `(0,0,0)`,
+/// but a color-managed renderer (fitz, US Web Coated SWOP) never reaches pure
+/// black from CMYK — its darkest K is `~(34,31,31)`. We model that by remapping
+/// the K axis from white down to a per-channel ink **floor** instead of to zero,
+/// then scaling by the CMY ink complement. A zero floor reduces to the prior
+/// naive transform, so only the neutral/black region shifts toward fitz. Kept in
+/// sync with `pdf_core::colorspace::cmyk_to_rgb` and `pdf_render::image`.
 fn cmyk_rgb(c: f64, m: f64, y: f64, k: f64) -> u32 {
     let c = c.clamp(0.0, 1.0);
     let m = m.clamp(0.0, 1.0);
     let y = y.clamp(0.0, 1.0);
     let k = k.clamp(0.0, 1.0);
-    let r = (1.0 - c) * (1.0 - k);
-    let g = (1.0 - m) * (1.0 - k);
-    let b = (1.0 - y) * (1.0 - k);
-    pack_rgb(r, g, b)
+    // Per-channel K floor (fitz SWOP darkest-K `(34,31,31)`, normalized).
+    let ch = |ink: f64, floor: f64| {
+        let k_axis = floor + (1.0 - floor) * (1.0 - k);
+        k_axis * (1.0 - ink)
+    };
+    pack_rgb(
+        ch(c, 34.0 / 255.0),
+        ch(m, 31.0 / 255.0),
+        ch(y, 31.0 / 255.0),
+    )
 }
 
 /// Approximates a packed sRGB from a generic `sc`/`scn` component list (used when

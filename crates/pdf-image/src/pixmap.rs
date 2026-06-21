@@ -791,14 +791,20 @@ impl Pixmap {
     }
 }
 
-/// Naive CMYK → RGB (`c/m/y/k` in 0..=255, additive complement). Matches the
-/// common viewer approximation; ICC-accurate conversion is M6.
+/// CMYK → RGB (`c/m/y/k` in 0..=255), analytic (non-ICC) with a SWOP-like
+/// **black point** (P3-3r): the K axis maps white → a per-channel ink floor
+/// (fitz's darkest-K `(34,31,31)`) rather than → 0, then is scaled by the CMY
+/// ink complement. A zero floor reduces to the prior naive additive complement,
+/// so only the neutral/black region shifts toward fitz. Kept in sync with
+/// `pdf_core::colorspace` and the `pdf_render` paths. ICC-accurate conversion of
+/// saturated primaries is deferred.
 fn cmyk_to_rgb(c: u8, m: u8, y: u8, k: u8) -> (u8, u8, u8) {
-    let inv = |comp: u8| -> u8 {
-        let v = (255u16 - comp as u16) * (255u16 - k as u16) / 255;
-        v as u8
+    // Per-channel K floor (fitz SWOP darkest-K `(34,31,31)`).
+    let ch = |ink: u8, floor: u16| -> u8 {
+        let k_axis = floor + (255 - floor) * (255 - k as u16) / 255;
+        (k_axis * (255 - ink as u16) / 255) as u8
     };
-    (inv(c), inv(m), inv(y))
+    (ch(c, 34), ch(m, 31), ch(y, 31))
 }
 
 /// Upsamples packed `bits`-per-component samples (1/2/4/8/16) to a contiguous
