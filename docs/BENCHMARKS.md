@@ -139,20 +139,33 @@ Five extraction fixes closed the gap to fitz:
 5. **`find_tables` ruling-line gating** — detect tables from real vector rulings, not prose
    whitespace (was over-detecting tables 9× on borderless multi-column text).
 
-## 5. Rendering (`get_pixmap`) — now near-parity (SSIM as of 2026-06-17)
+## 5. Rendering (`get_pixmap`) — at/near-parity (SSIM re-measured 2026-06-21)
 
-Page rendering went from SSIM **~0.58 → 0.945 mean / 0.986 median** vs fitz after four root-cause
-fixes (full per-glyph `Trm` into the render path; bare-CFF `FontFile3` parsing; CCITT/JBIG2 1-bpc
-polarity; CID-keyed CFF charset CID→GID). Per-corpus SSIM: corpus-born 0.995, pmc 0.991, eurlex 0.943,
-robustness 0.843, fixtures 0.971. Full machine report: `conformance/gt/RENDER-REPORT.md` (regenerate
-with `conformance/gt/render_diff.py`).
+Page rendering went from SSIM **~0.58 → 0.984 mean / 0.989 median** vs fitz (MAE-sim 0.992) over the
+same 46-doc sample (corpus-born 6, eurlex 10/40, robustness 10/23, pmc 10/12, fixtures/govinfo 10/30;
+DPI 150, page 1, seed 1234). This is a fresh aggregate that includes every landed render-fidelity fix —
+up from the stale **0.945 / 0.986** measured 2026-06-17 (mean **+0.039**), with the verdict crossing
+from "CLOSE" to "AT/NEAR PARITY". Per-corpus SSIM: corpus-born 0.995, pmc 0.991, eurlex 0.988,
+robustness 0.977, fixtures/govinfo 0.974. Full machine report: `conformance/gt/RENDER-REPORT.md`
+(regenerate with `conformance/gt/render_diff.py`; numbers above trace to that report — not hand-edited).
 
-Since that aggregate run, the longest tail items have been **fixed** (no aggregate SSIM re-measure yet,
-so the numbers above are as of 2026-06-17): non-embedded standard-14 body text now falls back to the
-OFL Liberation fonts (no more blank pages); **Indexed / Separation / DeviceN colorspaces + `/Decode`
-arrays** render (pixel-exact vs fitz on synthetic cases); and **embedded Type1 (`/FontFile`, PFB/PFA)**
-charstrings rasterize. Remaining residuals (Symbol/ZapfDingbats fallback, pre-existing naive CMYK→RGB)
-are tracked in `docs/PRD-NEXT.md`.
+The fixes that closed the gap, in two waves. Wave 1 (the 0.58 → 0.945 jump): full per-glyph `Trm` into
+the render path; bare-CFF `FontFile3` parsing; CCITT/JBIG2 1-bpc polarity; CID-keyed CFF charset
+CID→GID. Wave 2 (the 0.945 → 0.984 jump re-measured here) eliminated the long tail of **blank / near-blank**
+pages: non-embedded standard-14 body text now falls back to the OFL Liberation fonts; **embedded Type1
+(`/FontFile`, PFB/PFA)** charstrings rasterize; **Indexed / Separation / DeviceN colorspaces + `/Decode`
+arrays** render (pixel-exact vs fitz on synthetic cases); CMYK black-point and Symbol/ZapfDingbats
+fallback handled.
+
+The effect is starkest on the prior bottom of the distribution. The old worst page —
+eurlex `32006L0112_ES`, a non-embedded **Type1** page that rendered nearly blank — went **0.527 → 0.993**
+(ink-gap now 0.0, no longer near-blank). The two prior near-blank robustness scans `govdocs1-00000` and
+`govdocs1-00019` rose **0.541 → 0.954** and **0.558 → 0.969**. No page in the sample now falls below
+**0.92**; the new worst-10 are all flagged "good parity" (residual AA / hinting / sub-pixel differences
+only): the lowest are the IRS AcroForm pages `irs-f8843` (0.922) and `irs-fw4` (0.952) and the
+text-dense scans `govdocs1-00000` (0.954) / `govdocs1-00012` (0.955). Remaining residuals
+(pre-existing naive CMYK→RGB on photographic CMYK, fine AcroForm widget AA) are tracked in
+`docs/PRD-NEXT.md`.
 
 ## 6. OCR accuracy — PaddleOCR vs Tesseract (= fitz's OCR) (2026-06-19)
 

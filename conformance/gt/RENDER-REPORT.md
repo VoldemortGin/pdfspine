@@ -1,6 +1,6 @@
 # pdfspine vs fitz — Rendering Differential
 
-_Generated 2026-06-17T16:05:33+0800 · DPI 150 · 1 page(s)/doc · oracle_available=True · 218s_
+_Generated 2026-06-21T16:54:39+0800 · DPI 150 · 1 page(s)/doc · oracle_available=True · 95s_
 
 **Method:** raw RGB sample buffers -> downsampled grayscale -> windowed SSIM + MAE (pure Python; no PNG decode)
 
@@ -8,35 +8,35 @@ SSIM is 0..1 (1 = identical). AA / hinting / sub-pixel differences mean an exact
 
 ## Verdict
 
-CLOSE — mean SSIM 0.945. Broadly faithful with localized differences.
+AT/NEAR PARITY — mean SSIM 0.984. Renderer matches fitz closely (AA/hinting aside).
 
 ## Aggregate (overall)
 
 | docs | compared | errors | SSIM mean | SSIM median | MAE-sim mean |
 |---|---|---|---|---|---|
-| 46 | 46 | 0 | 0.9447 | 0.9862 | 0.9876 |
+| 46 | 46 | 0 | 0.9841 | 0.9886 | 0.9918 |
 
 ## Per-corpus
 
 | corpus | sampled/total | compared | errors | SSIM mean | SSIM median | MAE-sim mean |
 |---|---|---|---|---|---|---|
 | corpus-born | 6/6 | 6 | 0 | 0.9949 | 0.9947 | 0.9954 |
-| corpus-eurlex | 10/40 | 10 | 0 | 0.9431 | 0.9861 | 0.9907 |
-| corpus-pmc | 10/12 | 10 | 0 | 0.991 | 0.9923 | 0.9915 |
-| corpus-robustness | 10/23 | 10 | 0 | 0.8431 | 0.9653 | 0.9757 |
-| corpus | 10/30 | 10 | 0 | 0.9713 | 0.9779 | 0.9877 |
+| corpus-eurlex | 10/40 | 10 | 0 | 0.9879 | 0.9882 | 0.9941 |
+| corpus-robustness | 10/23 | 10 | 0 | 0.9767 | 0.9851 | 0.9902 |
+| corpus-pmc | 10/12 | 10 | 0 | 0.991 | 0.9924 | 0.9915 |
+| corpus | 10/30 | 10 | 0 | 0.9741 | 0.9786 | 0.989 |
 
 ## Worst ~10 divergences (lowest SSIM)
 
 | corpus/doc | page | SSIM | MAE | pdfspine size | fitz size | Δw×Δh | cause guess |
 |---|---|---|---|---|---|---|---|
-| corpus-eurlex/32006L0112_ES | 0 | 0.5271 | 11.68 | 1240×1754 | 1241×1754 | -1×0 | pdfspine drew much less ink (+12 gray) — missing glyphs / body text not rendered |
-| corpus-robustness/govdocs1-00000 | 0 | 0.5407 | 11.48 | 1275×1650 | 1275×1650 | 0×0 | pdfspine drew much less ink (+9 gray) — missing glyphs / body text not rendered |
-| corpus-robustness/govdocs1-00019 | 0 | 0.5583 | 17.47 | 1275×1650 | 1275×1650 | 0×0 | pdfspine drew much less ink (+17 gray) — missing glyphs / body text not rendered |
-| corpus-robustness/govdocs1-00003 | 0 | 0.7131 | 10.27 | 1650×1275 | 1650×1275 | 0×0 | moderate divergence — partial glyph/vector/AA differences |
-| corpus-robustness/govdocs1-00014 | 0 | 0.8249 | 6.27 | 2550×1650 | 2550×1650 | 0×0 | moderate divergence — partial glyph/vector/AA differences |
-| corpus-robustness/govdocs1-00012 | 0 | 0.8891 | 4.52 | 1275×1650 | 1275×1650 | 0×0 | moderate divergence — partial glyph/vector/AA differences |
-| corpus/irs-f8843 | 0 | 0.9161 | 5.25 | 1275×1650 | 1275×1650 | 0×0 | good parity |
-| corpus/irs-fw4 | 0 | 0.9487 | 5.3 | 1275×1650 | 1275×1650 | 0×0 | good parity |
-| corpus/irs-p15 | 0 | 0.9629 | 4.96 | 1275×1650 | 1275×1650 | 0×0 | good parity |
-| corpus-robustness/govdocs1-00005 | 0 | 0.9653 | 3.75 | 1275×1650 | 1275×1650 | 0×0 | good parity |
+| corpus/irs-f8843 | 0 | 0.9222 | 5.1 | 1275×1650 | 1275×1650 | 0×0 | good parity |
+| corpus/irs-fw4 | 0 | 0.952 | 5.18 | 1275×1650 | 1275×1650 | 0×0 | good parity |
+| corpus-robustness/govdocs1-00000 | 0 | 0.9544 | 2.93 | 1275×1650 | 1275×1650 | 0×0 | good parity |
+| corpus-robustness/govdocs1-00012 | 0 | 0.955 | 3.16 | 1275×1650 | 1275×1650 | 0×0 | good parity |
+| corpus-robustness/govdocs1-00014 | 0 | 0.9648 | 3.32 | 2550×1650 | 2550×1650 | 0×0 | good parity |
+| corpus-robustness/govdocs1-00005 | 0 | 0.9662 | 3.72 | 1275×1650 | 1275×1650 | 0×0 | good parity |
+| corpus-robustness/govdocs1-00019 | 0 | 0.9687 | 3.32 | 1275×1650 | 1275×1650 | 0×0 | good parity |
+| corpus/irs-p15 | 0 | 0.9722 | 3.46 | 1275×1650 | 1275×1650 | 0×0 | good parity |
+| corpus/irs-p501 | 0 | 0.978 | 2.8 | 1275×1650 | 1275×1650 | 0×0 | good parity |
+| corpus/cdc-mmwr-7251a1 | 0 | 0.9782 | 2.8 | 1275×1650 | 1275×1650 | 0×0 | good parity |

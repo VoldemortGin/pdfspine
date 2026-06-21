@@ -31,14 +31,13 @@
   born-digital **0.996** vs 1.000 — within 0.000–0.009 per column doc (PMC212687 0.083→0.996, born 2col
   0.549→0.997). CJK / EUR-Lex / GovInfo at parity; Arabic/bidi beats fitz (logical order, UAX#9 reorder). One
   ordering-only residual: PMC212689 (order 0.645, tokens all present) → P3-1r.
-- **Rendering (`get_pixmap`):** prior SSIM **0.945 mean / 0.986 median** vs fitz was dragged down by **blank
-  non-embedded standard-14 body text** (**fixed in P1-1**, Liberation OFL fallback, ink coverage +5..+10 pts).
-  **P3-3** then fixed Indexed/Separation/DeviceN colorspaces + `/Decode` (pixel-exact vs fitz on synthetic
-  cases). **P3-3r** then fixed CMYK→RGB (SWOP-like K-axis black point across the 4 render paths — pure-K now
-  renders 34,31,31 exact vs fitz, was 0,0,0; saturated-CMY primaries still differ, an inherent ICC limit).
-  Residual: Symbol/ZapfDingbats fallback **fixed (P1-1r)** via bundled OFL Noto (approximate shapes). A fresh
-  aggregate SSIM re-measure against the now-present `.venv-oracle` is still worth doing (→ §7 chore — the
-  0.945/0.986 above predates the colorspace/Type1/std-14 fixes).
+- **Rendering (`get_pixmap`):** **SSIM 0.984 mean / 0.989 median** vs fitz (re-measured 2026-06-21 over 46
+  docs) — **at/near parity**, up from 0.945 once the render-fidelity fixes landed: **P1-1** Liberation std-14
+  (the worst pages were blank non-embedded standard-14 text), **P3-3** Indexed/Separation/DeviceN + `/Decode`,
+  **P3-3r** CMYK black point (pure-K → 34,31,31 exact; saturated-CMY still differs, an inherent ICC limit),
+  **P4-2** embedded Type1 (eurlex `32006L0112_ES` 0.527→0.993), **P1-1r** Symbol/ZapfDingbats (OFL Noto). No
+  page is below 0.92 now (was 3 below 0.72); the new worst-10 are AA/hinting sub-pixel residuals, not missing
+  content.
 - **OCR:** Tesseract adapter + pure-Rust PaddleOCR (PP-OCRv4 via `tract`) both shipped, Python-selectable,
   scanned→searchable proven end-to-end, beats fitz on CJK. Wheel-bloat **resolved** and the publishing path
   is **decided + implemented** (P0-5r): the published `pdfspine` wheel compiles OCR in but embeds **no
@@ -256,11 +255,10 @@ oracle-cross-checked against real PyMuPDF 1.24.14 (`.venv-oracle`) with zero reg
 
 **Recommended next (in order):** *(**Phases 0–4 + the residual sweep + P1-1r ALL LANDED 2026-06-21** — on `main`;
 parity **88.7%**; every actionable residual is now fixed or flagged. P3-5 score blocked on sandbox data egress.)*
-1. **Pre-public chores** (§7) — re-run `render_diff.py` for a fresh aggregate render-SSIM (the 0.945/0.986 in
-   `docs/BENCHMARKS.md` is date-noted "as of 2026-06-17", before the colorspace/Type1/std-14/Symbol fixes); re-run
-   P3-5's GriTS from an unrestricted network for the absolute table number; then **flip the repo public + push**
+1. **Pre-public chores** (§7) — render-SSIM re-measured (now **0.984 / 0.989**, at parity); re-run P3-5's GriTS
+   from an unrestricted network for the absolute table number; then **flip the repo public + push**
    (feature-complete at 88.7% — multi-column, colorspaces, OCR parallelism, embedded fonts incl. Type1, vertical
-   CJK, Symbol/Dingbats all landed).
+   CJK, Symbol/Dingbats all landed; render at fitz parity).
 2. **Accepted / further work** — P3-1r is an accepted won't-fix (inherent content-vs-geometric-order tradeoff,
    `layout.rs` == HEAD); the 21 remaining deferred are the genuinely-blocked long tail (OCG/layers,
    device-replay, a few Type0/Type3 edges).
@@ -269,9 +267,9 @@ parity **88.7%**; every actionable residual is now fixed or flagged. P3-5 score 
 
 - Reword any historical commit messages that contain backticks (shell substitutes them).
 - **Keep `PARITY.md` + `docs/BENCHMARKS.md` current** — they drift as batches land; refresh after each.
-- **Fresh aggregate render-SSIM re-measure** (`render_diff.py`) — *open chore* — `docs/BENCHMARKS.md`'s SSIM
-  0.945 / 0.986 is date-noted "as of 2026-06-17", **before** the colorspace (P3-3/P3-3r), Type1 (P4-2/P4-2r),
-  and std-14 (P1-1) fixes; re-run against `.venv-oracle` and update the numbers.
+- **Aggregate render-SSIM re-measure** — ✅ DONE (2026-06-21): re-ran `render_diff.py` over the 46-doc render
+  corpus vs `.venv-oracle`; **0.945 → 0.984 mean / 0.989 median** (at/near parity); `RENDER-REPORT.md` +
+  `docs/BENCHMARKS.md` §5 refreshed. The committed P1-3 `ssim-refs/` were untouched.
 - Docs-site completeness pass (`docs/guide`, `docs/reference`, `index.md`) — see P4-4.
 - PyPI publish runbook: `docs/RELEASE-PYPI.md` (gated on P0-1 + P0-5); optional name trademark.
 - The PyPI runbook **encodes the P0-5r OCR-distribution decision** (✅ done) — the published `pdfspine` wheel compiles the `ocr` feature in (no embedded models) and the `[ocr]` extra pulls the `pdfspine-ocr-models` data distribution; see `docs/RELEASE-PYPI.md` §D.1.
@@ -308,7 +306,7 @@ extraction/conformance · perf/OCR). §3 is the correction log against this doc'
 rows C1 / C2 / C4 / C6 / C7 / C10 / C11 / C13 fixed + P0-6r closed; P3-5 GriTS harness landed (score blocked
 on sandbox CDN egress). **P4-1 / P4-3 / P4-4 / P4-2 landed 2026-06-21**, and a **residuals-clearing sweep the
 same day (2026-06-21)** fixed P0-2r / P2r-1 / P3-3r / P3-4r / P4-2r / **P1-1r** (Symbol/ZapfDingbats via OFL
-Noto) and resolved P2r-2 as not-a-bug (all oracle-cross-checked; cargo/clippy clean, pytest 721, P1-3 gate
-green, parity 88.7%). **Phases 0–4 + every actionable residual complete** — remaining = **P3-1r** (accepted
-won't-fix), the render-SSIM re-measure, the **P3-5** score (network-blocked), and the pre-public
-flip-to-public.*
+Noto) and resolved P2r-2 as not-a-bug; **render SSIM re-measured 0.945→0.984** (at fitz parity). All
+oracle-cross-checked; cargo/clippy clean, pytest 721, P1-3 gate green, parity 88.7%. **Phases 0–4 + every
+actionable item complete** — remaining = **P3-1r** (accepted won't-fix), the **P3-5** score (network-blocked),
+and the pre-public flip-to-public.*
