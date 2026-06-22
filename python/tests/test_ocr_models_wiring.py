@@ -1,14 +1,18 @@
 """OCR-MODELS-WIRING-* — the Python side that points the Rust PaddleOCR engine at
-its model weights (P0-5r / Option A).
+its model weights.
 
-The published ``pdfspine`` wheel has the OCR code compiled in but ships no models;
-the ~16 MB PP-OCRv4 ONNX weights live in the separate ``pdfspine-ocr-models``
-companion that the ``pdfspine[ocr]`` extra pulls in. ``document._ensure_ocr_models_env``
-bridges the two: before the ``engine="paddle"`` call it exports the companion's
-directory as ``PDFSPINE_OCR_MODELS`` for the Rust ``models_dir()`` to read.
+The published ``pdfspine`` wheel has the OCR code compiled in AND ships the
+~15 MB PP-OCRv4 ONNX weights inside the package (at ``pdfspine/_models``), so a
+plain ``pip install pdfspine`` is full-OCR-capable offline.
+``document._ensure_ocr_models_env`` exports a model directory as
+``PDFSPINE_OCR_MODELS`` for the Rust ``models_dir()`` to read, resolving (in
+order): an explicit env override → the wheel-bundled ``pdfspine/_models`` → the
+legacy ``pdfspine_ocr_models`` companion data package.
 
 These tests exercise the pure-Python wiring (no real OCR run, no real companion
-install needed) plus the clear error on a true base install with no models.
+install needed) plus the clear error on an install with no models at all. They
+neutralize the wheel-bundled tier with ``monkeypatch`` where they target the
+companion / no-op fallbacks, so the order stays observable in isolation.
 """
 
 from __future__ import annotations
@@ -43,15 +47,35 @@ def _restore_models_env():
             _doc.os.environ[_ENV] = saved
 
 
+# --- OCR-MODELS-WIRING-000: the wheel-bundled _models tier wins (the default) -
+
+
+def test_ensure_ocr_models_env_sets_from_bundled(monkeypatch, tmp_path):
+    """With no env preset, the helper exports the wheel-bundled ``pdfspine/_models``
+    directory — even if a companion is also importable (bundled wins)."""
+    monkeypatch.delenv(_ENV, raising=False)
+    monkeypatch.setattr(_doc, "_bundled_models_dir", lambda: str(tmp_path))
+
+    # A fake companion that, were it consulted, would win — it must NOT be.
+    fake = types.ModuleType("pdfspine_ocr_models")
+    fake.models_dir = lambda: "/companion/dir"  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "pdfspine_ocr_models", fake)
+
+    _doc._ensure_ocr_models_env()
+
+    assert _doc.os.environ.get(_ENV) == str(tmp_path)
+
+
 # --- OCR-MODELS-WIRING-001: helper sets env from an importable companion -----
 
 
 def test_ensure_ocr_models_env_sets_from_companion(monkeypatch, tmp_path):
-    """With no env preset and the companion importable, the helper exports the
-    companion's ``models_dir()`` as ``PDFSPINE_OCR_MODELS``."""
+    """With no env preset, no wheel-bundled models, and the companion importable,
+    the helper exports the companion's ``models_dir()`` as ``PDFSPINE_OCR_MODELS``."""
     monkeypatch.delenv(_ENV, raising=False)
+    monkeypatch.setattr(_doc, "_bundled_models_dir", lambda: None)  # no bundled tier
 
-    # A fake `pdfspine_ocr_models` so the test needs no real 16 MB install.
+    # A fake `pdfspine_ocr_models` so the test needs no real 15 MB install.
     fake = types.ModuleType("pdfspine_ocr_models")
     fake.models_dir = lambda: str(tmp_path)  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "pdfspine_ocr_models", fake)
@@ -66,8 +90,9 @@ def test_ensure_ocr_models_env_sets_from_companion(monkeypatch, tmp_path):
 
 def test_ensure_ocr_models_env_respects_preset(monkeypatch, tmp_path):
     """If the user already set ``PDFSPINE_OCR_MODELS``, the helper leaves it as-is
-    even when a companion is importable (explicit override wins)."""
+    even when bundled models / a companion exist (explicit override wins)."""
     monkeypatch.setenv(_ENV, "/user/override/dir")
+    monkeypatch.setattr(_doc, "_bundled_models_dir", lambda: str(tmp_path))
 
     fake = types.ModuleType("pdfspine_ocr_models")
     fake.models_dir = lambda: str(tmp_path)  # type: ignore[attr-defined]
@@ -78,13 +103,15 @@ def test_ensure_ocr_models_env_respects_preset(monkeypatch, tmp_path):
     assert _doc.os.environ.get(_ENV) == "/user/override/dir"
 
 
-# --- OCR-MODELS-WIRING-003: no companion + no env -> helper is a no-op -------
+# --- OCR-MODELS-WIRING-003: no bundled + no companion + no env -> no-op -------
 
 
 def test_ensure_ocr_models_env_noop_without_companion(monkeypatch):
-    """With no preset env and no importable companion, the helper does nothing
-    (leaving the Rust dev fallback / clear error to take over)."""
+    """With no preset env, no wheel-bundled models, and no importable companion,
+    the helper does nothing (leaving the Rust dev fallback / clear error to take
+    over)."""
     monkeypatch.delenv(_ENV, raising=False)
+    monkeypatch.setattr(_doc, "_bundled_models_dir", lambda: None)  # no bundled tier
     monkeypatch.setitem(sys.modules, "pdfspine_ocr_models", None)  # force ImportError
 
     _doc._ensure_ocr_models_env()
