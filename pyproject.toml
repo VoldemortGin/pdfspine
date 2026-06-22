@@ -67,6 +67,9 @@ docs = [
 #   3. else the in-repo `crates/pdf-ocr/models` dev fallback (source checkout);
 #   4. else a clear `PdfUnsupportedError` pointing at `pip install pdfspine[ocr]`.
 ocr = ["pdfspine-ocr-models"]
+# 一键装齐全部运行期功能依赖(不含开发用 test/docs)。当前等同 [ocr](拉入 PP-OCRv4 ONNX
+# 模型数据包);OCR 引擎已编进 wheel,GPU/CPU 由 tract 运行时自适应,无需装时区分。
+all = ["pdfspine[ocr]"]
 
 [project.scripts]
 pdfspine = "pdfspine.cli:main"
