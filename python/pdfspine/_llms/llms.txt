@@ -1,0 +1,46 @@
+# pdfspine
+
+> 纯 Rust 实现的 PyMuPDF(fitz) 重实现，通过 PyO3 暴露 Python API。不依赖 MuPDF/pdfium 等 C 库，自包含 abi3 wheel，许可证 Apache-2.0（PyMuPDF 是 AGPL-3.0）。目标：与 PyMuPDF 1.24.x 符号级对齐（当前约 88.7% 覆盖）。
+
+- pip 安装名: `pdfspine`（OCR 全功能用 `pip install pdfspine[ocr]`，`[all] == [ocr]`）
+- import 名: `import pdfspine`
+- 要求: CPython >= 3.11（abi3 wheel）
+- 版本: `pdfspine.__version__`（dev 构建为 "0.0.0"，正式版由 CI 按 git tag 注入）
+
+## fitz / pymupdf 兼容
+
+- 子模块永远可用、不污染全局名: `import pdfspine.fitz as fitz` 或 `from pdfspine import pymupdf`
+- 让裸 `import fitz` / `import pymupdf` 解析到 shim: 先调用一次 `pdfspine.install_fitz_shim()`（幂等，不覆盖已先导入的真 PyMuPDF）
+- shim 提供 PyMuPDF 异常名别名: `FileDataError`/`EmptyFileError`(=PdfSyntaxError)、`mupdf_display_errors`(=PdfError)
+
+## OCR
+
+- OCR 引擎(纯 Rust PaddleOCR PP-OCRv4 + Tesseract 适配器)已编进 wheel；但 ~16MB ONNX 模型不内嵌
+- 模型靠 `pip install pdfspine[ocr]` 拉入数据包 `pdfspine-ocr-models`，运行时解析（见 document.py `_ensure_ocr_models_env`）
+- 入口: `page.get_textpage_ocr(engine="paddle"|"tesseract", ...)`、`doc.pdfocr_save(...)` / `doc.pdfocr_tobytes(...)`
+- 缺模型/缺引擎 → 抛 `PdfUnsupportedError`；GPU/CPU 由 tract 运行时自适应
+
+## 文档地图
+
+- [overview.md](docs/overview.md): 是什么、解决什么、核心概念(Document/Page/TextPage/Pixmap 对象模型)、fitz 兼容层、OCR、与 PyMuPDF 的关系与差异、能力范围(参考 PARITY.md)
+- [api.md](docs/api.md): Python 公开 API 真实签名 + 契约（open/页面/文本/表格/图像/渲染/保存/注释/表单/redaction/OCR/几何/常量/异常），标注 fitz 兼容别名
+- [recipes.md](docs/recipes.md): 可运行最小示例（造 PDF、提取文本、渲染为图、fitz shim 替换 PyMuPDF、编辑合并、表格、注释/redaction、表单、OCR、CLI）
+- [gotchas.md](docs/gotchas.md): 陷阱（预编译 wheel/abi3≥3.11、shim 须显式 install、OCR 模型要 [ocr] extra、未实现的抛 PdfUnsupportedError、与真 PyMuPDF 的差异）
+
+## 30 秒 hello-world
+
+```python
+import pdfspine
+
+# 打开已有 PDF，提取文本
+doc = pdfspine.open("input.pdf")
+print(doc.page_count, "pages", doc.metadata.get("format"))
+print(doc[0].get_text())                 # 纯文本
+
+# 或：无参 open() 新建空 PDF，写一行字再读回来
+doc = pdfspine.open()
+page = doc.new_page(width=300, height=200)
+page.insert_text((50, 100), "Hello pdfspine", fontsize=18)
+print(repr(page.get_text()))             # 'Hello pdfspine\n'
+page.get_pixmap(dpi=150).save("page1.png")   # 渲染为 PNG
+```

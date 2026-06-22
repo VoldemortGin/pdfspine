@@ -102,6 +102,11 @@ include = [
     "NOTICE",
     "python/pdfspine/py.typed",
     "python/pdfspine/*.pyi",
+    # Ship the AI-facing usage docs inside the package (装后位于
+    # site-packages/pdfspine/_llms/)。这些是非 .py 文件,maturin 默认不打包,
+    # 需在此显式列出,确保进入 sdist + wheel。
+    "python/pdfspine/_llms/llms.txt",
+    "python/pdfspine/_llms/docs/*.md",
 ]
 
 [tool.pytest.ini_options]

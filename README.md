@@ -5,6 +5,8 @@
 > 🦴 **Part of the `spine` family — framework-free backend engines, each the spine of a domain:**
 > zero framework lock-in, Protocol-ized seams, offline-capable. **pdfspine** is the *PDF spine* (this
 > repo); **ragspine** is the *RAG spine* (deterministic dual-channel retrieval + agent orchestration).
+>
+> **🤖 For AI agents / LLMs:** before using this library, read [`llms.txt`](llms.txt) (concise index) and [`python/pdfspine/_llms/docs/`](python/pdfspine/_llms/docs/) (full API / recipes / gotchas); after `pip install` they ship at `site-packages/pdfspine/_llms/`.
 
 > **Status: alpha / pre-1.0, but the core is feature-complete.** pdfspine can
 > already parse/repair/decrypt PDFs, extract text & tables, search, edit / merge /
