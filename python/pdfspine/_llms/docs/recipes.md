@@ -218,9 +218,9 @@ doc.set_toc([[1, "Chapter 1", 1], [2, "Section 1.1", 2], [1, "Chapter 2", 5]])
 doc.save("book-toc.pdf")
 ```
 
-## 11. OCR（需 `pip install pdfspine[ocr]`）
+## 11. OCR（`pip install pdfspine` 即全功能，无需额外步骤）
 
-OCR 引擎已编进 wheel，但**模型靠 `pdfspine[ocr]` extra 拉入** `pdfspine-ocr-models`。没装模型时 `engine="paddle"` 会抛 `PdfUnsupportedError`，提示 `pip install pdfspine[ocr]`；默认 `engine="tesseract"` 还需系统 tesseract 二进制。
+OCR 引擎（纯 Rust PaddleOCR PP-OCRv5）**和 ~28MB 模型都已内嵌进 wheel**（装后位于 `site-packages/pdfspine/_models/`），一个裸 `pip install pdfspine` 即全功能 OCR、离线可跑，**无需单独数据包、无需 `[ocr]` extra**。`engine="paddle"` 走 PP-OCRv5（支持繁中/日文）；默认 `engine="tesseract"` 还需系统 tesseract 二进制。
 
 ```python
 import pdfspine
@@ -237,7 +237,7 @@ doc.pdfocr_save("searchable.pdf", dpi=150, engine="paddle")
 sandwich_bytes = doc.pdfocr_tobytes(dpi=150, engine="paddle")
 ```
 
-显式指定模型目录（绕过 extra）：
+显式指定模型目录（覆盖 wheel 内嵌的默认模型）：
 ```python
 import os
 os.environ["PDFSPINE_OCR_MODELS"] = "/path/to/models"   # 须在调用 OCR 前设置

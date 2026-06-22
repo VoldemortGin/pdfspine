@@ -22,13 +22,13 @@
 - `install_fitz_shim()` 用 `dict.setdefault`：若 `sys.modules["fitz"]` 已被真 PyMuPDF 占用，**shim 不会覆盖它**，真 PyMuPDF 赢。
 - shim 里未实现的 PyMuPDF 名访问时抛 `PdfUnsupportedError`（不是 `AttributeError`）。
 
-## 4. OCR：引擎在 wheel 里，模型不在
+## 4. OCR：引擎和模型都在 wheel 里
 
-- 一个 `pip install pdfspine` 装的 wheel **有 OCR 代码但没有模型**。
-- `engine="paddle"` 需要 PP-OCRv4 ONNX 模型（~16MB），由 **`pip install pdfspine[ocr]`** 拉入数据包 `pdfspine-ocr-models`。`[all] == [ocr]`。
+- 一个 `pip install pdfspine` 装的 wheel **既有 OCR 代码，也内嵌了模型** —— 开箱即全功能 OCR、离线可跑，**不需要任何单独数据包、不需要 `[ocr]` extra**。
+- `engine="paddle"` 用 PP-OCRv5 ONNX 模型（det/rec + PP-LCNet_x1_0 textline-ori，~28MB，支持繁中/日文），已随 wheel 装到 `site-packages/pdfspine/_models/`。`[ocr]`/`[all]` extra 现为**向后兼容空壳**（`pip install pdfspine[ocr]` 仍可解析，但不再拉任何东西；旧的 `pdfspine-ocr-models` 数据包已弃用）。
 - 默认 `engine="tesseract"` 还需要**系统安装的 tesseract 二进制**（不在 wheel 里）。
-- 缺模型/缺引擎/未知 engine → 抛 `PdfUnsupportedError`（带清晰提示）。
-- 模型解析顺序：`PDFSPINE_OCR_MODELS` 环境变量 → 已装 `pdfspine_ocr_models` → 源码树 `crates/pdf-ocr/models` → 否则报错。可设 `os.environ["PDFSPINE_OCR_MODELS"]` 显式指定（须在调用 OCR 前）。
+- 缺引擎/缺模型/未知 engine → 抛 `PdfUnsupportedError`（带清晰提示）。
+- 模型解析顺序：`PDFSPINE_OCR_MODELS` 环境变量（显式覆盖）→ wheel 内嵌的 `pdfspine/_models` → 旧 `pdfspine_ocr_models` 伴随包（兼容）→ 源码树 `crates/pdf-ocr/models`（开发回退）→ 否则报错。可设 `os.environ["PDFSPINE_OCR_MODELS"]` 显式指定（须在调用 OCR 前）。
 - 注意：对**已有文本层**的 born-digital PDF 调 OCR 通常没意义；OCR 针对扫描件/图片页。
 - `pil_save`/`pil_tobytes` 需要 `Pillow`；numpy 互操作需要 `numpy`——这两者都不是默认依赖。
 

@@ -1,17 +1,21 @@
-# Release workflow: builds the full abi3 wheel matrix + sdist for `pdfspine` AND
-# the pure-data `pdfspine-ocr-models` companion (sdist + universal wheel), then
-# publishes both to PyPI on a `v*` tag via PyPI Trusted Publishing (OIDC — no API
-# tokens). The `pdfspine` wheel has the PaddleOCR engine compiled IN (P0-5r /
-# Option A, via `[tool.maturin] features = [..., "ocr"]`), but the ~16 MB ONNX
-# models are NOT embedded — they ship in `pdfspine-ocr-models`, which the
-# `pdfspine[ocr]` extra pulls in.
+# Release workflow: builds the full abi3 wheel matrix + sdist for `pdfspine`,
+# then publishes them to PyPI on a `v*` tag via PyPI Trusted Publishing (OIDC — no
+# API tokens). The `pdfspine` wheel has the PaddleOCR engine compiled IN (P0-5r /
+# Option A, via `[tool.maturin] features = [..., "ocr"]`) AND ships the ~28 MB
+# PP-OCRv5 ONNX models inside the package (at `pdfspine/_models`, see
+# `[tool.maturin] include`). So a bare `pip install pdfspine` is full-OCR-capable
+# offline — no separate data package, no `[ocr]` extra needed. (The legacy
+# `pdfspine-ocr-models` companion is DEPRECATED and no longer built/published.)
+#
+# Before uploading each platform wheel we INSTALL it into a clean env and run a
+# real OCR recognition (scripts/ocr_smoke.py) as an all-platform release gate: if
+# the built wheel can't recover text, that `wheels` job fails and `publish` (which
+# `needs` wheels) never runs — so a broken OCR build can't ship.
 #
 # USER-GATED PREREQUISITE (one-time, in the PyPI web UI — see docs/RELEASE-PYPI.md):
-#   PyPI -> account -> Publishing -> "Add a pending publisher", TWICE — once per
-#   project (Owner = VoldemortGin, Repo = pdfspine, Workflow = release.yml,
-#   Environment = pypi):
+#   PyPI -> account -> Publishing -> "Add a pending publisher" (Owner =
+#   VoldemortGin, Repo = pdfspine, Workflow = release.yml, Environment = pypi):
 #     Project name = pdfspine
-#     Project name = pdfspine-ocr-models
 #   (and the same on test.pypi.org with Environment = testpypi for the dry run).
 #   Then create GitHub Environments `pypi` and `testpypi` (Settings -> Environments).
 # Until that is done, the `publish` job will fail with "not authorized".
@@ -41,12 +45,20 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # `ocr_native: true` = this wheel runs ON the runner's own CPU/OS, so we
+        # can install it and run a REAL OCR recognition as a release gate. The
+        # one omission is ubuntu-latest/aarch64: it is a manylinux CROSS build on
+        # an x86 runner, so the ARM wheel can't execute here. We skip the OCR
+        # run there — coverage is preserved by tract being pure-Rust and
+        # platform-agnostic (no per-arch kernels to validate) over the standard
+        # ai.onnx opset, exercised natively on the other three arch families; no
+        # native ARM-Linux GitHub runner exists to run it on.
         include:
-          - { os: ubuntu-latest, target: x86_64, manylinux: auto }
-          - { os: ubuntu-latest, target: aarch64, manylinux: "2_28" }
-          - { os: macos-13, target: x86_64 } # Intel runner
-          - { os: macos-14, target: aarch64 } # Apple Silicon runner
-          - { os: windows-latest, target: x64 }
+          - { os: ubuntu-latest, target: x86_64, manylinux: auto, ocr_native: true }
+          - { os: ubuntu-latest, target: aarch64, manylinux: "2_28" } # cross build → no native OCR run
+          - { os: macos-13, target: x86_64, ocr_native: true } # Intel runner
+          - { os: macos-14, target: aarch64, ocr_native: true } # Apple Silicon runner
+          - { os: windows-latest, target: x64, ocr_native: true }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -62,6 +74,25 @@ jobs:
           manylinux: ${{ matrix.manylinux }}
           args: --release --out dist --strip
           sccache: "true"
+      # Release gate: install the JUST-BUILT wheel into a clean venv and run a
+      # real PP-OCRv5 recognition on the in-repo sample raster (using only the
+      # wheel-bundled models — exactly what `pip install pdfspine` gives a user).
+      # If recognition fails, this job fails and `publish` (needs wheels) is
+      # skipped → no release. Only on targets that run natively on the runner
+      # (see the matrix note for why ubuntu-latest/aarch64 is excluded).
+      - name: OCR smoke (install wheel + real recognition)
+        if: matrix.ocr_native
+        shell: bash
+        run: |
+          python -m venv .ocrsmoke
+          if [ -f .ocrsmoke/bin/python ]; then
+            PY=.ocrsmoke/bin/python
+          else
+            PY=.ocrsmoke/Scripts/python
+          fi
+          "$PY" -m pip install --upgrade pip
+          "$PY" -m pip install --find-links dist --no-index pdfspine
+          "$PY" scripts/ocr_smoke.py crates/pdf-ocr/tests/fixtures/ocr_sample.png
       - uses: actions/upload-artifact@v4
         with:
           name: wheels-${{ matrix.os }}-${{ matrix.target }}
@@ -88,46 +119,9 @@ jobs:
           name: sdist
           path: dist/*.tar.gz
 
-  ocr-models:
-    name: ocr-models (data sdist + universal wheel)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      # Stamp the companion's version from the tag so it tracks the `pdfspine`
-      # release it ships alongside. Dev builds leave it at the 0.0.0 default.
-      - name: Set companion version from tag
-        if: github.ref_type == 'tag'
-        run: |
-          python - "${{ github.ref_name }}" <<'PY'
-          import re, sys
-          from pathlib import Path
-          version = sys.argv[1].lstrip("v").strip()
-          p = Path("packages/pdfspine-ocr-models/pyproject.toml")
-          text = p.read_text(encoding="utf-8")
-          text, n = re.subn(r'(?m)^version = "[^"]*"', f'version = "{version}"', text, count=1)
-          assert n == 1, "could not find version line in companion pyproject.toml"
-          p.write_text(text, encoding="utf-8")
-          print(f"set pdfspine-ocr-models version to {version}")
-          PY
-      - name: Build pure-data sdist + universal wheel
-        # The build hook force-includes the 3 ONNX from crates/pdf-ocr/models
-        # (the in-repo single source of truth) into both artifacts.
-        run: |
-          python -m pip install --upgrade build
-          python -m build packages/pdfspine-ocr-models --outdir dist
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ocr-models
-          path: |
-            dist/*.whl
-            dist/*.tar.gz
-
   publish:
     name: publish (Trusted Publishing / OIDC)
-    needs: [wheels, sdist, ocr-models]
+    needs: [wheels, sdist]
     runs-on: ubuntu-latest
     # Tag push -> PyPI. Manual dispatch -> the chosen target (default TestPyPI).
     environment: ${{ (github.event_name == 'push' || github.event.inputs.publish_target == 'pypi') && 'pypi' || 'testpypi' }}
