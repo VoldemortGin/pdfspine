@@ -23,6 +23,16 @@ import sys
 import zlib
 from pathlib import Path
 
+# Force UTF-8 stdout/stderr: this gate prints the recognized text (mixed
+# CJK+Latin) and an em-dash banner, but Windows Python defaults stdout to the
+# legacy ANSI codepage (cp1252), which cannot encode '纯' & co. and would raise
+# UnicodeEncodeError *after* OCR already succeeded. reconfigure() exists since
+# 3.7; guarded so the script stays robust everywhere.
+for _stream in (sys.stdout, sys.stderr):
+    _reconfigure = getattr(_stream, "reconfigure", None)
+    if _reconfigure is not None:
+        _reconfigure(encoding="utf-8")
+
 import pdfspine
 
 # The three lines printed in the OCR sample raster (must match
