@@ -61,16 +61,16 @@ _OCR_MODELS_ENV = "PDFSPINE_OCR_MODELS"
 
 # The three ONNX weights the Rust PaddleOCR engine loads at runtime; a directory
 # only counts as a usable model dir when all three are present (the dict
-# ``ppocr_keys_v4.txt`` stays embedded in the Rust binary, so it is not required
+# ``ppocr_keys_v5.txt`` stays embedded in the Rust binary, so it is not required
 # on disk).
-_OCR_ONNX_FILES = ("ppocrv4_det.onnx", "ppocrv4_rec.onnx", "ppocrv2_cls.onnx")
+_OCR_ONNX_FILES = ("ppocrv5_det.onnx", "ppocrv5_rec.onnx", "ppocrv5_cls.onnx")
 
 
 def _bundled_models_dir() -> str | None:
     """The absolute path of the wheel-bundled ``pdfspine/_models`` directory, or
     ``None`` when it is absent / incomplete.
 
-    The published ``pdfspine`` wheel now ships the ~15 MB PP-OCRv4 ONNX weights
+    The published ``pdfspine`` wheel now ships the ~28 MB PP-OCRv5 ONNX weights
     inside the package itself (at ``site-packages/pdfspine/_models``), so a bare
     ``pip install pdfspine`` is full-OCR-capable with no companion data package
     and no network. We locate the directory relative to this module's file and
@@ -86,7 +86,7 @@ def _ensure_ocr_models_env() -> None:
     """Point the Rust PaddleOCR engine at the bundled model weights.
 
     The published ``pdfspine`` wheel has the OCR *code* compiled in AND ships the
-    ~15 MB PP-OCRv4 ONNX weights inside the package (at ``pdfspine/_models``), so
+    ~28 MB PP-OCRv5 ONNX weights inside the package (at ``pdfspine/_models``), so
     a plain ``pip install pdfspine`` is full-OCR-capable offline. Before invoking
     the ``engine="paddle"`` path we export a model directory as
     ``PDFSPINE_OCR_MODELS`` so the Rust ``models_dir()`` finds the weights with no

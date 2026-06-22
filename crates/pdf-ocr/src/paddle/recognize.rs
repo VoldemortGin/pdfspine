@@ -1,10 +1,10 @@
 //! CRNN+CTC text recognition: a (possibly rotated) crop → recognized string +
 //! confidence.
 //!
-//! Matches RapidOCR's PP-OCRv4 rec config: resize the crop to height 48, width
+//! Matches RapidOCR's PP-OCRv5 rec config: resize the crop to height 48, width
 //! `round(48 * w/h)`; bucket the width UP to a multiple of 32 (min 16); resize
 //! to `(48, w_prop)` and right-pad with 0 to the bucket width; normalize
-//! `(px/255-0.5)/0.5`; run → logits `[1,T,6625]`; CTC greedy decode (per
+//! `(px/255-0.5)/0.5`; run → probs `[1,T,18385]`; CTC greedy decode (per
 //! timestep argmax, skip blank index 0, collapse consecutive-equal indices);
 //! confidence = mean of the max-softmax-prob over the kept (non-blank)
 //! timesteps. Results below `text_score=0.5` are dropped by the caller.
@@ -89,7 +89,7 @@ pub(crate) fn recognize(models: &Models, crop: &RgbImage) -> Result<RecResult> {
 /// CTC greedy decode over the rec output laid out as `[t][c]` (row-major,
 /// length `t*c`).
 ///
-/// The PP-OCRv4 rec model already applies softmax in-graph, so each row is a
+/// The PP-OCRv5 rec model already applies softmax in-graph, so each row is a
 /// probability distribution over the `c` classes. Per timestep we take the
 /// argmax class; we skip the blank (index 0) and collapse runs of the same
 /// index, mapping kept indices through the dictionary. Confidence is the mean

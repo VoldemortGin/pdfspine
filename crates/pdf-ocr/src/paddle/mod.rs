@@ -1,8 +1,8 @@
-//! Pure-Rust PaddleOCR (PP-OCRv4) engine, gated behind the `paddle-ocr` feature.
+//! Pure-Rust PaddleOCR (PP-OCRv5) engine, gated behind the `paddle-ocr` feature.
 //!
 //! [`PaddleOcr`] is a second [`OcrEngine`](crate::engine::OcrEngine) (next to the
-//! Tesseract CLI adapter) that runs the shipped PP-OCRv4 detection/recognition
-//! and PP-OCRv2 angle-classification ONNX models on CPU via [`tract`], with no
+//! Tesseract CLI adapter) that runs the shipped PP-OCRv5 detection/recognition
+//! and PP-LCNet text-line-orientation ONNX models on CPU via [`tract`], with no
 //! Python and no C/C++ runtime. It is higher-accuracy on mixed CJK+Latin text
 //! than the Tesseract default and needs no external binary.
 //!
@@ -40,7 +40,7 @@ const TEXT_SCORE: f32 = 0.5;
 /// was before rotated-rect detection.
 const UPRIGHT_ANGLE_RAD: f32 = 0.05;
 
-/// A pure-Rust PaddleOCR engine running PP-OCRv4 ONNX models via `tract`.
+/// A pure-Rust PaddleOCR engine running PP-OCRv5 ONNX models via `tract`.
 ///
 /// Construct once with [`PaddleOcr::new`] and reuse: optimized model runnables
 /// are cached per input-shape bucket across [`recognize`](OcrEngine::recognize)

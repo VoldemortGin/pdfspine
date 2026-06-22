@@ -2,7 +2,7 @@
 its model weights.
 
 The published ``pdfspine`` wheel has the OCR code compiled in AND ships the
-~15 MB PP-OCRv4 ONNX weights inside the package (at ``pdfspine/_models``), so a
+~28 MB PP-OCRv5 ONNX weights inside the package (at ``pdfspine/_models``), so a
 plain ``pip install pdfspine`` is full-OCR-capable offline.
 ``document._ensure_ocr_models_env`` exports a model directory as
 ``PDFSPINE_OCR_MODELS`` for the Rust ``models_dir()`` to read, resolving (in
@@ -75,7 +75,7 @@ def test_ensure_ocr_models_env_sets_from_companion(monkeypatch, tmp_path):
     monkeypatch.delenv(_ENV, raising=False)
     monkeypatch.setattr(_doc, "_bundled_models_dir", lambda: None)  # no bundled tier
 
-    # A fake `pdfspine_ocr_models` so the test needs no real 15 MB install.
+    # A fake `pdfspine_ocr_models` so the test needs no real 28 MB install.
     fake = types.ModuleType("pdfspine_ocr_models")
     fake.models_dir = lambda: str(tmp_path)  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "pdfspine_ocr_models", fake)

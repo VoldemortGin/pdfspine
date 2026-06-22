@@ -1,8 +1,8 @@
 """Hatchling build hook for the ``pdfspine-ocr-models`` data distribution.
 
-The 3 PP-OCRv4 ONNX models are the single source of truth in the pdfspine repo
+The 3 PP-OCRv5 ONNX models are the single source of truth in the pdfspine repo
 at ``crates/pdf-ocr/models/`` (git-tracked, also used by the Rust dev fallback).
-To avoid duplicating ~16 MB in git, this hook ``force_include``s those files into
+To avoid duplicating ~28 MB in git, this hook ``force_include``s those files into
 both the sdist and the wheel at build time instead of vendoring a second copy.
 
 Resolution of the models source dir (first that exists wins), so it works both
@@ -21,7 +21,7 @@ from hatchling.builders.hooks.plugin.interface import BuildHookInterface
 
 # The 3 ONNX weights live as data; the ~26 KB dict + PROVENANCE stay embedded /
 # carried elsewhere. Only these are force-included from the repo source of truth.
-_ONNX_FILES = ("ppocrv4_det.onnx", "ppocrv4_rec.onnx", "ppocrv2_cls.onnx")
+_ONNX_FILES = ("ppocrv5_det.onnx", "ppocrv5_rec.onnx", "ppocrv5_cls.onnx")
 
 
 class CustomBuildHook(BuildHookInterface):
@@ -35,7 +35,7 @@ class CustomBuildHook(BuildHookInterface):
                 return os.path.abspath(cand)
         searched = "\n  ".join(os.path.abspath(c) for c in candidates)
         raise RuntimeError(
-            "pdfspine-ocr-models: could not locate the PP-OCRv4 ONNX models "
+            "pdfspine-ocr-models: could not locate the PP-OCRv5 ONNX models "
             f"({', '.join(_ONNX_FILES)}). Searched:\n  {searched}\n"
             "Build this distribution from a full pdfspine checkout (the models are "
             "git-tracked at crates/pdf-ocr/models), or from its sdist."

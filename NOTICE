@@ -54,17 +54,20 @@ per-file provenance and full license headers are retained in
   `crates/pdf-fonts/fonts/symbols/PROVENANCE.md` and `NOTICE`.
 
 * PaddleOCR PP-OCR models and recognition dictionary
-  (`crates/pdf-ocr/models/ppocrv4_det.onnx`,
-  `crates/pdf-ocr/models/ppocrv4_rec.onnx`,
-  `crates/pdf-ocr/models/ppocrv2_cls.onnx`,
-  `crates/pdf-ocr/models/ppocr_keys_v4.txt`)
+  (`crates/pdf-ocr/models/ppocrv5_det.onnx`,
+  `crates/pdf-ocr/models/ppocrv5_rec.onnx`,
+  `crates/pdf-ocr/models/ppocrv5_cls.onnx`,
+  `crates/pdf-ocr/models/ppocr_keys_v5.txt`)
   Copyright (c) PaddlePaddle Authors.
   Licensed under the Apache License, Version 2.0.
-  The bundled files are the PP-OCRv4 text-detection and text-recognition
-  models, the PP-OCRv2 angle-classification model, and the PP-OCRv4
-  recognition character dictionary, converted to ONNX (via Paddle2ONNX) from
-  the upstream PaddlePaddle weights and embedded into the wheel via
-  `include_bytes!` / `include_str!`.
+  The bundled files are the PP-OCRv5 mobile text-detection and text-recognition
+  models, the PP-LCNet text-line-orientation classification model, and the
+  PP-OCRv5 recognition character dictionary, converted to ONNX (via Paddle2ONNX)
+  from the upstream PaddlePaddle weights, then post-processed by this repo's
+  `scripts/strip_onnx_dims.py` (a deterministic ONNX dim-name/shape-hint cleanup
+  so the pure-Rust `tract` runtime can parse them — no weight changes). The ONNX
+  weights ship as data files alongside the wheel; the recognition dictionary is
+  embedded into the binary via `include_str!`.
   Source: https://github.com/PaddlePaddle/PaddleOCR
   Per-file provenance and the conversion record are retained in
   `crates/pdf-ocr/models/PROVENANCE.md`.

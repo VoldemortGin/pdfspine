@@ -4,7 +4,7 @@
 //! each model caches one runnable per shape bucket in a `HashMap`. The detection
 //! and recognition models have dynamic input dims (symbolic `H`/`W` in the
 //! shipped ONNX), so we pin a concrete fact at first use of each bucket; the
-//! classifier is already fully concrete (3×48×192) and uses a single runnable.
+//! classifier takes a fixed 3×80×160 crop and uses a single runnable.
 //!
 //! The ~16 MB ONNX model files are NOT embedded in the binary (that bloated
 //! every wheel, even for non-OCR users — see P0-5). Instead they are loaded from
@@ -33,12 +33,15 @@ pub(crate) type Runnable = TypedRunnableModel<TypedModel>;
 /// places the models elsewhere). Overrides the in-repo default.
 const ENV_MODELS_DIR: &str = "PDFSPINE_OCR_MODELS";
 
-/// DBNet text-detection model. Input `[1,3,H,W]`, output prob map `[1,1,H,W]`.
-const DET_FILE: &str = "ppocrv4_det.onnx";
-/// CRNN+CTC recognition model. Input `[1,3,48,W]`, output logits `[1,T,6625]`.
-const REC_FILE: &str = "ppocrv4_rec.onnx";
-/// 180° angle classifier. Input concrete `[1,3,48,192]`, output `[1,2]`.
-const CLS_FILE: &str = "ppocrv2_cls.onnx";
+/// PP-OCRv5 DBNet text-detection model. Input `[1,3,H,W]`, output prob map
+/// `[1,1,H,W]`.
+const DET_FILE: &str = "ppocrv5_det.onnx";
+/// PP-OCRv5 CRNN+CTC recognition model. Input `[1,3,48,W]`, output softmax probs
+/// `[1,T,18385]`.
+const REC_FILE: &str = "ppocrv5_rec.onnx";
+/// PP-OCRv5 text-line orientation classifier (PP-LCNet_x1_0_textline_ori). Input
+/// concrete `[1,3,80,160]`, output `[1,2]` (0° / 180°).
+const CLS_FILE: &str = "ppocrv5_cls.onnx";
 
 /// The recognition dictionary, INDEX-ALIGNED to the rec output's class axis:
 /// line 0 = the CTC blank, lines 1.. = characters, last line = a single space.
@@ -46,7 +49,7 @@ const CLS_FILE: &str = "ppocrv2_cls.onnx";
 /// loaded from disk. We must preserve the trailing space line, so we split on
 /// `'\n'` (not `lines()`, which would also be fine, but we keep this explicit)
 /// and do NOT trim.
-const KEYS: &str = include_str!("../../models/ppocr_keys_v4.txt");
+const KEYS: &str = include_str!("../../models/ppocr_keys_v5.txt");
 
 /// Resolves the directory holding the ONNX model files. Prefers the
 /// `PDFSPINE_OCR_MODELS` environment variable (the `pdfspine[ocr]` install /
@@ -124,7 +127,7 @@ impl CharTable {
         self.table.get(i).map(String::as_str).unwrap_or("")
     }
 
-    /// The number of classes (should equal the rec model's output width, 6625).
+    /// The number of classes (should equal the rec model's output width, 18385).
     #[inline]
     pub(crate) fn len(&self) -> usize {
         self.table.len()
@@ -134,8 +137,8 @@ impl CharTable {
 /// Holds the three models' lazily-built runnables and the recognition dict.
 ///
 /// Detection caches per `(h, w)` and recognition per padded width (`(48, w)`),
-/// both keyed by the same `(h, w)` map. The classifier is concrete, so it builds
-/// exactly one runnable. Caches are behind a `Mutex` so `recognize(&self, ..)`
+/// both keyed by the same `(h, w)` map. The classifier is concrete (80×160), so
+/// it builds exactly one runnable. Caches are behind a `Mutex` so `recognize(&self, ..)`
 /// stays `&self` (the `OcrEngine` contract) while still memoizing across calls.
 pub(crate) struct Models {
     det: Mutex<HashMap<(usize, usize), std::sync::Arc<Runnable>>>,
@@ -185,7 +188,7 @@ impl Models {
             return Ok(r.clone());
         }
         let runnable =
-            std::sync::Arc::new(build_runnable(proto(&read_model(CLS_FILE)?)?, 48, 192)?);
+            std::sync::Arc::new(build_runnable(proto(&read_model(CLS_FILE)?)?, 80, 160)?);
         // OnceLock: if a concurrent caller won the race, use theirs.
         let _ = self.cls.set(runnable);
         Ok(self.cls.get().expect("just set").clone())

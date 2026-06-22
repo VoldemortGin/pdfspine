@@ -1,6 +1,6 @@
 //! DBNet text detection: image → text boxes in original pixel coordinates.
 //!
-//! Pipeline (matching RapidOCR's PP-OCRv4 det config):
+//! Pipeline (matching RapidOCR's PP-OCRv5 det config):
 //!   1. resize so `min(h,w) ≈ 736` (limit_type=min), cap max side ≤ 2000,
 //!      min side ≥ 30, both rounded to a multiple of 32 for the model;
 //!   2. normalize per channel and run DBNet → prob map `[1,1,H,W]`;

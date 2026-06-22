@@ -1,10 +1,10 @@
-//! 180° text-angle classification: decides whether a crop is upside-down and,
-//! if so, rotates it before recognition.
+//! 180° text-line orientation classification: decides whether a crop is
+//! upside-down and, if so, rotates it before recognition.
 //!
-//! Matches RapidOCR's PP-OCRv2 cls config: resize each crop to 3×48×192 (height
-//! to 48, then width to 192 with right-pad), normalize `(px/255-0.5)/0.5`, run,
-//! softmax the `[1,2]` logits; if `argmax==1` (label "180") with conf
-//! `> cls_thresh=0.9`, rotate the crop 180°.
+//! Matches PP-OCRv5's PP-LCNet text-line-orientation config: resize each crop to
+//! 3×80×160 (height to 80, then width to 160 with right-pad), normalize
+//! `(px/255-0.5)/0.5`, run, softmax the `[1,2]` logits; if `argmax==1` (label
+//! "180") with conf `> cls_thresh=0.9`, rotate the crop 180°.
 
 use image::RgbImage;
 use tract_onnx::prelude::*;
@@ -13,17 +13,17 @@ use crate::error::{Error, Result};
 use crate::paddle::model::Models;
 use crate::paddle::preprocess::{resize_exact, to_tensor};
 
-/// Classifier input geometry.
-const CLS_H: u32 = 48;
-const CLS_W: u32 = 192;
+/// Classifier input geometry (PP-OCRv5 text-line-orientation: 80×160).
+const CLS_H: u32 = 80;
+const CLS_W: u32 = 160;
 /// Confidence above which a "180" prediction triggers a rotation.
 const CLS_THRESH: f32 = 0.9;
 /// Symmetric `(px/255-0.5)/0.5` normalization.
 const CLS_MEAN: [f32; 3] = [0.5, 0.5, 0.5];
 const CLS_STD: [f32; 3] = [0.5, 0.5, 0.5];
 
-/// Resizes `crop` into the fixed 48×192 classifier canvas: scale to height 48
-/// preserving aspect, cap width at 192, then right-pad with black to 192.
+/// Resizes `crop` into the fixed 80×160 classifier canvas: scale to height 80
+/// preserving aspect, cap width at 160, then right-pad with black to 160.
 fn fit_cls(crop: &RgbImage) -> RgbImage {
     let (cw, ch) = (crop.width().max(1), crop.height().max(1));
     let new_w = (((CLS_H as f32) * cw as f32) / ch as f32).round() as u32;

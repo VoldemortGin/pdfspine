@@ -1,12 +1,13 @@
-"""``pdfspine-ocr-models`` — the PP-OCRv4 ONNX weights for pdfspine's PaddleOCR.
+"""``pdfspine-ocr-models`` — the PP-OCRv5 ONNX weights for pdfspine's PaddleOCR.
 
 This is a pure-data companion distribution (the `pdfspine[ocr]` extra depends on
 it). The `pdfspine` wheel has the OCR *code* compiled in but ships no models;
 this package supplies the 3 ONNX weights and exposes :func:`models_dir`, which
 pdfspine reads at runtime to set ``PDFSPINE_OCR_MODELS`` for the Rust engine.
 
-Models: PP-OCRv4 detection/recognition + PP-OCRv2 angle classifier, redistributed
-from PaddleOCR under Apache-2.0. See ``PROVENANCE.md`` / ``NOTICE`` in this package.
+Models: PP-OCRv5 detection/recognition + PP-LCNet text-line-orientation classifier,
+redistributed from PaddleOCR under Apache-2.0. See ``PROVENANCE.md`` / ``NOTICE``
+in this package.
 """
 
 from __future__ import annotations
@@ -24,14 +25,14 @@ except Exception:  # pragma: no cover - source tree without dist metadata
     __version__ = "0.0.0"
 
 # The 3 ONNX weights that pdfspine's PaddleOCR engine loads at runtime.
-_ONNX_FILES = ("ppocrv4_det.onnx", "ppocrv4_rec.onnx", "ppocrv2_cls.onnx")
+_ONNX_FILES = ("ppocrv5_det.onnx", "ppocrv5_rec.onnx", "ppocrv5_cls.onnx")
 
 
 def models_dir() -> str:
-    """Return the absolute path of the directory holding the 3 PP-OCRv4 ONNX models.
+    """Return the absolute path of the directory holding the 3 PP-OCRv5 ONNX models.
 
-    The directory is guaranteed to contain ``ppocrv4_det.onnx``,
-    ``ppocrv4_rec.onnx`` and ``ppocrv2_cls.onnx``. pdfspine passes this to the
+    The directory is guaranteed to contain ``ppocrv5_det.onnx``,
+    ``ppocrv5_rec.onnx`` and ``ppocrv5_cls.onnx``. pdfspine passes this to the
     Rust engine via the ``PDFSPINE_OCR_MODELS`` environment variable.
     """
     # `resources.files(__package__)` is the installed package directory; the ONNX

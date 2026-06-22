@@ -1,7 +1,7 @@
 """OCR-PADDLE-* — end-to-end proof of pdfspine's pure-Rust PaddleOCR engine
 (``engine="paddle"``) through the full Python pipeline.
 
-The pipeline under test, with NO external binary and NO network (the PP-OCRv4
+The pipeline under test, with NO external binary and NO network (the PP-OCRv5
 models load from disk in the OCR build):
 
 1. Build an image-only "scanned" page in memory: a new doc / page whose entire

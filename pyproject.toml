@@ -113,12 +113,12 @@ include = [
     # 需在此显式列出,确保进入 sdist + wheel。
     "python/pdfspine/_llms/llms.txt",
     "python/pdfspine/_llms/docs/*.md",
-    # Ship the PP-OCRv4 ONNX weights inside the package (装后位于
+    # Ship the PP-OCRv5 ONNX weights inside the package (装后位于
     # site-packages/pdfspine/_models/),使 `pip install pdfspine` 直接全功能 OCR、
-    # 离线可跑、无需 pdfspine-ocr-models 数据包。这些是 ~15MB 的二进制 .onnx + 字典,
+    # 离线可跑、无需 pdfspine-ocr-models 数据包。这些是 ~28MB 的二进制 .onnx + 字典,
     # maturin 默认不打非 .py 文件,故显式列出,确保进入 sdist + wheel。
     "python/pdfspine/_models/*.onnx",
-    "python/pdfspine/_models/ppocr_keys_v4.txt",
+    "python/pdfspine/_models/ppocr_keys_v5.txt",
     "python/pdfspine/_models/PROVENANCE.md",
 ]
 
