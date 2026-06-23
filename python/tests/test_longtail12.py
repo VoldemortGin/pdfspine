@@ -29,6 +29,12 @@ _FW4 = _CORPUS / "irs-fw4.pdf"
 _RENDER = _BORN / "render-fixture.pdf"
 
 
+def _require(path: Path) -> None:
+    """跳过缺失 corpus 的用例(CI 不 checkout gitignored 的 fixtures/corpus/)。"""
+    if not path.exists():
+        pytest.skip(f"{path.name} missing")
+
+
 # ---------------------------------------------------------------------------
 # draw_* convenience methods — return the same Point as fitz (and actually emit
 # content). Expected return points captured from the oracle.
@@ -74,6 +80,7 @@ def test_draw_convenience_present_on_fitz_shim() -> None:
 # load_links — returns the FIRST Link (like fitz), not a list.
 # ---------------------------------------------------------------------------
 def test_load_links_returns_first_link() -> None:
+    _require(_CDC)
     doc = pdfspine.open(_CDC)
     page = doc[0]
     link = page.load_links()
@@ -94,6 +101,7 @@ def test_load_links_none_when_no_links() -> None:
 # update_link — delete + re-insert; the new URI is observable on the page.
 # ---------------------------------------------------------------------------
 def test_update_link_changes_uri() -> None:
+    _require(_CDC)
     doc = pdfspine.open(_CDC)
     page = doc[0]
     page.insert_link({"kind": 2, "from": (10, 10, 100, 30), "uri": "https://a.com"})
@@ -110,6 +118,7 @@ def test_update_link_changes_uri() -> None:
 # load_annot — by xref (int) or name (str); errors match fitz's ValueError set.
 # ---------------------------------------------------------------------------
 def test_load_annot_by_xref_and_name() -> None:
+    _require(_CDC)
     doc = pdfspine.open(_CDC)
     page = doc[0]
     annot = page.add_text_annot((50, 50), "hi")
@@ -121,6 +130,7 @@ def test_load_annot_by_xref_and_name() -> None:
 
 
 def test_load_annot_bad_inputs_raise() -> None:
+    _require(_CDC)
     doc = pdfspine.open(_CDC)
     page = doc[0]
     with pytest.raises(ValueError):
@@ -134,6 +144,7 @@ def test_load_annot_bad_inputs_raise() -> None:
 # captured from irs-fw4.pdf page 0).
 # ---------------------------------------------------------------------------
 def test_load_widget_and_delete_widget() -> None:
+    _require(_FW4)
     doc = pdfspine.open(_FW4)
     page = None
     widgets = []
@@ -161,6 +172,7 @@ def test_load_widget_and_delete_widget() -> None:
 
 
 def test_load_widget_missing_raises() -> None:
+    _require(_FW4)
     doc = pdfspine.open(_FW4)
     page = next(iter(doc))
     with pytest.raises(ValueError):
@@ -181,6 +193,7 @@ _CDC_CLUSTERS = [
 
 
 def test_cluster_drawings_matches_oracle() -> None:
+    _require(_CDC)
     doc = pdfspine.open(_CDC)
     page = doc[0]
     clusters = page.cluster_drawings()
@@ -193,6 +206,7 @@ def test_cluster_drawings_matches_oracle() -> None:
 
 
 def test_cluster_drawings_reuses_drawings_and_respects_clip() -> None:
+    _require(_CDC)
     doc = pdfspine.open(_CDC)
     page = doc[0]
     drawings = page.get_drawings()
@@ -206,6 +220,7 @@ def test_cluster_drawings_reuses_drawings_and_respects_clip() -> None:
 
 def test_cluster_drawings_tolerance_filters_tiny() -> None:
     """Only clusters wider AND taller than the tolerances are returned."""
+    _require(_CDC)
     doc = pdfspine.open(_CDC)
     page = doc[0]
     for r in page.cluster_drawings(x_tolerance=3, y_tolerance=3):
@@ -217,11 +232,13 @@ def test_cluster_drawings_tolerance_filters_tiny() -> None:
 # wrapped; after wrap_contents() it IS; an empty new page IS.
 # ---------------------------------------------------------------------------
 def test_is_wrapped_normal_page_false() -> None:
+    _require(_CDC)
     doc = pdfspine.open(_CDC)
     assert doc[0].is_wrapped is False
 
 
 def test_is_wrapped_after_wrap_contents_true() -> None:
+    _require(_CDC)
     doc = pdfspine.open(_CDC)
     page = doc[0]
     page.wrap_contents()

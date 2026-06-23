@@ -91,6 +91,12 @@ _GOVINFO = _CORPUS / "govinfo-hr2.pdf"
 _IRS_P15 = _CORPUS / "irs-p15.pdf"
 
 
+def _require(path: Path) -> None:
+    """跳过缺失 corpus 的用例(CI 不 checkout gitignored 的 fixtures/corpus/)。"""
+    if not path.exists():
+        pytest.skip(f"{path.name} missing")
+
+
 # A deterministic 2-page PDF carrying BOTH a catalog ``/Dests`` dict entry
 # ("direct") and a ``/Names /Dests`` name-tree entry ("treekey"), each an
 # explicit ``/XYZ`` destination. (Built by hand; the same bytes pdfspine AND the
@@ -135,6 +141,7 @@ _GT_IRS_SAMPLE_VAL = {"page": 6, "to": (0.0, 188.25), "zoom": 0.0}
 
 @pytest.fixture()
 def gov():
+    _require(_GOVINFO)
     doc = fitz.open(str(_GOVINFO))
     yield doc
     doc.close()
@@ -273,6 +280,7 @@ def test_resolve_names_non_xyz_dest_fallback():
 
 
 def test_resolve_names_corpus_count_and_sample():
+    _require(_IRS_P15)
     doc = fitz.open(str(_IRS_P15))
     rn = doc.resolve_names()
     assert len(rn) == _GT_IRS_RESOLVE_COUNT
@@ -358,6 +366,7 @@ def test_update_stream_replaces_existing_body(gov):
 
 
 def test_writer_roundtrip_persists():
+    _require(_GOVINFO)
     doc = fitz.open(str(_GOVINFO))
     nx = doc.get_new_xref()
     doc.update_object(nx, "<< /Type /Demo /N 7 >>")
@@ -378,6 +387,7 @@ def test_writer_roundtrip_persists():
 
 
 def test_update_object_roundtrip_persists():
+    _require(_GOVINFO)
     doc = fitz.open(str(_GOVINFO))
     nx = doc.get_new_xref()
     doc.update_object(nx, "<< /Type /Marker /Tag (pdfspine) >>")
@@ -638,6 +648,7 @@ def test_is_dirty_after_edit():
     # A clean file parse starts not-dirty; a catalog edit flips it to dirty.
     # (A freshly *created* doc is dirty from the start in fitz — exercised here
     # against an opened file, where both engines agree on clean-on-open.)
+    _require(_GOVINFO)
     doc = fitz.open(str(_GOVINFO))
     assert doc.is_dirty is False
     doc.set_pagelayout("TwoPageLeft")
@@ -647,6 +658,7 @@ def test_is_dirty_after_edit():
 
 def test_is_closed_lifecycle():
     # oracle: open -> False, after close -> True
+    _require(_GOVINFO)
     doc = fitz.open(str(_GOVINFO))
     assert doc.is_closed is False
     doc.close()
@@ -669,8 +681,7 @@ def test_is_fast_webaccess_false_non_linearized(gov):
 def test_is_fast_webaccess_true_linearized():
     # oracle: irs-f1040 is linearized -> truthy
     p = _CORPUS / "irs-f1040.pdf"
-    if not p.exists():
-        pytest.skip("irs-f1040.pdf missing")
+    _require(p)
     doc = fitz.open(str(p))
     assert bool(doc.is_fast_webaccess) is True
     doc.close()
@@ -681,6 +692,7 @@ def test_is_fast_webaccess_true_linearized():
 
 def test_name_is_path_for_path_opened():
     # oracle: path-opened doc -> the file path
+    _require(_GOVINFO)
     doc = fitz.open(str(_GOVINFO))
     assert doc.name == str(_GOVINFO)
     doc.close()
