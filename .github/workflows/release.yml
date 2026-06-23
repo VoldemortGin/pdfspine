@@ -9,8 +9,18 @@
 #
 # Before uploading each platform wheel we INSTALL it into a clean env and run a
 # real OCR recognition (scripts/ocr_smoke.py) as an all-platform release gate: if
-# the built wheel can't recover text, that `wheels` job fails and `publish` (which
-# `needs` wheels) never runs — so a broken OCR build can't ship.
+# the built wheel can't recover text, that wheel job fails and `publish` is
+# skipped — so a broken OCR build can't ship.
+#
+# RUNNER-AVAILABILITY SPLIT: the wheel matrix is split into two jobs. `wheels`
+# (Linux x86_64/aarch64, Apple-Silicon macOS, Windows) is HARD-required by
+# `publish`. `wheels_intel` (the macos-13 / x86_64 Intel wheel) is a separate job
+# that `publish` does NOT `needs`, because GitHub's hosted Intel-mac runners are
+# severely rationed for this account and that leg can sit `queued` for hours
+# without ever being assigned a runner — which would block the entire release.
+# `publish` therefore runs as soon as the core wheels + sdist pass; the Intel
+# wheel is still built, OCR-gated, and merged in WHEN a runner is available, but
+# never holds the release hostage. (See the `wheels_intel` and `publish` jobs.)
 #
 # USER-GATED PREREQUISITE (one-time, in the PyPI web UI — see docs/RELEASE-PYPI.md):
 #   PyPI -> account -> Publishing -> "Add a pending publisher" (Owner =
@@ -39,6 +49,11 @@ permissions:
   contents: read
 
 jobs:
+  # CORE wheel matrix — the platforms whose GitHub runners are reliably
+  # available (Linux x86_64/aarch64, Apple-Silicon macOS, Windows). `publish`
+  # HARD-`needs` this job, so a real build/OCR failure on any core platform
+  # still blocks the whole release. The Intel-macOS wheel is deliberately NOT
+  # here — see the `wheels_intel` job below for why.
   wheels:
     name: wheels (${{ matrix.os }} / ${{ matrix.target }})
     runs-on: ${{ matrix.os }}
@@ -56,7 +71,6 @@ jobs:
         include:
           - { os: ubuntu-latest, target: x86_64, manylinux: auto, ocr_native: true }
           - { os: ubuntu-latest, target: aarch64, manylinux: "2_28" } # cross build → no native OCR run
-          - { os: macos-13, target: x86_64, ocr_native: true } # Intel runner
           - { os: macos-14, target: aarch64, ocr_native: true } # Apple Silicon runner
           - { os: windows-latest, target: x64, ocr_native: true }
     steps:
@@ -98,6 +112,56 @@ jobs:
           name: wheels-${{ matrix.os }}-${{ matrix.target }}
           path: dist/*.whl
 
+  # Intel-macOS (x86_64) wheel — SAME build + real-OCR gate + upload as the core
+  # matrix, but split into its own job that `publish` does NOT `needs`. Reason:
+  # GitHub's hosted Intel-mac (`macos-13`) runners are severely rationed for this
+  # account and a leg can sit `queued` for many hours without ever being assigned
+  # a runner. A job that never starts has no conclusion, so it would block a
+  # `needs: wheels` `publish` indefinitely (and `continue-on-error` can't rescue a
+  # job that never RUNS — it only neutralizes a job that runs and fails). By
+  # isolating Intel here and keeping it off `publish`'s critical path, the rest of
+  # the matrix + sdist still publish on time. `continue-on-error: true` means that
+  # if this leg DOES get a runner and the build/OCR fails, the failure is recorded
+  # on the wheel but doesn't redden the whole run. When a runner IS available the
+  # behavior is identical to before: it builds, runs the OCR gate, and uploads the
+  # `wheels-macos-13-x86_64` artifact, which `publish` merges in automatically.
+  wheels_intel:
+    name: wheels (macos-13 / x86_64)
+    runs-on: macos-13
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Set version from tag
+        if: github.ref_type == 'tag'
+        run: python scripts/set_version_from_tag.py "${{ github.ref_name }}"
+      - name: Build abi3 wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          target: x86_64
+          args: --release --out dist --strip
+          sccache: "true"
+      # Same release gate as the core matrix: install the just-built wheel into a
+      # clean venv and run a real PP-OCRv5 recognition on the bundled models.
+      - name: OCR smoke (install wheel + real recognition)
+        shell: bash
+        run: |
+          python -m venv .ocrsmoke
+          if [ -f .ocrsmoke/bin/python ]; then
+            PY=.ocrsmoke/bin/python
+          else
+            PY=.ocrsmoke/Scripts/python
+          fi
+          "$PY" -m pip install --upgrade pip
+          "$PY" -m pip install --find-links dist --no-index pdfspine
+          "$PY" scripts/ocr_smoke.py crates/pdf-ocr/tests/fixtures/ocr_sample.png
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-macos-13-x86_64
+          path: dist/*.whl
+
   sdist:
     name: sdist
     runs-on: ubuntu-latest
@@ -121,7 +185,15 @@ jobs:
 
   publish:
     name: publish (Trusted Publishing / OIDC)
+    # HARD-`needs` only the core wheels + sdist — deliberately NOT `wheels_intel`,
+    # so a `queued`/failed Intel-mac leg can never block the release. `always()`
+    # detaches publish from the default "all needs succeeded" gate; the explicit
+    # result checks then re-assert that the CORE platforms + sdist DID succeed
+    # (so a real core build/OCR failure still stops the release). The Intel wheel,
+    # if its job happened to finish, is still merged in below via download-artifact
+    # + `skip-existing`; if it didn't, the other platforms + sdist publish anyway.
     needs: [wheels, sdist]
+    if: always() && needs.wheels.result == 'success' && needs.sdist.result == 'success'
     runs-on: ubuntu-latest
     # Tag push -> PyPI. Manual dispatch -> the chosen target (default TestPyPI).
     environment: ${{ (github.event_name == 'push' || github.event.inputs.publish_target == 'pypi') && 'pypi' || 'testpypi' }}
