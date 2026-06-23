@@ -133,8 +133,8 @@ jobs:
           python-version: ${{ matrix.python }}
       - name: Install maturin + test deps
         run: pip install "maturin>=1.12,<2" pytest hypothesis
-      - name: Build + install (maturin develop)
-        run: maturin develop
+      - name: Build + install (editable; pip 走 maturin PEP 660,无需 venv)
+        run: pip install -e .
       - name: pytest (incl. doctests)
         run: pytest --doctest-modules python/pdfspine || pytest
 
