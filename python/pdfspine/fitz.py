@@ -135,6 +135,14 @@ def __getattr__(name: str):
     # Defer to pdfspine for anything it defines.
     if hasattr(pdfspine, name):
         return getattr(pdfspine, name)
+    # 工具/解释器探测的特殊属性（dunder 协议属性、pytest 的模块级 ``pytest_plugins`` /
+    # ``pytestmark`` 等 ``pytest*`` 收集探针）不属于 PyMuPDF API 面——必须按“无此属性”
+    # 语义抛 ``AttributeError``，否则会绊倒 pytest collection / inspect /
+    # ``--doctest-modules``（它们靠 ``AttributeError`` 判定属性缺失）。PyMuPDF 没有
+    # ``pytest*`` 或 dunder 形态的公开 API，故此例外不会遮蔽真实 API。PRD §9.5 的
+    # “never AttributeError”只约束 known-but-unimplemented 的 PyMuPDF *方法*。
+    if name.startswith("pytest") or (name.startswith("__") and name.endswith("__")):
+        raise AttributeError(name)
     raise PdfUnsupportedError(
         f"fitz.{name} is not implemented in the pdfspine shim yet. "
         "See the pdfspine parity matrix."
