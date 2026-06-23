@@ -39,7 +39,10 @@ wildcards = "warn"
 [advisories]
 # Use the RustSec advisory DB; CI fails on known vulnerabilities.
 yanked = "deny"
-ignore = []
+# RUSTSEC-2024-0436: `paste` 已归档/不再维护（仅 unmaintained 通告，非安全漏洞）。
+# proc-macro 传递依赖，广泛使用、无已知 CVE；在上游依赖迁移掉它之前先精准豁免此一条，
+# 避免一个“不再维护”通告把 CI 卡红。其余 advisory 仍一律 deny。
+ignore = ["RUSTSEC-2024-0436"]
 
 [sources]
 unknown-registry = "deny"
