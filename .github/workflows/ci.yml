@@ -171,8 +171,8 @@ jobs:
           python-version: "3.12"
       - name: Install maturin
         run: pip install "maturin>=1.12,<2"
-      - name: Build + install pdfspine (maturin develop)
-        run: maturin develop
+      - name: Build + install pdfspine (editable; pip 走 maturin PEP 660,无需 venv)
+        run: pip install -e .
       # The committed fixtures regenerate byte-for-byte; assert they are in sync
       # so a stale fixture cannot silently weaken the gate.
       - name: Fixtures reproducible (no drift)
