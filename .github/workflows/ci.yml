@@ -29,8 +29,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: rustfmt
         run: cargo fmt --all --check
-      - name: Checkout ocrspine sibling (--all-features 编译 OCR 需同级 ocrspine,匹配 ../../../ocrspine path dep)
-        run: git clone --depth 1 https://github.com/VoldemortGin/ocrspine.git "$GITHUB_WORKSPACE/../ocrspine"
       - name: clippy (-D warnings)
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings
       - name: cargo-deny (licenses + advisories + sources)
@@ -60,8 +58,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Checkout ocrspine sibling (--all-features 编译 OCR 需同级 ocrspine,匹配 ../../../ocrspine path dep)
-        run: git clone --depth 1 https://github.com/VoldemortGin/ocrspine.git "$GITHUB_WORKSPACE/../ocrspine"
       - name: cargo test --workspace --all-features
         run: cargo test --workspace --all-features
 
@@ -82,8 +78,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Checkout ocrspine sibling (--all-features 编译 OCR 需同级 ocrspine,匹配 ../../../ocrspine path dep)
-        run: git clone --depth 1 https://github.com/VoldemortGin/ocrspine.git "$GITHUB_WORKSPACE/../ocrspine"
       - name: cargo-llvm-cov (diff coverage)
         run: |
           cargo install cargo-llvm-cov --locked

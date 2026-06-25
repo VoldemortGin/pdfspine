@@ -37,7 +37,7 @@ thiserror.workspace = true
 # weights, it just bridges Pixmap <-> ocrspine (same sibling `path` pattern as
 # ragspine -> corespine). `image`: the `RgbImage` the Pixmap -> ocrspine bridge
 # materializes (also used by the paddle acceptance tests' fixture decode).
-ocrspine = { path = "../../../ocrspine", optional = true }
+ocrspine = { git = "https://github.com/VoldemortGin/ocrspine", rev = "732975f0233cd6500edfbbb82bc06c2332369871", optional = true }
 image = { workspace = true, optional = true }
 
 [features]

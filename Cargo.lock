@@ -986,6 +986,7 @@ dependencies = [
 [[package]]
 name = "ocrspine"
 version = "0.0.1"
+source = "git+https://github.com/VoldemortGin/ocrspine?rev=732975f0233cd6500edfbbb82bc06c2332369871#732975f0233cd6500edfbbb82bc06c2332369871"
 dependencies = [
  "image",
  "rayon",
