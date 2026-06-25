@@ -60,55 +60,34 @@ def _raise_deferred(group: str, name: str) -> None:
 _OCR_MODELS_ENV = "PDFSPINE_OCR_MODELS"
 # The OCR inference lives in the sibling ``ocrspine`` crate, whose ``models_dir()``
 # reads ``OCRSPINE_MODELS``. We mirror the resolved pdfspine model directory into
-# it so the bundled weights are found with no extra setup.
+# it so the weights are found with no extra setup.
 _OCRSPINE_MODELS_ENV = "OCRSPINE_MODELS"
-
-# The three ONNX weights the Rust PaddleOCR engine loads at runtime; a directory
-# only counts as a usable model dir when all three are present (the dict
-# ``ppocr_keys_v5.txt`` stays embedded in the Rust binary, so it is not required
-# on disk).
-_OCR_ONNX_FILES = ("ppocrv5_det.onnx", "ppocrv5_rec.onnx", "ppocrv5_cls.onnx")
-
-
-def _bundled_models_dir() -> str | None:
-    """The absolute path of the wheel-bundled ``pdfspine/_models`` directory, or
-    ``None`` when it is absent / incomplete.
-
-    The published ``pdfspine`` wheel now ships the ~28 MB PP-OCRv5 ONNX weights
-    inside the package itself (at ``site-packages/pdfspine/_models``), so a bare
-    ``pip install pdfspine`` is full-OCR-capable with no companion data package
-    and no network. We locate the directory relative to this module's file and
-    only accept it when all three ONNX models are actually present.
-    """
-    directory = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_models")
-    if all(os.path.isfile(os.path.join(directory, f)) for f in _OCR_ONNX_FILES):
-        return directory
-    return None
 
 
 def _ensure_ocr_models_env() -> None:
-    """Point the Rust PaddleOCR engine at the bundled model weights.
+    """Point the Rust PaddleOCR engine at the model weights.
 
-    The published ``pdfspine`` wheel has the OCR *code* compiled in AND ships the
-    ~28 MB PP-OCRv5 ONNX weights inside the package (at ``pdfspine/_models``), so
-    a plain ``pip install pdfspine`` is full-OCR-capable offline. The OCR
-    inference now runs in the sibling ``ocrspine`` crate, whose ``models_dir()``
-    reads ``OCRSPINE_MODELS``. Before invoking the ``engine="paddle"`` path we
-    resolve a model directory and export it as BOTH ``OCRSPINE_MODELS`` (what the
-    engine reads) and ``PDFSPINE_OCR_MODELS`` (kept as the documented pdfspine-side
+    The published ``pdfspine`` wheel has the OCR *code* compiled in but ships no
+    models; the ~28 MB PP-OCRv5 ONNX weights come from the shared
+    ``ocrspine-models`` data package (a hard dependency, so a plain
+    ``pip install pdfspine`` is full-OCR-capable offline). The OCR inference runs
+    in the sibling ``ocrspine`` crate, whose ``models_dir()`` reads
+    ``OCRSPINE_MODELS``. Before invoking the ``engine="paddle"`` path we resolve a
+    model directory and export it as BOTH ``OCRSPINE_MODELS`` (what the engine
+    reads) and ``PDFSPINE_OCR_MODELS`` (kept as the documented pdfspine-side
     override), so the weights are found with no network access.
 
     Resolution order (lazy, cheap, idempotent, cross-platform):
 
     1. ``PDFSPINE_OCR_MODELS`` already in the environment → mirror it into
-       ``OCRSPINE_MODELS`` (user override);
-    2. else the wheel-bundled ``pdfspine/_models`` directory → set both from there
-       (the default for an installed wheel);
-    3. else the installed ``pdfspine_ocr_models`` companion → set both from there
-       (kept for back-compat with the legacy data-package layout);
+       ``OCRSPINE_MODELS`` (explicit user override);
+    2. else the installed ``ocrspine_models`` shared data package → set both from
+       its ``models_dir()`` (the default for an installed wheel);
+    3. else the legacy ``pdfspine_ocr_models`` companion → set both from there
+       (kept for back-compat with the old data-package layout);
     4. else do nothing — the engine falls back to the in-crate ``ocrspine/models``
        dev directory (source checkout), or raises a clear ``PdfUnsupportedError``
-       pointing at ``pip install pdfspine[ocr]``.
+       pointing at ``pip install pdfspine``.
     """
 
     def _export(directory: str) -> None:
@@ -122,16 +101,24 @@ def _ensure_ocr_models_env() -> None:
         # engine, overriding any stale ``OCRSPINE_MODELS`` from a prior call).
         os.environ[_OCRSPINE_MODELS_ENV] = override
         return
-    bundled = _bundled_models_dir()
-    if bundled is not None:
-        _export(bundled)
-        return
+    try:
+        import ocrspine_models
+    except ImportError:
+        ocrspine_models = None  # type: ignore[assignment]
+    if ocrspine_models is not None:
+        try:
+            _export(os.fspath(ocrspine_models.models_dir()))
+            return
+        except Exception:
+            # A broken/partial data-package install must not mask the engine's own
+            # clear error; fall through to the legacy companion / no-op.
+            pass
     try:
         import pdfspine_ocr_models
     except ImportError:
         return
     try:
-        _export(pdfspine_ocr_models.models_dir())
+        _export(os.fspath(pdfspine_ocr_models.models_dir()))
     except Exception:
         # A broken/partial companion install must not mask the engine's own clear
         # error; leave the env unset and let the Rust side report.
