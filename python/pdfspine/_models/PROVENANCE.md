@@ -2,11 +2,12 @@
 
 This directory holds the *permissively-licensed* PaddleOCR **PP-OCRv5** model
 weights (converted to ONNX, then made `tract`-parseable) and the recognition
-character dictionary that the pure-Rust PaddleOCR engine uses. The recognition
-dictionary is embedded into the binary at compile time via `include_str!` (see
-`crates/pdf-ocr/src/paddle/model.rs`); the three multi-MB `*.onnx` weights ship
-as data files (loaded from disk at runtime — see the model-resolution note in
-`model.rs`). The project thesis is **license cleanliness**: every bundled byte
+character dictionary that the pure-Rust PaddleOCR engine uses. The OCR inference
+runs in the sibling `ocrspine` crate: the recognition dictionary is embedded into
+the binary at compile time via `include_str!` (see `ocrspine/src/paddle/model.rs`);
+the three multi-MB `*.onnx` weights ship as data files (loaded from disk at
+runtime — see the model-resolution note in that module). The project thesis is
+**license cleanliness**: every bundled byte
 must have a recorded, affirmatively-permissive license and a recorded upstream
 source. License-uncertain data is **never** bundled.
 

@@ -26,25 +26,31 @@ import pytest
 from pdfspine import document as _doc
 
 _ENV = "PDFSPINE_OCR_MODELS"
+# The engine (``ocrspine``) reads this var; the helper now mirrors the resolved
+# directory into it too, so the fixture must snapshot/restore it as well.
+_ENGINE_ENV = "OCRSPINE_MODELS"
 
 
 @pytest.fixture(autouse=True)
 def _restore_models_env():
-    """Snapshot/restore ``PDFSPINE_OCR_MODELS`` around each test.
+    """Snapshot/restore ``PDFSPINE_OCR_MODELS`` and ``OCRSPINE_MODELS`` around each
+    test.
 
     ``_ensure_ocr_models_env`` writes ``os.environ`` directly (not via
     monkeypatch), so monkeypatch's teardown cannot undo that write — this fixture
-    guarantees the env is restored so the helper's mutation never leaks into other
-    test modules (e.g. the paddle e2e tests that rely on the in-repo dev fallback)."""
+    guarantees both env vars are restored so the helper's mutation never leaks into
+    other test modules (e.g. the paddle e2e tests that rely on the in-crate dev
+    fallback)."""
     sentinel = object()
-    saved = _doc.os.environ.get(_ENV, sentinel)
+    saved = {k: _doc.os.environ.get(k, sentinel) for k in (_ENV, _ENGINE_ENV)}
     try:
         yield
     finally:
-        if saved is sentinel:
-            _doc.os.environ.pop(_ENV, None)
-        else:
-            _doc.os.environ[_ENV] = saved
+        for k, v in saved.items():
+            if v is sentinel:
+                _doc.os.environ.pop(k, None)
+            else:
+                _doc.os.environ[k] = v
 
 
 # --- OCR-MODELS-WIRING-000: the wheel-bundled _models tier wins (the default) -

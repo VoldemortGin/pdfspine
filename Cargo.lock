@@ -984,6 +984,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ocrspine"
+version = "0.0.1"
+dependencies = [
+ "image",
+ "rayon",
+ "thiserror",
+ "tract-onnx",
+]
+
+[[package]]
 name = "once_cell"
 version = "1.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1120,15 +1130,14 @@ name = "pdf-ocr"
 version = "0.0.1"
 dependencies = [
  "image",
+ "ocrspine",
  "pdf-core",
  "pdf-edit",
  "pdf-image",
  "pdf-render",
  "pdf-text",
  "proptest",
- "rayon",
  "thiserror",
- "tract-onnx",
 ]
 
 [[package]]

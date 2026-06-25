@@ -1,16 +1,18 @@
 """Hatchling build hook for the ``pdfspine-ocr-models`` data distribution.
 
-The 3 PP-OCRv5 ONNX models are the single source of truth in the pdfspine repo
-at ``crates/pdf-ocr/models/`` (git-tracked, also used by the Rust dev fallback).
-To avoid duplicating ~28 MB in git, this hook ``force_include``s those files into
-both the sdist and the wheel at build time instead of vendoring a second copy.
+The 3 PP-OCRv5 ONNX models are git-tracked in the pdfspine repo at
+``python/pdfspine/_models/`` (the same copy the published wheel bundles; the OCR
+inference itself ships its own copy in the sibling ``ocrspine`` crate). To avoid
+duplicating ~28 MB in git, this (legacy, back-compat) hook ``force_include``s
+those files into both the sdist and the wheel at build time instead of vendoring
+a second copy.
 
 Resolution of the models source dir (first that exists wins), so it works both
 for an in-repo build AND for building a wheel from an unpacked sdist:
 
   1. ``<package>/pdfspine_ocr_models/`` — already-vendored ONNX (e.g. an sdist
      that carried them into the package dir);
-  2. ``<package>/../../crates/pdf-ocr/models/`` — the in-repo source of truth.
+  2. ``<package>/../../python/pdfspine/_models/`` — the in-repo wheel-bundled copy.
 """
 
 from __future__ import annotations
@@ -28,7 +30,9 @@ class CustomBuildHook(BuildHookInterface):
     def _models_src_dir(self) -> str:
         candidates = (
             os.path.join(self.root, "pdfspine_ocr_models"),
-            os.path.join(self.root, os.pardir, os.pardir, "crates", "pdf-ocr", "models"),
+            os.path.join(
+                self.root, os.pardir, os.pardir, "python", "pdfspine", "_models"
+            ),
         )
         for cand in candidates:
             if all(os.path.isfile(os.path.join(cand, f)) for f in _ONNX_FILES):
@@ -38,7 +42,7 @@ class CustomBuildHook(BuildHookInterface):
             "pdfspine-ocr-models: could not locate the PP-OCRv5 ONNX models "
             f"({', '.join(_ONNX_FILES)}). Searched:\n  {searched}\n"
             "Build this distribution from a full pdfspine checkout (the models are "
-            "git-tracked at crates/pdf-ocr/models), or from its sdist."
+            "git-tracked at python/pdfspine/_models), or from its sdist."
         )
 
     def initialize(self, version: str, build_data: dict) -> None:

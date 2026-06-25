@@ -26,23 +26,27 @@ pdf-edit.workspace = true
 # Typed error wrapping (`From` impls for the upstream crate errors).
 thiserror.workspace = true
 
-# --- `paddle-ocr` feature: pure-Rust PaddleOCR (PP-OCRv5) engine ---
-# Optional heavy deps, gated behind the (default-OFF) `paddle-ocr` feature so the
-# base crate / wheel stays lean (P0-5): the multi-MB tract-onnx code path is
-# compiled out by default and only the opt-in `pdfspine[ocr]` build pulls it in.
-# `tract-onnx`: pure-Rust ONNX inference (det/rec/cls). `image`: pure-Rust resize.
-# `rayon`: data-parallel `par_iter` over the per-box recognition loop (P4-3).
-tract-onnx = { workspace = true, optional = true }
+# --- `paddle-ocr` feature: PaddleOCR (PP-OCRv5) engine via `ocrspine` ---
+# Gated behind the (default-OFF) `paddle-ocr` feature so the base crate / wheel
+# stays lean (P0-5): the multi-MB OCR inference path is compiled out by default
+# and only the opt-in `pdfspine[ocr]` build pulls it in.
+#
+# `ocrspine`: the sibling, domain-neutral OCR crate (image -> words). It owns the
+# PP-OCRv5 ONNX weights + the tract/rayon inference pipeline once for the whole
+# Spine family — pdf-ocr no longer carries a duplicate engine or duplicate ONNX
+# weights, it just bridges Pixmap <-> ocrspine (same sibling `path` pattern as
+# ragspine -> corespine). `image`: the `RgbImage` the Pixmap -> ocrspine bridge
+# materializes (also used by the paddle acceptance tests' fixture decode).
+ocrspine = { path = "../../../ocrspine", optional = true }
 image = { workspace = true, optional = true }
-rayon = { workspace = true, optional = true }
 
 [features]
 # OFF by default (P0-5): the lean base wheel must NOT carry the PaddleOCR engine.
 # Enable it explicitly for an OCR build (`cargo build --features paddle-ocr`,
 # `maturin develop --features ocr` via the py-bindings `ocr` alias).
 default = []
-# Gates the whole `paddle` module + its tract-onnx/image/rayon dependencies.
-paddle-ocr = ["dep:tract-onnx", "dep:image", "dep:rayon"]
+# Gates the whole `paddle` adapter module + its ocrspine/image dependencies.
+paddle-ocr = ["dep:ocrspine", "dep:image"]
 
 [dev-dependencies]
 proptest.workspace = true

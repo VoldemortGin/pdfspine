@@ -63,12 +63,12 @@ docs = [
 # pulls the legacy `pdfspine-ocr-models` data package, which is no longer needed).
 #
 # Runtime model resolution order (see `python/pdfspine/document.py`
-# `_ensure_ocr_models_env` and the Rust `models_dir()` in
-# `crates/pdf-ocr/src/paddle/model.rs`):
+# `_ensure_ocr_models_env`, which exports both `PDFSPINE_OCR_MODELS` and the
+# engine's own `OCRSPINE_MODELS`, read by `ocrspine`'s `models_dir()`):
 #   1. `PDFSPINE_OCR_MODELS` env var, if already set (explicit user override);
 #   2. else the wheel-bundled `pdfspine/_models` directory (the default);
 #   3. else the legacy installed `pdfspine_ocr_models` companion (back-compat);
-#   4. else the in-repo `crates/pdf-ocr/models` dev fallback (source checkout);
+#   4. else the in-crate `ocrspine/models` dev fallback (source checkout);
 #   5. else a clear `PdfUnsupportedError`.
 ocr = []  # models are bundled into the wheel; this extra is a back-compat no-op.
 # 一键装齐全部运行期功能依赖(不含开发用 test/docs)。OCR 引擎与 PP-OCRv5 模型均已编进/

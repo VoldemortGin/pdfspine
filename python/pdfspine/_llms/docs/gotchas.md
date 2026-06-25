@@ -28,7 +28,7 @@
 - `engine="paddle"` 用 PP-OCRv5 ONNX 模型（det/rec + PP-LCNet_x1_0 textline-ori，~28MB，支持繁中/日文），已随 wheel 装到 `site-packages/pdfspine/_models/`。`[ocr]`/`[all]` extra 现为**向后兼容空壳**（`pip install pdfspine[ocr]` 仍可解析，但不再拉任何东西；旧的 `pdfspine-ocr-models` 数据包已弃用）。
 - 默认 `engine="tesseract"` 还需要**系统安装的 tesseract 二进制**（不在 wheel 里）。
 - 缺引擎/缺模型/未知 engine → 抛 `PdfUnsupportedError`（带清晰提示）。
-- 模型解析顺序：`PDFSPINE_OCR_MODELS` 环境变量（显式覆盖）→ wheel 内嵌的 `pdfspine/_models` → 旧 `pdfspine_ocr_models` 伴随包（兼容）→ 源码树 `crates/pdf-ocr/models`（开发回退）→ 否则报错。可设 `os.environ["PDFSPINE_OCR_MODELS"]` 显式指定（须在调用 OCR 前）。
+- 模型解析顺序：`PDFSPINE_OCR_MODELS` 环境变量（显式覆盖）→ wheel 内嵌的 `pdfspine/_models` → 旧 `pdfspine_ocr_models` 伴随包（兼容）→ 源码树 `ocrspine/models`（开发回退）→ 否则报错。可设 `os.environ["PDFSPINE_OCR_MODELS"]` 显式指定（须在调用 OCR 前；内部会镜像到引擎实际读取的 `OCRSPINE_MODELS`）。
 - 注意：对**已有文本层**的 born-digital PDF 调 OCR 通常没意义；OCR 针对扫描件/图片页。
 - `pil_save`/`pil_tobytes` 需要 `Pillow`；numpy 互操作需要 `numpy`——这两者都不是默认依赖。
 
