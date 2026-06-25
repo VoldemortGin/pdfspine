@@ -1024,7 +1024,7 @@ self-built PDFs (reuse `tests/common`). No PyMuPDF files.
 | `COORD-ROT-90-PAGE` | `page_transform(r=90)` == `[0,1,1,0,-y0,-x0]`; size `h×w` | PRD §8.6.1 | green |
 | `COORD-ROT-180-PAGE` | `page_transform(r=180)` == `[-1,0,0,1,x1,-y0]`; size `w×h` | PRD §8.6.1 | green |
 | `COORD-ROT-270-PAGE` | `page_transform(r=270)` == `[0,-1,-1,0,y1,x1]`; size `h×w` | PRD §8.6.1 | green |
-| `COORD-ROT-MEDIABOX` | non-zero MediaBox origin baked into transform | PRD §8.6.1 | green |
+| `COORD-ROT-CROPBOX` | non-zero CropBox origin baked into transform | PRD §8.6.1 | green |
 | `LAYOUT-DEVICE-003` | TextPage width/height match rotated page size | PRD §8.6.1 | green |
 
 ### Line grouping (`layout.rs`) — `LAYOUT-LINE-*`

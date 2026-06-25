@@ -11,6 +11,34 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
+## [0.0.6] — 2026-06-25
+
+### Changed
+
+- **Coordinate basis unified MediaBox → CropBox (corrective breaking).** The
+  `page_transform` basis for the digital-text, vector and `get_drawings`
+  channels (and, transitively, the line-strategy table finder) is now the
+  **CropBox** instead of the MediaBox. On pages where `CropBox ≠ MediaBox` the
+  device coordinates of digital text / vector paths / drawings / tables now share
+  a single origin with the already-CropBox-based render, SVG and OCR channels,
+  eliminating the cross-channel spatial offset. This is a **corrective breaking
+  change** for the (uncommon) `CropBox ≠ MediaBox` pages only: extracted digital-
+  text device coordinates there shift from a MediaBox basis to a CropBox basis, so
+  any downstream consumer that relied on the old MediaBox-based coordinates must
+  be updated. Pages with `CropBox == MediaBox` (the overwhelming majority) are
+  byte-for-byte unaffected (`cropbox()` returns the MediaBox when `/CropBox` is
+  absent). `get_cdrawings` keeps its raw user-space output unchanged.
+
+### Tests
+
+- Added cross-layer alignment tests on `CropBox ≠ MediaBox` pages, each with a
+  negative control: digital-text device bbox vs render pixel position share a
+  zero-crop-offset origin; `get_drawings` and `find_tables` device coordinates are
+  pinned to the same CropBox origin; plus an API round-trip test
+  (`derotation_matrix` exactly inverts the extracted bbox, including with
+  `/Rotate`). Adjusted the `COORD-ROT-MEDIABOX` case to `COORD-ROT-CROPBOX`
+  (CropBox origin baked into the transform).
+
 ## [0.1.0] — 2026-06-21
 
 The first public release. The local/dev workspace version is `0.0.0`; the
@@ -114,5 +142,6 @@ published wheel's version is set from the `v0.1.0` git tag at build time.
   2858 ms → 819 ms). `rayon` is a feature-gated (`paddle-ocr`) optional dep and
   is not in the lean base wheel.
 
-[Unreleased]: https://github.com/VoldemortGin/pdfspine/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/VoldemortGin/pdfspine/compare/v0.0.6...HEAD
+[0.0.6]: https://github.com/VoldemortGin/pdfspine/compare/v0.0.5...v0.0.6
 [0.1.0]: https://github.com/VoldemortGin/pdfspine/releases/tag/v0.1.0

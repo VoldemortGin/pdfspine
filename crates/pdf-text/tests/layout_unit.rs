@@ -100,15 +100,19 @@ fn coord_rot_270_page_matrix_and_size() {
 }
 
 #[test]
-fn coord_rot_mediabox_origin_baked_in() {
-    // Non-zero MediaBox origin must be translated out by the transform.
-    let mb = Rect::new(50.0, 100.0, 662.0, 892.0); // 612×792 shifted
-    let m = page_transform(mb, 0);
+fn coord_rot_cropbox_origin_baked_in() {
+    // The page transform bakes out the **CropBox** origin (the coordinate basis):
+    // a glyph at the CropBox top-left maps to device (0,0), independent of where
+    // the MediaBox origin sits. `page_transform` is basis-agnostic and unchanged;
+    // `build_textpage` now feeds it the CropBox, so all extraction channels share
+    // one origin on CropBox ≠ MediaBox pages.
+    let cropbox = Rect::new(50.0, 100.0, 662.0, 892.0); // non-zero-origin CropBox
+    let m = page_transform(cropbox, 0);
     // P_0 = [1,0,0,-1,-x0,y1] = [1,0,0,-1,-50,892].
     assert_eq!(m, Matrix::new(1.0, 0.0, 0.0, -1.0, -50.0, 892.0));
-    // A glyph at user (50,892) (top-left corner) → device (0,0).
+    // A glyph at the CropBox top-left corner user (50,892) → device (0,0).
     let g = glyph("A", 50.0, 892.0, 12.0);
-    let tp = textpage_from_glyphs(&[g], &[], mb, 0);
+    let tp = textpage_from_glyphs(&[g], &[], cropbox, 0);
     approx(tp.blocks[0].lines[0].spans[0].chars[0].origin.x, 0.0);
     approx(tp.blocks[0].lines[0].spans[0].chars[0].origin.y, 0.0);
 }

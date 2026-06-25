@@ -52,9 +52,13 @@ pub fn build_textpage(doc: &DocumentStore, page: &Page, _limits: &Limits) -> Tex
         return TextPage::default();
     };
     let res: InterpretResult = ContentInterpreter::new(doc).run_page(&page_dict);
-    let mediabox = page.mediabox();
+    // CropBox is the shared coordinate basis: it drives both the device transform
+    // (origin baked out) and the page size, *and* is the out-of-page glyph clip —
+    // so digital-text device coords share one origin with render/svg/ocr on pages
+    // where CropBox ≠ MediaBox. (On the common CropBox == MediaBox page it is
+    // byte-for-byte the old MediaBox behavior.)
+    let cropbox = page.cropbox();
     let rotate = page.rotation();
-    let clip = page.cropbox();
     // Resource-name → resolved `/BaseFont` map (built once per page). The
     // device-transform pass applies it inline, so font-name enrichment costs one
     // pass over the *distinct* fonts instead of one clone per glyph.
@@ -62,9 +66,9 @@ pub fn build_textpage(doc: &DocumentStore, page: &Page, _limits: &Limits) -> Tex
     textpage_core(
         &res.glyphs,
         &res.images,
-        mediabox,
+        cropbox,
         rotate,
-        Some(clip),
+        Some(cropbox),
         Some(&resolver),
     )
 }
@@ -104,13 +108,13 @@ pub fn textpage_from_glyphs_clipped(
 fn textpage_core(
     glyphs: &[PositionedGlyph],
     images: &[ImageRef],
-    mediabox: Rect,
+    page_box: Rect,
     rotate: i32,
     clip: Option<Rect>,
     resolver: Option<&FontResolver>,
 ) -> TextPage {
-    let p = page_transform(mediabox, rotate);
-    let (width, height) = page_size(mediabox, rotate);
+    let p = page_transform(page_box, rotate);
+    let (width, height) = page_size(page_box, rotate);
 
     // 1. Transform every glyph to device space, dropping out-of-CropBox glyphs.
     // `dir` depends only on the page transform + writing mode (not the glyph), so
@@ -194,11 +198,13 @@ fn origin_in_clip(origin: Point, clip: &Rect) -> bool {
 // === device / page transform (PRD §8.6.1) ================================
 
 /// The page transform `P_r` (PRD §8.6.1) mapping PDF user space (post-CTM,
-/// y-up, MediaBox-relative) into PyMuPDF device space (top-left, y-down, with
-/// `/Rotate` applied). `[a b c d e f]` row-vector form.
+/// y-up, page-box-relative) into PyMuPDF device space (top-left, y-down, with
+/// `/Rotate` applied). `[a b c d e f]` row-vector form. Basis-agnostic: it bakes
+/// out the origin of whatever page box it is given; callers pass the **CropBox**
+/// so all extraction channels share one origin.
 #[must_use]
-pub fn page_transform(mediabox: Rect, rotate: i32) -> Matrix {
-    let mb = mediabox.normalize();
+pub fn page_transform(page_box: Rect, rotate: i32) -> Matrix {
+    let mb = page_box.normalize();
     let (x0, y0, x1, y1) = (mb.x0, mb.y0, mb.x1, mb.y1);
     match normalize_rotate(rotate) {
         90 => Matrix::new(0.0, 1.0, 1.0, 0.0, -y0, -x0),
@@ -211,8 +217,8 @@ pub fn page_transform(mediabox: Rect, rotate: i32) -> Matrix {
 /// The displayed page size `(width, height)` after `/Rotate`: `w×h` for
 /// `r ∈ {0,180}`, `h×w` for `r ∈ {90,270}` (PyMuPDF `page.rect`).
 #[must_use]
-pub fn page_size(mediabox: Rect, rotate: i32) -> (f64, f64) {
-    let mb = mediabox.normalize();
+pub fn page_size(page_box: Rect, rotate: i32) -> (f64, f64) {
+    let mb = page_box.normalize();
     let (w, h) = (mb.width(), mb.height());
     match normalize_rotate(rotate) {
         90 | 270 => (h, w),

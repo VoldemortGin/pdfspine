@@ -78,9 +78,9 @@ pub fn get_drawings(doc: &DocumentStore, index: usize) -> Vec<Drawing> {
     let Some(leaf) = pagetree::page_refs(doc).get(index).copied() else {
         return Vec::new();
     };
-    let mb = pagetree::mediabox(doc, leaf);
+    let cb = pagetree::cropbox(doc, leaf);
     let rotate = pagetree::rotation(doc, leaf);
-    let pr = pdf_text::page_transform(mb, rotate);
+    let pr = pdf_text::page_transform(cb, rotate);
     drawings_in_frame(doc, index, Some(pr))
 }
 

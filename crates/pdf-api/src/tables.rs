@@ -194,7 +194,7 @@ pub fn page_find_tables(page: &Page, opts: &TableOptions) -> TableFinder {
 
     // Device-space drawings: interpret the page, then map user-space → device.
     let res = pdf_text::interpret_page(doc, &page_dict);
-    let pt = pdf_text::page_transform(page.mediabox(), page.rotation());
+    let pt = pdf_text::page_transform(page.cropbox(), page.rotation());
     let drawings = core_tables::drawings_to_device(&res.drawings, &pt);
 
     let finder = core_tables::find_tables(&tp, &words, &drawings, &opts.to_core());
