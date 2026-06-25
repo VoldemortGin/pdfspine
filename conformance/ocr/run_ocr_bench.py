@@ -9,7 +9,7 @@ the Chinese (CJK) content and the Latin/digit content of every scanned image in
 
 Tesseract is invoked with its DEFAULT language (``eng``) — the same default fitz
 uses — so it has no Chinese model loaded and scores near-zero on CJK, while the
-pure-Rust PaddleOCR engine (PP-OCRv4, embedded in the wheel) scores high. That
+pure-Rust PaddleOCR engine (PP-OCRv5, embedded in the wheel) scores high. That
 gap is the quantified win.
 
 Run in ``.venv`` (the pdfspine wheel):

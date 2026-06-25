@@ -26,7 +26,7 @@ pdf-edit.workspace = true
 # Typed error wrapping (`From` impls for the upstream crate errors).
 thiserror.workspace = true
 
-# --- `paddle-ocr` feature: pure-Rust PaddleOCR (PP-OCRv4) engine ---
+# --- `paddle-ocr` feature: pure-Rust PaddleOCR (PP-OCRv5) engine ---
 # Optional heavy deps, gated behind the (default-OFF) `paddle-ocr` feature so the
 # base crate / wheel stays lean (P0-5): the multi-MB tract-onnx code path is
 # compiled out by default and only the opt-in `pdfspine[ocr]` build pulls it in.

@@ -53,7 +53,7 @@ docs = [
 ]
 # OCR is now FULLY built in. There is ONE published `pdfspine` wheel and it both
 # CONTAINS the pure-Rust PaddleOCR engine (compiled in via the maturin `ocr`
-# feature above) AND ships the ~15 MB PP-OCRv4 ONNX models inside the package (at
+# feature above) AND ships the ~15 MB PP-OCRv5 ONNX models inside the package (at
 # `pdfspine/_models`, see `[tool.maturin] include` below). So a bare
 # `pip install pdfspine` is full-OCR-capable, offline, with no extra and no
 # separate data package.
@@ -71,7 +71,7 @@ docs = [
 #   4. else the in-repo `crates/pdf-ocr/models` dev fallback (source checkout);
 #   5. else a clear `PdfUnsupportedError`.
 ocr = []  # models are bundled into the wheel; this extra is a back-compat no-op.
-# 一键装齐全部运行期功能依赖(不含开发用 test/docs)。OCR 引擎与 PP-OCRv4 模型均已编进/
+# 一键装齐全部运行期功能依赖(不含开发用 test/docs)。OCR 引擎与 PP-OCRv5 模型均已编进/
 # 打进 wheel,GPU/CPU 由 tract 运行时自适应;故此处也为空,保留名字仅为向后兼容。
 all = []
 
@@ -92,7 +92,7 @@ python-source = "python"
 # `bf_releasebuffer` stable-ABI slots were added in CPython 3.11.
 #
 # `ocr` (the py-bindings crate's feature) compiles the pure-Rust PaddleOCR engine
-# INTO the published wheel. The ~15 MB PP-OCRv4 ONNX models are NOT embedded in
+# INTO the published wheel. The ~15 MB PP-OCRv5 ONNX models are NOT embedded in
 # the binary (that would bloat memory for non-OCR users); instead they are SHIPPED
 # in the wheel as data files at `pdfspine/_models` (see `[tool.maturin] include`
 # below) and loaded from disk at runtime (see the model resolution order in the

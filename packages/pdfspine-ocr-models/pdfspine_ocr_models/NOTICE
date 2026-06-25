@@ -7,11 +7,11 @@ This distribution redistributes third-party model weights whose license requires
 that their attribution notice be carried in redistributions.
 
 * PaddleOCR PP-OCR models and recognition dictionary
-  (ppocrv4_det.onnx, ppocrv4_rec.onnx, ppocrv2_cls.onnx)
+  (ppocrv5_det.onnx, ppocrv5_rec.onnx, ppocrv5_cls.onnx)
   Copyright (c) PaddlePaddle Authors.
   Licensed under the Apache License, Version 2.0.
-  The bundled files are the PP-OCRv4 text-detection and text-recognition models
-  and the PP-OCRv2 angle-classification model, converted to ONNX (via Paddle2ONNX)
+  The bundled files are the PP-OCRv5 text-detection and text-recognition models
+  and the PP-OCRv5 angle-classification model, converted to ONNX (via Paddle2ONNX)
   from the upstream PaddlePaddle weights. Conversion is a mechanical format
   transcode; it does not change the licensing of the weights.
   Source: https://github.com/PaddlePaddle/PaddleOCR

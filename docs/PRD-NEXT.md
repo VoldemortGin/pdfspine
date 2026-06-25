@@ -38,7 +38,7 @@
   **P4-2** embedded Type1 (eurlex `32006L0112_ES` 0.527→0.993), **P1-1r** Symbol/ZapfDingbats (OFL Noto). No
   page is below 0.92 now (was 3 below 0.72); the new worst-10 are AA/hinting sub-pixel residuals, not missing
   content.
-- **OCR:** Tesseract adapter + pure-Rust PaddleOCR (PP-OCRv4 via `tract`) both shipped, Python-selectable,
+- **OCR:** Tesseract adapter + pure-Rust PaddleOCR (PP-OCRv5 via `tract`) both shipped, Python-selectable,
   scanned→searchable proven end-to-end, beats fitz on CJK. Wheel-bloat **resolved** and the publishing path
   is **decided + implemented** (P0-5r): the published `pdfspine` wheel compiles OCR in but embeds **no
   models** (~7 MB compressed; the `cargo` build default stays lean), and the ~16 MB models ship as a separate

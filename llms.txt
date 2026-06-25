@@ -13,7 +13,7 @@
 
 ## OCR
 
-- OCR 引擎(纯 Rust PaddleOCR PP-OCRv4 + Tesseract)已编进 wheel；~16MB ONNX 模型不内嵌
+- OCR 引擎(纯 Rust PaddleOCR PP-OCRv5 + Tesseract)已编进 wheel；~16MB ONNX 模型不内嵌
 - 模型靠 `pip install pdfspine[ocr]` 拉入数据包 `pdfspine-ocr-models`，运行时解析
 
 ## 面向 AI 的使用文档（随 wheel 分发）

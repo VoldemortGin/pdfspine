@@ -10,6 +10,8 @@
 
 pub mod error;
 pub mod image;
+#[cfg(feature = "paddle-ocr")]
+pub mod image_table;
 pub mod ocr;
 pub mod svg;
 pub mod tables;
@@ -74,6 +76,15 @@ pub use pdf_fonts::{Font, BASE14_FONTNAMES};
 // bindings depend only on `pdf-api`.
 pub use tables::{
     page_find_tables, strategy_from_str, CellSpan, Strategy, Table, TableFinder, TableOptions,
+};
+
+// Image-table reconstruction (opt-in OCR build only): parse a table living
+// inside a raster image into a structured grid with per-cell text / bbox /
+// colors / OCR confidence. Gated behind `paddle-ocr` (the only local
+// deterministic engine); absent from the lean build.
+#[cfg(feature = "paddle-ocr")]
+pub use image_table::{
+    page_find_image_tables, ImageTable, ImageTableCell, ImageTableOptions, ImageTableResult, Rgb,
 };
 
 // Optional-content (OCG / layers, M7): the read/write surface used by the

@@ -160,7 +160,7 @@ the ~16 MB ONNX models embedded in every wheel.
 | Distribution | What | How it is built |
 |---|---|---|
 | **`pdfspine`** | the engine wheel — OCR *code* compiled in (`[tool.maturin] features = ["pyo3/abi3-py311", "ocr"]`), models **NOT** embedded | the `wheels` + `sdist` jobs (maturin) |
-| **`pdfspine-ocr-models`** | pure-data, universal `py3-none-any` wheel — the 3 PP-OCRv4 ONNX weights only (import package `pdfspine_ocr_models`, exposes `models_dir()`) | the `ocr-models` job (`python -m build packages/pdfspine-ocr-models`) |
+| **`pdfspine-ocr-models`** | pure-data, universal `py3-none-any` wheel — the 3 PP-OCRv5 ONNX weights only (import package `pdfspine_ocr_models`, exposes `models_dir()`) | the `ocr-models` job (`python -m build packages/pdfspine-ocr-models`) |
 
 The companion does **not** keep a second copy of the models in git: its hatchling
 build hook (`packages/pdfspine-ocr-models/hatch_build.py`) `force_include`s the 3

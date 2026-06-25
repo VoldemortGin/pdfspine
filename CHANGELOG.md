@@ -50,7 +50,7 @@ published wheel's version is set from the `v0.1.0` git tag at build time.
   detection and `Table.to_html()`; Optional Content Groups (OCG / layers)
   read and write.
 - **OCR (`pdf-ocr`):** a pluggable `OcrEngine` with a Tesseract adapter and a
-  pure-Rust PaddleOCR engine (PP-OCRv4 via `tract`, with embedded models),
+  pure-Rust PaddleOCR engine (PP-OCRv5 via `tract`, with embedded models),
   Python-selectable, feeding an end-to-end searchable-sandwich PDF pipeline.
   Includes a CJK-scan accuracy benchmark and rotated-text detection.
 - **Python API & compat:** PyO3 bindings, module-level constants and helper
@@ -77,7 +77,7 @@ published wheel's version is set from the `v0.1.0` git tag at build time.
 - **Full API reference:** the complete public surface is documented via
   mkdocstrings (307/307 symbols).
 - **OCR distribution:** the published `pdfspine` wheel compiles OCR in but embeds
-  **no models** (lean base wheel); the ~16 MB PP-OCRv4 models ship as a separate
+  **no models** (lean base wheel); the ~16 MB PP-OCRv5 models ship as a separate
   `pdfspine-ocr-models` data distribution pulled in by the `[ocr]` extra
   (`pip install pdfspine[ocr]`), resolved offline at runtime via
   `PDFSPINE_OCR_MODELS` → companion → in-repo dev fallback (no download).

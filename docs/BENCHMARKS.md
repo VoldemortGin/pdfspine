@@ -171,7 +171,7 @@ text-dense scans `govdocs1-00000` (0.954) / `govdocs1-00012` (0.955). Remaining 
 
 pdfspine ships **two** OCR backends behind one API (`page.get_textpage_ocr(engine=...)` /
 `doc.pdfocr_*`): the default `"tesseract"` (the system Tesseract CLI — exactly what PyMuPDF/fitz
-uses, since **fitz's OCR is Tesseract-only**) and `"paddle"` (pdfspine's pure-Rust PP-OCRv4 engine,
+uses, since **fitz's OCR is Tesseract-only**) and `"paddle"` (pdfspine's pure-Rust PP-OCRv5 engine,
 embedded in the wheel, no external binary). This benchmark quantifies the CJK win.
 
 **Corpus.** 16 deterministic synthetic SCANS (`conformance/ocr/`), each a mixed

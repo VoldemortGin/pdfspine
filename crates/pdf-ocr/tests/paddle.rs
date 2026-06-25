@@ -1,4 +1,4 @@
-//! `PADDLE-*` — pure-Rust PaddleOCR (PP-OCRv4) engine acceptance test.
+//! `PADDLE-*` — pure-Rust PaddleOCR (PP-OCRv5) engine acceptance test.
 //!
 //! Loads the offline fixture `tests/fixtures/ocr_sample.png` (720×300, three
 //! mixed CJK+Latin lines) into a [`Pixmap`], runs [`PaddleOcr`], and asserts the

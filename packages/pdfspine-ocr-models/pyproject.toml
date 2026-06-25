@@ -4,14 +4,14 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pdfspine-ocr-models"
-# Pure-data, universal (py3-none-any) wheel: the ~16 MB PP-OCRv4 ONNX models that
+# Pure-data, universal (py3-none-any) wheel: the ~16 MB PP-OCRv5 ONNX models that
 # the `pdfspine[ocr]` extra pulls in (P0-5r / Option A). The `pdfspine` wheel has
 # the OCR *code* compiled in; this companion supplies the *weights*, resolved at
 # runtime via `pdfspine_ocr_models.models_dir()`. Dev builds show 0.0.0; tagged CI
 # stamps the real version (see .github/workflows/release.yml) so it tracks the
 # `pdfspine` release it ships alongside.
 version = "0.0.0"
-description = "PP-OCRv4 ONNX model weights for pdfspine's PaddleOCR engine (the pdfspine[ocr] data companion)."
+description = "PP-OCRv5 ONNX model weights for pdfspine's PaddleOCR engine (the pdfspine[ocr] data companion)."
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.11"

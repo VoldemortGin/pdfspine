@@ -1,6 +1,6 @@
 # pdfspine-ocr-models
 
-The PP-OCRv4 ONNX model weights for [pdfspine](https://github.com/VoldemortGin/pdfspine)'s
+The PP-OCRv5 ONNX model weights for [pdfspine](https://github.com/VoldemortGin/pdfspine)'s
 pure-Rust PaddleOCR engine (`engine="paddle"`).
 
 This is a **pure-data companion distribution**. The published `pdfspine` wheel

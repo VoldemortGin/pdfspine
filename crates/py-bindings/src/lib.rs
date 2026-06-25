@@ -165,6 +165,49 @@ fn rect_of(t: (f64, f64, f64, f64)) -> Rect {
     Rect::new(t.0, t.1, t.2, t.3)
 }
 
+/// Converts a core [`pdf_api::ImageTableResult`] into the Python `ImageTable`
+/// list (OCR build only).
+#[cfg(feature = "ocr")]
+fn image_tables_to_py(
+    py: Python<'_>,
+    result: pdf_api::ImageTableResult,
+) -> PyResult<Vec<PyImageTable>> {
+    result
+        .tables
+        .into_iter()
+        .map(|t| {
+            let cells: PyResult<Vec<Py<PyImageTableCell>>> = t
+                .cells
+                .into_iter()
+                .map(|c| {
+                    Py::new(
+                        py,
+                        PyImageTableCell {
+                            row: c.row,
+                            col: c.col,
+                            row_span: c.row_span,
+                            col_span: c.col_span,
+                            rect: rect_tuple(c.rect),
+                            text: c.text,
+                            confidence: c.confidence,
+                            bg_color: (c.bg_color[0], c.bg_color[1], c.bg_color[2]),
+                            text_color: (c.text_color[0], c.text_color[1], c.text_color[2]),
+                        },
+                    )
+                })
+                .collect();
+            Ok(PyImageTable {
+                bbox: rect_tuple(t.bbox),
+                row_count: t.row_count,
+                col_count: t.col_count,
+                cols: t.cols,
+                rows: t.rows,
+                cells: cells?,
+            })
+        })
+        .collect()
+}
+
 /// Builds a [`Point`] from the `(x, y)` 2-tuple the Python layer sends.
 fn point_of(t: (f64, f64)) -> Point {
     Point::new(t.0, t.1)
@@ -1366,6 +1409,156 @@ impl PyTableFinder {
     }
 }
 
+// --- ImageTable / ImageTableFinder (raster "image table", OCR build) -------
+//
+// A high-level, opt-in surface (`Page.find_image_tables`) that reconstructs a
+// table living inside a raster image (scanned / image-only page) into a grid,
+// preserving per-cell text + bbox + background color + text color + OCR
+// confidence. The pyclasses are plain data and always present; the heavy
+// orchestration in `pdf-api` exists only under the `ocr` feature, so on a lean
+// build `find_image_tables` raises `PdfUnsupportedError` (like `engine="paddle"`).
+
+/// One cell of a raster image table (`pdfspine` extra; not in PyMuPDF). Carries
+/// the grid position plus everything recovered from the raster: text, bbox
+/// (page points), background/text RGB color, and the mean OCR confidence.
+#[pyclass(name = "ImageTableCell", module = "pdfspine._core", frozen)]
+struct PyImageTableCell {
+    row: usize,
+    col: usize,
+    row_span: usize,
+    col_span: usize,
+    rect: (f64, f64, f64, f64),
+    text: String,
+    confidence: f32,
+    bg_color: (u8, u8, u8),
+    text_color: (u8, u8, u8),
+}
+
+#[pymethods]
+impl PyImageTableCell {
+    /// The 0-based grid row of the cell's top-left slot.
+    #[getter]
+    fn row(&self) -> usize {
+        self.row
+    }
+
+    /// The 0-based grid column of the cell's top-left slot.
+    #[getter]
+    fn col(&self) -> usize {
+        self.col
+    }
+
+    /// How many grid rows this cell spans (`>= 1`).
+    #[getter]
+    fn row_span(&self) -> usize {
+        self.row_span
+    }
+
+    /// How many grid columns this cell spans (`>= 1`).
+    #[getter]
+    fn col_span(&self) -> usize {
+        self.col_span
+    }
+
+    /// The cell bounding box `(x0, y0, x1, y1)` in page points (device space).
+    #[getter]
+    fn bbox(&self) -> (f64, f64, f64, f64) {
+        self.rect
+    }
+
+    /// The OCR text of the words inside this cell (reading order, space-joined).
+    #[getter]
+    fn text(&self) -> &str {
+        &self.text
+    }
+
+    /// The mean OCR confidence (`0.0..=100.0`) of the cell's words, `0.0` if none.
+    #[getter]
+    fn confidence(&self) -> f32 {
+        self.confidence
+    }
+
+    /// The cell background color as an `(r, g, b)` tuple.
+    #[getter]
+    fn bg_color(&self) -> (u8, u8, u8) {
+        self.bg_color
+    }
+
+    /// The cell text / foreground color as an `(r, g, b)` tuple.
+    #[getter]
+    fn text_color(&self) -> (u8, u8, u8) {
+        self.text_color
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "<pdfspine._core.ImageTableCell ({},{}) {:?}>",
+            self.row, self.col, self.text
+        )
+    }
+}
+
+/// One table reconstructed from a raster image (`pdfspine` extra). Field naming
+/// mirrors `Table` (`bbox` / `row_count` / `col_count` / `cols` / `rows`), plus
+/// `cells` as the list of present [`PyImageTableCell`]s.
+#[pyclass(name = "ImageTable", module = "pdfspine._core", frozen)]
+struct PyImageTable {
+    bbox: (f64, f64, f64, f64),
+    row_count: usize,
+    col_count: usize,
+    cols: Vec<f64>,
+    rows: Vec<f64>,
+    cells: Vec<Py<PyImageTableCell>>,
+}
+
+#[pymethods]
+impl PyImageTable {
+    /// The table bounding box `(x0, y0, x1, y1)` in page points.
+    #[getter]
+    fn bbox(&self) -> (f64, f64, f64, f64) {
+        self.bbox
+    }
+
+    /// The number of grid rows.
+    #[getter]
+    fn row_count(&self) -> usize {
+        self.row_count
+    }
+
+    /// The number of grid columns.
+    #[getter]
+    fn col_count(&self) -> usize {
+        self.col_count
+    }
+
+    /// The `col_count + 1` vertical grid-line x positions (page points).
+    #[getter]
+    fn cols(&self) -> Vec<f64> {
+        self.cols.clone()
+    }
+
+    /// The `row_count + 1` horizontal grid-line y positions (page points).
+    #[getter]
+    fn rows(&self) -> Vec<f64> {
+        self.rows.clone()
+    }
+
+    /// The present cells (grid slots with at least one word), row-major.
+    #[getter]
+    fn cells(&self, py: Python<'_>) -> Vec<Py<PyImageTableCell>> {
+        self.cells.iter().map(|c| c.clone_ref(py)).collect()
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "<pdfspine._core.ImageTable {}x{} cells={}>",
+            self.row_count,
+            self.col_count,
+            self.cells.len()
+        )
+    }
+}
+
 #[pymethods]
 impl PyPage {
     /// The zero-based page index (PyMuPDF `page.number`).
@@ -1895,6 +2088,65 @@ impl PyPage {
         let page = self.page.clone();
         let finder = py.detach(move || pdf_api::page_find_tables(&page, &opts));
         PyTableFinder { finder }
+    }
+
+    /// Reconstructs tables that live **inside a raster image** on this page
+    /// (scanned / image-only, no text layer, no vector rulings) into a structured
+    /// grid, preserving per-cell text + bbox + background color + text color +
+    /// OCR confidence (`pdfspine` extra; not in PyMuPDF).
+    ///
+    /// `engine` must be `"paddle"` — the local, deterministic PaddleOCR engine,
+    /// available only in the opt-in OCR build (`pip install pdfspine[ocr]`). On a
+    /// lean build, or any other engine, this raises `PdfUnsupportedError`.
+    /// Returns the list of reconstructed [`PyImageTable`]s (at most one in v1).
+    /// Heavy render + OCR + sampling work runs with the GIL released.
+    #[cfg(feature = "ocr")]
+    #[pyo3(signature = (*, engine="paddle", dpi=150, language="eng", min_confidence=0.0, row_gap_ratio=0.5, col_gap_ratio=0.7))]
+    #[allow(clippy::too_many_arguments)]
+    fn find_image_tables(
+        &self,
+        py: Python<'_>,
+        engine: &str,
+        dpi: u32,
+        language: &str,
+        min_confidence: f32,
+        row_gap_ratio: f64,
+        col_gap_ratio: f64,
+    ) -> PyResult<Vec<PyImageTable>> {
+        let page = self.page.clone();
+        let lang = language.to_string();
+        let engine = engine.to_string();
+        let opts = pdf_api::ImageTableOptions {
+            dpi,
+            language: lang,
+            min_confidence,
+            row_gap_ratio,
+            col_gap_ratio,
+        };
+        let result = py
+            .detach(move || pdf_api::page_find_image_tables(&page, &engine, &opts))
+            .map_err(map_err)?;
+        image_tables_to_py(py, result)
+    }
+
+    /// Lean-build stub: `find_image_tables` needs the OCR engine, absent here.
+    /// Raises `PdfUnsupportedError`, matching the `engine="paddle"` UX.
+    #[cfg(not(feature = "ocr"))]
+    #[pyo3(signature = (*, engine="paddle", dpi=150, language="eng", min_confidence=0.0, row_gap_ratio=0.5, col_gap_ratio=0.7))]
+    #[allow(clippy::too_many_arguments, unused_variables)]
+    fn find_image_tables(
+        &self,
+        engine: &str,
+        dpi: u32,
+        language: &str,
+        min_confidence: f32,
+        row_gap_ratio: f64,
+        col_gap_ratio: f64,
+    ) -> PyResult<Vec<PyImageTable>> {
+        Err(PdfUnsupportedError::new_err(
+            "find_image_tables requires the OCR build (the pure-Rust PaddleOCR \
+             engine); install it with `pip install pdfspine[ocr]`.",
+        ))
     }
 
     // --- SVG export (PRD §7, M7) -----------------------------------------
@@ -5000,6 +5252,8 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyDisplayList>()?;
     m.add_class::<PyTableFinder>()?;
     m.add_class::<PyTable>()?;
+    m.add_class::<PyImageTable>()?;
+    m.add_class::<PyImageTableCell>()?;
     m.add_class::<PyFont>()?;
     m.add_class::<PyTools>()?;
     m.add_class::<PyOutline>()?;

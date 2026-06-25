@@ -59,7 +59,7 @@ pdfspine is a **drop-in-shaped, permissively-licensed (Apache-2.0)** alternative
 | **Render** | `get_pixmap` (vector + text + image + shadings via a tiny-skia rasterizer), `Pixmap` (buffer-protocol/numpy), `DisplayList`, **`get_svg_image`** |
 | **Images** | open PNG/JPEG/TIFF/GIF/BMP/WEBP as documents, `convert_to_pdf`, image-XObject decode (DCT/CCITT/JBIG2/JPX), `extract_image` |
 | **Layers** | Optional Content Groups read/write (`get_ocgs` / `add_ocg` / `set_layer`) |
-| **OCR** | pluggable engine: Tesseract adapter **and** a pure-Rust PaddleOCR engine (PP-OCRv4, embedded models, stronger on CJK) → searchable-sandwich PDF |
+| **OCR** | pluggable engine: Tesseract adapter **and** a pure-Rust PaddleOCR engine (PP-OCRv5, embedded models, stronger on CJK) → searchable-sandwich PDF |
 | **CLI** | `pdfspine info / text / render / merge / split / pages / images / toc` |
 
 Planned next: reading-order accuracy improvements, Type1/Type3 glyph rendering,
@@ -123,7 +123,7 @@ committed). See [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) and the
   on Arabic / RTL** (correct bidi reordering).
 - **Rendering is near-parity** with fitz (page-image SSIM ~**0.945**) and ~**1.74×
   faster** after a font-cache fix.
-- **OCR beats fitz on CJK scans**: the pure-Rust PaddleOCR engine (PP-OCRv4, with
+- **OCR beats fitz on CJK scans**: the pure-Rust PaddleOCR engine (PP-OCRv5, with
   models embedded in the wheel) outperforms fitz's OCR path on Chinese/Japanese/
   Korean documents.
 - Real-corpus robustness: **open rate 100%**, **0 panics/hangs**, **re-saved files

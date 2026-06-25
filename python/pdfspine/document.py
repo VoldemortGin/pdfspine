@@ -1511,6 +1511,141 @@ class TableFinder:
         return f"<pdfspine.TableFinder tables={len(self)}>"
 
 
+class ImageTableCell:
+    """One cell of a raster :class:`ImageTable` (pdfspine extra; not in PyMuPDF).
+
+    Carries the grid position plus everything recovered from the image: text,
+    bbox (a :class:`Rect`, page points), ``bg_color`` / ``text_color`` as
+    ``(r, g, b)`` tuples, and the mean OCR ``confidence`` (``0.0..=100.0``).
+    """
+
+    __slots__ = ("_cell",)
+
+    def __init__(self, core_cell: "_core.ImageTableCell") -> None:
+        self._cell = core_cell
+
+    @property
+    def row(self) -> int:
+        """The 0-based grid row of the cell's top-left slot."""
+        return self._cell.row
+
+    @property
+    def col(self) -> int:
+        """The 0-based grid column of the cell's top-left slot."""
+        return self._cell.col
+
+    @property
+    def row_span(self) -> int:
+        """How many grid rows this cell spans (``>= 1``)."""
+        return self._cell.row_span
+
+    @property
+    def col_span(self) -> int:
+        """How many grid columns this cell spans (``>= 1``)."""
+        return self._cell.col_span
+
+    @property
+    def bbox(self) -> Rect:
+        """The cell bounding box (page points)."""
+        return _rect(self._cell.bbox)
+
+    @property
+    def text(self) -> str:
+        """The OCR text of the cell's words (reading order, space-joined)."""
+        return self._cell.text
+
+    @property
+    def confidence(self) -> float:
+        """The mean OCR confidence (``0.0..=100.0``); ``0.0`` if the cell is empty."""
+        return self._cell.confidence
+
+    @property
+    def bg_color(self) -> tuple[int, int, int]:
+        """The cell background color as an ``(r, g, b)`` tuple."""
+        return self._cell.bg_color
+
+    @property
+    def text_color(self) -> tuple[int, int, int]:
+        """The cell text / foreground color as an ``(r, g, b)`` tuple."""
+        return self._cell.text_color
+
+    def __repr__(self) -> str:
+        return f"<pdfspine.ImageTableCell ({self.row},{self.col}) {self.text!r}>"
+
+
+class ImageTable:
+    """One table reconstructed from a raster image (pdfspine extra).
+
+    Returned by :meth:`Page.find_image_tables` for scanned / image-only pages
+    (no text layer, no vector rulings). Field naming mirrors :class:`Table`
+    (``bbox`` / ``row_count`` / ``col_count`` / ``cols`` / ``rows``); ``cells``
+    is the list of present :class:`ImageTableCell`, each carrying the per-cell
+    color + OCR confidence the vector :class:`Table` has no place for.
+    """
+
+    __slots__ = ("_table",)
+
+    def __init__(self, core_table: "_core.ImageTable") -> None:
+        self._table = core_table
+
+    @property
+    def bbox(self) -> Rect:
+        """The table bounding box (page points)."""
+        return _rect(self._table.bbox)
+
+    @property
+    def row_count(self) -> int:
+        """The number of grid rows."""
+        return self._table.row_count
+
+    @property
+    def col_count(self) -> int:
+        """The number of grid columns."""
+        return self._table.col_count
+
+    @property
+    def cols(self) -> list[float]:
+        """The ``col_count + 1`` vertical grid-line x positions (page points)."""
+        return self._table.cols
+
+    @property
+    def rows(self) -> list[float]:
+        """The ``row_count + 1`` horizontal grid-line y positions (page points)."""
+        return self._table.rows
+
+    @property
+    def cells(self) -> list[ImageTableCell]:
+        """The present cells (grid slots with at least one word), row-major."""
+        return [ImageTableCell(c) for c in self._table.cells]
+
+    def cell(self, row: int, col: int) -> ImageTableCell | None:
+        """The present cell anchored at grid slot ``(row, col)``, or ``None``."""
+        for c in self._table.cells:
+            if c.row == row and c.col == col:
+                return ImageTableCell(c)
+        return None
+
+    def extract(self) -> list[list[str | None]]:
+        """The cell-text grid (row-major); ``None`` for an empty grid slot.
+
+        Mirrors :meth:`Table.extract`: a merged cell's text appears in its
+        originating (top-left) slot and the covered slots are ``None``.
+        """
+        grid: list[list[str | None]] = [
+            [None] * self.col_count for _ in range(self.row_count)
+        ]
+        for c in self._table.cells:
+            if 0 <= c.row < self.row_count and 0 <= c.col < self.col_count:
+                grid[c.row][c.col] = c.text
+        return grid
+
+    def __repr__(self) -> str:
+        return (
+            f"<pdfspine.ImageTable {self.row_count}x{self.col_count} "
+            f"cells={len(self._table.cells)}>"
+        )
+
+
 # ``Pixmap`` is the Rust ``_core.Pixmap`` directly (PyMuPDF ``fitz.Pixmap``,
 # PRD §8.10 / §3.3). Using the native pyclass — rather than a pure-Python wrapper
 # — means the zero-copy **buffer protocol** (``memoryview(pix)`` /
@@ -2018,6 +2153,49 @@ class Page:
                 min_line_length=float(min_line_length),
             )
         )
+
+    def find_image_tables(
+        self,
+        *,
+        engine: str = "paddle",
+        dpi: int = 150,
+        language: str = "eng",
+        min_confidence: float = 0.0,
+        row_gap_ratio: float = 0.5,
+        col_gap_ratio: float = 0.7,
+    ) -> list[ImageTable]:
+        """Reconstruct tables that live **inside a raster image** on this page
+        (scanned / image-only, no text layer, no vector rulings) into a
+        structured grid, preserving everything per cell: text, bbox, background
+        color, text color, and OCR confidence (pdfspine extra; not in PyMuPDF).
+
+        This is the opt-in, high-fidelity path: the default
+        :meth:`find_tables` reads vector rulings / the text layer and returns
+        nothing for an image table. Call this when you need the full per-cell
+        raster detail back.
+
+        ``engine`` must be ``"paddle"`` — the local, deterministic pure-Rust
+        PaddleOCR engine, available only in the OCR build
+        (``pip install pdfspine[ocr]``). On a lean build, or any other engine,
+        this raises :class:`PdfUnsupportedError`. ``dpi`` is the render
+        resolution (higher is sharper for OCR but slower); ``min_confidence``
+        drops low-confidence OCR words before gridding; ``row_gap_ratio`` /
+        ``col_gap_ratio`` tune the row/column clustering.
+
+        Returns a list of :class:`ImageTable` (at most one in v1); an empty list
+        when no table is recovered.
+        """
+        if engine == "paddle":
+            _ensure_ocr_models_env()
+        cores = self._page.find_image_tables(
+            engine=engine,
+            dpi=int(dpi),
+            language=language,
+            min_confidence=float(min_confidence),
+            row_gap_ratio=float(row_gap_ratio),
+            col_gap_ratio=float(col_gap_ratio),
+        )
+        return [ImageTable(t) for t in cores]
 
     # --- SVG export (PRD §7, M7) ---
     def get_svg_image(self, matrix=None, *, text_as_path: bool = True, **_ignored) -> str:
