@@ -30,6 +30,13 @@
 #   Then create GitHub Environments `pypi` and `testpypi` (Settings -> Environments).
 # Until that is done, the `publish` job will fail with "not authorized".
 #
+# NB: pdfspine is ALREADY published on PyPI (0.0.1–0.0.5, via API token), so this
+#   is NOT a pending publisher — go to the EXISTING project at
+#   pypi.org/manage/project/pdfspine/settings/publishing/ and "Add a trusted
+#   publisher" with the same Owner=VoldemortGin / Repo=pdfspine /
+#   Workflow=release.yml / Environment=pypi values. (Pending publishers are only
+#   for projects that do not exist on PyPI yet.)
+#
 # One abi3 wheel is built per (OS, arch) — NOT one per Python version (abi3-py311
 # covers CPython >= 3.11). maturin-action's containers ship the C/asm toolchain
 # that the bundled `tract` OCR kernels need to compile.
@@ -214,10 +221,6 @@ jobs:
         if: github.event_name == 'push' || github.event.inputs.publish_target == 'pypi'
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          # API-token auth (the v0.1.0 release). Trusted Publishing (OIDC,
-          # tokenless) is preferred for future releases — drop this `with:`
-          # once pending publishers are configured on PyPI.
-          password: ${{ secrets.PYPI_API_TOKEN }}
           # 跳过已存在的文件:本地手动发过 0.0.1 的 macOS-arm64 wheel + sdist,
           # 让 tag 重跑只补传缺的平台 wheel,不因重复文件而整批失败。
           skip-existing: true

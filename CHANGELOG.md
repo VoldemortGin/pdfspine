@@ -29,6 +29,15 @@ feature-complete, but the public API and on-disk formats may still change.
   byte-for-byte unaffected (`cropbox()` returns the MediaBox when `/CropBox` is
   absent). `get_cdrawings` keeps its raw user-space output unchanged.
 
+### Packaging
+
+- OCR models are no longer embedded in the `pdfspine` wheel: the ~28 MB PP-OCRv5
+  ONNX weights now ship in the shared `ocrspine-models` data distribution, pulled
+  in as a runtime dependency. `pip install pdfspine` still bundles OCR out of the
+  box (the models are resolved automatically) while the wheel shrinks by ~28 MB.
+  `ocrspine-models` must be published on PyPI before the first `pdfspine` release
+  that depends on it.
+
 ### Tests
 
 - Added cross-layer alignment tests on `CropBox ≠ MediaBox` pages, each with a
