@@ -112,6 +112,9 @@ jobs:
             PY=.ocrsmoke/Scripts/python
           fi
           "$PY" -m pip install --upgrade pip
+          # OCR 模型现由共享数据包 ocrspine-models 提供（硬依赖）：先从 PyPI 装它，
+          # 再用 --no-index 装本地 wheel（依赖已满足，仍只测本地构建的 wheel）。
+          "$PY" -m pip install ocrspine-models
           "$PY" -m pip install --find-links dist --no-index pdfspine
           "$PY" scripts/ocr_smoke.py crates/pdf-ocr/tests/fixtures/ocr_sample.png
       - uses: actions/upload-artifact@v4
@@ -162,6 +165,9 @@ jobs:
             PY=.ocrsmoke/Scripts/python
           fi
           "$PY" -m pip install --upgrade pip
+          # OCR 模型现由共享数据包 ocrspine-models 提供（硬依赖）：先从 PyPI 装它，
+          # 再用 --no-index 装本地 wheel（依赖已满足，仍只测本地构建的 wheel）。
+          "$PY" -m pip install ocrspine-models
           "$PY" -m pip install --find-links dist --no-index pdfspine
           "$PY" scripts/ocr_smoke.py crates/pdf-ocr/tests/fixtures/ocr_sample.png
       - uses: actions/upload-artifact@v4
