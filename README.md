@@ -1,5 +1,7 @@
 # pdfspine
 
+[![PyPI](https://img.shields.io/pypi/v/pdfspine.svg)](https://pypi.org/project/pdfspine/)
+
 **An Apache-2.0-licensed, pure-Rust reimplementation of [PyMuPDF](https://pymupdf.readthedocs.io/) (`fitz`), with PyO3 Python bindings.**
 
 > 🦴 **Part of the `spine` family — framework-free backend engines, each the spine of a domain:**
@@ -18,7 +20,8 @@
 > is at fitz parity (and beats fitz on Arabic / RTL), rendering is near-parity and
 > ~1.74× faster, and the pure-Rust PaddleOCR engine beats fitz on CJK scans
 > (see [Accuracy](#accuracy)).
-> Not yet on PyPI — [build from source](#build--install) for now.
+> Now on PyPI: `pip install pdfspine` (see [Install](#install)); or
+> [build from source](#build--install).
 
 ---
 
@@ -59,12 +62,24 @@ pdfspine is a **drop-in-shaped, permissively-licensed (Apache-2.0)** alternative
 | **Render** | `get_pixmap` (vector + text + image + shadings via a tiny-skia rasterizer), `Pixmap` (buffer-protocol/numpy), `DisplayList`, **`get_svg_image`** |
 | **Images** | open PNG/JPEG/TIFF/GIF/BMP/WEBP as documents, `convert_to_pdf`, image-XObject decode (DCT/CCITT/JBIG2/JPX), `extract_image` |
 | **Layers** | Optional Content Groups read/write (`get_ocgs` / `add_ocg` / `set_layer`) |
-| **OCR** | pluggable engine: Tesseract adapter **and** a pure-Rust PaddleOCR engine (PP-OCRv5, embedded models, stronger on CJK) → searchable-sandwich PDF |
+| **OCR** | pluggable engine: Tesseract adapter **and** a pure-Rust PaddleOCR engine (PP-OCRv5, weights from the shared `ocrspine-models` package, stronger on CJK) → searchable-sandwich PDF |
 | **CLI** | `pdfspine info / text / render / merge / split / pages / images / toc` |
 
 Planned next: reading-order accuracy improvements, Type1/Type3 glyph rendering,
 broader CJK coverage. See [`PRD.md`](PRD.md) / [`docs/ROADMAP.md`](docs/ROADMAP.md).
 Out of scope: digital-signature *creation*.
+
+## Install
+
+```bash
+pip install pdfspine
+```
+
+pdfspine is **on PyPI**. OCR works out of the box: the PP-OCRv5 weights ship in
+the shared [`ocrspine-models`](https://pypi.org/project/ocrspine-models/) data
+package — a runtime dependency `pip` pulls in automatically — so the wheel itself
+stays lean and no longer embeds them. To build from source instead, see
+[Build & install](#build--install).
 
 ## Quick start
 
@@ -124,8 +139,8 @@ committed). See [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) and the
 - **Rendering is near-parity** with fitz (page-image SSIM ~**0.945**) and ~**1.74×
   faster** after a font-cache fix.
 - **OCR beats fitz on CJK scans**: the pure-Rust PaddleOCR engine (PP-OCRv5, with
-  models embedded in the wheel) outperforms fitz's OCR path on Chinese/Japanese/
-  Korean documents.
+  weights from the shared `ocrspine-models` package) outperforms fitz's OCR path
+  on Chinese/Japanese/Korean documents.
 - Real-corpus robustness: **open rate 100%**, **0 panics/hangs**, **re-saved files
   100% `qpdf --check`-clean** across the public-domain US-government corpus.
 
@@ -149,10 +164,11 @@ maturin build --release         # -> target/wheels/
 > **Building from source needs a C/asm compiler.** The bundled pure-Rust
 > PaddleOCR engine depends on `tract`, which compiles target-specific assembly
 > kernels at build time: a C compiler (`cc`/`clang`) on Linux/macOS, or the MSVC
-> Build Tools (incl. `ml64.exe`) on Windows. Prebuilt wheels (once published) need
-> none of this. To build a fully C-free library, compile the Rust crates with
-> `--no-default-features` (drops the `paddle-ocr` feature). Wheels are large
-> (~15–25 MB) because the OCR models (~16 MB) are embedded.
+> Build Tools (incl. `ml64.exe`) on Windows. Prebuilt PyPI wheels need none of
+> this. To build a fully C-free library, compile the Rust crates with
+> `--no-default-features` (drops the `paddle-ocr` feature). The wheel no longer
+> embeds the OCR models — they ship in the shared `ocrspine-models` package (a
+> runtime dependency).
 
 ## Architecture
 
