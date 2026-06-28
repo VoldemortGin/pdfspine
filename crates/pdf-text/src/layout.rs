@@ -683,9 +683,23 @@ fn detect_page_gutters(runs: &[Vec<usize>], dev: &[DevGlyph]) -> Vec<f64> {
         if lo <= rx0 + 1e-6 || hi >= rx1 - 1e-6 || hi - lo < min_gap {
             continue;
         }
-        // A populated column on each side (rejects a ragged right margin).
-        if median_occ(0, lo_bin) >= side_floor && median_occ(hi_bin.min(nbins), nbins) >= side_floor
-        {
+        // A real column on each side. The major (denser) side must be a full
+        // column (≥ side_floor); the minor side may be a *sparse* secondary column
+        // — overflow text, marginalia, a narrow sidebar — which fitz reads as its
+        // own block. A clean interior empty band (occupancy ≤ low across its whole
+        // width) with even a few lines of text past it is a genuine column
+        // boundary, not a ragged margin: a ragged right margin never forms a clean
+        // interior empty band followed by a populated strip, so this does not
+        // over-split plain prose (the band there runs to the page edge and is
+        // rejected as non-interior above).
+        let left_occ = median_occ(0, lo_bin);
+        let right_occ = median_occ(hi_bin.min(nbins), nbins);
+        let major = left_occ.max(right_occ);
+        let minor = left_occ.min(right_occ);
+        // A sparse secondary column still needs a minimal real presence (≥ 2 lines)
+        // so a one-off stray glyph in the margin never manufactures a column.
+        const MINOR_SIDE_FLOOR: u32 = 2;
+        if major >= side_floor && minor >= MINOR_SIDE_FLOOR {
             gutters.push((lo + hi) / 2.0);
         }
     }
