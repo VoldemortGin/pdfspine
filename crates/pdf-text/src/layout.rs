@@ -392,7 +392,13 @@ fn group_lines(dev: &[DevGlyph]) -> Vec<Line> {
     //
     // Tolerance keys on the *larger* of the cluster representative's size and
     // the candidate glyph's size so a smaller super/subscript glyph still joins
-    // the main baseline.
+    // the main baseline. The size measure is the **device-space glyph cell
+    // height**, not the `Tf` operand size: PDFs that emit `Tf 1` and bake the real
+    // scale into the CTM report operand size ≈ 1.0, which would collapse the
+    // tolerance to `LINE_TOL_FRAC` (≈0.5pt) and split every super/subscript onto
+    // its own baseline — shattering words like `LNv` / `cyc01`. Keying off the
+    // device height (the same fix `words.rs` uses for the word-gap threshold)
+    // makes the tolerance invariant to where the scale lives.
     let mut clusters: Vec<Vec<usize>> = Vec::new();
     let mut cluster_cross: Vec<f64> = Vec::new();
     // Representative size/dir per cluster, kept in parallel arrays so the hot
@@ -404,7 +410,14 @@ fn group_lines(dev: &[DevGlyph]) -> Vec<Line> {
 
     for (i, g) in dev.iter().enumerate() {
         let cross = g.cross();
-        let g_size = g.size.abs();
+        // Size measure for the baseline tolerance: the larger of the `Tf` operand
+        // size and the device-space cell height (see the tolerance note above).
+        // The operand size is the stable measure for normal PDFs (ink height
+        // varies per glyph — an x-height lowercase vs a full-height cap), while the
+        // device height rescues `Tf 1` + CTM-scaled PDFs where the operand collapses
+        // to ~1.0. Taking the max keeps normal-PDF behavior intact and only lifts
+        // the tolerance when the operand is degenerate.
+        let g_size = g.size.abs().max(g.bbox.normalize().height());
         let g_dir = g.dir;
         let mut found = None;
         for ci in 0..cluster_cross.len() {
