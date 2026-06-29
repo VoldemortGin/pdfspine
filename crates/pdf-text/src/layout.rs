@@ -40,12 +40,6 @@ const SUPERSCRIPT_RISE_FRAC: f64 = 0.85;
 /// x-containment reattachment from ever merging two genuine lines.
 const FRAGMENT_MAX_WIDTH_FRAC: f64 = 3.0;
 
-/// A reattached fragment must be this much *shorter* than its host (ink height): a
-/// genuine super/subscript / footnote marker is a reduced or raised-and-clipped
-/// glyph, while a full-height short run (e.g. a 1–2 char CJK column line) is a real
-/// line and must never be pulled into a neighbour. This is the CJK-safety guard.
-const FRAGMENT_MAX_HEIGHT_RATIO: f64 = 0.78;
-
 /// Minimum vertical gap (as a fraction of the typical line height) that starts a
 /// new block. Lines closer than this fall into one paragraph block.
 const BLOCK_GAP_FRAC: f64 = 1.3;
@@ -550,7 +544,6 @@ fn reattach_fragment_runs(runs: &mut Vec<Vec<usize>>, dev: &[DevGlyph]) {
     let mut x1 = vec![f64::NEG_INFINITY; n];
     let mut cross = vec![0.0_f64; n];
     let mut size = vec![1.0_f64; n];
-    let mut height = vec![0.0_f64; n];
     let mut dir = vec![(1.0_f64, 0.0_f64); n];
     for (r, run) in runs.iter().enumerate() {
         let mut best_h = -1.0_f64;
@@ -565,7 +558,6 @@ fn reattach_fragment_runs(runs: &mut Vec<Vec<usize>>, dev: &[DevGlyph]) {
                 best_h = h;
                 cross[r] = dev[i].cross();
                 size[r] = dev[i].size.abs().max(h);
-                height[r] = h;
                 dir[r] = dev[i].dir;
             }
         }
@@ -592,9 +584,19 @@ fn reattach_fragment_runs(runs: &mut Vec<Vec<usize>>, dev: &[DevGlyph]) {
             if !dir_matches(&dir[a], &dir[b]) {
                 continue;
             }
-            // CJK-safety: only a genuinely *shorter* glyph (reduced/clipped
-            // super/subscript) reattaches — a full-height short run is a real line.
-            if height[b] <= 0.0 || height[a] >= height[b] * FRAGMENT_MAX_HEIGHT_RATIO {
+            // CJK-safety + precision: the fragment must slot into a *horizontal gap*
+            // of the host line — no host glyph covers the fragment's x-centre. A
+            // footnote marker fills the `( )` gap (true gap); a short CJK column line
+            // x-contained in a wider line would x-overlap that line's glyphs (no
+            // gap), so it is never pulled in. This is the discriminator that height-
+            // ratio could not provide (a `Ts`-raised full-size digit is not shorter).
+            if runs[b]
+                .iter()
+                .any(|&i| {
+                    let gb = dev[i].bbox.normalize();
+                    gb.x0 <= a_mid && a_mid <= gb.x1
+                })
+            {
                 continue;
             }
             let dy = (cross[a] - cross[b]).abs();
