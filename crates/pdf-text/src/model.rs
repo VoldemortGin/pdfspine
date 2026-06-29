@@ -52,6 +52,13 @@ pub struct PositionedGlyph {
     pub render_mode: u8,
     /// The writing direction in effect.
     pub writing_dir: WritingDir,
+    /// Unit advance direction of this glyph in **PDF user space** — the normalized
+    /// text x-axis of the rendering matrix `Trm` (`(Trm.a, Trm.b)`). Almost always
+    /// `(1, 0)`, but a rotated `Tm` (e.g. a 90°-turned table header) makes it
+    /// `(0, ±1)` etc. Layout keys line grouping off this per-glyph (not a single
+    /// per-page vector) so rotated runs cluster along their own baseline instead of
+    /// shattering into one char per line.
+    pub advance_dir: (f64, f64),
     /// The font ascender normalized to a unit font size (`/Ascent ÷ 1000`),
     /// matching PyMuPDF's span `ascender` (PRD §8.6.2, §10.7).
     pub ascender: f64,

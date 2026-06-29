@@ -290,7 +290,25 @@ impl DevGlyph {
             WritingDir::Vertical => 1,
             WritingDir::Horizontal => 0,
         };
-        let dir = if wmode == 1 { dir_v } else { dir_h };
+        // Device-space writing direction. Vertical writing keeps the page's
+        // vertical vector; horizontal writing maps this glyph's own user-space
+        // advance (`(1,0)` upright, `(0,±1)` for a rotated `Tm`) through the page
+        // transform's linear part — so a rotated table header clusters along its
+        // own baseline instead of one glyph per line. Upright text yields exactly
+        // `dir_h`, so non-rotated pages are byte-identical to before.
+        let dir = if wmode == 1 {
+            dir_v
+        } else {
+            let (ux, uy) = g.advance_dir;
+            let dx = p.a * ux + p.c * uy;
+            let dy = p.b * ux + p.d * uy;
+            let n = (dx * dx + dy * dy).sqrt();
+            if n > f64::EPSILON {
+                (dx / n, dy / n)
+            } else {
+                dir_h
+            }
+        };
         DevGlyph {
             origin,
             bbox,
@@ -1839,6 +1857,7 @@ mod tests {
             color: 0,
             render_mode: 0,
             writing_dir: WritingDir::Horizontal,
+            advance_dir: (1.0, 0.0),
             ascender: 0.7,
             descender: -0.2,
         }
@@ -2323,6 +2342,7 @@ mod tests {
             color: 0,
             render_mode: 0,
             writing_dir: WritingDir::Horizontal,
+            advance_dir: (1.0, 0.0),
             ascender: 0.7,
             descender: -0.2,
         }
