@@ -1349,6 +1349,17 @@ fn emit_glyph_into(
     if let Some(trms) = trms {
         trms.push(trm);
     }
+    // Per-glyph advance direction = normalized text x-axis of Trm (user space).
+    // `(1,0)` for upright text; a rotated `Tm` (turned table header) gives `(0,±1)`.
+    let advance_dir = {
+        let (dx, dy) = (trm.a, trm.b);
+        let n = (dx * dx + dy * dy).sqrt();
+        if n > f64::EPSILON {
+            (dx / n, dy / n)
+        } else {
+            (1.0, 0.0)
+        }
+    };
 
     // Glyph origin = (0,0) · Trm (the pen position in user space).
     let origin = Point::new(0.0, 0.0).transform(&trm);
@@ -1382,6 +1393,7 @@ fn emit_glyph_into(
             color: gs.fill_color,
             render_mode: ts.render_mode,
             writing_dir: WritingDir::Vertical,
+            advance_dir,
             ascender: asc,
             descender: desc,
         });
@@ -1410,6 +1422,7 @@ fn emit_glyph_into(
         color: gs.fill_color,
         render_mode: ts.render_mode,
         writing_dir: WritingDir::Horizontal,
+        advance_dir,
         ascender: asc,
         descender: desc,
     });
