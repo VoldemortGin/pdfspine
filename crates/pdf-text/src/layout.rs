@@ -29,6 +29,23 @@ use crate::model::{
 /// this times the larger size — tolerant to small super/subscript rises.
 const LINE_TOL_FRAC: f64 = 0.5;
 
+/// Baseline offset (× the larger size) up to which an orphaned short run is
+/// reattached to a horizontally-containing line as a super/subscript. Covers a
+/// `Ts`-raised footnote marker `( 1 )` (rise ≈0.6× line height) while staying below
+/// normal line spacing (≈1.0×+), so a separate line is never swallowed.
+const SUPERSCRIPT_RISE_FRAC: f64 = 0.85;
+
+/// A reattachment-candidate run is at most this many glyph cells wide — a footnote
+/// marker / allele subscript is 1–3 chars; a real line is far wider. Keeps the
+/// x-containment reattachment from ever merging two genuine lines.
+const FRAGMENT_MAX_WIDTH_FRAC: f64 = 3.0;
+
+/// A reattached fragment must be this much *shorter* than its host (ink height): a
+/// genuine super/subscript / footnote marker is a reduced or raised-and-clipped
+/// glyph, while a full-height short run (e.g. a 1–2 char CJK column line) is a real
+/// line and must never be pulled into a neighbour. This is the CJK-safety guard.
+const FRAGMENT_MAX_HEIGHT_RATIO: f64 = 0.78;
+
 /// Minimum vertical gap (as a fraction of the typical line height) that starts a
 /// new block. Lines closer than this fall into one paragraph block.
 const BLOCK_GAP_FRAC: f64 = 1.3;
@@ -472,7 +489,7 @@ fn group_lines(dev: &[DevGlyph]) -> Vec<Line> {
     let body_h = median_glyph_height(dev);
     let gutters = detect_page_gutters(&runs, dev);
 
-    let mut lines = Vec::new();
+    let mut final_runs: Vec<Vec<usize>> = Vec::new();
     for idxs in runs {
         // A single baseline cluster may straddle a column gutter; split it into
         // separate lines at each detected gutter it crosses (the principled cut),
@@ -488,19 +505,132 @@ fn group_lines(dev: &[DevGlyph]) -> Vec<Line> {
             // otherwise `build_line`'s advance sort would weave the two baselines
             // character-by-character.
             for run in split_on_baseline(&col_run, dev) {
-                let mut run = run;
-                if is_rtl_run(&run, dev) {
-                    reorder_rtl_line(&mut run, dev);
-                }
-                // Content-order key: the smallest source-glyph index in this run,
-                // i.e. the earliest-painted glyph of the line (document order).
-                let seq = run.iter().copied().min().unwrap_or(0);
-                let line_glyphs: Vec<&DevGlyph> = run.iter().map(|&i| &dev[i]).collect();
-                lines.push(build_line(&line_glyphs, seq));
+                final_runs.push(run);
             }
         }
     }
+    // Reattach orphaned super/subscript fragment runs onto the line that
+    // horizontally contains them. The cluster + gutter + baseline splitters each
+    // key on a tight baseline tolerance, so a `Ts`-raised footnote marker `( 1 )`
+    // or a clearly-smaller sub/superscript ends up as its own short run — read as a
+    // stray line that scrambles both the word (`LNv`→`LN`+`v`) and the reading
+    // order. Doing this **after** all splitting means nothing undoes it; requiring
+    // x-containment keeps it column-safe (a left-column marker is never inside a
+    // right-column line's x-span).
+    reattach_fragment_runs(&mut final_runs, dev);
+    let mut lines = Vec::with_capacity(final_runs.len());
+    for mut run in final_runs {
+        if is_rtl_run(&run, dev) {
+            reorder_rtl_line(&mut run, dev);
+        }
+        // Content-order key: the smallest source-glyph index in this run, i.e. the
+        // earliest-painted glyph of the line (document order).
+        let seq = run.iter().copied().min().unwrap_or(0);
+        let line_glyphs: Vec<&DevGlyph> = run.iter().map(|&i| &dev[i]).collect();
+        lines.push(build_line(&line_glyphs, seq));
+    }
     lines
+}
+
+/// Reattaches orphaned super/subscript fragment runs to the line run that
+/// horizontally contains them (see the call site for the rationale). A fragment is
+/// a short run (≤ [`FRAGMENT_MAX_WIDTH_FRAC`] glyph cells) whose x-centre lies inside
+/// a wider run's x-span and whose baseline is within [`SUPERSCRIPT_RISE_FRAC`] of it;
+/// it is merged into the nearest such host and the host re-sorted by advance so the
+/// marker lands in reading position. Hosts that are themselves fragments-being-moved
+/// are excluded, so no chaining. Operates on glyph-index runs in place.
+fn reattach_fragment_runs(runs: &mut Vec<Vec<usize>>, dev: &[DevGlyph]) {
+    let n = runs.len();
+    if n < 2 {
+        return;
+    }
+    // Per-run geometry: x-span, plus the baseline/size/dir of the run's tallest
+    // glyph (its most representative body glyph).
+    let mut x0 = vec![f64::INFINITY; n];
+    let mut x1 = vec![f64::NEG_INFINITY; n];
+    let mut cross = vec![0.0_f64; n];
+    let mut size = vec![1.0_f64; n];
+    let mut height = vec![0.0_f64; n];
+    let mut dir = vec![(1.0_f64, 0.0_f64); n];
+    for (r, run) in runs.iter().enumerate() {
+        let mut best_h = -1.0_f64;
+        for &i in run {
+            let b = dev[i].bbox.normalize();
+            if b.x1 > b.x0 {
+                x0[r] = x0[r].min(b.x0);
+                x1[r] = x1[r].max(b.x1);
+            }
+            let h = b.height();
+            if h > best_h {
+                best_h = h;
+                cross[r] = dev[i].cross();
+                size[r] = dev[i].size.abs().max(h);
+                height[r] = h;
+                dir[r] = dev[i].dir;
+            }
+        }
+    }
+    let mut merge_into: Vec<Option<usize>> = vec![None; n];
+    for a in 0..n {
+        if runs[a].is_empty() {
+            continue;
+        }
+        let aw = x1[a] - x0[a];
+        if aw <= 0.0 || aw > size[a].max(1.0) * FRAGMENT_MAX_WIDTH_FRAC {
+            continue;
+        }
+        let a_mid = (x0[a] + x1[a]) * 0.5;
+        let mut best: Option<(usize, f64)> = None;
+        for b in 0..n {
+            if b == a || runs[b].is_empty() || merge_into[b].is_some() {
+                continue;
+            }
+            // Host is a wider line whose x-span contains the fragment's x-centre.
+            if x1[b] - x0[b] <= aw || a_mid < x0[b] || a_mid > x1[b] {
+                continue;
+            }
+            if !dir_matches(&dir[a], &dir[b]) {
+                continue;
+            }
+            // CJK-safety: only a genuinely *shorter* glyph (reduced/clipped
+            // super/subscript) reattaches — a full-height short run is a real line.
+            if height[b] <= 0.0 || height[a] >= height[b] * FRAGMENT_MAX_HEIGHT_RATIO {
+                continue;
+            }
+            let dy = (cross[a] - cross[b]).abs();
+            let rise = size[a].max(size[b]).max(1.0) * SUPERSCRIPT_RISE_FRAC;
+            if dy <= rise && best.is_none_or(|(_, bd)| dy < bd) {
+                best = Some((b, dy));
+            }
+        }
+        if let Some((b, _)) = best {
+            merge_into[a] = Some(b);
+        }
+    }
+    let mut any = false;
+    for a in 0..n {
+        if let Some(b) = merge_into[a] {
+            let moved = std::mem::take(&mut runs[a]);
+            runs[b].extend(moved);
+            any = true;
+        }
+    }
+    if !any {
+        return;
+    }
+    runs.retain(|r| !r.is_empty());
+    // Re-sort every run by advance so a merged marker reads in position (idempotent
+    // for runs that received nothing).
+    for run in runs.iter_mut() {
+        if run.len() > 1 {
+            let mut keyed: Vec<(f64, usize)> =
+                run.iter().map(|&i| (dev[i].along(), i)).collect();
+            keyed.sort_by(|a, b| a.0.total_cmp(&b.0));
+            for (slot, (_, i)) in run.iter_mut().zip(keyed) {
+                *slot = i;
+            }
+        }
+    }
 }
 
 /// Separates a column run into its **distinct baselines**, returning each as its
