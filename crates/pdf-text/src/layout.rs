@@ -1072,6 +1072,56 @@ fn is_rtl_char(c: char) -> bool {
 /// Builds a [`Line`] from advance-ordered glyphs, splitting into spans where the
 /// style (font / size / color / flags) changes. `seq` is the line's content-order
 /// key (smallest source-glyph index).
+/// Detects **letter-spaced (tracked)** runs and returns a per-glyph mask: `mask[i]`
+/// marks ink glyph `i` whose preceding inter-word space must be **suppressed**. Some
+/// PDFs render an emphasised heading by tracking every letter apart — "Abschnitt"
+/// painted as `A b s c h n i t t` with no literal space glyph, just a uniform
+/// per-letter gap wider than the word-gap threshold. `build_line` would synthesize a
+/// space at each gap, shattering the word into single-char tokens and tanking text
+/// accuracy (PyMuPDF collapses them). A run qualifies only when ≥4 consecutive
+/// **single-char** ink glyphs sit at uniform tracking gaps (so initials "J R R" or
+/// "x = y" are never touched). A gap clearly wider than the tracking gap — a real
+/// word break, e.g. before the number in "Abschnitt 2" — is left unmarked, so that
+/// word boundary survives.
+fn letter_spacing_skip_mask(glyphs: &[&DevGlyph]) -> Vec<bool> {
+    let n = glyphs.len();
+    let mut mask = vec![false; n];
+    let is_space = |g: &DevGlyph| !g.text.is_empty() && g.text.chars().all(is_synth_ws);
+    // Ink glyphs (drop literal spaces) in reading order.
+    let ink: Vec<usize> = (0..n).filter(|&i| !is_space(glyphs[i])).collect();
+    if ink.len() < 4 {
+        return mask;
+    }
+    let single = |i: usize| glyphs[i].text.chars().count() == 1;
+    let gap = |k: usize| glyphs[ink[k]].along_span().0 - glyphs[ink[k - 1]].along_span().1;
+    // Maximal runs of consecutive single-char ink glyphs.
+    let mut a = 0;
+    while a < ink.len() {
+        if !single(ink[a]) {
+            a += 1;
+            continue;
+        }
+        let mut b = a + 1;
+        while b < ink.len() && single(ink[b]) {
+            b += 1;
+        }
+        if b - a >= 4 {
+            // Tracking gap = median of the run's inter-letter gaps; suppress the
+            // space before any letter whose gap is not clearly wider (a word break).
+            let mut gaps: Vec<f64> = (a + 1..b).map(gap).collect();
+            gaps.sort_by(f64::total_cmp);
+            let med = gaps[gaps.len() / 2].max(0.01);
+            for k in a + 1..b {
+                if gap(k) <= med * 1.8 {
+                    mask[ink[k]] = true;
+                }
+            }
+        }
+        a = b.max(a + 1);
+    }
+    mask
+}
+
 fn build_line(glyphs: &[&DevGlyph], seq: usize) -> Line {
     let wmode = glyphs.first().map_or(0, |g| g.wmode);
     let dir = glyphs.first().map_or((1.0, 0.0), |g| g.dir);
@@ -1108,7 +1158,12 @@ fn build_line(glyphs: &[&DevGlyph], seq: usize) -> Line {
     let mut prev_end: Option<f64> = None;
     let mut prev_char: Option<char> = None;
 
-    for g in glyphs {
+    // Per-glyph mask: suppress the synthesized word space before a glyph that sits
+    // mid letter-spaced (tracked) run, so emphasised headings like "A b s c h n i t t"
+    // collapse to "Abschnitt" instead of shattering into single-char tokens.
+    let suppress_space_before = letter_spacing_skip_mask(glyphs);
+
+    for (gi, g) in glyphs.iter().enumerate() {
         let mut gflags = g.flags;
         // Superscript: device y-down, so a glyph painted *above* the baseline
         // has a smaller cross value. A meaningful negative shift sets bit0.
@@ -1153,7 +1208,11 @@ fn build_line(glyphs: &[&DevGlyph], seq: usize) -> Line {
         let first_char = g.text.chars().next();
         if let (Some(pe), Some(pc), Some(fc)) = (prev_end, prev_char, first_char) {
             let gap = lead - pe;
-            if gap > gap_thresh && !is_synth_ws(pc) && !is_synth_ws(fc) {
+            if gap > gap_thresh
+                && !suppress_space_before[gi]
+                && !is_synth_ws(pc)
+                && !is_synth_ws(fc)
+            {
                 target.text.push(' ');
                 target.chars.push(Char {
                     // A thin zero-width cell at the new word's origin keeps the
