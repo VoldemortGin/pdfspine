@@ -1294,6 +1294,31 @@ impl<'a> ContentInterpreter<'a> {
 /// `cached` across the show-op loop while pushing into `out` — avoiding a
 /// per-glyph font-cache lookup. Geometry is identical to the previous method.
 #[allow(clippy::too_many_arguments)]
+/// Maps a CJK *radical* codepoint to its canonical unified ideograph. Some fonts'
+/// `ToUnicode` CMap maps an ideograph glyph to the look-alike radical codepoint —
+/// CJK Radicals Supplement (U+2E80–2EFF) or Kangxi Radicals (U+2F00–2FDF) — so the
+/// raw text comes out as `⼉⾊` instead of `儿色`. Emit the canonical ideograph (the
+/// radical's NFKC form) so extracted text matches the rendered page; PyMuPDF does
+/// the same. Only radical-range chars are touched — every other char (Latin,
+/// normal CJK, full-width, ligatures) is left byte-identical, so this never alters
+/// non-CJK-radical output.
+fn normalize_cjk_radicals(s: SmolStr) -> SmolStr {
+    let is_radical = |c: char| matches!(c as u32, 0x2E80..=0x2EFF | 0x2F00..=0x2FDF);
+    if !s.chars().any(is_radical) {
+        return s;
+    }
+    use unicode_normalization::UnicodeNormalization;
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        if is_radical(c) {
+            out.extend(c.nfkc());
+        } else {
+            out.push(c);
+        }
+    }
+    SmolStr::new(out)
+}
+
 fn emit_glyph_into(
     out: &mut Vec<PositionedGlyph>,
     trms: Option<&mut Vec<Matrix>>,
@@ -1306,7 +1331,7 @@ fn emit_glyph_into(
 ) {
     let ts = &gs.text;
     let w0 = cached.mapper.width(code) / 1000.0; // glyph advance, text units
-    let unicode = cached.mapper.to_unicode(code).unwrap_or_default();
+    let unicode = normalize_cjk_radicals(cached.mapper.to_unicode(code).unwrap_or_default());
 
     // params = [Tfs·Th, 0, 0, Tfs, 0, Trise]
     let params = Matrix::new(
