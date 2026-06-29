@@ -3956,7 +3956,20 @@ fn open(py: Python<'_>, path: &str) -> PyResult<PyDocument> {
     let doc = py
         .detach(|| ApiDocument::open_with(path, ParseMode::Lenient))
         .map_err(map_err)?;
+    auto_authenticate(&doc);
     Ok(PyDocument { doc })
+}
+
+/// Transparently tries the empty user password on an encrypted document, matching
+/// PyMuPDF: a permissions-only / owner-password PDF (empty *user* password) then
+/// opens and decrypts on `pdfspine.open(...)` without an explicit
+/// `authenticate("")` — otherwise its content streams stay encrypted and
+/// `get_text()` returns "". A real user password leaves `needs_pass()` true for
+/// the caller to satisfy. No-op on unencrypted documents.
+fn auto_authenticate(doc: &ApiDocument) {
+    if doc.is_encrypted() && doc.needs_pass() {
+        let _ = doc.authenticate(b"");
+    }
 }
 
 /// Opens a document from in-memory bytes (PyMuPDF `fitz.open(stream=…)`). The
@@ -3967,6 +3980,7 @@ fn open_bytes(py: Python<'_>, data: &[u8]) -> PyResult<PyDocument> {
     let doc = py
         .detach(move || ApiDocument::open_bytes_with(owned, ParseMode::Lenient))
         .map_err(map_err)?;
+    auto_authenticate(&doc);
     Ok(PyDocument { doc })
 }
 
