@@ -111,6 +111,10 @@ features = ["pyo3/abi3-py311", "ocr"]
 include = [
     "LICENSE",
     "NOTICE",
+    # Third-party permissive-license attribution (MIT/Apache/BSD/Zlib/…) for the
+    # bundled Rust deps — required to satisfy their attribution terms when the
+    # wheel/binary is redistributed (including any closed-source distribution).
+    "THIRD-PARTY-NOTICES.md",
     "python/pdfspine/py.typed",
     "python/pdfspine/*.pyi",
     # Ship the AI-facing usage docs inside the package (装后位于
