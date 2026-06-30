@@ -115,6 +115,10 @@ include = [
     # bundled Rust deps — required to satisfy their attribution terms when the
     # wheel/binary is redistributed (including any closed-source distribution).
     "THIRD-PARTY-NOTICES.md",
+    # maturin auto-detects LICENSE-BINARY.md as a license file (LICENSE* glob) and
+    # records it in the dist metadata, so it must also ship in sdist + wheel or
+    # PyPI rejects the upload ("License-File … does not exist in distribution").
+    "LICENSE-BINARY.md",
     "python/pdfspine/py.typed",
     "python/pdfspine/*.pyi",
     # Ship the AI-facing usage docs inside the package (装后位于
