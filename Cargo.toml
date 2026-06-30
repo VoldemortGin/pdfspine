@@ -21,7 +21,7 @@ members = [
 exclude = ["fuzz"]
 
 [workspace.package]
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 license = "Apache-2.0"
 repository = "https://github.com/VoldemortGin/pdfspine"
@@ -30,18 +30,18 @@ rust-version = "1.96"
 
 [workspace.dependencies]
 # --- shared first-party crates ---
-pdf-core = { path = "crates/pdf-core", version = "0.1.1" }
-pdf-crypto = { path = "crates/pdf-crypto", version = "0.1.1" }
-pdf-fonts = { path = "crates/pdf-fonts", version = "0.1.1" }
-pdf-text = { path = "crates/pdf-text", version = "0.1.1" }
-pdf-edit = { path = "crates/pdf-edit", version = "0.1.1" }
-pdf-image = { path = "crates/pdf-image", version = "0.1.1" }
-pdf-render = { path = "crates/pdf-render", version = "0.1.1" }
+pdf-core = { path = "crates/pdf-core", version = "0.1.2" }
+pdf-crypto = { path = "crates/pdf-crypto", version = "0.1.2" }
+pdf-fonts = { path = "crates/pdf-fonts", version = "0.1.2" }
+pdf-text = { path = "crates/pdf-text", version = "0.1.2" }
+pdf-edit = { path = "crates/pdf-edit", version = "0.1.2" }
+pdf-image = { path = "crates/pdf-image", version = "0.1.2" }
+pdf-render = { path = "crates/pdf-render", version = "0.1.2" }
 # `default-features = false` here so pdf-api's own (default-on) `paddle-ocr`
 # feature is the single switch for the PaddleOCR engine (pdf-api re-enables it);
 # building pdf-api with `--no-default-features` then truly compiles paddle out.
-pdf-ocr = { path = "crates/pdf-ocr", version = "0.1.1", default-features = false }
-pdf-api = { path = "crates/pdf-api", version = "0.1.1" }
+pdf-ocr = { path = "crates/pdf-ocr", version = "0.1.2", default-features = false }
+pdf-api = { path = "crates/pdf-api", version = "0.1.2" }
 
 # --- shared third-party deps (versions per PRD §11.1) ---
 thiserror = "2"
