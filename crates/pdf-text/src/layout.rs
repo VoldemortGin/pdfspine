@@ -608,13 +608,10 @@ fn reattach_fragment_runs(runs: &mut Vec<Vec<usize>>, dev: &[DevGlyph]) {
             // x-contained in a wider line would x-overlap that line's glyphs (no
             // gap), so it is never pulled in. This is the discriminator that height-
             // ratio could not provide (a `Ts`-raised full-size digit is not shorter).
-            if runs[b]
-                .iter()
-                .any(|&i| {
-                    let gb = dev[i].bbox.normalize();
-                    gb.x0 <= a_mid && a_mid <= gb.x1
-                })
-            {
+            if runs[b].iter().any(|&i| {
+                let gb = dev[i].bbox.normalize();
+                gb.x0 <= a_mid && a_mid <= gb.x1
+            }) {
                 continue;
             }
             let dy = (cross[a] - cross[b]).abs();
@@ -643,8 +640,7 @@ fn reattach_fragment_runs(runs: &mut Vec<Vec<usize>>, dev: &[DevGlyph]) {
     // for runs that received nothing).
     for run in runs.iter_mut() {
         if run.len() > 1 {
-            let mut keyed: Vec<(f64, usize)> =
-                run.iter().map(|&i| (dev[i].along(), i)).collect();
+            let mut keyed: Vec<(f64, usize)> = run.iter().map(|&i| (dev[i].along(), i)).collect();
             keyed.sort_by(|a, b| a.0.total_cmp(&b.0));
             for (slot, (_, i)) in run.iter_mut().zip(keyed) {
                 *slot = i;

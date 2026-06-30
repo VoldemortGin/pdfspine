@@ -1303,7 +1303,9 @@ impl<'a> ContentInterpreter<'a> {
 /// normal CJK, full-width, ligatures) is left byte-identical, so this never alters
 /// non-CJK-radical output.
 fn normalize_cjk_radicals(s: SmolStr) -> SmolStr {
-    let is_radical = |c: char| matches!(c as u32, 0x2E80..=0x2EFF | 0x2F00..=0x2FDF);
+    // CJK Radicals Supplement (U+2E80–2EFF) + Kangxi Radicals (U+2F00–2FDF) — the
+    // two blocks are contiguous, so a single range covers both.
+    let is_radical = |c: char| matches!(c as u32, 0x2E80..=0x2FDF);
     if !s.chars().any(is_radical) {
         return s;
     }
@@ -1319,6 +1321,7 @@ fn normalize_cjk_radicals(s: SmolStr) -> SmolStr {
     SmolStr::new(out)
 }
 
+#[allow(clippy::too_many_arguments)] // glyph-emission helper; the graphics/text state it needs is irreducible
 fn emit_glyph_into(
     out: &mut Vec<PositionedGlyph>,
     trms: Option<&mut Vec<Matrix>>,

@@ -229,7 +229,11 @@ pub fn page_find_image_tables(
                 let cb = (wb.y0 + wb.y1) / 2.0;
                 ca.partial_cmp(&cb)
                     .unwrap_or(std::cmp::Ordering::Equal)
-                    .then(wa.x0.partial_cmp(&wb.x0).unwrap_or(std::cmp::Ordering::Equal))
+                    .then(
+                        wa.x0
+                            .partial_cmp(&wb.x0)
+                            .unwrap_or(std::cmp::Ordering::Equal),
+                    )
             });
 
             let text = ordered
@@ -552,9 +556,7 @@ fn modal_color(colors: impl IntoIterator<Item = Rgb>) -> Rgb {
         .into_iter()
         .max_by(|a, b| {
             // Higher count wins; on a tie the earlier first-seen color wins.
-            a.1 .0
-                .cmp(&b.1 .0)
-                .then_with(|| b.1 .1.cmp(&a.1 .1))
+            a.1 .0.cmp(&b.1 .0).then_with(|| b.1 .1.cmp(&a.1 .1))
         })
         .map(|(color, _)| color)
         .unwrap_or([0, 0, 0])
@@ -592,8 +594,7 @@ fn sample_bg_color(pix: &pdf_image::pixmap::Pixmap, x0: f64, y0: f64, x1: f64, y
     while y < iy1 {
         let mut x = ix0;
         while x < ix1 {
-            let in_inner =
-                x >= inner_x0 && x < inner_x1 && y >= inner_y0 && y < inner_y1;
+            let in_inner = x >= inner_x0 && x < inner_x1 && y >= inner_y0 && y < inner_y1;
             if !in_inner {
                 if let Some(c) = rgb_at(pix, x, y) {
                     ring.push(c);
