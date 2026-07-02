@@ -14,6 +14,11 @@
 > **Single source of truth.** Per-symbol disposition lives in **`COMPAT.toml`**, generated from
 > `scripts/_compat_catalog.py` (guarded in CI). **Never hand-edit `COMPAT.toml`** — change dispositions in
 > the catalog and regenerate.
+>
+> **✅ Markdown → PDF original extension — COMPLETE (2026-07-02, in working tree).** See **§9**: a
+> brand-new top-level `pdfspine.markdown_to_pdf()`, **NOT** part of the fitz-parity Phases 0–4 above.
+> MD-0..MD-4 all landed 2026-07-02 (CJK **Option A**); P3-5 GriTS scored the same day. Remaining overall:
+> the pre-public flip (§7) and the accepted/deferred items (§5, P3-1r).
 
 ## 1. Snapshot (verified 2026-06-19)
 
@@ -63,9 +68,11 @@ Objective ground-truth + differential harness in `conformance/gt/` (scripts comm
 - **Venvs:** `.venv` (pdfspine wheel) is the engine under test; `.venv-oracle` (real fitz 1.24.14 + pdfminer +
   pypdfium2 + rapidocr) is the GROUND-TRUTH oracle. **In `.venv`, `import fitz` is the pdfspine SHIM** — for
   true correctness always cross-check against `.venv-oracle`. No oracle output is ever committed. **Set up
-  (2026-06-20):** `.venv-oracle` now holds real PyMuPDF **1.24.14 / MuPDF 1.24.11** (the COMPAT baseline) and is
-  the live fitz reference (`.venv-oracle/bin/python`). Regenerate via `.venv/bin/python -m venv .venv-oracle &&
-  .venv-oracle/bin/python -m pip install pymupdf==1.24.14 pdfminer.six pypdfium2`.
+  (2026-06-20):** `.venv-oracle` holds real PyMuPDF and is the live fitz reference (`.venv-oracle/bin/python`).
+  **⚠ Version drift found 2026-07-02:** it now actually holds **1.27.2.3**, not the documented 1.24.14 COMPAT
+  baseline (someone upgraded it). For baseline-pinned adjudications, spin a pinned venv:
+  `python -m venv <dir> && <dir>/bin/pip install pymupdf==1.24.14` (the 2026-07-02 encryption adjudication
+  ran both — identical answers on every probed point).
 - **Reproducibility debt — RESOLVED (P0-6 + P0-6r):** committed manifests/reports no longer hard-code
   `/workspace/pypdf`, and `run_gt.py` now resolves each corpus pdf/nxml relative to its manifest dir (falling
   back to the basename beside the manifest), so even the gitignored corpus manifests' stale absolute paths no
@@ -178,9 +185,10 @@ oracle-cross-checked against real PyMuPDF 1.24.14 (`.venv-oracle`) with zero reg
   - **Edge-case tests** (`python/tests/test_p3_4_edge_cases.py`, 6, oracle-checked): ToUnicode-less Type0 ✓, overlapping/co-located text ✓ (same char multiset as fitz), single-column vertical CJK ✓. **Residual → P3-4r — ✅ FIXED (2026-06-21):** vertical writing-mode (wmode 1) now reads `/W2`+`/DW2` metrics and applies a −y advance, so multi-column vertical CJK reads columns right-to-left like fitz (oracle-verified); the P3-4 tripwire test now asserts the correct order.
   - **Robustness:** new `conformance/gt/run_robustness.py` + `ROBUSTNESS-REPORT.md`; **0 panics** over N=43 GovDocs1 (target 250 — network-bound shortfall behind the local proxy; re-run on an unthrottled link to grow N).
 
-- **P3-5 · FinTabNet gold-table GT — ⚠ INFRA DONE, score BLOCKED on data egress (2026-06-20)** — *M · Medium* (optional)
-  - Built the harness for the first absolute `find_tables` cell-structure score: `conformance/gt/grits.py` (pure-stdlib **GriTS** Top+Con, AGPL-free port, 7-case self-test passes), `fetch_fintabnet.py` (FinTabNet.c, CDLA-Permissive), and a `tables_diff.py --gold` mode (parse gold → run pdfspine `find_tables` in the isolated worker → match by IoU → GriTS). Pipeline proven end-to-end (self-GriTS 1.0; a dropped-column perturbation → ~0.52/0.67). Default fitz-agreement mode unchanged.
-  - **Blocked:** the FinTabNet source PDFs live on `dax-cdn.cdn.appdomain.cloud`, **TLS-blocked from this sandbox** (HF annotations fetch fine). No number was fabricated. **Unblock:** run the fetcher + `tables_diff.py --gold` from a network that reaches that CDN — emits the absolute GriTS with zero code change.
+- **P3-5 · FinTabNet gold-table GT — ✅ DONE (scored 2026-07-02)** — *M · Medium*
+  - Harness (built 2026-06-20): `conformance/gt/grits.py` (pure-stdlib **GriTS** Top+Con, AGPL-free port, 7-case self-test passes), `fetch_fintabnet.py` (FinTabNet.c, CDLA-Permissive), and a `tables_diff.py --gold` mode (parse gold → run pdfspine `find_tables` in the isolated worker → match by IoU → GriTS). Default fitz-agreement mode unchanged.
+  - **Unblocked + scored (2026-07-02):** the original `dax-cdn.cdn.appdomain.cloud` host is **permanently decommissioned** (whole DNS zone SERVFAIL); `fetch_fintabnet.py` now extracts source PDFs from the verbatim HF mirror (`Leon1207/FinTabNet` `archive.zip`, license unchanged CDLA-Permissive-1.0) via zip64 HTTP-Range member extraction (central-directory index cached; `--self-test` green 3/3; provenance recorded in manifest `pdf_source`/`pdf_source_original`). Corpus: **150 pages / 186 structure-eligible gold tables**.
+  - **Scores** (recall-weighted over all 186 gold tables; `tables_diff.py --gold` gained a `--strategy` flag, default `lines` unchanged): default `lines` GriTS_Top **0.073** / Con **0.070** (39/150 pages any detection) — **parity with fitz**, whose default also detects ~0 on these borderless financial tables; `strategy="text"` GriTS_Top **0.185** / Con **0.107** (148/150 pages, 148/148 predictions match gold IoU>0.5) — the engine's real detection capability, with a documented structure-quality tradeoff (page-grid over-merge/over-split; matched-only means drop vs lines' few-but-clean matches). Both far below TATR ~0.98 — this is a *baseline tracking metric* for `find_tables`, not a claim. Reports: `GT-REPORT-tables-gold.md` (+ strategy-comparison section) and `GT-REPORT-tables-gold-text.md`.
 
 ### Phase 4 — Post-launch capability / strategic
 
@@ -215,6 +223,14 @@ oracle-cross-checked against real PyMuPDF 1.24.14 (`.venv-oracle`) with zero reg
 - **Additional OCR languages:** the bundled `ch` model covers CJK+Latin; each extra lang is ~10 MB that
   compounds the wheel-bloat problem — only after P0-5.
 - **DocLayNet / more-language corpus breadth:** lower priority than P3-1, which dominates any new corpus's numbers.
+- **Encryption-semantics COMPAT gaps (found during the 2026-07-02 `test_encrypted` adjudication;
+  oracle-verified on both 1.24.14 and 1.27.2.3):** `62997e2` auto-auth itself is fitz-correct
+  (`needs_pass` falsy on empty-user-pw docs — tests were fixed to match), but 5 systematic deviations
+  remain: `is_encrypted` means "has /Encrypt" in pdfspine vs "encrypted AND not yet authenticated" in fitz;
+  pre-auth `permissions` (-44 vs 0); pre-auth `metadata` (decrypted-garbage dict vs `None`); post-auth
+  `needs_pass` (flips False vs stays truthy in fitz); `metadata["encryption"]` missing the ` RC4` suffix.
+  Fixing `is_encrypted` naively breaks `test_pyenc_001_aes256_roundtrip` / `test_edit.py:284` /
+  `test_longtail11.py:308` — needs its own adjudication round, not a drive-by.
 
 ## 6. Task index
 
@@ -246,7 +262,7 @@ oracle-cross-checked against real PyMuPDF 1.24.14 (`.venv-oracle`) with zero reg
 | P3-3r | CMYK→RGB K-axis black point (pure-K 34,31,31 vs fitz) | S | Low | ✅ done | 3r |
 | P3-4 | Kangxi fold + edge-case tests + robustness rerun | S–M | Low–Med | ✅ done | 3 |
 | P3-4r | vertical writing-mode (wmode 1, `/W2`+`/DW2`, −y advance) | M | Low | ✅ done | 3r |
-| P3-5 | FinTabNet GriTS harness (infra done; score blocked on data) | M | Med | ⚠ blocked | 3 |
+| P3-5 | FinTabNet GriTS absolute score (HF-mirror fetch; lines 0.073 / text 0.185 Top) | M | Med | ✅ done | 3 |
 | P4-1 | Font carries `/FontFile*` (buffer/glyph_bbox, +2) | L | Med | ✅ done | 4 |
 | P4-2 | Type1 charstring (PFB/PFA) support | L | Med | ✅ done | 4 |
 | P4-2r | Type1 builtin `/Encoding` parse (hint-replace / MM stay safe no-ops) | S | Low | ✅ done | 4r |
@@ -255,10 +271,10 @@ oracle-cross-checked against real PyMuPDF 1.24.14 (`.venv-oracle`) with zero reg
 
 **Recommended next (in order):** *(**Phases 0–4 + the residual sweep + P1-1r ALL LANDED 2026-06-21** — on `main`;
 parity **88.7%**; every actionable residual is now fixed or flagged. P3-5 score blocked on sandbox data egress.)*
-1. **Pre-public chores** (§7) — render-SSIM re-measured (now **0.984 / 0.989**, at parity); re-run P3-5's GriTS
-   from an unrestricted network for the absolute table number; then **flip the repo public + push**
-   (feature-complete at 88.7% — multi-column, colorspaces, OCR parallelism, embedded fonts incl. Type1, vertical
-   CJK, Symbol/Dingbats all landed; render at fitz parity).
+1. **Pre-public chores** (§7) — render-SSIM re-measured (now **0.984 / 0.989**, at parity); P3-5 GriTS
+   **scored 2026-07-02** (lines 0.073 = fitz-parity-zero; text 0.185, the real capability number); then
+   **flip the repo public + push** (feature-complete at 88.7% — multi-column, colorspaces, OCR parallelism,
+   embedded fonts incl. Type1, vertical CJK, Symbol/Dingbats all landed; render at fitz parity).
 2. **Accepted / further work** — P3-1r is an accepted won't-fix (inherent content-vs-geometric-order tradeoff,
    `layout.rs` == HEAD); the 21 remaining deferred are the genuinely-blocked long tail (OCG/layers,
    device-replay, a few Type0/Type3 edges).
@@ -297,6 +313,114 @@ leptonica-1.87.0 install is broken** (reproduces on a trivial external PNG: "Lep
 not found"), so the local OCR tests (3 Rust + 7 pytest) fail for env reasons, not code — ignore them here
 and trust a clean machine / CI.
 
+## 9. Markdown → PDF — original extension — ✅ COMPLETE (2026-07-01 → 2026-07-02)
+
+**What & positioning.** A brand-new top-level API `pdfspine.markdown_to_pdf(md_or_path, ...) -> Document`
+that renders Markdown to PDF. This is a **pdfspine original extension** (a self-authored, deterministic
+block-level layout engine that reuses the existing drawing primitives). It is **NOT** PyMuPDF's
+`Story` / `Xml` / `insert_htmlbox` HTML-CSS engine — that stays out of scope (root `PRD.md` §3.2 #2). It
+implements no CSS/HTML DOM, only deterministic Markdown layout. Direction is md→pdf (authoring), orthogonal
+to the existing pdf→md extraction (`Table.to_markdown`) and image→pdf (`convert_to_pdf`).
+
+**Locked decisions (2026-07-01, via user Q&A):**
+- **Route:** pure-Rust in-house renderer — `pulldown-cmark` parses, an in-house layout engine reuses the
+  drawing primitives. No external / Python typesetting library, no HTML-CSS engine.
+- **Scope:** CommonMark + GFM tables + strikethrough + task lists + image embedding.
+- **API:** one top-level function `markdown_to_pdf()`. Original extension → **not** in the fitz-compat
+  surface / `COMPAT.toml` (no `PdfUnsupportedError` contract, no parity counting).
+- **Defaults (all options-configurable):** A4 595×842pt + 72pt margins; body Helvetica / heading
+  Helvetica-Bold / code Courier (Base-14, zero embedding); images from local path + `data:` URI only
+  (**no remote-URL fetch** — keeps the no-network property); links rendered as blue text, no link
+  annotation in v1.
+
+**✅ CJK DECISION — RESOLVED (2026-07-02, user chose Option A).** Don't bundle a font; expose `font=` /
+`cjk_font=` to pass a TTF path (PingFang / Noto Sans CJK) for Chinese; unset → CJK renders as missing
+glyphs; wheel stays small. No system-font auto-detection, no bundled CJK font. When a TTF is given, embed
+via the existing `pdf_edit::fontfile::EmbeddedFont` (Type0/Identity-H, usage-subset `write_type0`), measure
+via `EmbeddedFont::char_advance`; `cjk_font` acts as a per-char fallback for codepoints the active Base-14
+(or `font=`) face can't encode.
+
+**Reuse map (落点地图 — don't re-investigate):**
+- New crate `crates/pdf-markdown` (deps: pdf-core + pdf-edit + pulldown-cmark; add pdf-fonts / pdf-image in
+  MD-1). Facade in `pdf-api`, binding in `py-bindings`.
+- **Measure / line-break:** `pdf_fonts::std_widths::string_advance(std_name, text, fontsize)`
+  (`crates/pdf-fonts/src/std_widths.rs:151`).
+- **User-TTF embed + measure (Option A):** `pdf_edit::fontfile::EmbeddedFont` (`crates/pdf-edit/src/fontfile.rs`)
+  — `parse(program)` / `glyph_id(ch)` / `char_advance(ch)` / `write_type0(doc, used)` (Type0/Identity-H,
+  Flate FontFile2, usage-subset ToUnicode). **Parse ONCE per document and accumulate `used` across all runs,
+  write_type0 ONCE at the end** — calling `insert_text(fontfile=)` per run would re-embed the program per call.
+- **Base-14 resolve / resource:** `pdf_edit` `resolve_base14` (`crates/pdf-edit/src/text.rs:81`),
+  `base14_font_object` (`text.rs:108`).
+- **Draw:** `pdf_edit::insert_text` (baseline-point, `text.rs:152`); `Shape` / `draw_rect`
+  (`crates/pdf-edit/src/drawing.rs:118` / one-shot `:368`) for code-block backgrounds, table borders,
+  blockquote bars; `insert_image_jpeg` / `insert_image_rgb` (`crates/pdf-edit/src/image.rs:33` / `:81`;
+  PNG → decode to RGB via `pdf-image` first).
+- **Paginate / new page:** `PageEditor::new_page(index, w, h)` (`crates/pdf-edit/src/page_ops.rs:77`);
+  build-from-scratch template `pdf-image/src/imagedoc.rs` `empty_seed_pdf()` / `build_pdf()`;
+  emit bytes via `DocumentStore::save_to_vec(&SaveOptions::default().with_xref_style(XrefStyle::Table))`.
+- **⚠ TRAP:** `insert_textbox` (`text.rs:238`) **drops lines past the bottom edge and does not return the
+  overflow text** → unusable for cross-page flow. The layout engine MUST do its own per-line measure +
+  wrap + `new_page` before overflow.
+- **Python binding path (copy `image_to_pdf`):** Rust `#[pyfunction]` in `crates/py-bindings/src/lib.rs`
+  (template `image_to_pdf` ~:3992, register in the `_core` `#[pymodule]` ~:5248, return `PyBytes`);
+  Python wrapper in `python/pdfspine/document.py` (mirror `_open_image_bytes` ~:4582 —
+  `Document(_core.open_bytes(bytes))`); export in `python/pdfspine/__init__.py` `__all__`; stubs in
+  `_core.pyi` + `document.pyi`.
+
+**Phased plan:**
+- **MD-0 · Scaffold — ✅ DONE (2026-07-01).** New `crates/pdf-markdown/{Cargo.toml, src/lib.rs,
+  tests/smoke.rs}`; root `Cargo.toml` members + `[workspace.dependencies]` (pulldown-cmark 0.12,
+  `default-features = false`, with a license note); `supply-chain/config.toml` `[policy.pdf-markdown]`.
+  Placeholder `markdown_to_pdf(&str) -> pdf_core::error::Result<Vec<u8>>` parses with
+  `ENABLE_TABLES|ENABLE_STRIKETHROUGH|ENABLE_TASKLISTS`, emits a blank A4 page. build / test / fmt /
+  `clippy -D warnings` all green.
+- **MD-1 · Layout engine — ✅ DONE (2026-07-02).** Build-from-scratch pipeline (NOT PageEditor/`insert_text`
+  — those re-embed the font per call): pulldown-cmark events → block model (`model.rs`) → image resolve
+  (`images.rs`) → measure/wrap/paginate (`layout.rs`, top-left coords) → content-stream + doc assembly
+  (`render.rs`, y-flip; one content stream per page, one shared object per font, deterministic object
+  order). Covers H1–H6, paragraphs, bold/italic/bold-italic/inline-code/strikethrough(drawn)/links(blue),
+  ordered(+start)/unordered/nested/task lists (vector bullets/checkboxes), nested blockquotes (bar splits
+  across pages), code blocks (0.9× Courier, grey bg, char-level hard-break), HR, GFM tables (measured
+  col-widths + fair-share shrink, header bold+grey, per-row pagination), images (local + data: URI, JPEG
+  passthrough incl. CMYK `/Decode`, PNG/BMP/GIF/WEBP/TIFF via pdf-image, alpha→white composite).
+  `Options{page_w/h, margins×4, body_font_size, font, cjk_font, base_dir}` (#[non_exhaustive]). Option A:
+  per-char fallback base14→cjk_font→'?', font=→cjk_font→.notdef; embed parse ONCE/doc, `write_type0` ONCE
+  (test asserts exactly 1 `/FontFile2`). **48 integration tests** (9 files) round-trip via pdf-api; gates
+  green: fmt ✓ clippy -D warnings ✓ `cargo test --workspace` **1442 passed / 0 failed** (new floor).
+  Known v1 limits: single-face `font=` (no bold/italic variants), images inside headings/table cells
+  dropped, table rows don't split across pages (no header repeat), HTML blocks ignored, WinAnsi
+  0x80–0x9F degrade to '?' without cjk_font.
+- **MD-2 · Facade — ✅ DONE (2026-07-02).** `crates/pdf-api/src/markdown.rs` re-exports
+  `markdown_to_pdf(&str, &Options)` + `MarkdownOptions`; root re-export in `pdf-api/src/lib.rs`; bad-input
+  `InvalidArgument` explicitly mapped → `Unsupported` → `PdfUnsupportedError` (the image-path error policy).
+  3 facade tests in `crates/pdf-api/tests/markdown_facade.rs`.
+- **MD-3 · Python binding — ✅ DONE (2026-07-02).** `#[pyfunction] markdown_to_pdf` (GIL released) →
+  `PyBytes`; `document.py` wrapper `markdown_to_pdf(md_or_path, *, font=, cjk_font=, base_dir=,
+  page_width=, page_height=, margins=, body_font_size=) -> Document`. `md_or_path` heuristic: treated as a
+  FILE iff suffix ∈ {"", .md, .markdown, .txt} AND `Path.is_file()` (then base_dir defaults to its parent);
+  anything else = literal Markdown text. `font`/`cjk_font` accept path or bytes; `margins` float or 4-tuple.
+  Exported in `__all__` + stubs (`__init__.pyi`/`_core.pyi`/`document.pyi`); **NOT** in the fitz shim /
+  COMPAT surface (original extension; compat-symbol-guard is one-directional — no exception needed, verified
+  zero COMPAT diff). 10 pytest cases (`MARKDOWN-TO-PDF-001..010`) registered in `docs/test-case-catalog.md`.
+  Gates: workspace **1445** green, pytest **749 passed** (≫721 floor; the only 2 fails are a pre-existing
+  `test_encrypted.py` conflict with commit `62997e2` auto-auth, unrelated — adjudicated separately).
+- **MD-4 · Docs & wrap-up — ✅ DONE (2026-07-02).** README capability row + Quick-start example;
+  `CHANGELOG.md` Unreleased/Added; root `PRD.md` §3.2 #2 original-extension note (Story/HTML-CSS stays
+  out-of-scope); `_llms` (api/overview/recipes incl. a Chinese `cjk_font` recipe/gotchas — CJK silent-`?`
+  degradation listed FIRST; examples live-verified, macOS Hiragino/Songti **TTC collections work**,
+  PingFang.ttc absent on this machine); `docs/reference/functions.md` mkdocstrings entry;
+  `THIRD-PARTY-NOTICES.md` hand-extended (NO generator exists in-repo despite its header claim — ad-hoc
+  since `59f66a0`): +pulldown-cmark 0.12.2 (MIT) + transitive unicase 2.9.0, 184→186 components. Gates:
+  `check_docs_coverage.py` 310/310, `mkdocs build --strict` exit 0 / 0 warnings, manifest-lint 0. Also
+  fixed two pre-existing strict-gate breakages surfaced by the door: `ImageTable`/`ImageTableCell` were in
+  `__all__` but missing from `docs/reference/tables.md`, and `docs/BENCHMARKS.md:15` linked out-of-site
+  `../PARITY.md` (→ GitHub blob URL per license.md precedent).
+
+**Resume pointer.** MD-0..MD-4 are **all complete (2026-07-02)** and verified via the full §8 suite; the
+feature lives in the working tree pending commit. Nothing left in §9 — future markdown work (link
+annotations, bold/italic user-font variants, row-splitting tables, HTML passthrough) would be a new PRD
+section, not a resumption of this one.
+
 ---
 
 *Re-verified 2026-06-19 from a code-level 5-dimension survey (project health · API parity · rendering ·
@@ -308,5 +432,6 @@ on sandbox CDN egress). **P4-1 / P4-3 / P4-4 / P4-2 landed 2026-06-21**, and a *
 same day (2026-06-21)** fixed P0-2r / P2r-1 / P3-3r / P3-4r / P4-2r / **P1-1r** (Symbol/ZapfDingbats via OFL
 Noto) and resolved P2r-2 as not-a-bug; **render SSIM re-measured 0.945→0.984** (at fitz parity). All
 oracle-cross-checked; cargo/clippy clean, pytest 721, P1-3 gate green, parity 88.7%. **Phases 0–4 + every
-actionable item complete** — remaining = **P3-1r** (accepted won't-fix), the **P3-5** score (network-blocked),
-and the pre-public flip-to-public.*
+actionable item complete**; **P3-5 scored 2026-07-02** (DAX dead → HF-mirror fetch; lines 0.073 fitz-parity /
+text 0.185 capability) — remaining = **P3-1r** (accepted won't-fix), **§9 MD-1..MD-4**, and the pre-public
+flip-to-public.*

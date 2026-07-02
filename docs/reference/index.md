@@ -22,11 +22,11 @@ for the deferred / out-of-scope surface.
 | [Rendering](pixmap.md) | `Pixmap`, `DisplayList` |
 | [Annotations & forms](annotations.md) | `Annot`, `Widget` |
 | [Drawing & text](drawing.md) | `Shape`, `Font`, `TextWriter` |
-| [Tables](tables.md) | `Table`, `TableFinder` |
+| [Tables](tables.md) | `Table`, `TableFinder`, `ImageTable`, `ImageTableCell` |
 | [Navigation](navigation.md) | `Link`, `linkDest`, `Outline` |
 | [Color](color.md) | `Colorspace` |
 | [Tools](tools.md) | `Tools` |
 | [Geometry](geometry.md) | `Rect`, `IRect`, `Point`, `Matrix`, `Quad` |
-| [Functions](functions.md) | `open`, `install_fitz_shim`, `identity_matrix`, helpers |
+| [Functions](functions.md) | `open`, `markdown_to_pdf`, `install_fitz_shim`, `identity_matrix`, helpers |
 | [Exceptions](exceptions.md) | `PdfError` hierarchy |
 | [Constants](constants.md) | `PDF_*` / `TEXT_*` / `STAMP_*` values, colorspace singletons |

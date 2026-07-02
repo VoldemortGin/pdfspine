@@ -12,7 +12,7 @@
 > see §1. Rendering reaches **SSIM 0.945 mean / 0.986 median** vs fitz (§5), now that Indexed / Separation /
 > DeviceN colorspaces (+ `/Decode`) and embedded Type1 (`/FontFile`, PFB/PFA) charstrings render. OCR
 > `recognize()` is **rayon-parallel** (3.49× on a 42-box page; §6). API parity is **88.7% (682/769)** — see
-> [`PARITY.md`](../PARITY.md). Numbers not re-measured here are date-noted as "as of <date>".
+> [`PARITY.md`](https://github.com/VoldemortGin/pdfspine/blob/main/PARITY.md). Numbers not re-measured here are date-noted as "as of <date>".
 >
 > **Clean-room note.** PyMuPDF (AGPL), pypdfium2 (BSD/Apache PDFium), and pdfminer run locally as diff
 > references ONLY; no reference output is ever committed — only similarity scores. pdfspine is
