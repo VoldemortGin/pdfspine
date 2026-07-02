@@ -595,22 +595,24 @@ def _extract_pdfspine_inproc(pdf: Path) -> str:
     return "\n".join(pages)
 
 
-def run_baseline(manifest: Path, min_order: float) -> dict:
-    """Score pdfspine get_text vs inlined gt_text; assert per-doc order threshold.
+def run_baseline(manifest: Path, min_order: float, min_f1: float | None = None) -> dict:
+    """Score pdfspine get_text vs inlined gt_text; assert per-doc thresholds.
 
     The manifest is an object (or bare list) of entries, each with a ``pdf``
     path (resolved relative to the manifest dir) and an inlined ``gt_text``
     ground truth. No fitz / oracle / network is involved — this is the
     born-digital reading-order regression gate.
 
-    Returns a payload with per-doc ``order``/``lev`` scores and an overall
-    ``passed`` flag (True iff every scored doc has ``order >= min_order``).
+    Returns a payload with per-doc ``order``/``lev``/``f1`` scores and an
+    overall ``passed`` flag (True iff every scored doc has
+    ``order >= min_order`` and, when ``min_f1`` is given, ``f1 >= min_f1`` —
+    the typeset read-back gate, PRD §10 TS-7).
     """
     score_all = _import_score_all()
     subset, entries = load_manifest(manifest)
     manifest_dir = manifest.resolve().parent
     print(f"[baseline] {manifest} subset={subset} entries={len(entries)} "
-          f"min_order={min_order}", flush=True)
+          f"min_order={min_order} min_f1={min_f1}", flush=True)
 
     docs: list[dict] = []
     all_ok = True
@@ -618,7 +620,7 @@ def run_baseline(manifest: Path, min_order: float) -> dict:
         pdf_raw = entry.get("pdf") or entry.get("path") or entry.get("file")
         doc_id = entry.get("id") or (Path(pdf_raw).name if pdf_raw else "?")
         rec: dict = {"id": doc_id, "pdf": pdf_raw, "order": None, "lev": None,
-                     "passed": False, "error": None}
+                     "f1": None, "passed": False, "error": None}
         gt_text = entry.get("gt_text")
         if gt_text is None:
             rec["error"] = "manifest entry has no inlined 'gt_text'"
@@ -650,18 +652,22 @@ def run_baseline(manifest: Path, min_order: float) -> dict:
         scores = normalize_scores(score_all(hyp, str(gt_text)))
         rec["order"] = scores["order"]
         rec["lev"] = scores["lev"]
-        rec["passed"] = rec["order"] is not None and rec["order"] >= min_order
+        rec["f1"] = scores["f1"]
+        order_ok = rec["order"] is not None and rec["order"] >= min_order
+        f1_ok = min_f1 is None or (rec["f1"] is not None and rec["f1"] >= min_f1)
+        rec["passed"] = order_ok and f1_ok
         all_ok = all_ok and rec["passed"]
         docs.append(rec)
         tag = "ok" if rec["passed"] else "FAIL"
         print(f"  [{i}/{len(entries)}] {doc_id} -> {tag} "
-              f"(order={rec['order']}, lev={rec['lev']})", flush=True)
+              f"(order={rec['order']}, f1={rec['f1']}, lev={rec['lev']})", flush=True)
 
     return {
         "generated": datetime.now(timezone.utc).isoformat(),
         "mode": "baseline-no-oracle",
         "subset": subset,
         "min_order": min_order,
+        "min_f1": min_f1,
         "n_docs": len(docs),
         "passed": all_ok,
         "docs": docs,
@@ -820,6 +826,9 @@ def main(argv: list[str] | None = None) -> int:
                          "in this manifest and FAIL if any doc's reading order regresses")
     ap.add_argument("--min-order", type=float, default=0.95,
                     help="per-doc reading-order threshold for --baseline-manifest")
+    ap.add_argument("--min-f1", type=float, default=None,
+                    help="optional per-doc token-F1 threshold for --baseline-manifest "
+                         "(the typeset read-back gate, PRD §10 TS-7)")
     args = ap.parse_args(argv)
 
     if args.selftest:
@@ -830,16 +839,17 @@ def main(argv: list[str] | None = None) -> int:
             print(f"ERROR: baseline manifest not found: {args.baseline_manifest}",
                   file=sys.stderr)
             return 1
-        payload = run_baseline(args.baseline_manifest, args.min_order)
+        payload = run_baseline(args.baseline_manifest, args.min_order, args.min_f1)
         if args.json_out:
             args.json_out.parent.mkdir(parents=True, exist_ok=True)
             args.json_out.write_text(json.dumps(payload, indent=2), encoding="utf-8")
             print(f"Wrote {args.json_out}")
         n_pass = sum(1 for d in payload["docs"] if d["passed"])
+        f1_note = f", f1 >= {payload['min_f1']}" if payload["min_f1"] is not None else ""
         print(f"baseline reading-order gate: {n_pass}/{payload['n_docs']} docs "
-              f">= {payload['min_order']}")
+              f"order >= {payload['min_order']}{f1_note}")
         if not payload["passed"]:
-            print("BASELINE GATE FAILED — born-digital reading order regressed",
+            print("BASELINE GATE FAILED — read-back order/content regressed",
                   file=sys.stderr)
             return 1
         print("baseline reading-order gate PASSED")

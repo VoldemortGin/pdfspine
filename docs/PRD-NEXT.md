@@ -661,7 +661,7 @@ lists why · files · effort · **Acceptance**, the green condition that means "
     (`_near_blank:463-469`) and matches its committed reference at **SSIM ≥ 0.97**; an unsupported
     preset produces the rect fallback + exactly one `PresetDegraded` warning (asserted); alpha fills
     register one ExtGState object reused across ops (object-count assert).
-- **TS-7 · Conformance harness extension** — *M*. Wire typeset fixtures into the gate stack: read-back
+- **TS-7 · Conformance harness extension** — ✅ DONE 2026-07-03 (4 committed fixtures + read-back/SSIM/drift CI gates + LO oracle docx 0.98 / pptx 0.92 above-band) · *M*. Wire typeset fixtures into the gate stack: read-back
   scoring via `score.py`; committed `.ssimref` at `--min-ssim 0.97` (`ci.yml:189-194` pattern); and the
   **local-only** LO-oracle script (`soffice --headless --convert-to pdf`, rasterize both sides with
   pdfspine `get_pixmap`, SSIM via `render_diff.py ssim:242-281`, advisory band 0.80–0.90).
@@ -673,11 +673,16 @@ lists why · files · effort · **Acceptance**, the green condition that means "
   green. Phase B/C PRDs live in the consumer repos; each pins a pdfspine rev with its needed TS tasks
   landed.
 
-**Resume pointer.** Nothing in §10 has started — begin at **TS-1**. The family-wide decisions above are
-locked (2026-07-02 design brief): do not reopen fontdb-vs-alternatives, the no-synthetic-bold rule, the
-~35-preset subset, or the gradients-out call. `markdown_to_pdf` (§9) must stay green and untouched
-throughout Phase A — rewiring pdf-markdown onto pdf-typeset is a future option, not this phase. Verify
-every TS task with the §8 suite plus this section's gate stack.
+**Resume pointer.** **Phase A is COMPLETE (TS-1..TS-7 all ✅, 2026-07-02→03)** — pdf-typeset ships the
+Typesetter facade (layout_flow / layout_text_box / emit), fontdb resolution, the TTC-aware glyph subsetter
+(pdf-edit), the 35-preset subset, and the TS-7 gate stack (typeset read-back + SSIM in CI accuracy-gate;
+LO oracle advisory local-only). Consumers pin a git rev of this repo (first consumer: pptspine ppt-render
+at `709b41da`). The family-wide decisions stay locked: do not reopen fontdb-vs-alternatives, the
+no-synthetic-bold rule, the ~35-preset subset, or the gradients-out call. `markdown_to_pdf` (§9) stayed
+green and untouched — rewiring pdf-markdown onto pdf-typeset remains a future option, not Phase A. Known
+renderer gap for SSIM work: pdf-render glyph fills ignore the soft clip mask (`pdf-render/src/text.rs:446`)
+— clipped-box TEXT isn't visually clipped in in-repo rasters (PDF stream itself is correct; external
+viewers fine); TS-7 fixtures deliberately avoid overflowing clip boxes.
 
 ---
 

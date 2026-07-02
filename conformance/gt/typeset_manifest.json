@@ -1,0 +1,25 @@
+{
+ "subset": "typeset-ci",
+ "entries": [
+  {
+   "id": "typeset-flow.pdf",
+   "pdf": "../../fixtures/typeset/typeset-flow.pdf",
+   "gt_text": "Typeset conformance flow fixture This justified paragraph flows across several lines so the interior lines stretch their inter word spaces to reach the right edge of the measured column exactly as required marked struck plain 1. first list item body 2. second list item body hanging indent paragraph whose first line starts at the margin while every following wrapped line is indented under it exact twenty point line spacing paragraph wrapped over enough words to produce several evenly spaced lines here header A header B header C alpha beta gamma delta epsilon Second page continues the flow fixture centered paragraph on page two right aligned paragraph on page two"
+  },
+  {
+   "id": "typeset-box.pdf",
+   "pdf": "../../fixtures/typeset/typeset-box.pdf",
+   "gt_text": "middle anchored box content bottom anchored box content rotated box fit1 fit2 fit3 fit4 fit5 fit6 clipped box fits inside"
+  },
+  {
+   "id": "typeset-lo-doc.pdf",
+   "pdf": "../../fixtures/typeset/typeset-lo-doc.pdf",
+   "gt_text": "Typeset LibreOffice Oracle Sample This document is authored twice: once as a minimal docx converted to PDF by LibreOffice, and once through the pdf typeset engine with the bundled Liberation Serif face. The two renderings are rasterized by the same in repo renderer and compared with SSIM. Agreement is advisory rather than exact because line breaking, leading and justification differ slightly between engines. The expected band for this pair is between zero point eight zero and zero point nine zero structural similarity. A large regression such as missing text, wrong font size, broken wrapping or displaced margins drops the score far below the band and is investigated locally before any release."
+  },
+  {
+   "id": "typeset-lo-slide.pdf",
+   "pdf": "../../fixtures/typeset/typeset-lo-slide.pdf",
+   "gt_text": "Typeset LibreOffice Oracle Slide First body line rendered at eighteen points Second body line for the advisory comparison Third body line keeps the layout deliberately plain Fourth body line closes the sample slide"
+  }
+ ]
+}

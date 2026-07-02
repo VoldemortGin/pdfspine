@@ -193,6 +193,28 @@ jobs:
             --dpi 100 --pages 1 \
             --min-ssim 0.97 \
             --json conformance/gt/render-results.json
+      # ---- typeset conformance (PRD §10 TS-7; no LibreOffice in CI) ----
+      # The typeset fixtures regenerate byte-for-byte from the bundled-face
+      # engine; assert no drift so a stale fixture cannot weaken the gates.
+      - name: Typeset fixtures reproducible (no drift)
+        run: |
+          cargo run -p pdf-typeset --example make_typeset_fixtures
+          git diff --exit-code -- fixtures/typeset
+      - name: Typeset read-back gate (pdfspine vs inlined gt_text)
+        run: |
+          python conformance/gt/run_gt.py \
+            --baseline-manifest conformance/gt/typeset_manifest.json \
+            --min-order 0.99 \
+            --min-f1 0.99 \
+            --json conformance/gt/ci-typeset-results.json
+      - name: Typeset render SSIM gate (pdfspine vs committed references)
+        run: |
+          python conformance/gt/render_diff.py \
+            --reference-mode \
+            --corpus fixtures/typeset \
+            --dpi 100 --pages 2 \
+            --min-ssim 0.97 \
+            --json conformance/gt/typeset-render-results.json
 
   # ----------------------------------------------------------- supply-chain
   supply-chain:
