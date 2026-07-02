@@ -1,9 +1,4 @@
-# cargo-vet local audits (PRD §11.4).
-#
-# Local (first-party) audit entries are recorded here as the graph is reviewed.
-# In M0 the dependency set is small (thiserror, pyo3, proptest + transitive) and
-# coverage comes from the imported trusted audit sets in `config.toml`. Add
-# explicit entries for anything those sets do not cover.
+
+# cargo-vet audits file
 
 [audits]
-# (no local audit entries yet — covered by imported trusted audits)

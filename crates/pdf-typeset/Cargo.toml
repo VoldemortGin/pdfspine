@@ -1,0 +1,30 @@
+# pdf-typeset — shared typesetting engine (PRD §10, Phase A of docspine/pptspine
+# faithful PDF export). Crate-level Rust API, NOT part of the fitz-compat/COMPAT
+# surface; docspine/pptspine consume it via a git dependency + pinned rev and this
+# crate re-exports the pdf-edit/pdf-core surface they need (single pdfspine dep).
+[package]
+name = "pdf-typeset"
+publish = false # crates.io: name "pdfspine" reserved only; this lib ships via consumer repos (git dep + pinned rev)
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+description = "Shared typesetting engine for faithful docx/pptx → PDF export (pdfspine original extension)."
+
+[dependencies]
+# Geometry (Rect/Matrix/Point) + error types, re-exported for consumers.
+pdf-core.workspace = true
+# Color + (from TS-3 on) EmbeddedFont Type0 embedding; re-exported surface.
+pdf-edit.workspace = true
+# Bundled Liberation/Noto faces — the deterministic final font fallback (TS-2).
+pdf-fonts.workspace = true
+# System-font enumeration/query backend (see the root Cargo.toml note: pinned
+# exact, memmap ON, all resolution intelligence stays first-party here).
+fontdb.workspace = true
+# Glyph-coverage (`cmap`) checks for the per-character fallback chain; the same
+# pinned version fontdb itself parses with.
+ttf-parser.workspace = true
+# NFKC folding (full-width → ASCII) for the case/width-folded family-name index.
+unicode-normalization.workspace = true

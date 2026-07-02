@@ -1,13 +1,8 @@
-# cargo-vet config (PRD §11.4 — "auditable supply chain").
-#
-# Bootstrap for M0: import the well-known trusted audit sets so the bulk of the
-# ecosystem is covered without re-auditing, and default the audit-as-crates-io
-# policy. Run `cargo vet` in CI; unvetted deps fail the supply-chain job.
-#
-# As the dependency graph grows (M1+), each new crate/version needs either an
-# imported trusted audit or a recorded local audit entry in `audits.toml`.
 
-cargo-vet-version = "0.10"
+# cargo-vet config file
+
+[cargo-vet]
+version = "0.10"
 
 [imports.bytecodealliance]
 url = "https://raw.githubusercontent.com/bytecodealliance/wasmtime/main/supply-chain/audits.toml"
@@ -21,21 +16,19 @@ url = "https://raw.githubusercontent.com/google/supply-chain/main/audits.toml"
 [imports.mozilla]
 url = "https://raw.githubusercontent.com/mozilla/supply-chain/main/audits.toml"
 
-# Default trust policy: third-party crates require "safe-to-deploy". First-party
-# workspace crates are exempt (audited by being our own code).
+[policy.pdf-api]
+audit-as-crates-io = false
+
 [policy.pdf-core]
 audit-as-crates-io = false
 
 [policy.pdf-crypto]
 audit-as-crates-io = false
 
-[policy.pdf-fonts]
-audit-as-crates-io = false
-
-[policy.pdf-text]
-audit-as-crates-io = false
-
 [policy.pdf-edit]
+audit-as-crates-io = false
+
+[policy.pdf-fonts]
 audit-as-crates-io = false
 
 [policy.pdf-image]
@@ -47,11 +40,34 @@ audit-as-crates-io = false
 [policy.pdf-render]
 audit-as-crates-io = false
 
-[policy.pdf-api]
+[policy.pdf-testdata]
+audit-as-crates-io = false
+
+[policy.pdf-text]
+audit-as-crates-io = false
+
+[policy.pdf-typeset]
 audit-as-crates-io = false
 
 [policy.py-bindings]
 audit-as-crates-io = false
 
-[policy.pdf-testdata]
-audit-as-crates-io = false
+[[exemptions.fontconfig-parser]]
+version = "0.5.8"
+criteria = "safe-to-deploy"
+notes = "TS-2 (PRD §10): fontdb Linux fontconfig-XML leaf. MIT, pure Rust. No audit in any imported trusted set (checked 2026-07-02); replace with a local audit when reviewed."
+
+[[exemptions.fontdb]]
+version = "0.23.0"
+criteria = "safe-to-deploy"
+notes = "TS-2 (PRD §10 locked decision): system-font database, pinned exactly (=0.23.0, vendoring is the exit strategy). MIT, pure Rust. No audit in any imported trusted set (checked 2026-07-02)."
+
+[[exemptions.roxmltree]]
+version = "0.20.0"
+criteria = "safe-to-deploy"
+notes = "TS-2: fontconfig-parser's XML reader (same author as fontdb/ttf-parser). MIT OR Apache-2.0. No audit in any imported trusted set (checked 2026-07-02)."
+
+[[exemptions.slotmap]]
+version = "1.1.1"
+criteria = "safe-to-deploy"
+notes = "TS-2: fontdb's ID arena. Zlib. Only a google ub-risk-2 audit of 1.0.6 exists (wrong criteria + version, checked 2026-07-02); replace with a local audit when reviewed."

@@ -8,6 +8,7 @@ members = [
     "crates/pdf-edit",
     "crates/pdf-image",
     "crates/pdf-markdown",
+    "crates/pdf-typeset",
     "crates/pdf-render",
     "crates/pdf-ocr",
     "crates/pdf-api",
@@ -38,6 +39,7 @@ pdf-text = { path = "crates/pdf-text", version = "0.2.0" }
 pdf-edit = { path = "crates/pdf-edit", version = "0.2.0" }
 pdf-image = { path = "crates/pdf-image", version = "0.2.0" }
 pdf-markdown = { path = "crates/pdf-markdown", version = "0.2.0" }
+pdf-typeset = { path = "crates/pdf-typeset", version = "0.2.0" }
 pdf-render = { path = "crates/pdf-render", version = "0.2.0" }
 # `default-features = false` here so pdf-api's own (default-on) `paddle-ocr`
 # feature is the single switch for the PaddleOCR engine (pdf-api re-enables it);
@@ -160,6 +162,29 @@ rayon = "1"
 # `getopts`-based CLI + gen-tests binaries and their deps — only the library
 # parser is needed.
 pulldown-cmark = { version = "0.12", default-features = false }
+
+# --- pdf-typeset: system-font database for docx/pptx faithful export (§10 TS-2).
+#
+# `fontdb` is the locked system-font enumeration/query backend (PRD §10, 2026-07-02
+# family-wide design brief — do not reopen): MIT, 100% pure Rust (directory scan +
+# pure-Rust fontconfig-XML parsing — no CoreText/DirectWrite/libfontconfig), pins
+# the SAME ttf-parser 0.25 already locked above (no duplicate version), enumerates
+# every TTC face (`FaceInfo.index`, `with_face_data`), and indexes localized CJK
+# family names. Dormant-but-stable (0.23.0, 2024-10; still resvg/usvg's pinned
+# backend) — pinned EXACTLY (`=`); vendoring is the exit strategy. All the actual
+# resolution intelligence (folded-name index, three-platform substitution tables,
+# weight/style mapping, per-char fallback, bundled Liberation/Noto final fallback)
+# stays first-party in `pdf-typeset::fontres`.
+#
+# `memmap` feature decision (TS-2, recorded): ON. macOS keeps multi-GB CJK
+# collections under /System/Library/AssetsV2 (PingFang.ttc lives there on
+# macOS 13+); without mmap the scan eagerly `fs::read`s every candidate file,
+# costing seconds and GBs of transient allocations. The unsafe lives in the
+# well-audited `memmap2` leaf (already in the resolved graph), never in our
+# crates (`pdf-typeset` keeps `#![forbid(unsafe_code)]`); cargo-geiger stays the
+# advisory watchdog. `fontconfig` stays on for the Linux/BSD font-dir + alias
+# scan (pure-Rust `fontconfig-parser`, MIT).
+fontdb = { version = "=0.23.0", default-features = false, features = ["memmap", "fontconfig"] }
 
 # --- shared dev-deps ---
 proptest = "1"

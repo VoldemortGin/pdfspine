@@ -5,7 +5,8 @@ pdfspine 的二进制 / wheel 分发物包含以下第三方开源组件。各�
 Unicode-3.0 / BlueOak），无 copyleft（GPL / AGPL / LGPL / MPL）组件。** 本文件满足这些
 许可证的归因（attribution）义务，须随 pdfspine 二进制 / wheel 一并分发。
 
-第三方组件总数：**186**（覆盖含 OCR 的完整 wheel）。
+第三方组件总数：**191**（覆盖含 OCR 的完整 wheel，含 `pdf-typeset` 共享排版引擎的
+cargo 图新增组件 fontdb / fontconfig-parser / roxmltree / slotmap / core_maths）。
 
 > 本文件由仓库脚本从 `cargo license` 元数据生成。多许可 `OR` 表达式表示该组件
 > 可在所列任一许可证下使用；相关许可证全文见文末。Apache-2.0 全文见随附 LICENSE。
@@ -42,6 +43,7 @@ Unicode-3.0 / BlueOak），无 copyleft（GPL / AGPL / LGPL / MPL）组件。** 
 | cfg_aliases | 0.2.1 | MIT | Zicklag <zicklag@katharostech.com> | https://github.com/katharostech/cfg_aliases |
 | cipher | 0.4.4 | Apache-2.0 OR MIT | RustCrypto Developers | https://github.com/RustCrypto/traits |
 | color_quant | 1.1.0 | MIT | nwin <nwin@users.noreply.github.com> | https://github.com/image-rs/color_quant.git |
+| core_maths | 0.1.1 | MIT | Robert Bastian <me@robertbastian.dev | https://github.com/robertbastian/core_maths |
 | cpufeatures | 0.2.17 | Apache-2.0 OR MIT | RustCrypto Developers | https://github.com/RustCrypto/utils |
 | crc32fast | 1.5.0 | Apache-2.0 OR MIT | Sam Rijs <srijs@airpost.net>, Alex Crichton <alex@alexcricht | https://github.com/srijs/rust-crc32fast |
 | crossbeam-deque | 0.8.6 | Apache-2.0 OR MIT |  | https://github.com/crossbeam-rs/crossbeam |
@@ -64,6 +66,8 @@ Unicode-3.0 / BlueOak），无 copyleft（GPL / AGPL / LGPL / MPL）组件。** 
 | filetime | 0.2.29 | Apache-2.0 OR MIT | Alex Crichton <alex@alexcrichton.com> | https://github.com/alexcrichton/filetime |
 | find-msvc-tools | 0.1.9 | Apache-2.0 OR MIT |  | https://github.com/rust-lang/cc-rs |
 | flate2 | 1.1.9 | Apache-2.0 OR MIT | Alex Crichton <alex@alexcrichton.com>, Josh Triplett <josh@j | https://github.com/rust-lang/flate2-rs |
+| fontconfig-parser | 0.5.8 | MIT |  | https://github.com/Riey/fontconfig-parser |
+| fontdb | 0.23.0 | MIT | Yevhenii Reizner <razrfalcon@gmail.com> | https://github.com/RazrFalcon/fontdb |
 | generic-array | 0.14.7 | MIT | Bartłomiej Kamiński <fizyk20@gmail.com>, Aaron Trent <novacr | https://github.com/fizyk20/generic-array.git |
 | getrandom | 0.2.17 | Apache-2.0 OR MIT | The Rand Project Developers | https://github.com/rust-random/getrandom |
 | gif | 0.14.2 | Apache-2.0 OR MIT | The image-rs Developers | https://github.com/image-rs/image-gif |
@@ -143,6 +147,7 @@ Unicode-3.0 / BlueOak），无 copyleft（GPL / AGPL / LGPL / MPL）组件。** 
 | regex | 1.12.4 | Apache-2.0 OR MIT | The Rust Project Developers, Andrew Gallant <jamslam@gmail.c | https://github.com/rust-lang/regex |
 | regex-automata | 0.4.14 | Apache-2.0 OR MIT | The Rust Project Developers, Andrew Gallant <jamslam@gmail.c | https://github.com/rust-lang/regex |
 | regex-syntax | 0.8.11 | Apache-2.0 OR MIT | The Rust Project Developers, Andrew Gallant <jamslam@gmail.c | https://github.com/rust-lang/regex |
+| roxmltree | 0.20.0 | Apache-2.0 OR MIT | Yevhenii Reizner <razrfalcon@gmail.com> | https://github.com/RazrFalcon/roxmltree |
 | rustfft | 6.4.1 | Apache-2.0 OR MIT | Allen Welkie <allen.welkie at gmail>, Elliott Mahler <join.t | https://github.com/ejmahler/RustFFT |
 | rustix | 1.1.4 | Apache-2.0 OR Apache-2.0 WITH LLVM-exception OR MIT | Dan Gohman <dev@sunfishcode.online>, Jakub Konka <kubkon@jak | https://github.com/bytecodealliance/rustix |
 | same-file | 1.0.6 | MIT OR Unlicense | Andrew Gallant <jamslam@gmail.com> | https://github.com/BurntSushi/same-file |
@@ -154,6 +159,7 @@ Unicode-3.0 / BlueOak），无 copyleft（GPL / AGPL / LGPL / MPL）组件。** 
 | sha2 | 0.10.9 | Apache-2.0 OR MIT | RustCrypto Developers | https://github.com/RustCrypto/hashes |
 | shlex | 2.0.1 | Apache-2.0 OR MIT | comex <comexk@gmail.com>, Fenhl <fenhl@fenhl.net>, Adrian Ta | https://github.com/comex/rust-shlex |
 | simd-adler32 | 0.3.9 | MIT | Marvin Countryman <me@maar.vin> | https://github.com/mcountryman/simd-adler32 |
+| slotmap | 1.1.1 | Zlib | Orson Peters <orsonpeters@gmail.com> | https://github.com/orlp/slotmap |
 | smallvec | 1.15.2 | Apache-2.0 OR MIT | The Servo Project Developers | https://github.com/servo/rust-smallvec |
 | smol_str | 0.3.6 | Apache-2.0 OR MIT | Aleksey Kladov <aleksey.kladov@gmail.com>, Lukas Wirth <luka | https://github.com/rust-lang/rust-analyzer/tree/master/lib/smol_str |
 | static_assertions | 1.1.0 | Apache-2.0 OR MIT | Nikolai Vazquez | https://github.com/nvzqz/static-assertions-rs |
