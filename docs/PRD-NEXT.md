@@ -421,6 +421,264 @@ feature lives in the working tree pending commit. Nothing left in §9 — future
 annotations, bold/italic user-font variants, row-splitting tables, HTML passthrough) would be a new PRD
 section, not a resumption of this one.
 
+## 10. Shared typesetting engine `pdf-typeset` — Phase A of docspine/pptspine faithful PDF export
+
+**What & positioning.** The **shared-engine project (Phase A)** enabling faithful PDF **export** of
+`.docx` (docspine) and `.pptx` (pptspine). pdfspine grows one new workspace crate,
+**`crates/pdf-typeset`** (next to `pdf-markdown` in the members list, `Cargo.toml:3-15`); the consumers
+add `doc-render` / `ppt-render` crates **in their own repos** and pull pdfspine crates via **git
+dependency + pinned rev**, copying the ocrspine precedent (docspine `Cargo.toml:22-29`). `pdf-typeset`
+re-exports the pdf-edit surface consumers need, so doc-render/ppt-render declare exactly **ONE** pdfspine
+git dep. Scope: **(a)** input model — styled runs (per-run family/size/bold/italic/underline/strike/
+color/highlight), paragraph props (alignment incl. justify, line spacing multiple+exact, space
+before/after, first-line & hanging indent, left/right indent, list bullet/numbering labels), blocks, and
+an absolutely-positioned TextBox spec (fixed rect, vertical anchor top/middle/bottom, word-wrap on/off,
+normAutofit fontScale, rotation); **(b)** font resolution & management; **(c)** flow layout with
+pagination callbacks (generalized from pdf-markdown) + box layout; **(d)** a preset-geometry subset for
+pptx autoshapes; **(e)** table layout primitives (grid measure, cell block layout, per-edge border
+painting); **(f)** emission via pdf-edit ops. **Non-goals:** the content-level
+`to_markdown → markdown_to_pdf` path explicitly does **NOT** count as export fidelity; Phase A does
+**NOT** rewire pdf-markdown onto pdf-typeset (`markdown_to_pdf` stays green, untouched — generalization
+is **copy-adapt**; consolidation is a noted future option); no shaping/kerning/ligatures; gradients/
+shadows/3D out (below); not part of the fitz-compat/COMPAT surface (crate-level Rust API — the Python
+surface lives in the consumer repos, which surface warnings via `warnings.warn`).
+
+**Locked decisions (2026-07-02, family-wide design brief — do not reopen):**
+- **Fonts — `fontdb` 0.23 + first-party thin resolver.** fontdb is MIT (passes the `deny.toml:1-27`
+  allowlist), 100% pure Rust (directory scan + pure-Rust fontconfig-XML parsing — no CoreText/
+  DirectWrite/libfontconfig), pins the **same ttf-parser 0.25** already locked (`Cargo.lock:2101-2104` —
+  no duplicate version), enumerates **every TTC face** (`FaceInfo.index`; `with_face_data` hands back the
+  exact `(bytes, face_index)` pair the new `parse_indexed` needs), and matches **localized CJK family
+  names** (verified in source: all name-table language variants participate in `query`). It is
+  dormant-but-stable (0.23.0, 2024-10; still resvg/usvg's pinned backend) — pin the exact version,
+  vendoring is the exit strategy; hand-extend `THIRD-PARTY-NOTICES.md` (no generator exists,
+  `docs/PRD-NEXT.md:412-413`). fontdb's own query is exact/case-sensitive, so the first-party resolver
+  adds: a normalized (case/width-folded) name index, bold/italic → `Query{weight, style}` mapping, a
+  **configurable substitution table** with built-in three-platform defaults (宋体/SimSun → Songti SC
+  (macOS) / SimSun (Windows) / Noto Serif CJK SC (Linux); 微软雅黑/Microsoft YaHei → PingFang SC /
+  Microsoft YaHei / Noto Sans CJK SC; Calibri → Carlito-if-present; Times New Roman → bundled Liberation
+  Serif), a per-character fallback chain, and a final fallback to the bundled Liberation/Noto faces
+  (`crates/pdf-fonts/src/liberation.rs:36-52`).
+- **EmbeddedFont upgrades:** `Face::parse` with a **real TTC face index** (today hardcoded 0 at
+  `crates/pdf-edit/src/fontfile.rs:62` and `:108`); a **multi-face family registry**
+  (regular/bold/italic/bold-italic = 4 distinct embedded fonts, one embed per doc per face); and a
+  **usage-based glyph SUBSETTER — strategic requirement** (system CJK fonts are 10–90 MB; whole-font
+  embed kept only as a debug flag).
+- **No synthetic bold in v1** — consistent with the render side having no embolden path (correction C9,
+  §3): a missing face → substitution/similarity fallback + `ExportWarning`, never fake emboldening.
+- **Preset geometry:** v1 subset ≈ **35 presets** (rect, roundRect, ellipse, line, straightConnector1,
+  bentConnector2/3, triangle, rtTriangle, diamond, parallelogram, trapezoid, pentagon, hexagon, octagon,
+  plus, arc, pie, chord, donut, right/left/up/down/leftRight arrows, star4/5/6, chevron, homePlate,
+  wedgeRectCallout, flowChartProcess/Decision/Terminator/Data); every other `prstGeom` value degrades to
+  its **bounding-box rect + `ExportWarning`**, with the shape's text still laid out on top (text layout
+  is geometry-independent).
+- **Fills:** solid fill IN; **constant alpha IN** (cheap `ca`/`CA` ExtGState via the existing
+  `add_resource` plumbing, `crates/pdf-edit/src/content.rs:141-172`); **gradients/shadows/3D OUT** for
+  v1 (gradient → representative solid color + warning; shadows dropped + warning). Required drawing
+  upgrades: alpha ExtGState, `W n` clipping, line join/cap, arbitrary arc→Bézier, roundRect, shape-level
+  transforms (`q cm … Q`), text rotation.
+- **Engine output:** `ExportResult` carrying pdf bytes/ops + `Vec<ExportWarning>` — every
+  unsupported-feature degradation enumerated; consumers surface them in Python via `warnings.warn`.
+- **Determinism weakens to per-font-environment:** same machine + same installed fonts ⇒ identical
+  bytes; cross-machine output may differ (system-font resolution) — unlike pdf-markdown's absolute
+  contract (`crates/pdf-markdown/src/lib.rs:106-110`).
+- **Fixture policy:** docspine/pptspine keep their no-binary-fixture charter (synthesize OOXML zips in
+  conftest); pdf-typeset unit fixtures follow the `fixtures/born` deterministic-generator pattern (P1-3).
+
+**Acceptance-gate stack (family-wide — every phase gate below cites these anchors):**
+1. **CI-blocking content read-back:** source-side `to_text()` vs pdfspine `Page.get_text()`
+   (`python/pdfspine/document.py:1813-1843`, words-with-coords), scored with `conformance/gt/score.py`
+   (`content_scores:152`, `order_score:198`) — **token-F1 ≥ 0.99 AND order ≥ 0.99** on synthetic fixtures.
+2. **CI-blocking structural/geometry asserts:** page count/size, `get_text_words` coordinate tolerance,
+   `extractIMGINFO` image survival, non-blank raster via `conformance/gt/render_diff.py`
+   (`_near_blank:463-469`).
+3. **Local-only advisory LibreOffice oracle:** `/Applications/LibreOffice.app/Contents/MacOS/soffice`
+   (binary verified present, 25.2.1.2), `--headless --convert-to pdf`; both PDFs rasterized with
+   pdfspine's own `get_pixmap`; SSIM via `render_diff.py` (`ssim:242-281`); **advisory band 0.80–0.90 —
+   never in CI**.
+4. **Once stable:** committed `.ssimref` references at `--min-ssim 0.97`, following the existing
+   accuracy-gate pattern (`.github/workflows/ci.yml:189-194`).
+
+**Reuse map (落点地图 — don't re-investigate):**
+- **Pipeline skeleton (copy-adapt from `crates/pdf-markdown`):** the 5-stage pure pipeline
+  (`src/lib.rs:117-124`) is the right skeleton. `model.rs` is replaced entirely by the new input IR;
+  ~60–70% of `layout.rs` *logic* survives (greedy first-fit wrap + char-granularity force-split
+  `layout.rs:310-394`; paginating `Ctx` + `ensure(h)` `:410-461`; pending-gap collapse-at-page-top
+  `:442-452` — Word-ish space-before/after semantics for free; per-line pagination `emit_lines`
+  `:468-488`; list-marker drawing `:709-775`; table measure/shrink `:834-945`); near-100% of `render.rs`
+  assembly survives modulo N fonts (two-pass whole-doc glyph-usage accumulation `render.rs:39-91`, one
+  `write_type0` per face per doc `:75-84`, deterministic `SaveOptions` + content-hash `/ID` `:13-15`,
+  build-from-scratch seed `:159-177`). Keep top-left authoring coords + y-flip at emission
+  (`layout.rs:4-6`).
+- **Measurement invariant to preserve:** measurement and drawing share one resolution path
+  (`crates/pdf-markdown/src/fonts.rs:16-17`; `FontSet::advance` `:209-218`; per-char fallback `resolve`
+  `:169-205`; gid memoization `:99-121`); Base-14 advances via `pdf_fonts::std_widths::string_advance`
+  (`crates/pdf-fonts/src/std_widths.rs:147-157`). Advances stay strictly additive per char — no shaper.
+- **EmbeddedFont (`crates/pdf-edit/src/fontfile.rs`):** `parse` (`:61-100`), `glyph_id` (`:105-112`),
+  `write_type0` Type0/Identity-H with usage-scoped `/W` + `/ToUnicode` (`:155-254`, `:256-268`,
+  `:289-314`); the always-written ToUnicode is what guarantees gate-1 read-back extractability.
+- **⚠ TRAP — face index 0 is hardcoded TWICE** (`fontfile.rs:62` and the `glyph_id` re-parse at `:108`);
+  `ttf_parser::fonts_in_collection` is used nowhere in the repo. TS-3 must thread one `face_index`
+  through both call sites.
+- **⚠ TRAP — no subsetting exists today:** the whole program is embedded verbatim
+  (`fontfile.rs:36-37,81,156-171`); the module doc's "feature-gated `subset` path" (`fontfile.rs:4-5`)
+  does not exist anywhere. Raw `.ttc` bytes would embed the **entire multi-face collection** (macOS
+  Songti.ttc ≈ 90 MB) — TS-3's subsetter is what makes system-CJK embedding viable at all.
+- **⚠ TRAP — `Frag` has no per-run size** (`crates/pdf-markdown/src/layout.rs:148-156`) and `emit_lines`
+  assumes one size per paragraph (`:468-476`); `Face` is a fixed 7-variant enum with fixed `F0..F6`
+  resource names (`fonts.rs:51-77`) that ripples into assembly pass-1 (`render.rs:41-43,73`).
+  pdf-typeset replaces both with `FaceId(usize)` + size-carrying frags; line height = max over frags,
+  baseline from real ascent/descent already carried by `EmbeddedFont` (`fontfile.rs:84-88`) — retire the
+  `BASELINE_FACTOR = 0.8` heuristic (`layout.rs:23-24`).
+- **⚠ TRAP — justify exists nowhere:** `align_offset` is Left/Center/Right only (`layout.rs:516-522`),
+  paragraphs hardcode Left (`:573-580`), and pdf-edit's `Align::Justify` silently renders Left
+  (`crates/pdf-edit/src/text.rs:44-48`). `Tw` cannot implement it either (Identity-H 2-byte codes — `Tw`
+  only affects single-byte code 32) → justify = redistributing the line's space-frag widths, last line
+  left.
+- **⚠ TRAP — RGB only, no alpha, no clip, no join/cap:** `Color` emits `rg`/`RG` only
+  (`crates/pdf-edit/src/color.rs:5-50`); no `ca`/`CA` ExtGState in any authoring API (the only ExtGState
+  is the hardcoded highlight `/BM /Multiply`, `annot.rs:2044-2058`); no `W`/`W n` is ever emitted by
+  authoring code; `finish()` parameterizes width + dashes only (`drawing.rs:263-271`).
+- **⚠ TRAP — `insert_textbox` drops overflow silently** (`text.rs:238`; §9's trap stands): flow layout
+  must keep doing its own measure/wrap/paginate; box layout does its own v-align/autofit/clip.
+- **Drawing primitives (`crates/pdf-edit/src/drawing.rs`):** `Shape` builder (`:28-42`) — `draw_line`
+  `:86` / `draw_polyline` `:96` / `draw_rect` `:118` / `draw_bezier` `:131` / Catmull-Rom `draw_curve`
+  `:151` / 4-Bézier `draw_oval`/`draw_circle` `:187-249`; `finish(color, fill, width, dashes, even_odd,
+  close_path)` wraps each group `q…Q` (`:263-317`); even-odd `f*` enables donut/frame multi-subpath
+  fills. Straight-edge presets (triangles, diamonds, arrows, stars, chevron…) are drawable **today**;
+  only arcs/roundRect need the new arc→Bézier segmenting.
+- **Transform precedent:** full affine `Matrix` incl. arbitrary-angle `rotate(deg)`
+  (`crates/pdf-core/src/geom/matrix.rs:95`, full ops `:9-193`); arbitrary `q a b c d e f cm … Q` emission
+  proven in `show_pdf_page` placement (`crates/pdf-edit/src/merge.rs:202-211`). pptx `rot`/`flipH`/
+  `flipV` and text rotation = lay out unrotated, wrap the op batch in `q <cm> … Q`.
+- **Gate machinery (reuse as-is):** `Page.get_text` words-with-coords
+  (`python/pdfspine/document.py:1813-1843`); `conformance/gt/score.py` (`content_scores:152`,
+  `order_score:198`); `render_diff.py` (`ssim:242-281`, `_near_blank:463-469`); the committed-`.ssimref`
+  gate pattern (`.github/workflows/ci.yml:189-194`).
+- **Consumer wiring precedent:** ocrspine-style git dependency + pinned rev (docspine
+  `Cargo.toml:22-29`); pdf-typeset re-exports the needed `pdf_edit`/`pdf_core` types so consumers stay
+  single-dep.
+
+**Design sketch (`crates/pdf-typeset` — deps: pdf-core + pdf-edit + pdf-fonts + fontdb):**
+- **Modules:** `model` (input IR) · `fontres` (fontdb + resolver) · `faces` (`FaceId` registry +
+  embed/subset bookkeeping) · `flow` (tokens/wrap/paginate — generalized `layout.rs`) · `boxes` (TextBox
+  layout) · `preset` (autoshape outlines → `Shape` ops) · `table` (grid measure / cell layout / per-edge
+  borders) · `emit` (op IR → content streams → bytes — copy-adapt `render.rs`) · `warn`
+  (`ExportWarning`). `lib.rs` re-exports the consumer-facing pdf-edit/pdf-core surface.
+- **Input model (signature level; `#[non_exhaustive]` where growth is expected):**
+
+  ```rust
+  pub struct Run { pub text: String, pub style: RunStyle }
+  pub struct RunStyle { pub family: String, pub size: f64, pub bold: bool, pub italic: bool,
+      pub underline: bool, pub strike: bool, pub color: Rgb, pub highlight: Option<Rgb> }
+  pub enum Align { Left, Center, Right, Justify }
+  pub enum LineSpacing { Multiple(f64), Exact(f64) }
+  pub struct ParaProps { pub align: Align, pub spacing: LineSpacing, pub space_before: f64,
+      pub space_after: f64, pub indent_left: f64, pub indent_right: f64,
+      pub first_line_indent: f64 /* negative = hanging */, pub list: Option<ListLabel> }
+  pub struct ListLabel { pub text: String, pub gutter: f64 } // consumer computes counters/format
+  pub enum Block { Paragraph(ParaProps, Vec<Run>), Table(TableSpec), Image(ImageSpec), PageBreak }
+  pub enum VAnchor { Top, Middle, Bottom }
+  pub struct TextBoxSpec { pub rect: Rect, pub v_anchor: VAnchor, pub wrap: bool,
+      pub font_scale: Option<f64> /* normAutofit */, pub rotation_deg: f64, pub clip: bool,
+      pub blocks: Vec<Block> }
+  pub struct ExportResult { pub pdf: Vec<u8>, pub warnings: Vec<ExportWarning> }
+  #[non_exhaustive] pub enum ExportWarning { FontSubstituted { requested: String, used: String },
+      GlyphFallback { ch: char, family: String }, PresetDegraded { preset: String },
+      GradientDegraded { .. }, BoxOverflowClipped { .. } /* … */ }
+  ```
+
+  List counters/numbering formats (`%1.%2`, roman/alpha, restarts) are computed by the **consumer** (it
+  owns `numbering.xml` / `buChar` semantics); pdf-typeset receives the final label string + indents.
+- **Resolver architecture:** `fontdb::Database` (system scan, or injected `load_font_data` fixtures for
+  tests) → first-party folded-name index + substitution tables + weight/style `Query` → `(bytes,
+  face_index)` via `with_face_data` → `FaceId` in the embed registry (programs cached per export run);
+  per-char fallback chain resolved at tokenization time (same place as today, `layout.rs:248`); every
+  substitution/degrade appends an `ExportWarning` — degrade-never-panic (`fonts.rs:15-17` house rule).
+- **Flow core:** pagination becomes a callback/trait (`PageProvider: fn next_page(&mut self) ->
+  PageGeom`) so docspine sections (per-section page size/margins), plain pages, and fixed-box layout
+  (no pagination; clip/overflow policy instead) all share one measure/wrap/emit core.
+
+**Phased plan** (effort per §4 scale — **S** ≈ hours · **M** ≈ 1–2 days · **L** ≈ multi-day; each task
+lists why · files · effort · **Acceptance**, the green condition that means "done"):
+- **TS-1 · Crate scaffold + input model** — *M*. New `crates/pdf-typeset` (copy MD-0's scaffold recipe:
+  workspace members + `[workspace.dependencies]` + `supply-chain/config.toml` policy); the `model`/`warn`
+  types above; op IR (extend pdf-markdown's `Op` vocabulary, `layout.rs:88-139`, with size-carrying text
+  + shape/alpha/clip ops). **Acceptance:** workspace fmt / clippy `-D warnings` / test green with the
+  crate in; existing floors untouched (`cargo test --workspace` ≥ **1445 passed / 0 failed**;
+  pdf-markdown outputs byte-identical); model-construction unit tests pass.
+- **TS-2 · System font resolution** — *L*.
+  - fontdb 0.23 wiring, pinned exact; `memmap` feature decision recorded (*S*).
+  - Folded-name index + three-platform substitution tables (built-in defaults + user override) (*M*).
+  - Weight/style `Query` mapping + per-char fallback chain + bundled Liberation/Noto final fallback +
+    `FontSubstituted`/`GlyphFallback` warning channel (*M*).
+  - **Acceptance:** `cargo deny check` green with fontdb added (`deny.toml:1-27` allowlist);
+    `THIRD-PARTY-NOTICES.md` hand-extended; resolver unit tests run against an **injected**
+    deterministic Database (committed fixture fonts, no system dependence) and pass on all 3 CI OSes; a
+    local (non-CI) macOS test resolves 宋体 → Songti SC and 微软雅黑 → PingFang SC; an unknown family
+    returns Liberation + exactly one `FontSubstituted` warning (never an error).
+- **TS-3 · Multi-face EmbeddedFont + TTC face index + glyph subsetter** — *L*.
+  - `EmbeddedFont::parse_indexed(program, face_index)` threading the index through `fontfile.rs:62` and
+    `:108`, + `fonts_in_collection` enumeration (*S*).
+  - 4-slot family registry (regular/bold/italic/bold-italic, each embedded once per doc) replacing the
+    fixed 7-face bookkeeping (`fonts.rs:51-77`, `render.rs:41-43,73`) (*M*).
+  - Usage-based glyph subsetter: rebuild glyf/loca/cmap/hmtx/head/hhea/maxp (+ minimal name/post/OS-2)
+    from used gids with composite-glyph closure; whole-font embed behind a debug flag (*L* core).
+  - **Acceptance:** a doc using all four styles embeds **exactly 4 `/FontFile2`** (extend the
+    one-FontFile2 lock, `crates/pdf-markdown/tests/fonts_embed.rs:23`); embedding ≤ 100 glyphs from a
+    ≥ 10 MB system TTC face yields a FontFile2 **< 5% of source size**; subset text read-back exact
+    (gate 1 ≥ 0.99) and raster SSIM subset-vs-whole-font **≥ 0.99** (`render_diff.py ssim:242-281`).
+- **TS-4 · Flow-layout generalization** — *L*.
+  - `FaceId` + per-frag size + real-ascent line boxes (mixed sizes in one line share one baseline) (*M*).
+  - Justify via space-frag redistribution, last line left (*M*).
+  - Underline/strike/highlight decorations (clone the strike mechanism `layout.rs:502-512`; highlight =
+    `FillRect` behind frags using line-box metrics) (*S*).
+  - First-line/hanging/left/right indents (per-line-index widths in `wrap()`) + configurable line
+    spacing (multiple/exact) + space before/after (parameterize the `layout.rs:19-30` consts) + list
+    labels from `ListLabel` (drawing side reusable, `layout.rs:709-775`) (*M*).
+  - Table primitives generalized from `layout_table` (`layout.rs:834-945`): fixed + auto grid measure
+    (keep fair-share shrink `:865-889`), cell block layout, per-edge border painting (4 `Line` ops per
+    cell instead of `StrokeRect`) (*M*).
+  - **Acceptance:** synthetic-fixture read-back green — **token-F1 ≥ 0.99 AND order ≥ 0.99** (`score.py`
+    `content_scores:152` / `order_score:198`); justified interior lines' right edges within **0.5 pt** of
+    the column edge and mixed-size lines share a single baseline y (asserted on `get_text_words` coords,
+    `document.py:1813-1843`); repeated runs byte-identical (same font environment).
+- **TS-5 · Text boxes** — *M*. Fixed rect + `VAnchor` (two-pass: wrap → total height → offset), wrap-off
+  mode (hard-break lines only), `normAutofit` fontScale (binary-search re-wrap over the pure measure
+  path), rotation (`q cm Q` wrap via `Matrix::rotate`), optional `re W n` clip. **Acceptance:** all
+  words of a boxed fixture land inside the box rect **± 1 pt** (`get_text_words`); middle/bottom-anchored
+  fixtures hit the expected first-baseline y ± 1 pt; an overflowing autofit fixture scales down until
+  **zero words lost** in read-back; a 90°-rotated box still passes read-back + non-blank raster
+  (`_near_blank:463-469`).
+- **TS-6 · Preset geometry subset + drawing upgrades** — *L*.
+  - pdf-edit `Shape` upgrades: arbitrary elliptical-arc→Bézier segmenting + roundRect; line join/cap
+    params; constant-alpha ExtGState (`ca`/`CA` via `add_resource`, `content.rs:141-172`); `W n`
+    clipping; shape-level `q cm Q` transforms (*M*).
+  - The ~35 preset outlines, table-driven, + `rot`/`flipH`/`flipV` handling (*M*).
+  - Degradation policy: unknown preset → bounding-box rect + `PresetDegraded`; gradient →
+    representative solid + `GradientDegraded`; shadows dropped + warning (*S*).
+  - **Acceptance:** every v1 preset has a deterministic raster fixture that is non-blank
+    (`_near_blank:463-469`) and matches its committed reference at **SSIM ≥ 0.97**; an unsupported
+    preset produces the rect fallback + exactly one `PresetDegraded` warning (asserted); alpha fills
+    register one ExtGState object reused across ops (object-count assert).
+- **TS-7 · Conformance harness extension** — *M*. Wire typeset fixtures into the gate stack: read-back
+  scoring via `score.py`; committed `.ssimref` at `--min-ssim 0.97` (`ci.yml:189-194` pattern); and the
+  **local-only** LO-oracle script (`soffice --headless --convert-to pdf`, rasterize both sides with
+  pdfspine `get_pixmap`, SSIM via `render_diff.py ssim:242-281`, advisory band 0.80–0.90).
+  **Acceptance:** the CI accuracy-gate job fails on a seeded layout regression and passes at HEAD
+  (canary-and-revert proven — the P0-4 norm); the LO script runs end-to-end locally on one `.docx` and
+  one `.pptx` sample and emits an advisory report; **no LibreOffice dependency appears in CI**.
+- **Downstream unblocking:** **Phase B (pptspine `ppt-render`)** starts when the TS-2/3/5/6 gates are
+  green; **Phase C (docspine `doc-render`)** when the TS-2/3/4 gates (incl. TS-4's table primitives) are
+  green. Phase B/C PRDs live in the consumer repos; each pins a pdfspine rev with its needed TS tasks
+  landed.
+
+**Resume pointer.** Nothing in §10 has started — begin at **TS-1**. The family-wide decisions above are
+locked (2026-07-02 design brief): do not reopen fontdb-vs-alternatives, the no-synthetic-bold rule, the
+~35-preset subset, or the gradients-out call. `markdown_to_pdf` (§9) must stay green and untouched
+throughout Phase A — rewiring pdf-markdown onto pdf-typeset is a future option, not this phase. Verify
+every TS task with the §8 suite plus this section's gate stack.
+
 ---
 
 *Re-verified 2026-06-19 from a code-level 5-dimension survey (project health · API parity · rendering ·
