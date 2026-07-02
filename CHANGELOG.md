@@ -11,6 +11,8 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-07-02
+
 ### Added
 
 - **Markdown → PDF: new top-level `pdfspine.markdown_to_pdf()` (pdfspine
@@ -173,6 +175,7 @@ published wheel's version is set from the `v0.1.0` git tag at build time.
   2858 ms → 819 ms). `rayon` is a feature-gated (`paddle-ocr`) optional dep and
   is not in the lean base wheel.
 
-[Unreleased]: https://github.com/VoldemortGin/pdfspine/compare/v0.0.6...HEAD
+[Unreleased]: https://github.com/VoldemortGin/pdfspine/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/VoldemortGin/pdfspine/compare/v0.1.2...v0.2.0
 [0.0.6]: https://github.com/VoldemortGin/pdfspine/compare/v0.0.5...v0.0.6
 [0.1.0]: https://github.com/VoldemortGin/pdfspine/releases/tag/v0.1.0
