@@ -20,7 +20,25 @@
 //! - [`fontres`] — fontdb-backed system-font resolution: folded-name index,
 //!   three-platform substitution tables, weight/style query mapping, per-char
 //!   fallback chain, bundled Liberation/Noto final fallback (TS-2).
-//! - `faces` / `flow` / `boxes` / `preset` / `table` / `emit` — TS-3..TS-6.
+//! - `faces` — the [`ops::FaceId`] registry: one id / one parse / one embed
+//!   per distinct face per export run, real font metrics (TS-3/TS-4).
+//! - [`flow`] — measure → wrap → paginate: mixed faces/sizes on shared
+//!   baselines, justify by space redistribution, decorations, indents, line
+//!   spacing, [`flow::PageProvider`] pagination (TS-4).
+//! - `table` — grid measure (fixed/auto + fair-share shrink), cell layout,
+//!   per-edge borders (TS-4).
+//! - `boxes` — absolutely-positioned text boxes: [`VAnchor`], wrap-off,
+//!   `normAutofit` scaling, rotation, clipping (TS-5).
+//! - `emit` — op IR → content streams → deterministic PDF bytes (TS-4).
+//! - [`preset`] — pptx autoshape outlines (TS-6).
+//!
+//! # Driving the engine
+//!
+//! [`Typesetter`] is the per-export-run facade: consumers lay out flowing
+//! blocks ([`Typesetter::layout_flow`]) and/or absolutely-positioned text
+//! boxes ([`Typesetter::layout_text_box`], assembling [`PageOps`] themselves
+//! for slides), then serialize once via [`Typesetter::emit`], which returns
+//! the PDF bytes together with every accumulated [`ExportWarning`].
 //!
 //! # Determinism contract
 //!
@@ -29,10 +47,18 @@
 //! resolution). The [`fontres::FontResolver::without_system_fonts`] constructor
 //! (bundled faces only) restores full determinism for tests.
 
+mod boxes;
+mod emit;
+mod faces;
+pub mod flow;
 pub mod fontres;
 pub mod model;
 pub mod ops;
+pub mod preset;
+mod table;
 pub mod warn;
+
+use std::collections::{HashMap, HashSet};
 
 // --- re-exported consumer surface (single pdfspine git dep for doc-render /
 // --- ppt-render; PRD §10 consumer-wiring precedent) -------------------------
@@ -42,11 +68,13 @@ pub use pdf_core::geom::{Matrix, Point, Rect};
 /// `0.0..=1.0`; `pdf_edit::Color` re-exported under the PRD §10 model name).
 pub use pdf_edit::Color as Rgb;
 
+pub use flow::{FixedPages, PageGeom, PageProvider};
 pub use fontres::{FontResolver, Platform, ResolvedFace, Substitutions};
 pub use model::{
     Align, Block, BorderEdge, CellBorders, ColumnWidth, ImageSpec, LineSpacing, ListLabel,
     ParaProps, Run, RunStyle, TableCell, TableRow, TableSpec, TextBoxSpec, VAnchor,
 };
+pub use ops::{FaceId, Fill, LineCap, LineJoin, Op, PageOps, PathSeg, Stroke};
 pub use warn::ExportWarning;
 
 /// The result of one export run: the serialized PDF plus every degradation
@@ -58,4 +86,185 @@ pub struct ExportResult {
     pub pdf: Vec<u8>,
     /// Every unsupported-feature degradation, in occurrence order.
     pub warnings: Vec<ExportWarning>,
+}
+
+/// The per-export-run engine: a [`FontResolver`] behind memoized style / char
+/// resolution, the face registry (one [`FaceId`] / one parse / one embed per
+/// face per document), prepared images, and the deduplicated warning channel.
+///
+/// One `Typesetter` produces one document: lay out with
+/// [`Typesetter::layout_flow`] / [`Typesetter::layout_text_box`] (and place
+/// images via [`Typesetter::add_image`] when assembling [`PageOps`] directly),
+/// then consume it with [`Typesetter::emit`].
+pub struct Typesetter {
+    resolver: FontResolver,
+    faces: faces::FaceRegistry,
+    images: Vec<emit::PreparedImage>,
+    warnings: Vec<ExportWarning>,
+    /// (family, bold, italic) → resolved base face (memoized so the
+    /// substitution / style warnings fire once per style).
+    styles: HashMap<(String, bool, bool), ResolvedFace>,
+    /// (base face, char) → drawing face (memoized per-char fallback).
+    chars: HashMap<(fontres::FaceKey, char), FaceId>,
+    /// (family, char) pairs already reported as glyph fallbacks (the TS-4
+    /// warning dedup: `resolve_char` fires per occurrence, the layout layer
+    /// reports each miss once).
+    glyph_warned: HashSet<(String, char)>,
+}
+
+impl Typesetter {
+    /// An engine over `resolver` (inject a deterministic
+    /// [`FontResolver::with_platform`] resolver for tests).
+    #[must_use]
+    pub fn new(resolver: FontResolver) -> Self {
+        Typesetter {
+            resolver,
+            faces: faces::FaceRegistry::new(),
+            images: Vec::new(),
+            warnings: Vec::new(),
+            styles: HashMap::new(),
+            chars: HashMap::new(),
+            glyph_warned: HashSet::new(),
+        }
+    }
+
+    /// An engine over the system fonts (deterministic per font environment
+    /// only — the PRD §10 contract).
+    #[must_use]
+    pub fn with_system_fonts() -> Self {
+        Typesetter::new(FontResolver::with_system_fonts())
+    }
+
+    /// The underlying font resolver.
+    #[must_use]
+    pub fn resolver(&self) -> &FontResolver {
+        &self.resolver
+    }
+
+    /// Mutable resolver access (inject document-embedded fonts via
+    /// `add_font_data`, extend the substitution table, …). Configure fonts
+    /// **before** laying out — resolution results are memoized per style.
+    pub fn resolver_mut(&mut self) -> &mut FontResolver {
+        &mut self.resolver
+    }
+
+    /// Debug flag: embed whole font programs instead of usage-based glyph
+    /// subsets (PRD §10 TS-3 keeps the full embed behind this flag only).
+    pub fn set_full_embed(&mut self, full_embed: bool) {
+        self.faces.set_full_embed(full_embed);
+    }
+
+    /// The warnings accumulated so far (moved into [`ExportResult`] by
+    /// [`Typesetter::emit`]).
+    #[must_use]
+    pub fn warnings(&self) -> &[ExportWarning] {
+        &self.warnings
+    }
+
+    /// Prepares an image for embedding and returns its id for
+    /// [`Op::Image`]. An undecodable image records an
+    /// [`ExportWarning::ImageDropped`] and returns `None` (degrade-never-panic).
+    pub fn add_image(&mut self, spec: &ImageSpec) -> Option<usize> {
+        match emit::prepare_image(&spec.data) {
+            Ok(img) => {
+                self.images.push(img);
+                Some(self.images.len() - 1)
+            }
+            Err(e) => {
+                self.warnings.push(ExportWarning::ImageDropped {
+                    reason: e.to_string(),
+                });
+                None
+            }
+        }
+    }
+
+    /// Lays out `blocks` as paginated flow (docspine body); `pages` supplies
+    /// each started page's geometry (per-section page size / margins). Always
+    /// returns at least one page.
+    pub fn layout_flow(&mut self, blocks: &[Block], pages: &mut dyn PageProvider) -> Vec<PageOps> {
+        flow::layout_flow(self, blocks, pages)
+    }
+
+    /// Lays out one absolutely-positioned text box (pptx shape text body /
+    /// docx text box) and returns its page-coordinate ops, ready to append to
+    /// a page's [`PageOps::ops`] (TS-5: vertical anchor, wrap-off,
+    /// `normAutofit` scaling, rotation, clipping).
+    pub fn layout_text_box(&mut self, spec: &TextBoxSpec) -> Vec<Op> {
+        boxes::layout_text_box(self, spec)
+    }
+
+    /// Serializes the laid-out pages into the final PDF, consuming the engine
+    /// (faces, glyph usage and images are document-scoped). Deterministic for
+    /// a fixed font environment.
+    ///
+    /// # Errors
+    ///
+    /// Propagates `pdf-core` object/write errors (never panics).
+    pub fn emit(self, pages: &[PageOps]) -> Result<ExportResult> {
+        let pdf = emit::build_pdf(pages, &self.faces, &self.images)?;
+        Ok(ExportResult {
+            pdf,
+            warnings: self.warnings,
+        })
+    }
+
+    // --- crate-internal resolution plumbing (layout stages) ------------------
+
+    /// Records a degradation.
+    pub(crate) fn warn(&mut self, warning: ExportWarning) {
+        self.warnings.push(warning);
+    }
+
+    /// The face registry (measurement + emission access).
+    pub(crate) fn faces(&self) -> &faces::FaceRegistry {
+        &self.faces
+    }
+
+    /// Resolves a run style to its base face, memoized per
+    /// (family, bold, italic) — `FontSubstituted` / `StyleApproximated`
+    /// warnings fire exactly once per distinct style.
+    pub(crate) fn base_face(&mut self, style: &RunStyle) -> ResolvedFace {
+        let key = (style.family.clone(), style.bold, style.italic);
+        if let Some(face) = self.styles.get(&key) {
+            return face.clone();
+        }
+        let face =
+            self.resolver
+                .resolve(&style.family, style.bold, style.italic, &mut self.warnings);
+        self.styles.insert(key, face.clone());
+        face
+    }
+
+    /// Interns a resolved face directly (no per-char fallback) — reference
+    /// metrics for empty lines.
+    pub(crate) fn face_id(&mut self, base: &ResolvedFace) -> FaceId {
+        self.faces.intern(&self.resolver, base)
+    }
+
+    /// Resolves one character against `base` through the per-char fallback
+    /// chain and interns the winning face. Memoized per (face, char);
+    /// `GlyphFallback` warnings are deduplicated per (family, char) — the
+    /// TS-4 layout-layer dedup over `resolve_char`'s per-occurrence firing.
+    pub(crate) fn char_face(&mut self, base: &ResolvedFace, ch: char) -> FaceId {
+        let key = (base.key(), ch);
+        if let Some(&id) = self.chars.get(&key) {
+            return id;
+        }
+        let mut local = Vec::new();
+        let face = self.resolver.resolve_char(base, ch, &mut local);
+        for warning in local {
+            match &warning {
+                ExportWarning::GlyphFallback { ch, family } => {
+                    if self.glyph_warned.insert((family.clone(), *ch)) {
+                        self.warnings.push(warning);
+                    }
+                }
+                _ => self.warnings.push(warning),
+            }
+        }
+        let id = self.faces.intern(&self.resolver, &face);
+        self.chars.insert(key, id);
+        id
+    }
 }

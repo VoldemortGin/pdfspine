@@ -57,6 +57,12 @@ pub enum ExportWarning {
         /// How far the content overflowed the box, in points.
         overflow_pt: f64,
     },
+    /// An image could not be decoded and was dropped from the output
+    /// (degrade-never-panic: layout continues without it).
+    ImageDropped {
+        /// Why the image was dropped (decode error detail).
+        reason: String,
+    },
 }
 
 impl fmt::Display for ExportWarning {
@@ -90,6 +96,9 @@ impl fmt::Display for ExportWarning {
             }
             ExportWarning::BoxOverflowClipped { overflow_pt } => {
                 write!(f, "text box content clipped ({overflow_pt:.2} pt overflow)")
+            }
+            ExportWarning::ImageDropped { reason } => {
+                write!(f, "image dropped: {reason}")
             }
         }
     }

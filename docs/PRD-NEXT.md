@@ -601,13 +601,13 @@ surface lives in the consumer repos, which surface warnings via `warnings.warn`)
 
 **Phased plan** (effort per §4 scale — **S** ≈ hours · **M** ≈ 1–2 days · **L** ≈ multi-day; each task
 lists why · files · effort · **Acceptance**, the green condition that means "done"):
-- **TS-1 · Crate scaffold + input model** — *M*. New `crates/pdf-typeset` (copy MD-0's scaffold recipe:
+- **TS-1 · Crate scaffold + input model** — ✅ DONE 2026-07-02 · *M*. New `crates/pdf-typeset` (copy MD-0's scaffold recipe:
   workspace members + `[workspace.dependencies]` + `supply-chain/config.toml` policy); the `model`/`warn`
   types above; op IR (extend pdf-markdown's `Op` vocabulary, `layout.rs:88-139`, with size-carrying text
   + shape/alpha/clip ops). **Acceptance:** workspace fmt / clippy `-D warnings` / test green with the
   crate in; existing floors untouched (`cargo test --workspace` ≥ **1445 passed / 0 failed**;
   pdf-markdown outputs byte-identical); model-construction unit tests pass.
-- **TS-2 · System font resolution** — *L*.
+- **TS-2 · System font resolution** — ✅ DONE 2026-07-02 (d3d3563) · *L*.
   - fontdb 0.23 wiring, pinned exact; `memmap` feature decision recorded (*S*).
   - Folded-name index + three-platform substitution tables (built-in defaults + user override) (*M*).
   - Weight/style `Query` mapping + per-char fallback chain + bundled Liberation/Noto final fallback +
@@ -617,7 +617,7 @@ lists why · files · effort · **Acceptance**, the green condition that means "
     deterministic Database (committed fixture fonts, no system dependence) and pass on all 3 CI OSes; a
     local (non-CI) macOS test resolves 宋体 → Songti SC and 微软雅黑 → PingFang SC; an unknown family
     returns Liberation + exactly one `FontSubstituted` warning (never an error).
-- **TS-3 · Multi-face EmbeddedFont + TTC face index + glyph subsetter** — *L*.
+- **TS-3 · Multi-face EmbeddedFont + TTC face index + glyph subsetter** — ✅ DONE 2026-07-02 (e0bfd4c; Songti subset 0.101%) · *L*.
   - `EmbeddedFont::parse_indexed(program, face_index)` threading the index through `fontfile.rs:62` and
     `:108`, + `fonts_in_collection` enumeration (*S*).
   - 4-slot family registry (regular/bold/italic/bold-italic, each embedded once per doc) replacing the
@@ -628,7 +628,7 @@ lists why · files · effort · **Acceptance**, the green condition that means "
     one-FontFile2 lock, `crates/pdf-markdown/tests/fonts_embed.rs:23`); embedding ≤ 100 glyphs from a
     ≥ 10 MB system TTC face yields a FontFile2 **< 5% of source size**; subset text read-back exact
     (gate 1 ≥ 0.99) and raster SSIM subset-vs-whole-font **≥ 0.99** (`render_diff.py ssim:242-281`).
-- **TS-4 · Flow-layout generalization** — *L*.
+- **TS-4 · Flow-layout generalization** — ✅ DONE 2026-07-03 · *L*.
   - `FaceId` + per-frag size + real-ascent line boxes (mixed sizes in one line share one baseline) (*M*).
   - Justify via space-frag redistribution, last line left (*M*).
   - Underline/strike/highlight decorations (clone the strike mechanism `layout.rs:502-512`; highlight =
@@ -643,14 +643,14 @@ lists why · files · effort · **Acceptance**, the green condition that means "
     `content_scores:152` / `order_score:198`); justified interior lines' right edges within **0.5 pt** of
     the column edge and mixed-size lines share a single baseline y (asserted on `get_text_words` coords,
     `document.py:1813-1843`); repeated runs byte-identical (same font environment).
-- **TS-5 · Text boxes** — *M*. Fixed rect + `VAnchor` (two-pass: wrap → total height → offset), wrap-off
+- **TS-5 · Text boxes** — ✅ DONE 2026-07-03 · *M*. Fixed rect + `VAnchor` (two-pass: wrap → total height → offset), wrap-off
   mode (hard-break lines only), `normAutofit` fontScale (binary-search re-wrap over the pure measure
   path), rotation (`q cm Q` wrap via `Matrix::rotate`), optional `re W n` clip. **Acceptance:** all
   words of a boxed fixture land inside the box rect **± 1 pt** (`get_text_words`); middle/bottom-anchored
   fixtures hit the expected first-baseline y ± 1 pt; an overflowing autofit fixture scales down until
   **zero words lost** in read-back; a 90°-rotated box still passes read-back + non-blank raster
   (`_near_blank:463-469`).
-- **TS-6 · Preset geometry subset + drawing upgrades** — *L*.
+- **TS-6 · Preset geometry subset + drawing upgrades** — ✅ DONE 2026-07-03 (35 presets, 47 tests) · *L*.
   - pdf-edit `Shape` upgrades: arbitrary elliptical-arc→Bézier segmenting + roundRect; line join/cap
     params; constant-alpha ExtGState (`ca`/`CA` via `add_resource`, `content.rs:141-172`); `W n`
     clipping; shape-level `q cm Q` transforms (*M*).

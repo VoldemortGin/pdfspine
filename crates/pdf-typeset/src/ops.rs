@@ -257,3 +257,73 @@ pub struct PageOps {
     /// The ops, in paint order.
     pub ops: Vec<Op>,
 }
+
+/// Translates `ops` in place by `(dx, dy)` in top-left page coordinates
+/// (positions text boxes / table cells laid out at a local origin). A
+/// transformed / clipped [`Op::Group`] is moved as one unit by post-composing
+/// the translation, so its clip path and nested ops stay in their local space.
+pub(crate) fn translate_ops(ops: &mut [Op], dx: f64, dy: f64) {
+    for op in ops {
+        match op {
+            Op::Text { x, baseline, .. } => {
+                *x += dx;
+                *baseline += dy;
+            }
+            Op::FillRect { x, y, .. } | Op::StrokeRect { x, y, .. } | Op::Image { x, y, .. } => {
+                *x += dx;
+                *y += dy;
+            }
+            Op::Line { x1, y1, x2, y2, .. } => {
+                *x1 += dx;
+                *y1 += dy;
+                *x2 += dx;
+                *y2 += dy;
+            }
+            Op::FillCircle { cx, cy, .. } => {
+                *cx += dx;
+                *cy += dy;
+            }
+            Op::Path { segs, .. } => translate_segs(segs, dx, dy),
+            Op::Group {
+                transform,
+                clip,
+                ops,
+            } => {
+                if transform.is_some() || clip.is_some() {
+                    let m = transform.unwrap_or(Matrix::IDENTITY);
+                    *transform = Some(Matrix::concat(&m, &Matrix::translate(dx, dy)));
+                } else {
+                    translate_ops(ops, dx, dy);
+                }
+            }
+        }
+    }
+}
+
+/// Translates path segments in place.
+pub(crate) fn translate_segs(segs: &mut [PathSeg], dx: f64, dy: f64) {
+    for seg in segs {
+        match seg {
+            PathSeg::MoveTo { x, y } | PathSeg::LineTo { x, y } => {
+                *x += dx;
+                *y += dy;
+            }
+            PathSeg::CurveTo {
+                x1,
+                y1,
+                x2,
+                y2,
+                x,
+                y,
+            } => {
+                *x1 += dx;
+                *y1 += dy;
+                *x2 += dx;
+                *y2 += dy;
+                *x += dx;
+                *y += dy;
+            }
+            PathSeg::Close => {}
+        }
+    }
+}

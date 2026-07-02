@@ -20,6 +20,9 @@ pdf-core.workspace = true
 pdf-edit.workspace = true
 # Bundled Liberation/Noto faces — the deterministic final font fallback (TS-2).
 pdf-fonts.workspace = true
+# Image decoding for `ImageSpec` embedding (TS-4): JPEG passes through as
+# /DCTDecode, PNG/BMP/GIF/WEBP/TIFF decode to raw samples (/FlateDecode).
+pdf-image.workspace = true
 # System-font enumeration/query backend (see the root Cargo.toml note: pinned
 # exact, memmap ON, all resolution intelligence stays first-party here).
 fontdb.workspace = true
@@ -28,3 +31,8 @@ fontdb.workspace = true
 ttf-parser.workspace = true
 # NFKC folding (full-width → ASCII) for the case/width-folded family-name index.
 unicode-normalization.workspace = true
+
+[dev-dependencies]
+# Round-trip verification: emitted PDFs are re-opened and text-extracted /
+# rasterized through the repo's own parsing + rendering stack (TS-4/TS-5 gates).
+pdf-api.workspace = true
