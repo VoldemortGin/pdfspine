@@ -11,6 +11,7 @@ pdfspine.__version__: str                       # 安装时 wheel 元数据；de
 pdfspine.version: tuple[str, str, None]         # fitz 形状 (VersionBind, VersionFitz, None)
 pdfspine.identity_matrix() -> tuple[float,...]  # (1,0,0,1,0,0)
 pdfspine.install_fitz_shim() -> None            # 让裸 import fitz/pymupdf 解析到 shim（幂等，不覆盖已导入的真 PyMuPDF）
+pdfspine.markdown_to_pdf(md_or_path, ...) -> Document   # Markdown → PDF（pdfspine 原创扩展，见下节）
 ```
 
 ### `open()` — 打开文档
@@ -32,6 +33,31 @@ pdfspine.open(
 - 失败：路径不存在抛 `FileNotFoundError`；坏 PDF 抛 `PdfSyntaxError`；加密相关抛 `PdfPasswordError`；不支持的输入抛 `PdfUnsupportedError`。
 
 > 注意：图片→PDF 依赖 `_core.image_to_pdf`，需要带 OCR/图片特性编译的 wheel（发布 wheel 已含）。
+
+### `markdown_to_pdf()` — Markdown → PDF（pdfspine 原创扩展）
+
+```python
+pdfspine.markdown_to_pdf(
+    md_or_path: str | os.PathLike[str],   # Markdown 文本；或现存文件路径（后缀 ""/.md/.markdown/.txt）
+    *,
+    font: str | os.PathLike[str] | bytes | bytearray | None = None,      # 用户 TTF/OTF：替换正文+标题（嵌入一次，用量子集）
+    cjk_font: str | os.PathLike[str] | bytes | bytearray | None = None,  # 逐字符回退字体（中文必传！）
+    base_dir: str | os.PathLike[str] | None = None,   # 相对图片路径的基目录
+    page_width: float | None = None,      # 默认 A4 595.32 pt
+    page_height: float | None = None,     # 默认 841.92 pt
+    margins: float | tuple[float, float, float, float] | None = None,  # 单值或 (top,right,bottom,left)，默认 72
+    body_font_size: float | None = None,  # 默认 11；标题按比例缩放
+) -> Document
+```
+
+契约（核对自 `document.py::markdown_to_pdf`，实跑验证）：
+- **pdfspine 原创扩展**，不属于 PyMuPDF 表面（不是 `Story`/`insert_htmlbox`，`COMPAT.toml` 不收录）。
+- 范围：CommonMark + GFM 表格/删除线/任务列表。H1–H6、段落、行内 bold/italic/inline-code/链接（蓝字，v1 无 link annotation）、有序/无序/嵌套/任务列表、嵌套引用块、代码块（灰底 Courier）、水平线、GFM 表格（边框 + 表头加粗 + 按内容测列宽 + 跨页逐行分页）、图片。
+- `md_or_path`：仅当它是**现存文件**且后缀 ∈ {"", ".md", ".markdown", ".txt"} 时按 UTF-8 读文件（此时 `base_dir` 默认取其父目录）；其余一律当作 Markdown 文本字面量（含不存在的路径）。
+- 图片（`![alt](src)`）只接受本地路径和 `data:` URI（JPEG 直通，PNG/BMP/GIF/WEBP/TIFF 解码后嵌入，等比缩放）；远程 URL 被拒，**绝不发网络请求**。相对路径按 `base_dir` 解析；无 `base_dir` 且输入是文本时只接受绝对路径 / `data:` URI。
+- 默认字体 Base-14（Helvetica 正文/标题、Courier 代码，零嵌入）→ **默认没有 CJK 字形，中文渲染成 `?`**（不报错）；传 `cjk_font=`（TTF/OTF/TTC 路径或字节）才能出中文，见 gotchas。
+- 确定性输出：同输入 + 同选项 → 字节级相同的 PDF。
+- 失败：`margins` 形状错 `ValueError`；参数类型错 `TypeError`；文件不可读 `OSError`；几何不可用/坏图片/坏字体程序抛 `PdfError` 子类。
 
 ## `Document`
 

@@ -63,3 +63,15 @@
 ## 9. 类型信息齐全
 
 - 包带 `py.typed` 和全套 `.pyi` stubs（`__init__.pyi`/`document.pyi`/`geometry.pyi`/`helpers.pyi`/`constants.pyi`/`_core.pyi`），mypy/IDE 可直接用。LLM 生成代码时优先参照这些 stub 的真实签名。
+
+## 10. `markdown_to_pdf()`（原创扩展）的边界
+
+- **中文/CJK 默认渲染成 `?`（最常踩！）**：默认 Base-14 字体（Helvetica/Courier）没有 CJK 字形，不传 `cjk_font=` 时中/日/韩字符逐个退化为 `?` ——**不报错，静默退化**。必须传一个 CJK 字体文件（TTF/OTF/TTC 路径或字节）：macOS 如 `/System/Library/Fonts/Hiragino Sans GB.ttc`，Windows 如 `C:\Windows\Fonts\msyh.ttc`，或任意 Noto Sans CJK。`cjk_font` 是**逐字符回退**：主字体能编码的字符用主字体，编码不了的落到 `cjk_font`。
+- 同理，WinAnsi 0x80–0x9F 区的排版字符（智能引号 “ ” ‘ ’、em-dash —）默认编码不了，无 `cjk_font` 时也退化 `?`。
+- `font=` 是**单一字面**：传用户 TTF 后 bold/italic 不再切换粗/斜变体（同一字体绘制，样式退化）；默认 Base-14 时 bold/italic 正常。
+- 标题内、表格单元格内的图片会被**丢弃**（段落/列表里的图片正常）。
+- 表格跨页按**行**分页：单行本身不拆分，续页**不重复表头**。
+- HTML 块 / 内联 HTML 被**忽略**（既不渲染也不报错）。
+- 链接渲染为蓝字，**没有可点击的 link annotation**（v1）。
+- 图片只接受本地路径 + `data:` URI；远程 URL 被拒，**绝不发网络请求**。相对路径需要 `base_dir=`（传文件路径时默认取该文件的父目录）。
+- `md_or_path` 歧义：字符串若恰好是**现存文件**且后缀 ∈ {"", ".md", ".markdown", ".txt"} 会被当文件读；其余（含不存在的路径）当 Markdown 文本。

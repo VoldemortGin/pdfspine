@@ -52,6 +52,7 @@ from .document import (
     csGRAY,
     csRGB,
     linkDest,
+    markdown_to_pdf,
     open,
 )
 from .geometry import IRect, Matrix, Point, Quad, Rect
@@ -117,6 +118,7 @@ __all__ = [
     "__version__",
     "identity_matrix",
     "install_fitz_shim",
+    "markdown_to_pdf",
     "open",
     "Document",
     "Page",

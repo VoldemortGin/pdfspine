@@ -3998,6 +3998,66 @@ fn image_to_pdf<'py>(py: Python<'py>, data: &[u8]) -> PyResult<Bound<'py, PyByte
     Ok(PyBytes::new(py, &pdf))
 }
 
+/// Renders Markdown (CommonMark + GFM tables / strikethrough / task lists) to
+/// PDF bytes — the pdfspine-original `markdown_to_pdf` extension (PRD-NEXT §9;
+/// not part of the fitz-compat surface). Each `None` kwarg keeps the Rust
+/// default (A4, 72 pt margins, 11 pt body). `font` replaces the Base-14
+/// body/heading faces with a user TTF; `cjk_font` is a per-character fallback
+/// TTF (CJK Option A — unset, unencodable characters degrade to missing
+/// glyphs). Images resolve from `base_dir`-relative / absolute paths and
+/// `data:` URIs only (no network). Parse + layout run with the GIL released
+/// (PRD §9.4).
+#[pyfunction]
+#[pyo3(signature = (md, *, page_width=None, page_height=None, margin_top=None,
+    margin_right=None, margin_bottom=None, margin_left=None,
+    body_font_size=None, font=None, cjk_font=None, base_dir=None))]
+#[allow(clippy::too_many_arguments)]
+fn markdown_to_pdf<'py>(
+    py: Python<'py>,
+    md: &str,
+    page_width: Option<f64>,
+    page_height: Option<f64>,
+    margin_top: Option<f64>,
+    margin_right: Option<f64>,
+    margin_bottom: Option<f64>,
+    margin_left: Option<f64>,
+    body_font_size: Option<f64>,
+    font: Option<Vec<u8>>,
+    cjk_font: Option<Vec<u8>>,
+    base_dir: Option<String>,
+) -> PyResult<Bound<'py, PyBytes>> {
+    let mut opts = pdf_api::MarkdownOptions::new();
+    if let Some(v) = page_width {
+        opts.page_width = v;
+    }
+    if let Some(v) = page_height {
+        opts.page_height = v;
+    }
+    if let Some(v) = margin_top {
+        opts.margin_top = v;
+    }
+    if let Some(v) = margin_right {
+        opts.margin_right = v;
+    }
+    if let Some(v) = margin_bottom {
+        opts.margin_bottom = v;
+    }
+    if let Some(v) = margin_left {
+        opts.margin_left = v;
+    }
+    if let Some(v) = body_font_size {
+        opts.body_font_size = v;
+    }
+    opts.font = font;
+    opts.cjk_font = cjk_font;
+    opts.base_dir = base_dir.map(std::path::PathBuf::from);
+    let owned = md.to_string();
+    let pdf = py
+        .detach(move || pdf_api::markdown_to_pdf(&owned, &opts))
+        .map_err(map_err)?;
+    Ok(PyBytes::new(py, &pdf))
+}
+
 /// Returns the pdfspine version string.
 #[pyfunction]
 fn version() -> &'static str {
@@ -5254,6 +5314,7 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(open, m)?)?;
     m.add_function(wrap_pyfunction!(open_bytes, m)?)?;
     m.add_function(wrap_pyfunction!(image_to_pdf, m)?)?;
+    m.add_function(wrap_pyfunction!(markdown_to_pdf, m)?)?;
     m.add_function(wrap_pyfunction!(image_profile, m)?)?;
 
     m.add_class::<PyDocument>()?;

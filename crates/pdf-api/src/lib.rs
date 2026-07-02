@@ -12,6 +12,7 @@ pub mod error;
 pub mod image;
 #[cfg(feature = "paddle-ocr")]
 pub mod image_table;
+pub mod markdown;
 pub mod ocr;
 pub mod svg;
 pub mod tables;
@@ -94,6 +95,10 @@ pub use pdf_core::ocg::{LayerUiConfig, OcgInfo};
 
 // SVG export (M7): page → standalone SVG string (PRD §7).
 pub use svg::page_get_svg_image;
+
+// Markdown → PDF (pdfspine-original extension, PRD-NEXT §9). Not part of the
+// fitz-compat surface; the bindings depend only on `pdf-api`.
+pub use markdown::{markdown_to_pdf, Options as MarkdownOptions};
 
 // OCR (M8): `get_textpage_ocr` + sandwich-PDF export via the system Tesseract
 // (PRD §3.2 #3 post-v1). The bindings depend only on `pdf-api`.

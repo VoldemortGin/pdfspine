@@ -11,6 +11,28 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
+### Added
+
+- **Markdown → PDF: new top-level `pdfspine.markdown_to_pdf()` (pdfspine
+  original extension).** Renders CommonMark + GFM (tables, strikethrough, task
+  lists) to a new PDF `Document` through a self-authored, deterministic
+  pure-Rust layout engine (new `pdf-markdown` crate; `pulldown-cmark` parses,
+  layout and drawing are in-house). This is **not** PyMuPDF's
+  `Story` / `insert_htmlbox` HTML-CSS engine and is not part of the fitz-compat
+  surface (`COMPAT.toml` does not list it). Covers headings H1–H6, paragraphs
+  with bold / italic / inline-code / links (blue text, no annotation in v1),
+  nested ordered / unordered / task lists, nested blockquotes, fenced code
+  blocks (grey background, Courier), horizontal rules, GFM tables (measured
+  column widths, bold header, row-by-row cross-page pagination) and images
+  from local paths / `data:` URIs (JPEG passthrough, other formats decoded;
+  **no network access ever**). Accepts Markdown text or a
+  `.md` / `.markdown` / `.txt` / suffix-less file path (the file's parent
+  becomes the image base directory). Options: page size (default A4), margins
+  (default 72 pt), body font size (default 11 pt), `font=` (user TTF/OTF
+  replacing body + headings) and `cjk_font=` (per-character fallback — without
+  it CJK renders as `?`, see the docs); user fonts are embedded once,
+  usage-subset. Deterministic: same input + options → identical PDF bytes.
+
 ## [0.0.6] — 2026-06-25
 
 ### Changed

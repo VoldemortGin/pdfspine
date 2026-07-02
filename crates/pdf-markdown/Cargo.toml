@@ -1,0 +1,27 @@
+[package]
+name = "pdf-markdown"
+publish = false  # crates.io: name "pdfspine" reserved only; this lib ships via PyPI (Python-first, like ragspine)
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+description = "Deterministic Markdown → PDF block layout for pdfspine (original extension)."
+
+[dependencies]
+pdf-core.workspace = true
+# User-TTF embedding (`EmbeddedFont`, Type0/Identity-H) for `font=`/`cjk_font=`.
+pdf-edit.workspace = true
+# Base-14 advance widths (`std_widths`) for measurement without embedding.
+pdf-fonts.workspace = true
+# Image decoding (PNG/BMP/GIF/WEBP/TIFF → RGB samples; JPEG header profile) for
+# `![image](...)` embedding — JPEG bytes pass through as /DCTDecode.
+pdf-image.workspace = true
+# CommonMark + GFM parsing (see the root Cargo.toml note on `pulldown-cmark`).
+pulldown-cmark.workspace = true
+
+[dev-dependencies]
+# Round-trip verification: the emitted PDFs are re-opened and text-extracted
+# through the repo's own parsing stack.
+pdf-api.workspace = true

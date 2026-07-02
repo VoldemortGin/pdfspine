@@ -2446,3 +2446,29 @@ Tests live in `python/tests/test_m7.py`.
 | `PYFITZ-M7-002` | `fitz` `get_svg_image`/`getSVGimage` parity | PRD §9.5 | green |
 | `PYFITZ-M7-003` | `fitz` `addOCG`/`getOCGs`/`layerUIConfigs`/`setLayer` aliases | PRD §9.5 | green |
 | `PYFITZ-M7-004` | `pymupdf.open(...).find_tables().tables[0].to_markdown()` works | PRD §9.5 | green |
+
+---
+
+## Markdown → PDF — original extension (PRD-NEXT §9)
+
+`pdfspine.markdown_to_pdf(md_or_path, ...) -> Document` — a pdfspine-original
+authoring API (NOT in the fitz-compat surface / COMPAT.toml). The Rust layout
+engine is covered in `crates/pdf-markdown/tests`; the rows below are the MD-3
+Python-binding surface. Tests live in `python/tests/test_markdown_to_pdf.py`;
+fixtures are self-generated (raw PNG bytes, repo-local Liberation TTFs), no
+network.
+
+### Python `markdown_to_pdf` — `MARKDOWN-TO-PDF-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `MARKDOWN-TO-PDF-001` | Markdown text input → opened `Document`; heading + body round-trip via `get_text` | PRD-NEXT §9 | green |
+| `MARKDOWN-TO-PDF-002` | file-path input (str + `Path`, `.md` suffix) reads UTF-8; non-existing path stays literal text | PRD-NEXT §9 | green |
+| `MARKDOWN-TO-PDF-003` | headings + nested lists + GFM table cells all extractable | PRD-NEXT §9 | green |
+| `MARKDOWN-TO-PDF-004` | `font=` accepts a TTF path (str/`Path`) and raw `bytes`/`bytearray` | PRD-NEXT §9 | green |
+| `MARKDOWN-TO-PDF-005` | `cjk_font=` per-character fallback (path + bytes): non-WinAnsi text round-trips | PRD-NEXT §9 | green |
+| `MARKDOWN-TO-PDF-006` | CJK without `cjk_font` degrades to missing glyphs — no crash, Latin survives (Option A) | PRD-NEXT §9 | green |
+| `MARKDOWN-TO-PDF-007` | CJK with a glyph-less fallback face stays structural: 1 page, `get_text` returns str | PRD-NEXT §9 | green |
+| `MARKDOWN-TO-PDF-008` | `margins=` scalar + 4-tuple; `page_width`/`page_height` land in the page rect | PRD-NEXT §9 | green |
+| `MARKDOWN-TO-PDF-009` | bad inputs → typed `TypeError`/`ValueError`/`OSError`/`PdfError`, never a panic | PRD-NEXT §9 | green |
+| `MARKDOWN-TO-PDF-010` | relative images: file input defaults `base_dir` to the file's parent; explicit `base_dir=`; none → typed error | PRD-NEXT §9 | green |

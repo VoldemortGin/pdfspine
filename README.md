@@ -61,6 +61,7 @@ pdfspine is a **drop-in-shaped, permissively-licensed (Apache-2.0)** alternative
 | **Annotate** | all common annotation types with `/AP` appearance streams; AcroForm read / fill / flatten + `Widget`; **destructive redaction** (verified content removal) |
 | **Render** | `get_pixmap` (vector + text + image + shadings via a tiny-skia rasterizer), `Pixmap` (buffer-protocol/numpy), `DisplayList`, **`get_svg_image`** |
 | **Images** | open PNG/JPEG/TIFF/GIF/BMP/WEBP as documents, `convert_to_pdf`, image-XObject decode (DCT/CCITT/JBIG2/JPX), `extract_image` |
+| **Markdown** | `markdown_to_pdf()` — a **pdfspine original extension** (not a PyMuPDF API): CommonMark + GFM tables / strikethrough / task lists → PDF via a deterministic pure-Rust layout engine; local & `data:`-URI images (never the network); optional user TTF via `font=` / `cjk_font=` (CJK) |
 | **Layers** | Optional Content Groups read/write (`get_ocgs` / `add_ocg` / `set_layer`) |
 | **OCR** | pluggable engine: Tesseract adapter **and** a pure-Rust PaddleOCR engine (PP-OCRv5, weights from the shared `ocrspine-models` package, stronger on CJK) → searchable-sandwich PDF |
 | **CLI** | `pdfspine info / text / render / merge / split / pages / images / toc` |
@@ -99,6 +100,9 @@ for t in tables.tables:
     print(t.to_markdown())                    # or t.to_html() for merged cells
 
 doc.save("output.pdf", garbage=4, deflate=True)
+
+# Markdown → PDF (pdfspine original extension — not part of the PyMuPDF surface)
+pdfspine.markdown_to_pdf("# Title\n\nHello **Markdown**!").save("hello.pdf")
 ```
 
 Existing PyMuPDF code often runs unchanged via the opt-in compat shim:

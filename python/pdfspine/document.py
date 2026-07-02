@@ -4620,3 +4620,125 @@ def open(
         with builtins.open(path, "rb") as fh:
             return _open_image_bytes(fh.read(), path)
     return Document(_core.open(path), name=path)
+
+
+# File suffixes ``markdown_to_pdf`` accepts as Markdown *files* (the empty
+# string admits suffix-less paths like ``README``).
+_MARKDOWN_SUFFIXES = frozenset({"", ".md", ".markdown", ".txt"})
+
+
+def _font_bytes(
+    value: str | os.PathLike[str] | bytes | bytearray | None, param: str
+) -> bytes | None:
+    """Coerces a ``font=`` / ``cjk_font=`` argument to raw font-program bytes.
+
+    Accepts ``bytes``/``bytearray`` (used as-is) or a filesystem path
+    (``str``/``os.PathLike``, read binary). Raises ``TypeError`` for any other
+    type; an unreadable path raises the usual ``OSError``."""
+    if value is None:
+        return None
+    if isinstance(value, (bytes, bytearray)):
+        return bytes(value)
+    if isinstance(value, (str, os.PathLike)):
+        with builtins.open(os.fspath(value), "rb") as fh:
+            return fh.read()
+    raise TypeError(
+        f"{param} must be a TTF/OTF file path (str/os.PathLike) or "
+        f"bytes/bytearray, got {type(value).__name__}"
+    )
+
+
+def markdown_to_pdf(
+    md_or_path: str | os.PathLike[str],
+    *,
+    font: str | os.PathLike[str] | bytes | bytearray | None = None,
+    cjk_font: str | os.PathLike[str] | bytes | bytearray | None = None,
+    base_dir: str | os.PathLike[str] | None = None,
+    page_width: float | None = None,
+    page_height: float | None = None,
+    margins: float | tuple[float, float, float, float] | None = None,
+    body_font_size: float | None = None,
+) -> Document:
+    """Renders Markdown to a new PDF :class:`Document` (pdfspine original
+    extension — not part of the PyMuPDF surface).
+
+    Supports CommonMark plus the GFM extensions: tables, strikethrough and
+    task lists; headings H1–H6, nested ordered/unordered lists, blockquotes,
+    code blocks, horizontal rules, inline bold/italic/code and links (rendered
+    as blue text, no annotation). Layout is deterministic: the same input and
+    options always produce the same PDF bytes.
+
+    ``md_or_path`` may be Markdown text or a file path. It is treated as a
+    **file** only when, after ``os.fspath``, it names an existing regular file
+    whose suffix is ``.md``/``.markdown``/``.txt`` or empty (e.g. ``README``);
+    the file is then read as UTF-8 and, unless ``base_dir`` is given, the
+    file's parent directory becomes the image base directory. Anything else —
+    including a path that does not exist — is used verbatim as Markdown text.
+
+    Fonts default to the built-in Base-14 set (Helvetica body/headings,
+    Courier code; nothing embedded). ``font`` — a TTF/OTF path or its bytes —
+    replaces the body/heading face (embedded once, subset). ``cjk_font`` is a
+    **per-character fallback** for characters the active face cannot encode,
+    e.g. Chinese (pass a CJK-capable TTF such as PingFang or Noto Sans CJK).
+    Without ``cjk_font``, CJK characters degrade to missing glyphs (``?``) —
+    never an error (PRD-NEXT §9, CJK Option A).
+
+    Images (``![alt](src)``) load from local paths and ``data:`` URIs only —
+    remote URLs are rejected, and **no network access** ever happens. Relative
+    paths resolve against ``base_dir``; without one (and when ``md_or_path``
+    is text, not a file) only absolute paths and ``data:`` URIs are accepted.
+
+    ``page_width``/``page_height`` are in points (default A4, 595.32 ×
+    841.92). ``margins`` is a single number for all four sides or a ``(top,
+    right, bottom, left)`` 4-tuple (default 72). ``body_font_size`` defaults
+    to 11; headings scale from it.
+
+    Raises ``ValueError`` for a malformed ``margins``, ``TypeError`` for wrong
+    argument types, ``OSError`` for an unreadable file path, and a typed
+    :class:`~pdfspine._core.PdfError` subclass for unusable geometry, bad
+    image data or an unparseable font program.
+    """
+    if not isinstance(md_or_path, (str, os.PathLike)):
+        raise TypeError(
+            f"md_or_path must be Markdown text (str) or a file path "
+            f"(str/os.PathLike), got {type(md_or_path).__name__}"
+        )
+    source = os.fsdecode(os.fspath(md_or_path))
+    md = source  # default: the argument is literal Markdown text
+    if os.path.splitext(source)[1].lower() in _MARKDOWN_SUFFIXES and os.path.isfile(
+        source
+    ):
+        with builtins.open(source, "r", encoding="utf-8") as fh:
+            md = fh.read()
+        if base_dir is None:
+            base_dir = os.path.dirname(source) or "."
+
+    margin_top = margin_right = margin_bottom = margin_left = None
+    if margins is not None:
+        if isinstance(margins, (int, float)):
+            margin_top = margin_right = margin_bottom = margin_left = float(margins)
+        else:
+            try:
+                margin_top, margin_right, margin_bottom, margin_left = (
+                    float(v) for v in margins
+                )
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    "margins must be a single number or a "
+                    "(top, right, bottom, left) 4-tuple"
+                ) from exc
+
+    pdf = _core.markdown_to_pdf(
+        md,
+        page_width=page_width,
+        page_height=page_height,
+        margin_top=margin_top,
+        margin_right=margin_right,
+        margin_bottom=margin_bottom,
+        margin_left=margin_left,
+        body_font_size=body_font_size,
+        font=_font_bytes(font, "font"),
+        cjk_font=_font_bytes(cjk_font, "cjk_font"),
+        base_dir=None if base_dir is None else os.fsdecode(os.fspath(base_dir)),
+    )
+    return Document(_core.open_bytes(pdf))

@@ -32,6 +32,7 @@ from .document import (
     csGRAY as csGRAY,
     csRGB as csRGB,
     linkDest as linkDest,
+    markdown_to_pdf as markdown_to_pdf,
     open as open,
 )
 from .geometry import (
@@ -73,6 +74,7 @@ __all__ = [
     "__version__",
     "identity_matrix",
     "install_fitz_shim",
+    "markdown_to_pdf",
     "open",
     "Document",
     "Page",

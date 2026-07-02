@@ -15,6 +15,7 @@ __all__ = [
     "open",
     "open_bytes",
     "image_to_pdf",
+    "markdown_to_pdf",
     "Document",
     "Page",
     "TextPage",
@@ -41,6 +42,20 @@ def identity_matrix() -> tuple[float, float, float, float, float, float]: ...
 def open(path: str) -> Document: ...
 def open_bytes(data: bytes) -> Document: ...
 def image_to_pdf(data: bytes) -> bytes: ...
+def markdown_to_pdf(
+    md: str,
+    *,
+    page_width: float | None = ...,
+    page_height: float | None = ...,
+    margin_top: float | None = ...,
+    margin_right: float | None = ...,
+    margin_bottom: float | None = ...,
+    margin_left: float | None = ...,
+    body_font_size: float | None = ...,
+    font: bytes | None = ...,
+    cjk_font: bytes | None = ...,
+    base_dir: str | None = ...,
+) -> bytes: ...
 def image_profile(
     stream: bytes, keep_image: int = ...
 ) -> dict[str, Any] | None: ...

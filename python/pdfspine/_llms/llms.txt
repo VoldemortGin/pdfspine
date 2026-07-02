@@ -23,9 +23,9 @@
 ## 文档地图
 
 - [overview.md](docs/overview.md): 是什么、解决什么、核心概念(Document/Page/TextPage/Pixmap 对象模型)、fitz 兼容层、OCR、与 PyMuPDF 的关系与差异、能力范围(参考 PARITY.md)
-- [api.md](docs/api.md): Python 公开 API 真实签名 + 契约（open/页面/文本/表格/图像/渲染/保存/注释/表单/redaction/OCR/几何/常量/异常），标注 fitz 兼容别名
-- [recipes.md](docs/recipes.md): 可运行最小示例（造 PDF、提取文本、渲染为图、fitz shim 替换 PyMuPDF、编辑合并、表格、注释/redaction、表单、OCR、CLI）
-- [gotchas.md](docs/gotchas.md): 陷阱（预编译 wheel/abi3≥3.11、shim 须显式 install、OCR 模型已内嵌进 wheel 无需 extra、未实现的抛 PdfUnsupportedError、与真 PyMuPDF 的差异）
+- [api.md](docs/api.md): Python 公开 API 真实签名 + 契约（open/markdown_to_pdf(Markdown→PDF 原创扩展)/页面/文本/表格/图像/渲染/保存/注释/表单/redaction/OCR/几何/常量/异常），标注 fitz 兼容别名
+- [recipes.md](docs/recipes.md): 可运行最小示例（造 PDF、提取文本、渲染为图、fitz shim 替换 PyMuPDF、编辑合并、表格、注释/redaction、表单、OCR、Markdown→PDF(含中文 cjk_font 示例)、CLI）
+- [gotchas.md](docs/gotchas.md): 陷阱（预编译 wheel/abi3≥3.11、shim 须显式 install、OCR 模型已内嵌进 wheel 无需 extra、未实现的抛 PdfUnsupportedError、与真 PyMuPDF 的差异、markdown_to_pdf 默认无 CJK 字形——中文必传 cjk_font）
 
 ## 30 秒 hello-world
 

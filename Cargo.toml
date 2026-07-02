@@ -7,6 +7,7 @@ members = [
     "crates/pdf-text",
     "crates/pdf-edit",
     "crates/pdf-image",
+    "crates/pdf-markdown",
     "crates/pdf-render",
     "crates/pdf-ocr",
     "crates/pdf-api",
@@ -36,6 +37,7 @@ pdf-fonts = { path = "crates/pdf-fonts", version = "0.1.2" }
 pdf-text = { path = "crates/pdf-text", version = "0.1.2" }
 pdf-edit = { path = "crates/pdf-edit", version = "0.1.2" }
 pdf-image = { path = "crates/pdf-image", version = "0.1.2" }
+pdf-markdown = { path = "crates/pdf-markdown", version = "0.1.2" }
 pdf-render = { path = "crates/pdf-render", version = "0.1.2" }
 # `default-features = false` here so pdf-api's own (default-on) `paddle-ocr`
 # feature is the single switch for the PaddleOCR engine (pdf-api re-enables it);
@@ -146,6 +148,18 @@ tract-onnx = "0.21"
 # jpeg-decoder), so this only promotes it to a direct, feature-gated dep of
 # pdf-ocr — no new crate enters the wheel.
 rayon = "1"
+
+# --- pdf-markdown: CommonMark + GFM Markdown parsing (M-md, original extension).
+#
+# `pulldown-cmark` is the mature pure-Rust CommonMark parser — a pull/event
+# parser, NOT an HTML DOM or layout engine. It supplies the block/inline event
+# stream that the first-party deterministic block layouter renders to PDF; all
+# the layout intelligence stays first-party in `pdf-markdown`. Used with the GFM
+# extensions (tables / strikethrough / task-lists). MIT-licensed (already on the
+# deny.toml allowlist), pure-Rust. `default-features = false` drops the bundled
+# `getopts`-based CLI + gen-tests binaries and their deps — only the library
+# parser is needed.
+pulldown-cmark = { version = "0.12", default-features = false }
 
 # --- shared dev-deps ---
 proptest = "1"

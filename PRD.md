@@ -91,7 +91,7 @@ All corpus-relative goals are measured against **`CONF-CORPUS-v1`**, a frozen, v
 Calling a known-but-unimplemented method raises `PdfUnsupportedError`/`NotImplementedError` with a link to the compat matrix, **never** a bare `AttributeError`.
 
 1. **Vector page rasterization** — `get_pixmap`/`get_svg_image`/`DisplayList`/`run` for PDF *pages that contain vector/text content* (the entire M6 graphics interpreter, font rasterization, shadings, transparency/blend, ICC color management). Image-doc Pixmaps and the image-XObject Pixmap paths defined in §3.3 are **in scope**; vector-page rasterization is not.
-2. **HTML/CSS layout engine** — `Story`, `Xml` DOM, `Archive`, `insert_htmlbox`; `convert_to_pdf` for **non-image** inputs only (image inputs → PDF **is** in scope, M5).
+2. **HTML/CSS layout engine** — `Story`, `Xml` DOM, `Archive`, `insert_htmlbox`; `convert_to_pdf` for **non-image** inputs only (image inputs → PDF **is** in scope, M5). *Post-v1 note:* `markdown_to_pdf()` (PRD-NEXT §9) is a **pdfspine original extension** — a self-authored deterministic Markdown layout engine, **not** an implementation of `Story`/`insert_htmlbox`; the HTML/CSS engine itself remains out of scope.
 3. **OCR** — `get_textpage_ocr`, `pdfocr_save/tobytes`, Tesseract.
 4. **Table detection** — `find_tables`/`TableFinder`/`make_table`.
 5. **Optional content/layers (OCG/OCMD)**, advanced page labels (basic `/PageLabels` *reading* for TOC/named-dest interplay **is** in scope per §3.5), journalling (undo/redo).

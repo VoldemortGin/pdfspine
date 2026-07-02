@@ -41,6 +41,9 @@ audit-as-crates-io = false
 [policy.pdf-image]
 audit-as-crates-io = false
 
+[policy.pdf-markdown]
+audit-as-crates-io = false
+
 [policy.pdf-render]
 audit-as-crates-io = false
 

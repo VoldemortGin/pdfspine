@@ -67,3 +67,9 @@ Functions exported directly from `pdfspine`.
 ::: pdfspine.ConversionHeader
 
 ::: pdfspine.ConversionTrailer
+
+## Markdown → PDF
+
+### pdfspine.markdown_to_pdf
+
+::: pdfspine.markdown_to_pdf

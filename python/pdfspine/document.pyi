@@ -1067,3 +1067,14 @@ def open(
     stream: bytes | None = ...,
     filetype: str | None = ...,
 ) -> Document: ...
+def markdown_to_pdf(
+    md_or_path: str | os.PathLike[str],
+    *,
+    font: str | os.PathLike[str] | bytes | bytearray | None = ...,
+    cjk_font: str | os.PathLike[str] | bytes | bytearray | None = ...,
+    base_dir: str | os.PathLike[str] | None = ...,
+    page_width: float | None = ...,
+    page_height: float | None = ...,
+    margins: float | tuple[float, float, float, float] | None = ...,
+    body_font_size: float | None = ...,
+) -> Document: ...

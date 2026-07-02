@@ -260,7 +260,48 @@ with open("photo.jpg", "rb") as f:
 pdf_bytes = pdfspine.open("photo.png").convert_to_pdf()
 ```
 
-## 13. 命令行（CLI）
+## 13. Markdown → PDF（pdfspine 原创扩展）
+
+`pdfspine.markdown_to_pdf()` 把 CommonMark + GFM（表格/删除线/任务列表）渲染成新 `Document`（确定性输出；图片仅本地路径/`data:` URI，不发网络）：
+
+```python
+import pdfspine
+
+md = """# 报告标题
+
+支持 **粗体** / *斜体* / `行内代码` / [链接](https://example.com)（蓝字）。
+
+- 列表、嵌套列表
+- [x] 任务列表（已完成项）
+
+| 列 A | 列 B |
+|---|---|
+| 1 | 2 |
+"""
+
+doc = pdfspine.markdown_to_pdf(md)             # 返回 Document
+doc.save("out.pdf")
+
+# 也可直接传 .md/.markdown/.txt/无后缀 的现存文件路径
+# （相对图片路径默认以该文件所在目录为基准；可用 base_dir= 覆盖）
+doc = pdfspine.markdown_to_pdf("README.md")
+```
+
+**中文（CJK）必须传 `cjk_font=`** ——默认 Base-14 字体没有 CJK 字形，不传时中文渲染成 `?`（不报错）：
+
+```python
+doc = pdfspine.markdown_to_pdf(
+    "# 中文标题\n\n正文**加粗**，表格、列表都支持。",
+    cjk_font="/System/Library/Fonts/Hiragino Sans GB.ttc",  # macOS 自带；TTF/OTF/TTC 均可
+    # Windows 可用 r"C:\Windows\Fonts\msyh.ttc"；或任意 Noto Sans CJK 文件
+)
+doc.save("cjk.pdf")
+```
+（实跑核对：不传 `cjk_font` 时 `get_text()` 返回 `'????\n?? abc\n'`；传 Hiragino/Songti/Arial Unicode 后返回 `'中文标题\n正文加粗。\n'`。）
+
+页面选项：`page_width`/`page_height`（默认 A4 595.32×841.92 pt）、`margins`（单值或 `(top,right,bottom,left)`，默认 72）、`body_font_size`（默认 11，标题按比例缩放）、`font=`（用户 TTF/OTF 替换正文+标题字体）。
+
+## 14. 命令行（CLI）
 
 安装后提供 `pdfspine` 命令（也可 `python -m pdfspine`）。页码为 **1-based**，范围语法 `1-3,5,8-`。
 
