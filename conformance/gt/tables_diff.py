@@ -146,13 +146,13 @@ def _table_record(tbl) -> dict:
     return rec
 
 
-def _worker_pdfspine(pdf: str, page_index: int) -> list[dict]:
+def _worker_pdfspine(pdf: str, page_index: int, strategy: str = "lines") -> list[dict]:
     import pdfspine
 
     doc = pdfspine.open(pdf)
     try:
         page = doc.load_page(page_index)
-        finder = page.find_tables()
+        finder = page.find_tables(strategy=strategy)
         tables = list(getattr(finder, "tables", finder))
         return [_table_record(t) for t in tables]
     finally:
@@ -178,7 +178,7 @@ def _worker_fitz(pdf: str, page_index: int) -> list[dict]:
             pass
 
 
-def _run_worker(mode: str, pdf: str, page_index: int) -> int:
+def _run_worker(mode: str, pdf: str, page_index: int, strategy: str = "lines") -> int:
     """Worker entrypoint: emit ``{"ok":bool, "tables":[...], "error":...}`` JSON.
 
     fitz (and MuPDF's C layer) write warnings to **stdout** ("Consider using the
@@ -194,7 +194,7 @@ def _run_worker(mode: str, pdf: str, page_index: int) -> int:
         sys.stdout = sys.stderr
         try:
             if mode == "pdfspine":
-                out["tables"] = _worker_pdfspine(pdf, page_index)
+                out["tables"] = _worker_pdfspine(pdf, page_index, strategy)
             elif mode == "fitz":
                 out["tables"] = _worker_fitz(pdf, page_index)
             else:
@@ -222,13 +222,17 @@ def _emit_json(fd: int, obj: dict) -> None:
 # ===========================================================================
 # PARENT MODE — drives both workers per page, compares, reports.
 # ===========================================================================
-def call_worker(py: str, mode: str, pdf: Path, page_index: int, timeout: float) -> dict:
+def call_worker(py: str, mode: str, pdf: Path, page_index: int, timeout: float,
+                strategy: str = "lines") -> dict:
     """Spawn an isolated worker; return its JSON (or a synthesized failure rec).
 
     A timeout / non-zero exit / SIGABRT (Rust panic) becomes ``ok=False`` with an
     error string so one bad page can never crash the whole differential run.
+    ``strategy`` is forwarded to the pdfspine worker's ``find_tables`` (the fitz
+    worker ignores it; default ``"lines"`` preserves historical behavior).
     """
-    cmd = [py, str(THIS), "--worker", mode, "--pdf", str(pdf), "--page", str(page_index)]
+    cmd = [py, str(THIS), "--worker", mode, "--pdf", str(pdf), "--page", str(page_index),
+           "--strategy", strategy]
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired:
@@ -504,7 +508,8 @@ def _pred_cells_from_html(html: str | None) -> list[dict]:
 
 
 def process_doc_gold(pdf: Path, doc_id: str, gold_tables: list[dict],
-                     page_index: int, pdfspine_py: str, timeout: float) -> dict:
+                     page_index: int, pdfspine_py: str, timeout: float,
+                     strategy: str = "lines") -> dict:
     """Score one page's pdfspine tables vs the page's gold tables with GriTS.
 
     ``gold_tables`` is the list of FinTabNet.c annotation tables for this page
@@ -521,7 +526,7 @@ def process_doc_gold(pdf: Path, doc_id: str, gold_tables: list[dict],
             golds.append({"cells": cells, "bbox": bbox})
 
     # Predicted side (isolated pdfspine worker; reuse the robust call_worker).
-    ox_res = call_worker(pdfspine_py, "pdfspine", pdf, page_index, timeout)
+    ox_res = call_worker(pdfspine_py, "pdfspine", pdf, page_index, timeout, strategy)
     preds: list[dict] = []
     if ox_res.get("ok"):
         for rec in ox_res.get("tables", []):
@@ -628,7 +633,7 @@ def load_gold_manifest(path: Path) -> list[dict]:
 
 
 def run_gold(manifest_path: Path, pdfspine_py: str, timeout: float,
-             report_path: Path, json_path: Path) -> int:
+             report_path: Path, json_path: Path, strategy: str = "lines") -> int:
     """Drive the gold-GT GriTS run over a FinTabNet.c manifest; write report+json.
 
     If no source PDFs are present (the common BLOCKED case in restricted
@@ -645,7 +650,7 @@ def run_gold(manifest_path: Path, pdfspine_py: str, timeout: float,
     docs: list[dict] = []
     for k, pg in enumerate(scored, 1):
         d = process_doc_gold(pg["pdf"], pg["document_id"], pg["gold_tables"],
-                             pg["page_index"], pdfspine_py, timeout)
+                             pg["page_index"], pdfspine_py, timeout, strategy)
         docs.append(d)
         mt = d["n_matched"]
         gt = d["n_gold"]
@@ -659,13 +664,14 @@ def run_gold(manifest_path: Path, pdfspine_py: str, timeout: float,
         "manifest": str(manifest_path),
         "metric": "GriTS (grits.py)",
         "pdfspine_python": pdfspine_py,
+        "find_tables_strategy": strategy,
         "n_pages_total": len(pages),
         "n_pages_with_pdf": len(scored),
         "docs": docs,
     }
     json_path.parent.mkdir(parents=True, exist_ok=True)
     json_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
-    report = build_gold_report(manifest_path, pages, scored, docs)
+    report = build_gold_report(manifest_path, pages, scored, docs, strategy)
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(report, encoding="utf-8")
     print(f"\nWrote {json_path}\nWrote {report_path}", flush=True)
@@ -673,7 +679,7 @@ def run_gold(manifest_path: Path, pdfspine_py: str, timeout: float,
 
 
 def build_gold_report(manifest_path: Path, pages: list[dict], scored: list[dict],
-                      docs: list[dict]) -> str:
+                      docs: list[dict], strategy: str = "lines") -> str:
     """Render the committed gold-GT report (absolute GriTS or a clean blocked one)."""
     man = json.loads(manifest_path.read_text(encoding="utf-8"))
     n_total = len(pages)
@@ -685,7 +691,8 @@ def build_gold_report(manifest_path: Path, pages: list[dict], scored: list[dict]
 
     L: list[str] = []
     L.append("# Table cell-structure GOLD GT — pdfspine `find_tables` vs FinTabNet.c (GriTS)\n")
-    L.append(f"Harness: `{THIS}` (`--gold`)  ")
+    L.append(f"Harness: `{THIS}` (`--gold --strategy {strategy}`; find_tables "
+             f"`strategy=\"{strategy}\"`)  ")
     L.append("Metric: **GriTS** (Grid Table Similarity, Smock et al. arXiv:2303.00716 / 2203.12555) "
              "— `conformance/gt/grits.py`.  ")
     L.append(f"Dataset: **FinTabNet.c** — annotations `{anno_lic}`, source PDFs `{pdf_lic}`.  ")
@@ -732,7 +739,7 @@ def build_gold_report(manifest_path: Path, pages: list[dict], scored: list[dict]
     med_top = _median(tops)
     med_con = _median(cons)
 
-    L.append("## Absolute cell-structure score (pdfspine vs gold)\n")
+    L.append(f"## Absolute cell-structure score (pdfspine `strategy=\"{strategy}\"` vs gold)\n")
     L.append(f"- Gold tables scored: **{tot_gold}** (across {len(valid)} pages); pdfspine "
              f"detected **{tot_pred}**, matched **{tot_match}** by bbox IoU.")
     L.append(f"- **GriTS_Top (topology): mean {mean_top:.3f}, median {med_top:.3f}**")
@@ -766,21 +773,21 @@ def _gold_blocked_section(man: dict, pages: list[dict]) -> list[str]:
     L.append("### Exactly what is missing\n")
     L.append("- The `bsmock/FinTabNet.c` HF dataset ships **annotations only** "
              "(`FinTabNet.c-PDF_Annotations.tar.gz` = 77,437 JSONs, **zero PDFs**).")
-    L.append(f"- The matching PDFs exist only in the original FinTabNet release at "
-             f"`{man.get('pdf_source')}...` (inside `dax-fintabnet/1.0.0/fintabnet.tar.gz`).")
-    L.append("- That host (`dax-cdn.cdn.appdomain.cloud`) is **unreachable from this "
-             "environment**: TLS connection fails (verify error, `http=000`) on every "
-             "retry, while HuggingFace and other hosts succeed — i.e. an environment-level "
-             "egress restriction on that specific CDN host, not a transient error.")
+    L.append(f"- The matching PDFs come from the FinTabNet 1.0.0 mirror zip at "
+             f"`{man.get('pdf_source')}` (the original DAX CDN is decommissioned — "
+             "see `fetch_fintabnet.py`).")
+    L.append("- That mirror was unreachable from this environment (or missing the "
+             "members) on every retry in this run.")
     L.append(f"- Per-page fetch status in this run: `{man.get('pdf_status_counts')}`.\n")
     L.append("### How to unblock (one of)\n")
     L.append("1. Run `conformance/gt/fetch_fintabnet.py` from a network that can reach "
-             "`dax-cdn.cdn.appdomain.cloud`; it will fetch the per-page PDFs and the manifest "
-             "will flip `pdf_status` to `ok`. Then re-run `tables_diff.py --gold` — it is "
-             "ready and will emit the absolute GriTS numbers with no further code change.")
-    L.append("2. Or download the full `fintabnet.tar.gz` once, untar its `pdf/` tree next to "
-             "the annotations, and point the manifest's per-entry `pdf` at "
-             "`pdf/<TICKER>/<YEAR>/page_<N>.pdf` (the `pdf_rel_path` already recorded in the "
+             "HuggingFace; it will Range-extract the per-page PDFs from the mirror zip and "
+             "the manifest will flip `pdf_status` to `ok`. Then re-run `tables_diff.py "
+             "--gold` — it is ready and will emit the absolute GriTS numbers with no "
+             "further code change.")
+    L.append("2. Or obtain the FinTabNet 1.0.0 `pdf/` tree by any other means and drop the "
+             "single-page PDFs into the corpus `pdfs/` dir as `<document_id>.pdf` (the "
+             "fetcher treats them as cached; `pdf_rel_path` is recorded per entry in the "
              "manifest).\n")
     L.append("### What IS proven now (no PDFs needed)\n")
     L.append("- `grits.py` self-test: 7 known-answer cases pass (identity=1.0, content "
@@ -1029,6 +1036,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--fitz-python", default=DEFAULT_FITZ_PY)
     ap.add_argument("--timeout", type=float, default=90.0,
                     help="per-(page,engine) wall-clock timeout (s)")
+    ap.add_argument("--strategy", default="lines",
+                    help="find_tables strategy for the pdfspine worker in --gold mode "
+                         "('lines' = default & historical behavior, 'text' = text-based "
+                         "detection for borderless tables); non-'lines' runs write to "
+                         "strategy-suffixed default report/json paths")
     # GOLD-GT mode: score pdfspine vs FinTabNet.c human gold with GriTS (absolute).
     ap.add_argument("--gold", type=Path, default=None,
                     help="FinTabNet.c manifest (from fetch_fintabnet.py): score "
@@ -1044,17 +1056,21 @@ def main(argv: list[str] | None = None) -> int:
         if not args.pdf:
             sys.stdout.write(json.dumps({"ok": False, "tables": [], "error": "no --pdf"}))
             return 2
-        return _run_worker(args.worker, args.pdf, args.page)
+        return _run_worker(args.worker, args.pdf, args.page, args.strategy)
 
     # GOLD-GT mode (absolute cell-structure score vs FinTabNet.c via GriTS).
     if args.gold is not None:
         if not args.gold.exists():
             ap.error(f"gold manifest not found: {args.gold}")
+        # Non-default strategies get suffixed default paths so a 'text' run can
+        # never silently clobber the canonical (lines-default) gold report.
+        sfx = "" if args.strategy == "lines" else f"-{args.strategy}"
         report = (args.report if args.report != GT_DIR / "GT-REPORT-tables.md"
-                  else GT_DIR / "GT-REPORT-tables-gold.md")
+                  else GT_DIR / f"GT-REPORT-tables-gold{sfx}.md")
         jsonp = (args.json if args.json != GT_DIR / "gt-tables.json"
-                 else GT_DIR / "gt-tables-gold.json")
-        return run_gold(args.gold, args.pdfspine_python, args.timeout, report, jsonp)
+                 else GT_DIR / f"gt-tables-gold{sfx}.json")
+        return run_gold(args.gold, args.pdfspine_python, args.timeout, report, jsonp,
+                        args.strategy)
 
     # Parent.
     from score import score_all  # local, pure stdlib
