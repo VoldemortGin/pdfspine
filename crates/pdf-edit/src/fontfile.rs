@@ -1,27 +1,41 @@
-//! User-supplied TrueType/OpenType font embedding (PRD §8.5 / §8.5.2).
+//! User-supplied TrueType/OpenType font embedding (PRD §8.5 / §8.5.2,
+//! PRD-NEXT §10 TS-3).
 //!
-//! `insert_text` with a `fontfile=` argument **fully embeds** the whole font
-//! program (the full-embed fallback of §8.5.2 — subsetting is the deferred,
-//! feature-gated `subset` path) as a composite `/Type0` font:
+//! `insert_text` with a `fontfile=` argument embeds the font program as a
+//! composite `/Type0` font:
 //!
 //! ```text
 //! /Type0  /Encoding /Identity-H        ── 2-byte codes == glyph IDs
 //!   └─ DescendantFonts [ /CIDFontType2 ]
 //!         ├─ /CIDToGIDMap /Identity     ── CID == GID
 //!         ├─ /W  [ … per-glyph advances ]
-//!         └─ /FontDescriptor /FontFile2 ── the whole TTF program (Flate)
+//!         └─ /FontDescriptor /FontFile2 ── the font program (Flate)
 //! /ToUnicode  ── CMap mapping each 2-byte code back to its Unicode scalar(s)
 //! ```
 //!
 //! With Identity-H + Identity `/CIDToGIDMap`, a shown 2-byte code is the glyph
 //! ID directly, so emitting text reduces to "look up each char's glyph ID via
 //! the font `cmap`, write the 2-byte code." Widths come from the font `hmtx`
-//! table (read by `ttf-parser`); the `/ToUnicode` map makes the inserted text
-//! extractable / searchable (the M2 round-trip oracle).
+//! table (read by `ttf-parser`); the `/ToUnicode` map is **always** written so
+//! the inserted text stays extractable / searchable (the M2 round-trip oracle).
+//!
+//! **Glyph subsetting (TS-3).** By default [`EmbeddedFont::write_type0`]
+//! embeds a usage-based TrueType **subset** — only the used glyphs (plus their
+//! recursive composite-component closure) survive, with the original glyph IDs
+//! preserved so the Identity-H codes stay valid, and the `/BaseFont` name gets
+//! the standard `ABCDEF+` subset tag. This is what makes multi-megabyte system
+//! CJK fonts (TTC collections) embeddable at all. The whole-program embed is
+//! kept behind the [`EmbeddedFont::set_full_embed`] debug flag, and remains
+//! the automatic fallback for CFF-flavored OpenType (no `glyf` table) in v1.
+//!
+//! **TTC face selection.** [`EmbeddedFont::parse_indexed`] parses one face of
+//! a TrueType Collection by index (enumerate with [`fonts_in_collection`]);
+//! [`EmbeddedFont::parse`] stays the face-0 shorthand.
 //!
 //! `ttf-parser` is `#![forbid(unsafe_code)]` and pure-Rust, preserving the
 //! crate purity invariant.
 
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 
 use pdf_core::error::{Error, Result};
@@ -29,11 +43,25 @@ use pdf_core::filters::flate;
 use pdf_core::object::{Dict, Name, ObjRef, Object, StreamObj};
 use pdf_core::DocumentStore;
 
+use crate::subset;
+
+/// The number of faces in a TrueType Collection (`ttcf`), or `None` when
+/// `data` is not a collection (a plain TTF/OTF is a one-face "collection" —
+/// parse it with face index 0).
+#[must_use]
+pub fn fonts_in_collection(data: &[u8]) -> Option<u32> {
+    ttf_parser::fonts_in_collection(data)
+}
+
 /// A parsed, embeddable font program plus the lookup tables `insert_text` needs:
 /// per-char glyph-ID mapping (`cmap`) and per-glyph advance (`hmtx`).
 pub struct EmbeddedFont {
-    /// The raw font-program bytes (embedded verbatim — full embed).
+    /// The raw source font-program bytes (for a TTC: the whole collection).
     program: Vec<u8>,
+    /// The face index inside `program` (0 for a plain TTF/OTF).
+    face_index: u32,
+    /// Debug flag: embed the whole program instead of the usage-based subset.
+    full_embed: bool,
     /// `units_per_em`, used to scale `hmtx` advances to the 1000-unit text space.
     units_per_em: f64,
     /// PostScript / family name for `/BaseFont` (sanitized).
@@ -52,15 +80,29 @@ pub struct EmbeddedFont {
 }
 
 impl EmbeddedFont {
-    /// Parses `program` (a TTF/OTF byte blob) into an embeddable font.
+    /// Parses `program` (a TTF/OTF byte blob) into an embeddable font — face 0
+    /// of a collection (see [`EmbeddedFont::parse_indexed`] for TTC faces).
     ///
     /// # Errors
     ///
     /// [`Error::Unsupported`] if the bytes are not a parseable font (never
     /// panics on arbitrary input).
     pub fn parse(program: &[u8]) -> Result<Self> {
-        let face = ttf_parser::Face::parse(program, 0)
-            .map_err(|_| Error::Unsupported("insert_text fontfile: not a parseable TTF/OTF"))?;
+        Self::parse_indexed(program, 0)
+    }
+
+    /// Parses face `face_index` of `program` (a TTF/OTF/TTC byte blob) into an
+    /// embeddable font. Enumerate collection faces with
+    /// [`fonts_in_collection`]; for a non-collection only index 0 is valid.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Unsupported`] if the bytes are not a parseable font or the
+    /// face index is out of bounds (never panics on arbitrary input).
+    pub fn parse_indexed(program: &[u8], face_index: u32) -> Result<Self> {
+        let face = ttf_parser::Face::parse(program, face_index).map_err(|_| {
+            Error::Unsupported("fontfile: not a parseable TTF/OTF or face index out of bounds")
+        })?;
 
         let upem = f64::from(face.units_per_em());
         let scale = if upem > 0.0 { 1000.0 / upem } else { 1.0 };
@@ -79,6 +121,8 @@ impl EmbeddedFont {
 
         Ok(EmbeddedFont {
             program: program.to_vec(),
+            face_index,
+            full_embed: false,
             units_per_em: upem,
             base_name,
             ascent: f64::from(face.ascender()) * scale,
@@ -105,7 +149,7 @@ impl EmbeddedFont {
     pub fn glyph_id(&self, ch: char) -> u16 {
         // Re-parse is cheap (zero-copy header parse) and avoids holding a
         // self-referential `Face<'_>`; only used while emitting text.
-        ttf_parser::Face::parse(&self.program, 0)
+        ttf_parser::Face::parse(&self.program, self.face_index)
             .ok()
             .and_then(|f| f.glyph_index(ch))
             .map_or(0, |g| g.0)
@@ -129,13 +173,34 @@ impl EmbeddedFont {
         self.units_per_em
     }
 
-    /// The length of the embedded font program in bytes (full-embed check).
+    /// The length of the **source** font program in bytes (for a TTC: the
+    /// whole collection — what the full-embed debug path would write).
     #[must_use]
     pub fn program_len(&self) -> usize {
         self.program.len()
     }
 
-    /// The `/BaseFont` name chosen for this font.
+    /// The face index this font was parsed from (0 for a plain TTF/OTF).
+    #[must_use]
+    pub fn face_index(&self) -> u32 {
+        self.face_index
+    }
+
+    /// Debug flag: when `true`, [`EmbeddedFont::write_type0`] embeds the whole
+    /// source program instead of the usage-based glyph subset (PRD-NEXT §10
+    /// TS-3 keeps the full embed only behind this flag).
+    pub fn set_full_embed(&mut self, full_embed: bool) {
+        self.full_embed = full_embed;
+    }
+
+    /// Whether the full-embed debug flag is set.
+    #[must_use]
+    pub fn full_embed(&self) -> bool {
+        self.full_embed
+    }
+
+    /// The `/BaseFont` name chosen for this font (untagged; the written
+    /// `/BaseFont` gains an `ABCDEF+` prefix when a subset is embedded).
     #[must_use]
     pub fn base_name(&self) -> &str {
         &self.base_name
@@ -145,16 +210,34 @@ impl EmbeddedFont {
     /// `/Type0` font reference, ready to register under `/Resources /Font`.
     ///
     /// `used` is the set of `(glyph_id, ch)` pairs the caller actually shows; it
-    /// drives the `/W` width array and the `/ToUnicode` CMap. (The *program*
-    /// itself is still fully embedded — only the metadata tables are scoped to
-    /// the used glyphs, which is correct and keeps them compact.)
+    /// drives the `/W` width array, the `/ToUnicode` CMap **and the embedded
+    /// glyph subset**: by default only the used glyphs (plus their composite
+    /// component closure, original glyph IDs preserved) are embedded, and the
+    /// `/BaseFont` gains the standard `ABCDEF+` subset tag. The whole program
+    /// is embedded instead when [`EmbeddedFont::set_full_embed`] is set (debug)
+    /// or when the face is not subsettable (CFF-flavored OpenType — the
+    /// documented v1 degradation).
     ///
     /// # Errors
     ///
     /// Propagates ChangeSet-allocation errors.
     pub fn write_type0(&self, doc: &DocumentStore, used: &BTreeMap<u16, char>) -> Result<ObjRef> {
-        // --- FontFile2: the whole program, Flate-compressed ----------------
-        let compressed = flate::encode(&self.program);
+        // --- FontFile2: usage-based subset (default) or the whole program --
+        let subset_program = if self.full_embed {
+            None
+        } else {
+            subset::subset_truetype(&self.program, self.face_index, used)
+        };
+        let font_name = match &subset_program {
+            Some(_) => format!("{}+{}", subset::subset_tag(used), self.base_name),
+            None => self.base_name.clone(),
+        };
+        let program: Cow<'_, [u8]> = match subset_program {
+            Some(sub) => Cow::Owned(sub),
+            None => Cow::Borrowed(&self.program),
+        };
+
+        let compressed = flate::encode(&program);
         let mut ff_dict = Dict::new();
         ff_dict.insert(Name::new("Filter"), Object::Name(Name::new("FlateDecode")));
         ff_dict.insert(
@@ -163,20 +246,14 @@ impl EmbeddedFont {
         );
         // `/Length1` is the *uncompressed* program length (required for TrueType
         // FontFile2 per ISO 32000-1 §9.9, Table 127).
-        ff_dict.insert(
-            Name::new("Length1"),
-            Object::Integer(self.program.len() as i64),
-        );
+        ff_dict.insert(Name::new("Length1"), Object::Integer(program.len() as i64));
         let fontfile =
             doc.add_object(Object::Stream(StreamObj::new_encoded(ff_dict, compressed)))?;
 
         // --- FontDescriptor ------------------------------------------------
         let mut fd = Dict::new();
         fd.insert(Name::new("Type"), Object::Name(Name::new("FontDescriptor")));
-        fd.insert(
-            Name::new("FontName"),
-            Object::Name(Name::new(&self.base_name)),
-        );
+        fd.insert(Name::new("FontName"), Object::Name(Name::new(&font_name)));
         fd.insert(Name::new("Flags"), Object::Integer(self.descriptor_flags()));
         fd.insert(
             Name::new("FontBBox"),
@@ -212,10 +289,7 @@ impl EmbeddedFont {
             Name::new("Subtype"),
             Object::Name(Name::new("CIDFontType2")),
         );
-        cidfont.insert(
-            Name::new("BaseFont"),
-            Object::Name(Name::new(&self.base_name)),
-        );
+        cidfont.insert(Name::new("BaseFont"), Object::Name(Name::new(&font_name)));
         let mut cidsysinfo = Dict::new();
         cidsysinfo.insert(
             Name::new("Registry"),
@@ -240,10 +314,7 @@ impl EmbeddedFont {
         let mut type0 = Dict::new();
         type0.insert(Name::new("Type"), Object::Name(Name::new("Font")));
         type0.insert(Name::new("Subtype"), Object::Name(Name::new("Type0")));
-        type0.insert(
-            Name::new("BaseFont"),
-            Object::Name(Name::new(&self.base_name)),
-        );
+        type0.insert(Name::new("BaseFont"), Object::Name(Name::new(&font_name)));
         type0.insert(Name::new("Encoding"), Object::Name(Name::new("Identity-H")));
         type0.insert(
             Name::new("DescendantFonts"),

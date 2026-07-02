@@ -17,3 +17,6 @@ ttf-parser.workspace = true
 
 [dev-dependencies]
 ttf-parser.workspace = true
+# TS-3 subset-vs-full-embed pixel-parity gate (tests/fontfile_subset.rs):
+# render both variants with the repo raster stack and compare samples.
+pdf-render.workspace = true

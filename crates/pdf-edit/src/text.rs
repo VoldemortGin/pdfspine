@@ -6,10 +6,11 @@
 //!   resource is registered and glyph advances come from the built-in Core-14
 //!   width table (`pdf_fonts::std_widths`). Text bytes are WinAnsi (single-byte
 //!   `Tj`).
-//! - A **user TTF/OTF** (`fontfile`): the whole font program is embedded as a
-//!   `/Type0` Identity-H font (see [`crate::fontfile`]); text is emitted as
-//!   2-byte glyph-ID codes via a hex string, with a `/ToUnicode` map so the
-//!   inserted text stays extractable / searchable.
+//! - A **user TTF/OTF** (`fontfile`): the font program is embedded as a
+//!   `/Type0` Identity-H font (a usage-based glyph subset by default — see
+//!   [`crate::fontfile`]); text is emitted as 2-byte glyph-ID codes via a hex
+//!   string, with a `/ToUnicode` map so the inserted text stays extractable /
+//!   searchable.
 //!
 //! Coordinates: PyMuPDF passes a **top-left** page point as the text *baseline
 //! origin*; [`PageContent::to_user_space`] converts it to PDF user space

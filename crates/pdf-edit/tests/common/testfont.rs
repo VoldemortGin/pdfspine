@@ -172,6 +172,43 @@ pub fn build_test_ttf(chars: &[char], advance: u16) -> Vec<u8> {
     assemble_font(&mut tables)
 }
 
+/// Wraps standalone sfnt fonts into a TrueType Collection (`ttcf` v1.0),
+/// rebasing each font's table-directory offsets to the collection file (table
+/// offsets in a TTC are absolute). For TTC face-selection tests only.
+pub fn build_test_ttc(fonts: &[Vec<u8>]) -> Vec<u8> {
+    let header_len = 12 + 4 * fonts.len();
+    let mut bases: Vec<u32> = Vec::with_capacity(fonts.len());
+    let mut running = header_len;
+    for f in fonts {
+        bases.push(running as u32);
+        running += f.len();
+        running += (4 - running % 4) % 4;
+    }
+
+    let mut out = Vec::with_capacity(running);
+    out.extend_from_slice(b"ttcf");
+    out.extend_from_slice(&0x0001_0000u32.to_be_bytes()); // version 1.0
+    out.extend_from_slice(&(fonts.len() as u32).to_be_bytes());
+    for b in &bases {
+        out.extend_from_slice(&b.to_be_bytes());
+    }
+    for (f, &base) in fonts.iter().zip(&bases) {
+        debug_assert_eq!(out.len() as u32, base);
+        let mut font = f.clone();
+        // Rebase directory offsets: numTables at 4..6, 16-byte records from 12,
+        // each record's offset field at +8.
+        let num_tables = u16::from_be_bytes([font[4], font[5]]) as usize;
+        for i in 0..num_tables {
+            let pos = 12 + i * 16 + 8;
+            let off = u32::from_be_bytes(font[pos..pos + 4].try_into().unwrap());
+            font[pos..pos + 4].copy_from_slice(&(off + base).to_be_bytes());
+        }
+        out.extend_from_slice(&font);
+        pad4(&mut out);
+    }
+    out
+}
+
 fn new_table(tag: [u8; 4], data: Vec<u8>) -> Table {
     let checksum = checksum(&data);
     Table {

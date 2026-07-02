@@ -32,6 +32,7 @@ pub mod page_ops;
 pub mod pagelabel;
 pub mod redact;
 pub mod scrub;
+mod subset;
 pub mod text;
 pub mod toc;
 
@@ -56,7 +57,7 @@ pub use drawings::{get_cdrawings, get_drawings, DrawItem, Drawing};
 pub use embfile::{
     embfile_add, embfile_count, embfile_del, embfile_get, embfile_info, embfile_names, EmbfileInfo,
 };
-pub use fontfile::EmbeddedFont;
+pub use fontfile::{fonts_in_collection, EmbeddedFont};
 pub use form::{
     acroform_dict, default_appearance, fill, first_widget, flatten, form_fields, has_acroform,
     is_form_pdf, need_appearances, set_need_appearances, sigflags, terminal_field_refs,

@@ -224,10 +224,12 @@ fn insert_text_008_aliases() {
 // === INSERT-TTF-* =========================================================
 
 /// `INSERT-TTF-001` / `INSERT-TTF-004`: embedding a user TTF emits a `/Type0`
-/// Identity-H font with a `/CIDFontType2` descendant + a FontFile2 whose
-/// uncompressed length equals the input program length (full embed).
+/// Identity-H font with a `/CIDFontType2` descendant + a FontFile2 holding a
+/// usage-based glyph **subset** (PRD-NEXT §10 TS-3): `/Length1` equals the
+/// embedded program length, the subset parses standalone, and the original
+/// glyph IDs are preserved so the Identity-H codes stay valid.
 #[test]
-fn insert_ttf_001_type0_full_embed() {
+fn insert_ttf_001_type0_subset_embed() {
     let ttf = common::testfont::build_test_ttf(&['H', 'e', 'l', 'o'], 500);
     let doc = open(&blank_page(612, 792));
     let opts = TextOptions {
@@ -242,6 +244,7 @@ fn insert_ttf_001_type0_full_embed() {
     let mut saw_cidfont = false;
     let mut saw_identity_h = false;
     let mut fontfile_len1: Option<i64> = None;
+    let mut fontfile_program: Option<Vec<u8>> = None;
     for num in re.xref().object_numbers() {
         if let Ok(o) = re.get_object(num, 0) {
             if let Some(d) = o.as_dict() {
@@ -268,6 +271,7 @@ fn insert_ttf_001_type0_full_embed() {
                     .and_then(pdf_core::Object::as_i64)
                 {
                     fontfile_len1 = Some(l1);
+                    fontfile_program = re.decode_stream(s).and_then(|o| o.into_decoded()).ok();
                 }
             }
         }
@@ -275,11 +279,23 @@ fn insert_ttf_001_type0_full_embed() {
     assert!(saw_type0, "no /Type0 font");
     assert!(saw_identity_h, "no Identity-H encoding");
     assert!(saw_cidfont, "no /CIDFontType2 descendant");
+    let program = fontfile_program.expect("no FontFile2 stream");
     assert_eq!(
         fontfile_len1,
-        Some(ttf.len() as i64),
-        "FontFile2 /Length1 must equal the full program length (full embed)"
+        Some(program.len() as i64),
+        "FontFile2 /Length1 must equal the embedded (subset) program length"
     );
+    // The subset parses standalone and preserves the source glyph IDs, so the
+    // Identity-H 2-byte codes in the content stream stay valid.
+    let orig = ttf_parser::Face::parse(&ttf, 0).expect("source font parses");
+    let sub = ttf_parser::Face::parse(&program, 0).expect("subset font parses");
+    for ch in ['H', 'e', 'l', 'o'] {
+        assert_eq!(
+            sub.glyph_index(ch),
+            orig.glyph_index(ch),
+            "glyph id for {ch:?} must be preserved in the subset"
+        );
+    }
 }
 
 /// `INSERT-TTF-002`: the inserted TTF text is extractable via the written
