@@ -166,7 +166,11 @@ def test_pyfitz_002_encrypted_flow(encrypted_path):
 
     doc = fitz.open(encrypted_path)
     assert doc.is_encrypted is True
-    assert doc.needs_pass is True
+    # This fixture has an *empty* user password, so `open` auto-authenticates
+    # with "" exactly like MuPDF's pdf_needs_password (real fitz 1.24.14 oracle,
+    # measured 2026-07-02: needs_pass == 0 right after open). pdfspine matches
+    # via the auto-auth in open() (commit 62997e2).
+    assert doc.needs_pass is False
     assert doc.permissions == -44
     md = doc.metadata
     assert md["encryption"].startswith("Standard")
@@ -180,8 +184,16 @@ def test_pyfitz_002_encrypted_flow(encrypted_path):
     assert doc.metadata["title"] == "Secret Title"
 
 
-def test_encrypted_wrong_password(encrypted_path):
-    doc = pdfspine.open(encrypted_path)
+def test_encrypted_wrong_password(tmp_path):
+    # A real (non-empty) user password: the empty-password auto-auth in open()
+    # fails, so the document still needs a password. Real fitz 1.24.14 oracle
+    # (measured 2026-07-02): needs_pass truthy after open,
+    # authenticate("definitely-wrong") -> 0, needs_pass stays truthy,
+    # authenticate("user") -> 2 (user password accepted).
+    path = tmp_path / "encrypted-user-pw.pdf"
+    path.write_bytes(build_encrypted_pdf(user_pw=b"user"))
+    doc = pdfspine.open(str(path))
     assert doc.needs_pass is True
     assert doc.authenticate("definitely-wrong") is False
     assert doc.needs_pass is True
+    assert doc.authenticate("user") is True
