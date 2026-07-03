@@ -93,10 +93,7 @@ fn flow_fixture() -> Vec<u8> {
     let list_item = |label: &str| {
         let mut p = ParaProps::new();
         p.indent_left = 24.0;
-        p.list = Some(ListLabel {
-            text: label.to_string(),
-            gutter: 6.0,
-        });
+        p.list = Some(ListLabel::new(label, 6.0));
         p
     };
 

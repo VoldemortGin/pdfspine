@@ -41,10 +41,7 @@ fn builds_a_mixed_paragraph_with_list_label_and_hanging_indent() {
     props.spacing = LineSpacing::Exact(18.0);
     props.space_before = 6.0;
     props.first_line_indent = -12.0; // hanging
-    props.list = Some(ListLabel {
-        text: "(a)".to_string(),
-        gutter: 7.0,
-    });
+    props.list = Some(ListLabel::new("(a)", 7.0));
     let para = Block::Paragraph(
         props.clone(),
         vec![
@@ -222,6 +219,10 @@ fn export_warnings_render_human_readable() {
             kind: "linear".to_string(),
         },
         ExportWarning::BoxOverflowClipped { overflow_pt: 12.5 },
+        ExportWarning::Custom {
+            kind: "chart-placeholder".to_string(),
+            detail: "bar chart 'Sales' rendered as a gray placeholder".to_string(),
+        },
     ];
     let rendered: Vec<String> = warnings.iter().map(ToString::to_string).collect();
     assert_eq!(
@@ -233,9 +234,31 @@ fn export_warnings_render_human_readable() {
     assert!(rendered[3].contains("gear9"));
     assert!(rendered[4].contains("linear gradient"));
     assert!(rendered[5].contains("12.50 pt"));
+    assert_eq!(
+        rendered[6],
+        "chart-placeholder: bar chart 'Sales' rendered as a gray placeholder"
+    );
     let result = ExportResult {
         pdf: Vec::new(),
         warnings,
     };
-    assert_eq!(result.warnings.len(), 6);
+    assert_eq!(result.warnings.len(), 7);
+}
+
+#[test]
+fn list_label_and_image_spec_ts8_extensions_default_off() {
+    // TS-8: the new optional knobs default to "inherit" / "uncropped", so the
+    // Phase-A construction paths keep their exact old meaning.
+    let label = ListLabel::new("1.", 6.0);
+    assert_eq!(label.text, "1.");
+    assert_eq!(label.gutter, 6.0);
+    assert_eq!(label.size_pct, None);
+    assert_eq!(label.font, None);
+
+    let img = ImageSpec::new(vec![0xFF, 0xD8, 0xFF], 240.0, 180.0);
+    assert_eq!(img.crop, None);
+
+    let mut props = ParaProps::new();
+    props.spacing = LineSpacing::AtLeast(18.0);
+    assert_eq!(props.spacing, LineSpacing::AtLeast(18.0));
 }

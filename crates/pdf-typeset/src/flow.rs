@@ -32,7 +32,7 @@
 
 use crate::faces::FaceRegistry;
 use crate::model::{Align, Block, ImageSpec, LineSpacing, ListLabel, Run};
-use crate::ops::{FaceId, Op, PageOps};
+use crate::ops::{FaceId, Op, PageOps, PathSeg};
 use crate::warn::ExportWarning;
 use crate::{Rgb, Typesetter};
 
@@ -680,6 +680,13 @@ fn layout_paragraph(ctx: &mut Ctx, props: &crate::model::ParaProps, runs: &[Run]
                     natural
                 }
             }
+            LineSpacing::AtLeast(h) => {
+                if h.is_finite() && h > 0.0 {
+                    natural.max(h)
+                } else {
+                    natural
+                }
+            }
         };
         ctx.ensure(lh);
         let baseline = ctx.y + lh - desc;
@@ -755,7 +762,9 @@ fn line_metrics(
 /// Draws a consumer-computed list label right-aligned against the paragraph's
 /// first-line text start (`ListLabel::gutter` away), on the first baseline.
 /// The label inherits the first run's family / size / color (decorations
-/// dropped — marker formatting is the consumer's `numbering.xml` business).
+/// dropped — marker formatting is the consumer's `numbering.xml` business),
+/// except where the label overrides them: [`ListLabel::font`] replaces the
+/// family (pptx `buFont`), [`ListLabel::size_pct`] scales the size (`buSzPct`).
 fn draw_list_label(ctx: &mut Ctx, label: &ListLabel, runs: &[Run], first_left: f64, baseline: f64) {
     let Some(first) = runs
         .iter()
@@ -767,6 +776,14 @@ fn draw_list_label(ctx: &mut Ctx, label: &ListLabel, runs: &[Run], first_left: f
     style.underline = false;
     style.strike = false;
     style.highlight = None;
+    if let Some(family) = &label.font {
+        style.family.clone_from(family);
+    }
+    if let Some(pct) = label.size_pct {
+        if pct.is_finite() && pct > 0.0 {
+            style.size *= pct / 100.0;
+        }
+    }
     let line = plain_line(ctx.ts, &label.text, &style);
     let x0 = first_left - label.gutter.max(0.0) - line.width;
     emit_line(ctx, &line, x0, baseline);
@@ -885,7 +902,9 @@ fn flush_text(ctx: &mut Ctx, cur: &mut Option<(f64, FaceId, f64, Rgb, String)>, 
 
 /// Places a block image at its display size, downscaled proportionally to the
 /// available width (and, in paged mode, the page content height) — never
-/// upscaled. An undecodable image degrades to a warning (never an error).
+/// upscaled. A `crop` (pptx `srcRect`) places the whole image enlarged and
+/// offset inside a display-rect clip group, so only the cropped region shows.
+/// An undecodable image degrades to a warning (never an error).
 fn layout_image(ctx: &mut Ctx, spec: &ImageSpec) {
     ctx.flush_gap();
     if !(spec.width.is_finite() && spec.width > 0.0 && spec.height.is_finite() && spec.height > 0.0)
@@ -906,13 +925,61 @@ fn layout_image(ctx: &mut Ctx, spec: &ImageSpec) {
     }
     let (dw, dh) = (spec.width * scale, spec.height * scale);
     ctx.ensure(dh);
-    ctx.op(Op::Image {
-        id,
-        x: ctx.left(),
-        y: ctx.y,
-        w: dw,
-        h: dh,
-    });
+    let (x, y) = (ctx.left(), ctx.y);
+    match sanitized_crop(spec.crop) {
+        Some([l, t, r, b]) => {
+            // The whole image, scaled so the visible fraction fills the
+            // display rect, shifted so the crop origin lands on the rect,
+            // clipped to the rect.
+            let (full_w, full_h) = (dw / (1.0 - l - r), dh / (1.0 - t - b));
+            let clip = vec![
+                PathSeg::MoveTo { x, y },
+                PathSeg::LineTo { x: x + dw, y },
+                PathSeg::LineTo {
+                    x: x + dw,
+                    y: y + dh,
+                },
+                PathSeg::LineTo { x, y: y + dh },
+                PathSeg::Close,
+            ];
+            ctx.op(Op::Group {
+                transform: None,
+                clip: Some(clip),
+                ops: vec![Op::Image {
+                    id,
+                    x: x - l * full_w,
+                    y: y - t * full_h,
+                    w: full_w,
+                    h: full_h,
+                }],
+            });
+        }
+        None => ctx.op(Op::Image {
+            id,
+            x,
+            y,
+            w: dw,
+            h: dh,
+        }),
+    }
     ctx.y += dh;
-    ctx.max_x = ctx.max_x.max(ctx.left() + dw);
+    ctx.max_x = ctx.max_x.max(x + dw);
+}
+
+/// The usable `[left, top, right, bottom]` crop of an [`ImageSpec`]: negative
+/// insets clamp to 0; `None` for an absent, all-zero (no-op), non-finite or
+/// degenerate (opposing insets ≥ 1 — nothing visible) crop.
+fn sanitized_crop(crop: Option<[f64; 4]>) -> Option<[f64; 4]> {
+    let c = crop?;
+    if c.iter().any(|v| !v.is_finite()) {
+        return None;
+    }
+    let c = c.map(|v| v.max(0.0));
+    if c.iter().all(|&v| v <= EPS) {
+        return None; // no-op crop: plain placement
+    }
+    if c[0] + c[2] >= 1.0 - EPS || c[1] + c[3] >= 1.0 - EPS {
+        return None; // nothing left visible: ignore the crop
+    }
+    Some(c)
 }

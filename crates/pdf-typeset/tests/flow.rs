@@ -214,6 +214,49 @@ fn line_spacing_multiple_and_exact() {
 }
 
 #[test]
+fn line_spacing_at_least_takes_max_of_natural_and_given() {
+    // TS-8: w:spacing lineRule="atLeast" — line height = max(natural, given).
+    let geom = PageGeom::new(400.0, 500.0, 50.0);
+    let natural = natural_line_height(12.0);
+
+    // Given value above the natural height: the given value wins.
+    let mut tall = ParaProps::new();
+    tall.spacing = LineSpacing::AtLeast(30.0);
+    assert!(
+        30.0 > natural,
+        "fixture: 30 pt must exceed the natural height"
+    );
+    let blocks = vec![Block::Paragraph(
+        tall,
+        vec![Run::new("one\ntwo", style(12.0))],
+    )];
+    let (pages, _) = export(&blocks, geom);
+    let b = text_baselines(&pages[0].ops);
+    assert_near(
+        b[1] - b[0],
+        30.0,
+        1e-6,
+        "at-least pitch takes the given value",
+    );
+
+    // Given value below the natural height: the natural height wins.
+    let mut short = ParaProps::new();
+    short.spacing = LineSpacing::AtLeast(5.0);
+    let blocks = vec![Block::Paragraph(
+        short,
+        vec![Run::new("one\ntwo", style(12.0))],
+    )];
+    let (pages, _) = export(&blocks, geom);
+    let b = text_baselines(&pages[0].ops);
+    assert_near(
+        b[1] - b[0],
+        natural,
+        1e-6,
+        "at-least pitch keeps the natural height",
+    );
+}
+
+#[test]
 fn first_line_and_hanging_indents_shift_line_starts() {
     let geom = PageGeom::new(300.0, 500.0, 50.0);
     let text = "alpha beta gamma delta epsilon zeta eta theta iota kappa \
@@ -249,10 +292,7 @@ fn list_label_right_aligned_at_gutter_on_first_baseline() {
     let geom = PageGeom::new(400.0, 500.0, 50.0);
     let mut props = ParaProps::new();
     props.indent_left = 30.0;
-    props.list = Some(ListLabel {
-        text: "1.".to_string(),
-        gutter: 6.0,
-    });
+    props.list = Some(ListLabel::new("1.", 6.0));
     let (_, result) = export(
         &[Block::Paragraph(
             props,
@@ -271,6 +311,53 @@ fn list_label_right_aligned_at_gutter_on_first_baseline() {
     );
     assert_near(item.0, 80.0, 0.5, "text starts at indent_left");
     assert_near(label.3, item.3, 0.5, "label sits on the first baseline");
+}
+
+#[test]
+fn list_label_size_pct_and_font_override_body_style() {
+    // TS-8: buSzPct / buFont — the label's size and family are independent of
+    // the first run's, while the body keeps its own face and size.
+    let geom = PageGeom::new(400.0, 500.0, 50.0);
+    let mut props = ParaProps::new();
+    props.indent_left = 30.0;
+    let mut label = ListLabel::new("1.", 6.0);
+    label.size_pct = Some(50.0);
+    label.font = Some("Liberation Serif".to_string());
+    props.list = Some(label);
+    let (pages, result) = export(
+        &[Block::Paragraph(
+            props,
+            vec![Run::new("item text", style(12.0))],
+        )],
+        geom,
+    );
+
+    let texts: Vec<(&str, f64, pdf_typeset::FaceId)> = pages[0]
+        .ops
+        .iter()
+        .filter_map(|op| match op {
+            Op::Text {
+                text, size, face, ..
+            } => Some((text.as_str(), *size, *face)),
+            _ => None,
+        })
+        .collect();
+    let label_op = texts.iter().find(|(t, _, _)| *t == "1.").expect("label op");
+    let body_op = texts
+        .iter()
+        .find(|(t, _, _)| t.starts_with("item"))
+        .expect("body op");
+    assert_near(label_op.1, 6.0, 1e-9, "label size = 50% of the 12 pt run");
+    assert_near(body_op.1, 12.0, 1e-9, "body size unchanged");
+    assert_ne!(
+        label_op.2, body_op.2,
+        "label draws with its own (serif) face"
+    );
+    assert!(
+        result.warnings.is_empty(),
+        "bundled serif resolves without substitution: {:?}",
+        result.warnings
+    );
 }
 
 #[test]

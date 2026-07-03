@@ -437,13 +437,13 @@ pub(crate) fn draw_glyph_path(
         return;
     }
 
-    let pixmap = canvas.pixmap_mut();
+    let (pixmap, clip) = canvas.pixmap_and_clip_mut();
     scratch.anti_alias = true;
 
     if do_fill {
         let [r, g, b] = unpack_rgb(glyph.color);
         scratch.set_color_rgba8(r, g, b, 0xFF);
-        pixmap.fill_path(path, scratch, FillRule::Winding, transform, None);
+        pixmap.fill_path(path, scratch, FillRule::Winding, transform, clip);
     }
 
     if do_stroke {
@@ -453,7 +453,7 @@ pub(crate) fn draw_glyph_path(
             width: stroke.width.max(f32::MIN_POSITIVE),
             ..Stroke::default()
         };
-        pixmap.stroke_path(path, scratch, &sk_stroke, transform, None);
+        pixmap.stroke_path(path, scratch, &sk_stroke, transform, clip);
     }
 }
 
@@ -1316,6 +1316,59 @@ mod tests {
             glyph_transform_from_trm(Matrix::new(0.0, 0.0, 0.0, 0.0, 1.0, 2.0), 1000.0, base)
                 .is_none()
         );
+    }
+
+    // ----- RENDER-TEXT-014: glyph paint honors the canvas clip mask ---------
+
+    #[test]
+    fn render_text_014_glyph_fill_respects_clip() {
+        // The TS-7 SSIM noise source: glyph fills used to pass a `None` mask,
+        // so clipped-box text leaked outside the clip in this crate's rasters.
+        // Clip to the TOP half of the device (user-space y 50..100 under the
+        // y-flip base), then draw the box glyph spanning device rows 20..90:
+        // rows below the clip must rasterize to zero ink.
+        let ttf = build_box_ttf(&['A']);
+        let font = GlyphFont::from_program(&ttf, 0).unwrap();
+        let gid = font.glyph_for_char('A').unwrap();
+
+        let mut cv = canvas(100, 100);
+        crate::vector::set_clip(
+            &mut cv,
+            &[pdf_text::model::PathItem::Rect(Rect::new(
+                0.0, 50.0, 100.0, 100.0,
+            ))],
+            Matrix::IDENTITY,
+            false,
+        )
+        .unwrap();
+        // Same placement as RENDER-TEXT-001: box over device (10..90, 20..90).
+        let g = glyph_at(Point::new(0.0, 10.0), 100.0, 0x000000, 2); // fill+stroke
+        draw_glyph_with_font(
+            &mut cv,
+            &g,
+            gid,
+            &font,
+            Paint::from_rgb(0),
+            &StrokeStyle {
+                width: 2.0,
+                ..StrokeStyle::default()
+            },
+            Matrix::IDENTITY,
+        )
+        .unwrap();
+
+        assert!(
+            painted_at(&cv, 50, 30),
+            "inside the clip box the glyph still paints"
+        );
+        for y in 51..100 {
+            for x in 0..100 {
+                assert!(
+                    !painted_at(&cv, x, y),
+                    "overflow below the clip box must be zero ink (painted at {x},{y})"
+                );
+            }
+        }
     }
 
     // ----- RENDER-TEXT-PROP-001: missing glyph id never panics / draws -----

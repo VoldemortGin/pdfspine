@@ -63,6 +63,17 @@ pub enum ExportWarning {
         /// Why the image was dropped (decode error detail).
         reason: String,
     },
+    /// A consumer-domain degradation the enumerated variants cannot express
+    /// (e.g. a pptx chart rendered as a placeholder): the generic escape
+    /// hatch for `doc-render` / `ppt-render` degradations, since this enum is
+    /// `#[non_exhaustive]` and cannot be extended outside this crate.
+    Custom {
+        /// A stable, machine-matchable degradation tag (consumer-defined,
+        /// e.g. `chart-placeholder`).
+        kind: String,
+        /// Human-readable detail for the warning text.
+        detail: String,
+    },
 }
 
 impl fmt::Display for ExportWarning {
@@ -99,6 +110,9 @@ impl fmt::Display for ExportWarning {
             }
             ExportWarning::ImageDropped { reason } => {
                 write!(f, "image dropped: {reason}")
+            }
+            ExportWarning::Custom { kind, detail } => {
+                write!(f, "{kind}: {detail}")
             }
         }
     }

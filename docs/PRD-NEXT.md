@@ -668,21 +668,51 @@ lists why · files · effort · **Acceptance**, the green condition that means "
   **Acceptance:** the CI accuracy-gate job fails on a seeded layout regression and passes at HEAD
   (canary-and-revert proven — the P0-4 norm); the LO script runs end-to-end locally on one `.docx` and
   one `.pptx` sample and emits an advisory report; **no LibreOffice dependency appears in CI**.
+- **TS-8 · Consumer feedback batch 1 (Phase B/C round-trip)** — ✅ DONE 2026-07-04 · *M*. First
+  ppt-render/doc-render feedback batch against the Phase-A surface:
+  - `LineSpacing::AtLeast(f64)` (docx `lineRule="atLeast"`): line height = **max(natural, given)**;
+    non-finite/non-positive values degrade to natural. One spacing match site (`flow.rs`) serves
+    paragraphs and text boxes alike (*S*).
+  - `ListLabel` grows `size_pct: Option<f64>` (pptx `buSzPct`, % of the first run's size) and
+    `font: Option<String>` (pptx `buFont` / docx numbering `rFonts`) — label size/family now
+    independent of the body run; struct made `#[non_exhaustive]` with a `ListLabel::new(text, gutter)`
+    constructor so future knobs stay non-breaking. **Consumer note:** struct-literal construction stops
+    compiling outside the crate — build via `ListLabel::new` + field assignment (*S*).
+  - `ExportWarning::Custom { kind, detail }` (+ `Display` as `"{kind}: {detail}"`): the generic escape
+    hatch for consumer-domain degradations (e.g. a pptx chart placeholder) since the enum is
+    `#[non_exhaustive]` and closed to external extension (*S*).
+  - `ImageSpec.crop: Option<[f64; 4]>` (pptx `blipFill` `srcRect`, `[l, t, r, b]` cut-away fractions;
+    `width`/`height` stay the display size of the cropped result): emitted as the whole image enlarged
+    (display / visible fraction) and offset inside a display-rect clip group. Negative insets clamp
+    to 0; no-op / non-finite / nothing-visible crops degrade to the uncropped placement — never an
+    error (*S*).
+  - **pdf-render glyph clip fix** — the known TS-7 renderer gap (`text.rs:446`): glyph fill/stroke
+    passed a `None` mask, so clipped-box text leaked outside the clip in in-repo rasters (the PDF
+    stream itself was always correct). Both paths now pass the canvas clip mask, mirroring the
+    `vector.rs` paint path (*S*).
+  **Acceptance:** workspace fmt / clippy `-D warnings` / test green — **1576 passed / 0 failed** (floor
+  1571); `RENDER-TEXT-014` asserts a glyph overflowing the clip box rasters **zero ink** below it;
+  committed refs **byte-stable** — typeset fixtures regenerate identical, and the accuracy-gate stack
+  rerun locally post-fix is green with **zero raster drift** (born 3/3 SSIM = 1.0; typeset read-back
+  4/4 order/f1 = 1.0; typeset SSIM 5/5 ≥ 0.9999, and typeset-box's 0.9999 A/B-verified identical
+  pre/post-fix — pre-existing, not TS-8 drift); the new knobs default off (`None` / uncropped), so all
+  Phase-A outputs are unchanged; pytest fitz-parity surface zero regression.
 - **Downstream unblocking:** **Phase B (pptspine `ppt-render`)** starts when the TS-2/3/5/6 gates are
   green; **Phase C (docspine `doc-render`)** when the TS-2/3/4 gates (incl. TS-4's table primitives) are
   green. Phase B/C PRDs live in the consumer repos; each pins a pdfspine rev with its needed TS tasks
   landed.
 
-**Resume pointer.** **Phase A is COMPLETE (TS-1..TS-7 all ✅, 2026-07-02→03)** — pdf-typeset ships the
+**Resume pointer.** **Phase A is COMPLETE (TS-1..TS-7 all ✅, 2026-07-02→03; +TS-8 consumer batch 1,
+2026-07-04)** — pdf-typeset ships the
 Typesetter facade (layout_flow / layout_text_box / emit), fontdb resolution, the TTC-aware glyph subsetter
 (pdf-edit), the 35-preset subset, and the TS-7 gate stack (typeset read-back + SSIM in CI accuracy-gate;
 LO oracle advisory local-only). Consumers pin a git rev of this repo (first consumer: pptspine ppt-render
-at `709b41da`). The family-wide decisions stay locked: do not reopen fontdb-vs-alternatives, the
+at `709b41da`; TS-8 additions land in the next pinned rev — note the `ListLabel` construction change).
+The family-wide decisions stay locked: do not reopen fontdb-vs-alternatives, the
 no-synthetic-bold rule, the ~35-preset subset, or the gradients-out call. `markdown_to_pdf` (§9) stayed
-green and untouched — rewiring pdf-markdown onto pdf-typeset remains a future option, not Phase A. Known
-renderer gap for SSIM work: pdf-render glyph fills ignore the soft clip mask (`pdf-render/src/text.rs:446`)
-— clipped-box TEXT isn't visually clipped in in-repo rasters (PDF stream itself is correct; external
-viewers fine); TS-7 fixtures deliberately avoid overflowing clip boxes.
+green and untouched — rewiring pdf-markdown onto pdf-typeset remains a future option, not Phase A. The
+TS-7-era renderer gap (glyph fills ignoring the soft clip mask, `pdf-render/src/text.rs:446`) is **fixed
+in TS-8**; TS-7 fixtures never overflowed clip boxes, so their committed refs stayed byte-stable.
 
 ---
 

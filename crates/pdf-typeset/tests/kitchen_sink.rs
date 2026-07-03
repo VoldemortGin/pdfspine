@@ -48,10 +48,7 @@ fn flow_blocks() -> Vec<Block> {
 
     let mut listish = ParaProps::new();
     listish.indent_left = 24.0;
-    listish.list = Some(ListLabel {
-        text: "1.".to_string(),
-        gutter: 6.0,
-    });
+    listish.list = Some(ListLabel::new("1.", 6.0));
 
     let border = BorderEdge {
         width: 0.8,

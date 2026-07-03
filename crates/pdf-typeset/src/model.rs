@@ -96,6 +96,9 @@ pub enum LineSpacing {
     Multiple(f64),
     /// An exact line height in points (docx `lineRule="exact"`).
     Exact(f64),
+    /// A minimum line height in points (docx `lineRule="atLeast"`): the line
+    /// gets `max(natural line height, the given value)`.
+    AtLeast(f64),
 }
 
 impl Default for LineSpacing {
@@ -107,12 +110,33 @@ impl Default for LineSpacing {
 /// The final, consumer-computed label of a list paragraph (bullet glyph or
 /// formatted number — counters / `%1.%2` formats / restarts are consumer
 /// business, PRD §10).
+#[non_exhaustive]
 #[derive(Clone, Debug, PartialEq)]
 pub struct ListLabel {
     /// The label text, drawn right-aligned against the paragraph text start.
     pub text: String,
     /// Gap between the label's right edge and the paragraph text, in points.
     pub gutter: f64,
+    /// Label font size as a percentage of the first run's size (pptx
+    /// `buSzPct`, e.g. `75.0` = 75%); `None` inherits the run size unchanged.
+    pub size_pct: Option<f64>,
+    /// Label font family override (pptx `buFont` / docx numbering `rFonts`);
+    /// `None` inherits the first run's family.
+    pub font: Option<String>,
+}
+
+impl ListLabel {
+    /// A label of `text` drawn `gutter` points left of the paragraph text,
+    /// inheriting the first run's family and size.
+    #[must_use]
+    pub fn new(text: impl Into<String>, gutter: f64) -> Self {
+        ListLabel {
+            text: text.into(),
+            gutter,
+            size_pct: None,
+            font: None,
+        }
+    }
 }
 
 /// Paragraph-level properties (docx `pPr` / pptx `pPr` subset).
@@ -283,16 +307,24 @@ pub struct ImageSpec {
     pub width: f64,
     /// Display height in points.
     pub height: f64,
+    /// Source-rect crop as `[left, top, right, bottom]` fractions of the
+    /// source image cut away from each side (pptx `blipFill` `srcRect`;
+    /// e.g. `[0.25, 0.0, 0.25, 0.0]` keeps the middle half horizontally).
+    /// `width`/`height` stay the **display** size of the cropped result.
+    /// Negative insets clamp to 0; a crop with a non-finite value or nothing
+    /// left visible (opposing insets ≥ 1) is ignored (degrade-never-panic).
+    pub crop: Option<[f64; 4]>,
 }
 
 impl ImageSpec {
-    /// An image of `data` displayed at `width` × `height` points.
+    /// An uncropped image of `data` displayed at `width` × `height` points.
     #[must_use]
     pub fn new(data: Vec<u8>, width: f64, height: f64) -> Self {
         ImageSpec {
             data,
             width,
             height,
+            crop: None,
         }
     }
 }

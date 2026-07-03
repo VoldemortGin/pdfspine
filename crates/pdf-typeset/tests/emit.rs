@@ -251,6 +251,71 @@ fn images_embed_once_per_id_and_flow_blocks_place_them() {
 }
 
 #[test]
+fn cropped_image_places_enlarged_inside_a_display_rect_clip_group() {
+    // TS-8 (pptx blipFill srcRect): crop [l, t, r, b] = keep the middle half
+    // horizontally, the bottom 2/3 vertically. The whole image is placed
+    // enlarged (display / visible-fraction) and offset by the cut-away
+    // fractions, clipped to the display rect.
+    let geom = PageGeom::new(300.0, 300.0, 50.0);
+    let mut spec = ImageSpec::new(tiny_png(), 60.0, 45.0);
+    spec.crop = Some([0.25, 1.0 / 3.0, 0.25, 0.0]);
+    let (pages, result) = export(&[Block::Image(spec)], geom);
+
+    let (clip, inner) = pages[0]
+        .ops
+        .iter()
+        .find_map(|op| match op {
+            Op::Group {
+                transform: None,
+                clip: Some(clip),
+                ops,
+            } => Some((clip, ops)),
+            _ => None,
+        })
+        .expect("crop emits a clip group");
+    // Clip = the display rect at the cursor (margin 50, page top).
+    assert!(
+        matches!(clip[0], PathSeg::MoveTo { x, y } if x == 50.0 && y == 50.0),
+        "clip starts at the display rect origin: {:?}",
+        clip[0]
+    );
+    assert!(
+        matches!(clip[2], PathSeg::LineTo { x, y } if x == 110.0 && y == 95.0),
+        "clip reaches the display rect corner: {:?}",
+        clip[2]
+    );
+    // Inner image: w = 60 / (1 - 0.5) = 120, h = 45 / (1 - 1/3) = 67.5,
+    // shifted left by l·w = 30 and up by t·h = 22.5.
+    match inner.as_slice() {
+        [Op::Image { x, y, w, h, .. }] => {
+            assert!((w - 120.0).abs() < 1e-9, "full width {w}");
+            assert!((h - 67.5).abs() < 1e-9, "full height {h}");
+            assert!((x - 20.0).abs() < 1e-9, "x offset {x}");
+            assert!((y - 27.5).abs() < 1e-9, "y offset {y}");
+        }
+        other => panic!("expected exactly the placed image, got {other:?}"),
+    }
+    // The emitted stream clips (`W n`) before showing the image.
+    let raw_str = raw(&result.pdf);
+    let clip_at = raw_str.find("W n").expect("clip operator in content");
+    let show_at = raw_str.find("/Im0 Do").expect("image placement");
+    assert!(clip_at < show_at, "clip precedes the image Do");
+    assert!(result.warnings.is_empty(), "{:?}", result.warnings);
+
+    // Degenerate crops are ignored: nothing left visible ⇒ plain placement.
+    let mut bad = ImageSpec::new(tiny_png(), 60.0, 45.0);
+    bad.crop = Some([0.6, 0.0, 0.6, 0.0]);
+    let (pages, _) = export(&[Block::Image(bad)], geom);
+    assert!(
+        pages[0]
+            .ops
+            .iter()
+            .any(|op| matches!(op, Op::Image { w, h, .. } if *w == 60.0 && *h == 45.0)),
+        "degenerate crop degrades to the uncropped placement"
+    );
+}
+
+#[test]
 fn undecodable_image_degrades_to_a_warning() {
     let geom = PageGeom::new(300.0, 300.0, 50.0);
     let blocks = vec![Block::Image(ImageSpec::new(vec![0xde, 0xad], 40.0, 40.0))];
