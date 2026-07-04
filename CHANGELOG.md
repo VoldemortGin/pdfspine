@@ -11,6 +11,24 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-07-04
+
+### Added
+
+- **Shared PDF typesetting engine `pdf-typeset` (workspace crate; Phase A
+  complete).** A deterministic, pure-Rust rich-text layout engine living in
+  this repo (`crates/pdf-typeset`, with glyph-subsetting extensions in
+  `pdf-fonts`): rich-text input model, fontdb-backed system-font resolution
+  with a CJK substitution table, TTC face selection, usage-based TrueType
+  glyph subsetting, flow layout with text boxes and preset geometry, glyph
+  clipping, `srcRect` image cropping, `AtLeast` line spacing, list-label
+  extensions, structured degradation warnings (`Custom` kinds), and a
+  conformance test gate. It powers the sibling packages' faithful document
+  exports — **pptspine 0.2.0 `.pptx → PDF`** and **docspine 0.2.0
+  `.docx → PDF`** — which consume it as a pinned git dependency. The engine is
+  workspace-internal: the `pdfspine` Python wheel surface is unchanged by this
+  release (`markdown_to_pdf()` keeps its own `pdf-markdown` layout path).
+
 ## [0.2.0] — 2026-07-02
 
 ### Added
