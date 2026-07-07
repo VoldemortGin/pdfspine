@@ -17,9 +17,12 @@
 //! PyMuPDF (Tier-A documented facts, PRD §8.6.2); the flags honored in M2d are
 //! `PRESERVE_IMAGES` (include/exclude image blocks), `DEHYPHENATE` (join a
 //! line-broken hyphenated word in plain text), and `MEDIABOX_CLIP` (drop glyphs
-//! whose origin falls outside the page box). Image **pixel bytes** are deferred
-//! to M5 — image blocks carry the full key set with placeholder values and an
-//! `image_stubbed` flag.
+//! whose origin falls outside the page box). Image blocks carry the real encoded
+//! pixel bytes + raster header when the caller supplies an [`ImageResolver`] (via
+//! [`to_dict_with_images`] / [`to_json_with_images`]) — the same payload as
+//! `Document.extract_image`. The plain [`to_dict`] / [`to_json`] entry points
+//! have no document handle, so they emit geometry-only image blocks (empty
+//! `image`, as fitz does for an unresolvable image).
 
 use pdf_core::geom::{Point, Rect};
 
@@ -119,7 +122,7 @@ pub struct TextDict {
 pub enum DictBlock {
     /// A text block carrying lines.
     Text(DictTextBlock),
-    /// An image block carrying placement + (stubbed) pixel metadata.
+    /// An image block carrying placement + encoded pixel bytes/metadata.
     Image(DictImageBlock),
 }
 
@@ -184,37 +187,75 @@ pub struct DictChar {
     pub c: String,
 }
 
-/// A `dict` image block (`type` 1). Pixel bytes are deferred to M5: `image` is
-/// empty and `image_stubbed` is `true` until then; all keys are present so the
-/// Python shape is stable (PRD §10.7).
+/// A `dict` image block (`type` 1). When a caller supplies an [`ImageResolver`],
+/// `image` carries the encoded bytes and the raster header (`ext`, `colorspace`,
+/// `bpc`, `xres`/`yres`, `size`) is populated — the same payload as
+/// `Document.extract_image`. Without a resolver the block is geometry-only
+/// (`image` empty, header zero). All keys are always present so the Python shape
+/// is stable (PRD §10.7).
 #[derive(Clone, Debug, PartialEq)]
 pub struct DictImageBlock {
     /// The reading-order block number.
     pub number: i32,
     /// The image bounding box `(x0, y0, x1, y1)`.
     pub bbox: (f64, f64, f64, f64),
-    /// Declared pixel width (0 when unknown).
+    /// Pixel width (0 when unknown).
     pub width: i32,
-    /// Declared pixel height (0 when unknown).
+    /// Pixel height (0 when unknown).
     pub height: i32,
-    /// Image extension / codec hint (e.g. `"png"`); empty until M5.
+    /// Image extension / codec hint (e.g. `"png"`); empty when unresolved.
     pub ext: String,
-    /// Colorspace component count (0 until M5).
+    /// Colorspace component count (fitz convention: channel count); 0 when
+    /// unresolved.
     pub colorspace: i32,
-    /// Horizontal resolution (0 until M5).
+    /// Horizontal resolution in DPI (0 when unresolved).
     pub xres: i32,
-    /// Vertical resolution (0 until M5).
+    /// Vertical resolution in DPI (0 when unresolved).
     pub yres: i32,
-    /// Bits per component (0 until M5).
+    /// Bits per component (0 when unresolved).
     pub bpc: i32,
     /// The image-placement matrix `(a, b, c, d, e, f)` (device space).
     pub transform: (f64, f64, f64, f64, f64, f64),
-    /// Encoded byte size (0 until M5).
+    /// Encoded byte size (`image.len()`; 0 when unresolved).
     pub size: i32,
-    /// The encoded image bytes (empty until M5).
+    /// The encoded image bytes (empty when unresolved).
     pub image: Vec<u8>,
-    /// `true` while pixel bytes are stubbed (M5 will populate + clear this).
-    pub image_stubbed: bool,
+}
+
+/// The encoded payload + raster header for one `dict`/`json` image block,
+/// resolved by the caller which holds the document (see [`ImageResolver`]). The
+/// fields map onto `Document.extract_image`: `ext`/`image`/`bpc`/`width`/`height`
+/// are that descriptor verbatim, `colorspace` is its component count.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ResolvedImage {
+    /// Codec token (`"png"`/`"jpeg"`/`"jpx"`/`"jb2"`/`"ccitt"`), extract-image-sourced.
+    pub ext: String,
+    /// Colorspace component count (fitz's `colorspace` is the channel count).
+    pub colorspace: i32,
+    /// Bits per component.
+    pub bpc: i32,
+    /// Pixel width (from the image XObject's `/Width`).
+    pub width: i32,
+    /// Pixel height (from the image XObject's `/Height`).
+    pub height: i32,
+    /// Horizontal resolution in DPI.
+    pub xres: i32,
+    /// Vertical resolution in DPI.
+    pub yres: i32,
+    /// The encoded image bytes (same payload as `Document.extract_image`).
+    pub image: Vec<u8>,
+}
+
+/// Resolves a `dict`/`json` image block's real encoded bytes + raster header.
+///
+/// Implemented by the caller (`pdf-api`), which holds the document and can map a
+/// block's XObject resource name to its bytes. Pure-model callers pass no
+/// resolver and get the geometry-only stub. `name` is `None` for an inline image
+/// (no resource name), for which the resolver should return `None`.
+pub trait ImageResolver {
+    /// Resolves the image referenced under XObject resource `name`, or `None`
+    /// when it can't be resolved (inline / missing).
+    fn resolve(&self, name: Option<&str>) -> Option<ResolvedImage>;
 }
 
 // === plain text (PRD §8.6) ================================================
@@ -565,9 +606,32 @@ pub fn to_words(tp: &TextPage, _flags: u32) -> Vec<WordTuple> {
 
 /// Builds the structured [`TextDict`] (PyMuPDF `dict` when `raw == false`,
 /// `rawdict` when `raw == true`). Image blocks are included only when
-/// `PRESERVE_IMAGES` is set.
+/// `PRESERVE_IMAGES` is set, and are geometry-only (empty `image`) — use
+/// [`to_dict_with_images`] to fill their real encoded bytes.
 #[must_use]
 pub fn to_dict(tp: &TextPage, raw: bool, flags: u32) -> TextDict {
+    to_dict_impl(tp, raw, flags, None)
+}
+
+/// Like [`to_dict`] but resolves each image block's real encoded bytes + raster
+/// header through `resolver` (implemented by the caller, which holds the
+/// document). Used by the `dict`/`rawdict` `get_text` paths.
+#[must_use]
+pub fn to_dict_with_images(
+    tp: &TextPage,
+    raw: bool,
+    flags: u32,
+    resolver: &dyn ImageResolver,
+) -> TextDict {
+    to_dict_impl(tp, raw, flags, Some(resolver))
+}
+
+fn to_dict_impl(
+    tp: &TextPage,
+    raw: bool,
+    flags: u32,
+    resolver: Option<&dyn ImageResolver>,
+) -> TextDict {
     let images = flags & textflags::PRESERVE_IMAGES != 0;
     let mut blocks = Vec::new();
     for block in &tp.blocks {
@@ -575,7 +639,7 @@ pub fn to_dict(tp: &TextPage, raw: bool, flags: u32) -> TextDict {
             BlockKind::Text => blocks.push(DictBlock::Text(text_block(block, raw))),
             BlockKind::Image => {
                 if images {
-                    blocks.push(DictBlock::Image(image_block(block)));
+                    blocks.push(DictBlock::Image(image_block(block, resolver)));
                 }
             }
         }
@@ -636,24 +700,51 @@ fn dict_span(span: &Span, raw: bool) -> DictSpan {
     }
 }
 
-fn image_block(block: &Block) -> DictImageBlock {
+/// Builds an image block. With a `resolver`, the block's XObject resource name is
+/// looked up to fetch the real encoded bytes + raster header (same payload as
+/// `Document.extract_image`); otherwise (no document handle, or an inline image
+/// with no name) the block is geometry-only with an empty `image`, matching
+/// fitz for an unresolvable image.
+fn image_block(block: &Block, resolver: Option<&dyn ImageResolver>) -> DictImageBlock {
     let img = block.image.as_ref();
     let b = block.bbox.normalize();
+    // 内联图无资源名（name = None）→ 无法回查，落到几何占位分支。
+    let name = img.and_then(|i| i.name.as_deref());
+    let resolved = resolver.and_then(|r| r.resolve(name));
+
+    // 内容流声明的像素尺寸，作为回退（解析成功时以图像 XObject 为准）。
+    let decl_w = img.and_then(|i| i.width).unwrap_or(0) as i32;
+    let decl_h = img.and_then(|i| i.height).unwrap_or(0) as i32;
+
+    let (width, height, ext, colorspace, xres, yres, bpc, image) = match resolved {
+        Some(r) => (
+            if r.width > 0 { r.width } else { decl_w },
+            if r.height > 0 { r.height } else { decl_h },
+            r.ext,
+            r.colorspace,
+            r.xres,
+            r.yres,
+            r.bpc,
+            r.image,
+        ),
+        None => (decl_w, decl_h, String::new(), 0, 0, 0, 0, Vec::new()),
+    };
+    let size = image.len() as i32;
+
     DictImageBlock {
         number: block.number as i32,
         bbox: rect_tuple(block.bbox),
-        width: img.and_then(|i| i.width).unwrap_or(0) as i32,
-        height: img.and_then(|i| i.height).unwrap_or(0) as i32,
-        ext: String::new(),
-        colorspace: 0,
-        xres: 0,
-        yres: 0,
-        bpc: 0,
+        width,
+        height,
+        ext,
+        colorspace,
+        xres,
+        yres,
+        bpc,
         // Placement matrix maps the unit square to the block bbox (device space).
         transform: (b.x1 - b.x0, 0.0, 0.0, b.y1 - b.y0, b.x0, b.y0),
-        size: 0,
-        image: Vec::new(),
-        image_stubbed: true,
+        size,
+        image,
     }
 }
 
@@ -664,7 +755,29 @@ fn image_block(block: &Block) -> DictImageBlock {
 /// image bytes become a base64 string. Key order is fixed (deterministic).
 #[must_use]
 pub fn to_json(tp: &TextPage, raw: bool, flags: u32) -> String {
-    let dict = to_dict(tp, raw, flags);
+    to_json_impl(tp, raw, flags, None)
+}
+
+/// Like [`to_json`] but resolves each image block's real encoded bytes through
+/// `resolver` (the `json`/`rawjson` `get_text` paths); the `image` field then
+/// carries real base64 instead of an empty string.
+#[must_use]
+pub fn to_json_with_images(
+    tp: &TextPage,
+    raw: bool,
+    flags: u32,
+    resolver: &dyn ImageResolver,
+) -> String {
+    to_json_impl(tp, raw, flags, Some(resolver))
+}
+
+fn to_json_impl(
+    tp: &TextPage,
+    raw: bool,
+    flags: u32,
+    resolver: Option<&dyn ImageResolver>,
+) -> String {
+    let dict = to_dict_impl(tp, raw, flags, resolver);
     let mut s = String::new();
     s.push('{');
     json_kv_num(&mut s, "width", dict.width);

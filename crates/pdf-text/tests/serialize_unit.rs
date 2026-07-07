@@ -8,7 +8,8 @@
 use pdf_core::geom::{Matrix, Point, Rect};
 use pdf_text::model::{Block, BlockKind, ImageBlock, WritingDir};
 use pdf_text::serialize::{
-    defaults, get_textbox, textflags, to_blocks, to_dict, to_json, to_text, to_words, DictBlock,
+    defaults, get_textbox, textflags, to_blocks, to_dict, to_dict_with_images, to_json, to_text,
+    to_words, DictBlock, ImageResolver, ResolvedImage,
 };
 use pdf_text::{textpage_from_glyphs, ImageRef, PositionedGlyph, TextPage};
 use smol_str::SmolStr;
@@ -397,6 +398,27 @@ fn dict_006_dict_span_has_text_no_chars() {
     assert!(span.chars.is_empty());
 }
 
+/// A mock [`ImageResolver`] standing in for the document-backed resolver: it
+/// returns a known PNG payload + raster header for the `"Im0"` XObject (so the
+/// serializer's plumbing is tested without a real PDF; the extract_image
+/// same-source parity is asserted at the Python layer).
+struct MockImageResolver;
+
+impl ImageResolver for MockImageResolver {
+    fn resolve(&self, name: Option<&str>) -> Option<ResolvedImage> {
+        (name == Some("Im0")).then(|| ResolvedImage {
+            ext: "png".to_string(),
+            colorspace: 3,
+            bpc: 8,
+            width: 8,
+            height: 9,
+            xres: 96,
+            yres: 96,
+            image: b"\x89PNG\r\n\x1a\n".to_vec(),
+        })
+    }
+}
+
 #[test]
 fn dict_007_image_block_keys() {
     let img = ImageRef {
@@ -407,21 +429,35 @@ fn dict_007_image_block_keys() {
         height: Some(9),
     };
     let tp = textpage_from_glyphs(&[], &[img], letter(), 0);
-    let d = to_dict(&tp, false, defaults::DICT);
+
+    // With a resolver: the block carries the real encoded bytes + raster header.
+    let d = to_dict_with_images(&tp, false, defaults::DICT, &MockImageResolver);
     let DictBlock::Image(b) = &d.blocks[0] else {
         panic!("expected image block")
     };
     assert_eq!(b.width, 8);
     assert_eq!(b.height, 9);
-    assert_eq!(b.ext, "");
-    assert_eq!(b.colorspace, 0);
-    assert_eq!(b.bpc, 0);
-    assert_eq!(b.size, 0);
-    assert!(b.image.is_empty());
-    assert!(b.image_stubbed);
+    assert_eq!(b.ext, "png");
+    assert_eq!(b.colorspace, 3);
+    assert_eq!(b.bpc, 8);
+    assert_eq!(b.image, b"\x89PNG\r\n\x1a\n");
+    assert_eq!(b.size as usize, b.image.len());
     // transform present (6-tuple); bbox present (4-tuple).
     let _ = b.transform;
     assert!(b.bbox.0 <= b.bbox.2);
+
+    // Without a resolver (no document handle): geometry-only, empty `image`.
+    let d0 = to_dict(&tp, false, defaults::DICT);
+    let DictBlock::Image(b0) = &d0.blocks[0] else {
+        panic!("expected image block")
+    };
+    assert_eq!(b0.width, 8);
+    assert_eq!(b0.height, 9);
+    assert_eq!(b0.ext, "");
+    assert_eq!(b0.colorspace, 0);
+    assert_eq!(b0.bpc, 0);
+    assert_eq!(b0.size, 0);
+    assert!(b0.image.is_empty());
 }
 
 #[test]

@@ -11,14 +11,16 @@
 //! optional pre-built `&TextPage` so a caller can extract text **and** search
 //! without re-running the interpreter (PRD §9.4).
 
-use std::collections::HashSet;
+use std::cell::RefCell;
+use std::collections::{HashMap, HashSet};
 
 use pdf_core::geom::{Quad, Rect};
 use pdf_core::object::{Dict, Name, Object};
 use pdf_core::page::Page;
 use pdf_core::{DocumentStore, Limits};
 
-use pdf_text::{defaults, TextDict, TextPage};
+use pdf_image::getpixmap;
+use pdf_text::{defaults, ImageResolver, ResolvedImage, TextDict, TextPage};
 
 // === inventory structs (Tier-A tuple shapes, PRD §7) ======================
 
@@ -857,28 +859,36 @@ pub fn get_text(page: &Page, opt: &str, flags: Option<u32>, tp: Option<&TextPage
         }
     };
 
+    // dict/json image blocks inline the real encoded bytes, resolved by name →
+    // xref → extract_image (fitz always inlines image bytes in these modes).
+    let img_resolver = PageImageResolver::new(page);
+
     match opt {
         "blocks" => TextOutput::Blocks(pdf_text::to_blocks(tp, flags.unwrap_or(defaults::BLOCKS))),
         "words" => TextOutput::Words(pdf_text::to_words(tp, flags.unwrap_or(defaults::WORDS))),
-        "dict" => TextOutput::Dict(pdf_text::to_dict(
+        "dict" => TextOutput::Dict(pdf_text::to_dict_with_images(
             tp,
             false,
             flags.unwrap_or(defaults::DICT),
+            &img_resolver,
         )),
-        "rawdict" => TextOutput::Dict(pdf_text::to_dict(
+        "rawdict" => TextOutput::Dict(pdf_text::to_dict_with_images(
             tp,
             true,
             flags.unwrap_or(defaults::RAWDICT),
+            &img_resolver,
         )),
-        "json" => TextOutput::Text(pdf_text::to_json(
+        "json" => TextOutput::Text(pdf_text::to_json_with_images(
             tp,
             false,
             flags.unwrap_or(defaults::JSON),
+            &img_resolver,
         )),
-        "rawjson" => TextOutput::Text(pdf_text::to_json(
+        "rawjson" => TextOutput::Text(pdf_text::to_json_with_images(
             tp,
             true,
             flags.unwrap_or(defaults::RAWJSON),
+            &img_resolver,
         )),
         "html" => TextOutput::Text(pdf_text::to_html(tp, flags.unwrap_or(defaults::HTML))),
         "xhtml" => TextOutput::Text(pdf_text::to_xhtml(tp, flags.unwrap_or(defaults::XHTML))),
@@ -886,6 +896,74 @@ pub fn get_text(page: &Page, opt: &str, flags: Option<u32>, tp: Option<&TextPage
         // "text" and any unknown option → plain text.
         _ => TextOutput::Text(pdf_text::to_text(tp, flags.unwrap_or(defaults::TEXT))),
     }
+}
+
+/// Resolves a `get_text("dict"/"json")` image block's encoded bytes + raster
+/// header by resource name → xref → `extract_image` (the same payload as
+/// `Document.extract_image`).
+///
+/// The name→xref map is built lazily on first use, so pages with no image blocks
+/// pay nothing. Extracted results are cached per xref so a repeated image is
+/// decoded only once, while each placement still gets its own copy of the bytes
+/// (fitz inlines the payload at every image block).
+struct PageImageResolver<'a> {
+    page: &'a Page,
+    /// 资源名 → xref，懒建。
+    names: RefCell<Option<HashMap<String, u32>>>,
+    /// xref → 解析结果，避免同图重复解码。
+    cache: RefCell<HashMap<u32, Option<ResolvedImage>>>,
+}
+
+impl<'a> PageImageResolver<'a> {
+    fn new(page: &'a Page) -> Self {
+        Self {
+            page,
+            names: RefCell::new(None),
+            cache: RefCell::new(HashMap::new()),
+        }
+    }
+}
+
+impl ImageResolver for PageImageResolver<'_> {
+    fn resolve(&self, name: Option<&str>) -> Option<ResolvedImage> {
+        let name = name?;
+        // 资源名 → xref（懒建映射；沿用 get_images 的 name→xref 绑定）。
+        let xref = {
+            let mut names = self.names.borrow_mut();
+            let map = names.get_or_insert_with(|| {
+                get_images(self.page)
+                    .into_iter()
+                    .filter(|im| im.xref > 0)
+                    .map(|im| (im.name, im.xref as u32))
+                    .collect()
+            });
+            *map.get(name)?
+        };
+        // 每个 xref 只解码一次；每个摆放位各自克隆字节（fitz 内联语义）。
+        let mut cache = self.cache.borrow_mut();
+        cache
+            .entry(xref)
+            .or_insert_with(|| extract_resolved_image(self.page.document(), xref))
+            .clone()
+    }
+}
+
+/// Extracts image `xref` and maps `extract_image`'s descriptor onto the `dict`
+/// image-block raster header: `colorspace` is the component count (fitz's
+/// convention) and `xres`/`yres` default to 96 DPI (matching `extractIMGINFO`).
+/// Returns `None` when the xref is not an extractable image XObject.
+fn extract_resolved_image(doc: &DocumentStore, xref: u32) -> Option<ResolvedImage> {
+    let ex = getpixmap::extract_image(doc, xref).ok()?;
+    Some(ResolvedImage {
+        ext: ex.ext,
+        colorspace: ex.components,
+        bpc: ex.bpc,
+        width: ex.width,
+        height: ex.height,
+        xres: 96,
+        yres: 96,
+        image: ex.image,
+    })
 }
 
 /// Searches `page` for `needle`, optionally reusing a pre-built `tp`. Returns the

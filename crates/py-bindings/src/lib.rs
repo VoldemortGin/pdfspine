@@ -529,7 +529,8 @@ fn dict_block_to_py<'py>(
             d.set_item("bpc", b.bpc)?;
             d.set_item("transform", b.transform)?;
             d.set_item("size", b.size)?;
-            // Image pixel bytes are deferred to M5 (empty until then).
+            // Encoded image bytes (same payload as `Document.extract_image`);
+            // empty only for an unresolvable/inline image.
             d.set_item("image", PyBytes::new(py, &b.image))?;
         }
     }
