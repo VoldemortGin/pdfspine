@@ -12,15 +12,18 @@
 # the built wheel can't recover text, that wheel job fails and `publish` is
 # skipped — so a broken OCR build can't ship.
 #
-# RUNNER-AVAILABILITY SPLIT: the wheel matrix is split into two jobs. `wheels`
-# (Linux x86_64/aarch64, Apple-Silicon macOS, Windows) is HARD-required by
-# `publish`. `wheels_intel` (the macos-13 / x86_64 Intel wheel) is a separate job
-# that `publish` does NOT `needs`, because GitHub's hosted Intel-mac runners are
-# severely rationed for this account and that leg can sit `queued` for hours
-# without ever being assigned a runner — which would block the entire release.
-# `publish` therefore runs as soon as the core wheels + sdist pass; the Intel
-# wheel is still built, OCR-gated, and merged in WHEN a runner is available, but
-# never holds the release hostage. (See the `wheels_intel` and `publish` jobs.)
+# INTEL-MACOS (x86_64) via CROSS-COMPILE: the Intel-mac wheel is built as just
+# another leg of the core `wheels` matrix, CROSS-compiled on the plentiful
+# Apple-Silicon `macos-14` runner (maturin-action adds the x86_64-apple-darwin
+# target). It used to build NATIVELY on `macos-13`, split into its own job that
+# `publish` did NOT `needs`, because GitHub's hosted Intel-mac runners are
+# severely rationed for this account and that leg could sit `queued` for hours
+# without ever being assigned a runner — blocking the whole release. Cross-
+# compiling on the abundant arm64 runner removes that bottleneck, so Intel is
+# back on `publish`'s critical path as a real release gate. The one caveat: an
+# x86_64 wheel can't be installed/run on the arm64 build host, so this leg SKIPS
+# the OCR smoke gate — exactly like the ubuntu-latest/aarch64 cross leg (see the
+# `wheels` matrix note).
 #
 # USER-GATED PREREQUISITE (one-time, in the PyPI web UI — see docs/RELEASE-PYPI.md):
 #   PyPI -> account -> Publishing -> "Add a pending publisher" (Owner =
@@ -56,11 +59,10 @@ permissions:
   contents: read
 
 jobs:
-  # CORE wheel matrix — the platforms whose GitHub runners are reliably
-  # available (Linux x86_64/aarch64, Apple-Silicon macOS, Windows). `publish`
-  # HARD-`needs` this job, so a real build/OCR failure on any core platform
-  # still blocks the whole release. The Intel-macOS wheel is deliberately NOT
-  # here — see the `wheels_intel` job below for why.
+  # Wheel matrix — every platform we ship: Linux x86_64/aarch64, macOS arm64 +
+  # Intel-x86_64 (the latter CROSS-compiled on the arm64 runner — see the overview
+  # + the matrix note below), and Windows. `publish` HARD-`needs` this job, so a
+  # real build/OCR failure on any platform still blocks the whole release.
   wheels:
     name: wheels (${{ matrix.os }} / ${{ matrix.target }})
     runs-on: ${{ matrix.os }}
@@ -68,17 +70,21 @@ jobs:
       fail-fast: false
       matrix:
         # `ocr_native: true` = this wheel runs ON the runner's own CPU/OS, so we
-        # can install it and run a REAL OCR recognition as a release gate. The
-        # one omission is ubuntu-latest/aarch64: it is a manylinux CROSS build on
-        # an x86 runner, so the ARM wheel can't execute here. We skip the OCR
-        # run there — coverage is preserved by tract being pure-Rust and
+        # can install it and run a REAL OCR recognition as a release gate. Two
+        # legs omit it because each is a CROSS build whose wheel can't execute on
+        # its build runner: ubuntu-latest/aarch64 (manylinux ARM cross on an x86
+        # runner) and macos-14/x86_64 (Intel cross on the Apple-Silicon runner —
+        # a `pip install` of the x86_64 wheel there fails with "No matching
+        # distribution found", so it would die before upload). We skip the OCR
+        # run on both — coverage is preserved by tract being pure-Rust and
         # platform-agnostic (no per-arch kernels to validate) over the standard
         # ai.onnx opset, exercised natively on the other three arch families; no
-        # native ARM-Linux GitHub runner exists to run it on.
+        # native runner exists to execute the cross wheels.
         include:
           - { os: ubuntu-latest, target: x86_64, manylinux: auto, ocr_native: true }
           - { os: ubuntu-latest, target: aarch64, manylinux: "2_28" } # cross build → no native OCR run
           - { os: macos-14, target: aarch64, ocr_native: true } # Apple Silicon runner
+          - { os: macos-14, target: x86_64 } # Intel mac, cross-compiled on the arm64 runner → no native OCR run
           - { os: windows-latest, target: x64, ocr_native: true }
     steps:
       - uses: actions/checkout@v4
@@ -100,7 +106,7 @@ jobs:
       # wheel-bundled models — exactly what `pip install pdfspine` gives a user).
       # If recognition fails, this job fails and `publish` (needs wheels) is
       # skipped → no release. Only on targets that run natively on the runner
-      # (see the matrix note for why ubuntu-latest/aarch64 is excluded).
+      # (see the matrix note for why the cross legs are excluded).
       - name: OCR smoke (install wheel + real recognition)
         if: matrix.ocr_native
         shell: bash
@@ -120,59 +126,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: wheels-${{ matrix.os }}-${{ matrix.target }}
-          path: dist/*.whl
-
-  # Intel-macOS (x86_64) wheel — SAME build + real-OCR gate + upload as the core
-  # matrix, but split into its own job that `publish` does NOT `needs`. Reason:
-  # GitHub's hosted Intel-mac (`macos-13`) runners are severely rationed for this
-  # account and a leg can sit `queued` for many hours without ever being assigned
-  # a runner. A job that never starts has no conclusion, so it would block a
-  # `needs: wheels` `publish` indefinitely (and `continue-on-error` can't rescue a
-  # job that never RUNS — it only neutralizes a job that runs and fails). By
-  # isolating Intel here and keeping it off `publish`'s critical path, the rest of
-  # the matrix + sdist still publish on time. `continue-on-error: true` means that
-  # if this leg DOES get a runner and the build/OCR fails, the failure is recorded
-  # on the wheel but doesn't redden the whole run. When a runner IS available the
-  # behavior is identical to before: it builds, runs the OCR gate, and uploads the
-  # `wheels-macos-13-x86_64` artifact, which `publish` merges in automatically.
-  wheels_intel:
-    name: wheels (macos-13 / x86_64)
-    runs-on: macos-13
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Set version from tag
-        if: github.ref_type == 'tag'
-        run: python scripts/set_version_from_tag.py "${{ github.ref_name }}"
-      - name: Build abi3 wheel
-        uses: PyO3/maturin-action@v1
-        with:
-          target: x86_64
-          args: --release --out dist --strip
-          sccache: "true"
-      # Same release gate as the core matrix: install the just-built wheel into a
-      # clean venv and run a real PP-OCRv5 recognition on the bundled models.
-      - name: OCR smoke (install wheel + real recognition)
-        shell: bash
-        run: |
-          python -m venv .ocrsmoke
-          if [ -f .ocrsmoke/bin/python ]; then
-            PY=.ocrsmoke/bin/python
-          else
-            PY=.ocrsmoke/Scripts/python
-          fi
-          "$PY" -m pip install --upgrade pip
-          # OCR 模型现由共享数据包 ocrspine-models 提供（硬依赖）：先从 PyPI 装它，
-          # 再用 --no-index 装本地 wheel（依赖已满足，仍只测本地构建的 wheel）。
-          "$PY" -m pip install ocrspine-models
-          "$PY" -m pip install --find-links dist --no-index pdfspine
-          "$PY" scripts/ocr_smoke.py crates/pdf-ocr/tests/fixtures/ocr_sample.png
-      - uses: actions/upload-artifact@v4
-        with:
-          name: wheels-macos-13-x86_64
           path: dist/*.whl
 
   sdist:
@@ -198,15 +151,15 @@ jobs:
 
   publish:
     name: publish (Trusted Publishing / OIDC)
-    # HARD-`needs` only the core wheels + sdist — deliberately NOT `wheels_intel`,
-    # so a `queued`/failed Intel-mac leg can never block the release. `always()`
-    # detaches publish from the default "all needs succeeded" gate; the explicit
-    # result checks then re-assert that the CORE platforms + sdist DID succeed
-    # (so a real core build/OCR failure still stops the release). The Intel wheel,
-    # if its job happened to finish, is still merged in below via download-artifact
-    # + `skip-existing`; if it didn't, the other platforms + sdist publish anyway.
+    # HARD-`needs` the whole core wheel matrix + sdist. Every platform wheel —
+    # including the Intel (macos-14 / x86_64) CROSS leg now folded into `wheels`
+    # — is a real release gate: a build failure (or, on the natively-runnable
+    # legs, an OCR-smoke failure) on any of them skips `publish`. The default
+    # "all needs succeeded" gate is exactly what we want now, so no `always()` /
+    # explicit result-checks are needed. download-artifact (merge-multiple) then
+    # collects every `wheels-*` artifact (Intel included) plus the sdist into
+    # dist/ before upload.
     needs: [wheels, sdist]
-    if: always() && needs.wheels.result == 'success' && needs.sdist.result == 'success'
     runs-on: ubuntu-latest
     # Tag push -> PyPI. Manual dispatch -> the chosen target (default TestPyPI).
     environment: ${{ (github.event_name == 'push' || github.event.inputs.publish_target == 'pypi') && 'pypi' || 'testpypi' }}

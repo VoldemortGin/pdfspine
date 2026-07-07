@@ -20,11 +20,13 @@
 //! - [`pixmap`] — the [`pixmap::Pixmap`] decoded-raster type (for image docs and
 //!   image-only PDF pages, PRD §3.3).
 //!
-//! This is the **M5 scaffold**: every public item below is a compiling stub that
-//! returns [`error::Error::Unsupported`] (or an empty placeholder) so the
-//! workspace builds and stays panic-free. The four parallel M5 units each own
-//! exactly one module and fill the stubs **without changing the signatures**
-//! documented here and in `ARCHITECTURE.md`.
+//! This crate is **fully implemented** — every public item below is a working
+//! implementation, not a stub. The four codecs decode real image XObjects,
+//! [`imagedoc`] loads image documents and converts raster inputs to PDF,
+//! [`pixmap`] carries decoded rasters, and [`getpixmap`] renders page pixmaps
+//! and extracts embedded images. Every path honours the §8.4.1 degradation
+//! contract (a failure is a typed [`error::Error`], never a panic) and keeps
+//! the signatures documented here and in `ARCHITECTURE.md`.
 
 pub mod codecs;
 pub mod error;
