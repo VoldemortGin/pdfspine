@@ -11,6 +11,15 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
+### Added
+
+- **Tab-stop advance in `pdf-typeset` (§10 TS-9 / docspine C-9).** A `\t` now
+  advances the pen to the next tab stop instead of collapsing to a single
+  space; the interval is Word's `defaultTabStop` (0.5 inch default) and is
+  configurable via `Typesetter::set_tab_interval`. Post-tab text lands on the
+  stop within 1 pt; justify never widens a tab; auto table-column measurement
+  accounts for tab advances.
+
 ## [0.3.0] — 2026-07-04
 
 ### Added

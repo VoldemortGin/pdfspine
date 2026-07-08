@@ -24,7 +24,8 @@
 //!   the same core through [`layout_box_content`] (no pagination, optional
 //!   wrap-off where lines break only at hard `\n`).
 //!
-//! Small documented degradations: tabs lay out as a single space (tab stops
+//! Small documented degradations: a `\t` advances the pen to the next tab stop
+//! ([`Typesetter::set_tab_interval`], 36 pt default; custom per-paragraph stops
 //! are out of v1 scope); consecutive typed spaces are preserved; a paragraph
 //! with **no runs** contributes no line box (consumers pass an empty-text run
 //! carrying the paragraph-mark style to get Word's empty-paragraph height);
@@ -169,6 +170,9 @@ pub(crate) struct Frag {
     pub(crate) space: bool,
     /// Width was widened by justify (breaks the text-op merge chain).
     pub(crate) stretched: bool,
+    /// A tab advance (a blank pen move to the next tab stop): counts as a
+    /// space for trailing-strip, but justify never widens it.
+    pub(crate) tab: bool,
 }
 
 /// One wrapped output line.
@@ -186,6 +190,10 @@ pub(crate) enum Tok {
     Word { frags: Vec<Frag>, width: f64 },
     /// An inter-word space (kept as its own fragment for justify).
     Space { frag: Frag },
+    /// A tab: at wrap time the pen advances to the next tab stop. The fragment
+    /// carries the decoration/face of the `\t`'s run; its width is filled in
+    /// from the line's current position.
+    Tab { frag: Frag },
     /// A hard line break.
     Break,
 }
@@ -225,9 +233,9 @@ fn push_frag(frags: &mut Vec<Frag>, frag: Frag) {
 }
 
 /// Converts styled runs into wrap tokens: per-char font fallback, `\n` hard
-/// breaks, tabs as spaces, control chars dropped, CJK chars as one-char words
-/// (U+3000 ideographic space stays a full-width breakable char; U+00A0 no-break
-/// space stays inside its word).
+/// breaks, `\t` as a tab-stop advance ([`Tok::Tab`]), control chars dropped,
+/// CJK chars as one-char words (U+3000 ideographic space stays a full-width
+/// breakable char; U+00A0 no-break space stays inside its word).
 pub(crate) fn tokens(ts: &mut Typesetter, runs: &[Run]) -> Vec<Tok> {
     let mut out: Vec<Tok> = Vec::new();
     let mut word: Vec<Frag> = Vec::new();
@@ -246,7 +254,26 @@ pub(crate) fn tokens(ts: &mut Typesetter, runs: &[Run]) -> Vec<Tok> {
                 out.push(Tok::Break);
                 continue;
             }
-            let ch = if ch == '\t' { ' ' } else { ch };
+            if ch == '\t' {
+                flush_word(&mut out, &mut word, &mut word_w);
+                let face = ts.char_face(&base, ' ');
+                out.push(Tok::Tab {
+                    frag: Frag {
+                        face,
+                        size,
+                        color: style.color,
+                        underline: style.underline,
+                        strike: style.strike,
+                        highlight: style.highlight,
+                        text: String::new(),
+                        width: 0.0,
+                        space: true,
+                        stretched: true,
+                        tab: true,
+                    },
+                });
+                continue;
+            }
             if ch.is_control() {
                 continue;
             }
@@ -267,6 +294,7 @@ pub(crate) fn tokens(ts: &mut Typesetter, runs: &[Run]) -> Vec<Tok> {
                         width,
                         space: true,
                         stretched: false,
+                        tab: false,
                     },
                 });
                 continue;
@@ -284,6 +312,7 @@ pub(crate) fn tokens(ts: &mut Typesetter, runs: &[Run]) -> Vec<Tok> {
                 width,
                 space: false,
                 stretched: false,
+                tab: false,
             };
             if breaks_anywhere {
                 flush_word(&mut out, &mut word, &mut word_w);
@@ -313,8 +342,9 @@ fn flush_word(out: &mut Vec<Tok>, word: &mut Vec<Frag>, word_w: &mut f64) {
 }
 
 /// The widest soft-unbreakable line of `toks`: the max run width between hard
-/// breaks (auto table-column sizing).
-pub(crate) fn natural_width(toks: &[Tok]) -> f64 {
+/// breaks (auto table-column sizing). Tabs advance to the next `tab_interval`
+/// multiple, matching the wrap-time pen behaviour.
+pub(crate) fn natural_width(toks: &[Tok], tab_interval: f64) -> f64 {
     let mut max_w: f64 = 0.0;
     let mut cur = 0.0;
     for tok in toks {
@@ -325,9 +355,22 @@ pub(crate) fn natural_width(toks: &[Tok]) -> f64 {
             }
             Tok::Word { width, .. } => cur += width,
             Tok::Space { frag } => cur += frag.width,
+            Tok::Tab { .. } => cur = next_tab_stop(cur, tab_interval),
         }
     }
     max_w.max(cur)
+}
+
+/// The next tab stop strictly past `x` (points): the smallest multiple of
+/// `interval` greater than `x`. A non-finite / non-positive interval falls back
+/// to the 0.5-inch default so a tab always advances.
+fn next_tab_stop(x: f64, interval: f64) -> f64 {
+    let step = if interval.is_finite() && interval > 0.0 {
+        interval
+    } else {
+        36.0
+    };
+    ((x / step).floor() + 1.0) * step
 }
 
 /// Greedy line breaker with per-line-index widths (`w_first` for line 0 —
@@ -336,7 +379,13 @@ pub(crate) fn natural_width(toks: &[Tok]) -> f64 {
 /// granularity. Trailing spaces are stripped from every line; spaces are
 /// dropped only at the start of *soft-wrapped* continuation lines (typed
 /// leading spaces at a paragraph start / after `\n` are preserved).
-pub(crate) fn wrap(faces: &FaceRegistry, toks: &[Tok], w_first: f64, w_rest: f64) -> Vec<LineOut> {
+pub(crate) fn wrap(
+    faces: &FaceRegistry,
+    toks: &[Tok],
+    w_first: f64,
+    w_rest: f64,
+    tab_interval: f64,
+) -> Vec<LineOut> {
     let mut lines: Vec<LineOut> = Vec::new();
     let mut cur: Vec<Frag> = Vec::new();
     let mut cur_w = 0.0f64;
@@ -376,6 +425,16 @@ pub(crate) fn wrap(faces: &FaceRegistry, toks: &[Tok], w_first: f64, w_rest: f64
                 }
                 cur_w += frag.width;
                 cur.push(frag.clone());
+            }
+            Tok::Tab { frag } => {
+                if cur.is_empty() && after_soft {
+                    continue;
+                }
+                let adv = (next_tab_stop(cur_w, tab_interval) - cur_w).max(0.0);
+                let mut f = frag.clone();
+                f.width = adv;
+                cur_w += adv;
+                cur.push(f);
             }
             Tok::Word { frags, width } => {
                 if !cur.is_empty() && cur_w + width > limit + EPS {
@@ -635,7 +694,8 @@ fn layout_paragraph(ctx: &mut Ctx, props: &crate::model::ParaProps, runs: &[Run]
     };
 
     let toks = tokens(ctx.ts, runs);
-    let mut lines = wrap(ctx.ts.faces(), &toks, w_first, w_rest);
+    let tab_interval = ctx.ts.tab_interval();
+    let mut lines = wrap(ctx.ts.faces(), &toks, w_first, w_rest, tab_interval);
 
     // Reference metrics for empty lines (empty paragraph / blank `\n\n` line):
     // the first usable run style (the paragraph-mark style by convention).
@@ -716,9 +776,9 @@ fn justify_line(line: &mut LineOut, target: f64) {
     if !target.is_finite() {
         return;
     }
-    let nspaces = line.frags.iter().filter(|f| f.space).count();
+    let nspaces = line.frags.iter().filter(|f| f.space && !f.tab).count();
     if nspaces == 0 {
-        return; // single-word / CJK-only lines cannot justify
+        return; // single-word / CJK-only / tab-only lines cannot justify
     }
     let deficit = target - line.width;
     if deficit <= EPS {
@@ -726,7 +786,7 @@ fn justify_line(line: &mut LineOut, target: f64) {
     }
     let extra = deficit / nspaces as f64;
     for frag in &mut line.frags {
-        if frag.space {
+        if frag.space && !frag.tab {
             frag.width += extra;
             frag.stretched = true;
         }
@@ -792,7 +852,14 @@ fn draw_list_label(ctx: &mut Ctx, label: &ListLabel, runs: &[Run], first_left: f
 /// Lays a single-line text (no wrapping) out into fragments (list labels).
 fn plain_line(ts: &mut Typesetter, text: &str, style: &crate::model::RunStyle) -> LineOut {
     let toks = tokens(ts, &[Run::new(text, style.clone())]);
-    let mut lines = wrap(ts.faces(), &toks, f64::INFINITY, f64::INFINITY);
+    let tab_interval = ts.tab_interval();
+    let mut lines = wrap(
+        ts.faces(),
+        &toks,
+        f64::INFINITY,
+        f64::INFINITY,
+        tab_interval,
+    );
     if lines.is_empty() {
         LineOut {
             frags: Vec::new(),
@@ -845,6 +912,11 @@ fn emit_line(ctx: &mut Ctx, line: &LineOut, x0: f64, baseline: f64) {
             if frag.stretched {
                 flush_text(ctx, &mut cur, baseline);
             }
+        } else if frag.stretched && frag.width > EPS {
+            // A pure pen advance with no glyph (a tab): break the text-op run so
+            // the following text starts at the advanced pen position — otherwise
+            // a compatible following fragment would merge across the gap.
+            flush_text(ctx, &mut cur, baseline);
         }
         x += frag.width;
     }

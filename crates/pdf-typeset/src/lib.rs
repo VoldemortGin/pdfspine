@@ -77,6 +77,9 @@ pub use model::{
 pub use ops::{FaceId, Fill, LineCap, LineJoin, Op, PageOps, PathSeg, Stroke};
 pub use warn::ExportWarning;
 
+/// Word's default tab-stop interval: 0.5 inch = 36 points.
+const DEFAULT_TAB_INTERVAL: f64 = 36.0;
+
 /// The result of one export run: the serialized PDF plus every degradation
 /// that occurred while producing it (consumers surface these in Python via
 /// `warnings.warn`).
@@ -110,6 +113,9 @@ pub struct Typesetter {
     /// warning dedup: `resolve_char` fires per occurrence, the layout layer
     /// reports each miss once).
     glyph_warned: HashSet<(String, char)>,
+    /// Tab-stop interval in points: a `\t` advances the pen to the next
+    /// multiple of this (Word's `defaultTabStop`, 0.5 inch by default).
+    tab_interval: f64,
 }
 
 impl Typesetter {
@@ -125,6 +131,7 @@ impl Typesetter {
             styles: HashMap::new(),
             chars: HashMap::new(),
             glyph_warned: HashSet::new(),
+            tab_interval: DEFAULT_TAB_INTERVAL,
         }
     }
 
@@ -152,6 +159,20 @@ impl Typesetter {
     /// subsets (PRD §10 TS-3 keeps the full embed behind this flag only).
     pub fn set_full_embed(&mut self, full_embed: bool) {
         self.faces.set_full_embed(full_embed);
+    }
+
+    /// Sets the tab-stop interval in points (Word's `defaultTabStop`): a `\t`
+    /// advances the pen to the next multiple of this. Non-finite / non-positive
+    /// values are ignored, keeping the 0.5-inch default.
+    pub fn set_tab_interval(&mut self, points: f64) {
+        if points.is_finite() && points > 0.0 {
+            self.tab_interval = points;
+        }
+    }
+
+    /// The current tab-stop interval in points (used by the layout core).
+    pub(crate) fn tab_interval(&self) -> f64 {
+        self.tab_interval
     }
 
     /// The warnings accumulated so far (moved into [`ExportResult`] by

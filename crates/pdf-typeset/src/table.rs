@@ -92,7 +92,8 @@ fn natural_blocks_width(ts: &mut Typesetter, blocks: &[Block]) -> f64 {
         let bw = match block {
             Block::Paragraph(props, runs) => {
                 let toks = tokens(ts, runs);
-                natural_width(&toks)
+                let tab_interval = ts.tab_interval();
+                natural_width(&toks, tab_interval)
                     + props.indent_left.max(0.0)
                     + props.indent_right.max(0.0)
                     + props.first_line_indent.max(0.0)
