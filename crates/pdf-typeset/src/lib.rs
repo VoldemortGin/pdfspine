@@ -68,7 +68,7 @@ pub use pdf_core::geom::{Matrix, Point, Rect};
 /// `0.0..=1.0`; `pdf_edit::Color` re-exported under the PRD §10 model name).
 pub use pdf_edit::Color as Rgb;
 
-pub use flow::{FixedPages, PageGeom, PageProvider};
+pub use flow::{FixedPages, LineMetrics, Measurement, PageGeom, PageProvider};
 pub use fontres::{FontResolver, Platform, ResolvedFace, Substitutions};
 pub use model::{
     Align, Block, BorderEdge, CellBorders, ColumnWidth, ImageSpec, LineSpacing, ListLabel,
@@ -213,6 +213,36 @@ impl Typesetter {
     /// `normAutofit` scaling, rotation, clipping).
     pub fn layout_text_box(&mut self, spec: &TextBoxSpec) -> Vec<Op> {
         boxes::layout_text_box(self, spec)
+    }
+
+    /// Measures `blocks` at a fixed content `width` **without emitting**,
+    /// returning per-line metrics and totals (TS-10). It shares the exact
+    /// measure → wrap → line-box path the emitters run, so
+    /// [`Measurement::height`] equals the content height
+    /// [`Typesetter::layout_text_box`] (and box-mode flow) produce for the same
+    /// input. `wrap == false` breaks lines only at hard `\n` (the text-box
+    /// wrap-off mode); pass `true` for the normal wrap-to-width behaviour.
+    ///
+    /// 在给定宽度下度量 `blocks`（不产出 PDF），返回每行的 ascent/descent/行高
+    /// 与总高度、内容自然宽度。消费方用它做 autofit、表格按内容增高、单元格
+    /// 垂直对齐等——度量结果与真实排版逐点一致。
+    pub fn measure_blocks(&mut self, blocks: &[Block], width: f64, wrap: bool) -> Measurement {
+        flow::measure_box_content(self, blocks, width, wrap)
+    }
+
+    /// Measures a [`TextBoxSpec`]'s content at its rect width and wrap mode
+    /// (TS-10): the natural line metrics / height at `font_scale` 1.0 — i.e.
+    /// **before** any autofit shrinking and independent of vertical anchoring,
+    /// rotation and clipping. Consumers use it to drive their own autofit or
+    /// grow-to-content boxes; the reported height is what
+    /// [`Typesetter::layout_text_box`] anchors within the rect when autofit is
+    /// off.
+    ///
+    /// 按文本框矩形宽度与换行模式度量其内容（`font_scale` 视为 1.0，不含
+    /// autofit 缩放、垂直锚定、旋转与裁剪）。
+    pub fn measure_text_box(&mut self, spec: &TextBoxSpec) -> Measurement {
+        let width = (spec.rect.x1 - spec.rect.x0).abs().max(1.0);
+        flow::measure_box_content(self, &spec.blocks, width, spec.wrap)
     }
 
     /// Serializes the laid-out pages into the final PDF, consuming the engine

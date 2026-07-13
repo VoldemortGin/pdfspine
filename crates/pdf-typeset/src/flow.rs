@@ -499,6 +499,9 @@ pub(crate) struct Ctx<'t, 'p> {
     pub(crate) y: f64,
     pending: f64,
     pub(crate) max_x: f64,
+    /// Line-metric sink for the measure API (`Some` only during
+    /// [`measure_box_content`]; layout for emission leaves it `None`).
+    measure: Option<Vec<LineMetrics>>,
 }
 
 impl Ctx<'_, '_> {
@@ -597,6 +600,57 @@ impl Ctx<'_, '_> {
     }
 }
 
+// --- measurement (TS-10) ---------------------------------------------------------
+
+/// The metrics of one laid-out text line ([`Typesetter::measure_blocks`]),
+/// each value maxed over the line's mixed faces / sizes — the very numbers the
+/// layouter uses to place the baseline and advance the cursor.
+///
+/// 一行排出后的度量：`ascent` / `descent` 为该行各字面（可混排字体/字号）
+/// 的最大上/下伸量，`height` 为应用段落 [`LineSpacing`] 之后光标前进的行高。
+#[non_exhaustive]
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct LineMetrics {
+    /// Ascent above the baseline, in points (max over the line's fragments).
+    pub ascent: f64,
+    /// Descent below the baseline, in points (positive magnitude; max over
+    /// the line's fragments).
+    pub descent: f64,
+    /// The line's advance height in points: the natural single-spaced height
+    /// **after** the paragraph's [`LineSpacing`] is applied — exactly what the
+    /// cursor advances by, so a single paragraph's line heights sum to its
+    /// laid-out height.
+    pub height: f64,
+}
+
+/// The result of measuring blocks at a fixed content width without emitting
+/// ([`Typesetter::measure_blocks`] / [`Typesetter::measure_text_box`], TS-10).
+///
+/// Produced by the **same** measure → wrap → line-box path the emitters run
+/// (one shared box-layout core), so [`Measurement::height`] equals
+/// the content height [`Typesetter::layout_text_box`] and box-mode
+/// [`Typesetter::layout_flow`] actually produce for the identical input — the
+/// property the TS-10 tests pin.
+///
+/// 与真实排版走同一条度量路径，故 `height` 与真正排出的内容高度逐点一致，
+/// 供消费方做 autofit / 表格按内容增高 / 单元格垂直对齐等。
+#[non_exhaustive]
+#[derive(Clone, Debug, PartialEq)]
+pub struct Measurement {
+    /// One entry per laid-out text line, in layout order. Table-internal lines
+    /// are laid out in their own sub-boxes and are **not** enumerated here
+    /// (their contribution still counts in [`Measurement::height`]); block
+    /// content with no text lines yields an empty vector.
+    pub lines: Vec<LineMetrics>,
+    /// The total laid-out content height in points: paragraph line heights plus
+    /// interior space-before / space-after gaps (leading gaps collapse at the
+    /// box top, matching flow layout).
+    pub height: f64,
+    /// The natural content width in points — the rightmost inked x reached,
+    /// for shrink-/grow-to-content boxes.
+    pub max_width: f64,
+}
+
 // --- entry points ---------------------------------------------------------------
 
 /// Lays out `blocks` as paginated flow; page geometry comes from `provider`
@@ -618,6 +672,7 @@ pub(crate) fn layout_flow(
         y: geom.margin_top,
         pending: 0.0,
         max_x: 0.0,
+        measure: None,
         mode: Mode::Paged { provider, geom },
     };
     layout_blocks(&mut ctx, blocks);
@@ -634,6 +689,38 @@ pub(crate) fn layout_box_content(
     width: f64,
     wrap: bool,
 ) -> (Vec<Op>, f64, f64) {
+    let (ops, height, max_x, _) = box_layout(ts, blocks, width, wrap, false);
+    (ops, height, max_x)
+}
+
+/// Measures `blocks` in an unbounded box of `width` without emitting: the same
+/// core [`layout_box_content`] runs, so the reported height / max-width are the
+/// values real layout produces, plus a per-line breakdown (TS-10).
+pub(crate) fn measure_box_content(
+    ts: &mut Typesetter,
+    blocks: &[Block],
+    width: f64,
+    wrap: bool,
+) -> Measurement {
+    let (_, height, max_width, lines) = box_layout(ts, blocks, width, wrap, true);
+    Measurement {
+        lines,
+        height,
+        max_width,
+    }
+}
+
+/// The shared box-mode driver behind [`layout_box_content`] (emission) and
+/// [`measure_box_content`] (measure). `collect_lines` toggles the line-metric
+/// sink; both paths walk the identical [`layout_blocks`], guaranteeing the
+/// measure and the emitted layout agree point-for-point.
+fn box_layout(
+    ts: &mut Typesetter,
+    blocks: &[Block],
+    width: f64,
+    wrap: bool,
+    collect_lines: bool,
+) -> (Vec<Op>, f64, f64, Vec<LineMetrics>) {
     let width = if width.is_finite() {
         width.max(1.0)
     } else {
@@ -650,13 +737,15 @@ pub(crate) fn layout_box_content(
         y: 0.0,
         pending: 0.0,
         max_x: 0.0,
+        measure: collect_lines.then(Vec::new),
         mode: Mode::Boxed { width, wrap },
     };
     layout_blocks(&mut ctx, blocks);
     let height = ctx.y;
     let max_x = ctx.max_x;
+    let lines = ctx.measure.take().unwrap_or_default();
     let ops = ctx.pages.swap_remove(0).ops;
-    (ops, height, max_x)
+    (ops, height, max_x, lines)
 }
 
 /// Lays out sibling blocks at the context cursor.
@@ -730,7 +819,7 @@ fn layout_paragraph(ctx: &mut Ctx, props: &crate::model::ParaProps, runs: &[Run]
     }
 
     for (i, line) in lines.iter().enumerate() {
-        let (desc, natural) = line_metrics(ctx.ts.faces(), line, ref_frag);
+        let (asc, desc, natural) = line_metrics(ctx.ts.faces(), line, ref_frag);
         let lh = match props.spacing {
             LineSpacing::Multiple(m) => natural * if m.is_finite() && m > 0.0 { m } else { 1.0 },
             LineSpacing::Exact(h) => {
@@ -748,6 +837,13 @@ fn layout_paragraph(ctx: &mut Ctx, props: &crate::model::ParaProps, runs: &[Run]
                 }
             }
         };
+        if let Some(sink) = ctx.measure.as_mut() {
+            sink.push(LineMetrics {
+                ascent: asc,
+                descent: desc,
+                height: lh,
+            });
+        }
         ctx.ensure(lh);
         let baseline = ctx.y + lh - desc;
         let line_left = if i == 0 { first_left } else { left };
@@ -794,29 +890,33 @@ fn justify_line(line: &mut LineOut, target: f64) {
     line.width = target;
 }
 
-/// The line box metrics of one wrapped line: max descent (points below the
-/// baseline) and the natural single-spaced line height, both maxed over the
-/// line's mixed faces/sizes (so mixed-size lines share one baseline).
+/// The line box metrics of one wrapped line: max ascent (points above the
+/// baseline), max descent (points below) and the natural single-spaced line
+/// height, all maxed over the line's mixed faces/sizes (so mixed-size lines
+/// share one baseline). Returns `(ascent, descent, natural)`.
 fn line_metrics(
     faces: &FaceRegistry,
     line: &LineOut,
     ref_frag: Option<(FaceId, f64)>,
-) -> (f64, f64) {
+) -> (f64, f64, f64) {
+    let mut asc = 0.0f64;
     let mut desc = 0.0f64;
     let mut natural = 0.0f64;
     for frag in &line.frags {
         let m = faces.metrics(frag.face);
+        asc = asc.max(m.ascent * frag.size);
         desc = desc.max(m.descent * frag.size);
         natural = natural.max(m.line_height(frag.size));
     }
     if line.frags.is_empty() {
         if let Some((face, size)) = ref_frag {
             let m = faces.metrics(face);
+            asc = m.ascent * size;
             desc = m.descent * size;
             natural = m.line_height(size);
         }
     }
-    (desc, natural)
+    (asc, desc, natural)
 }
 
 /// Draws a consumer-computed list label right-aligned against the paragraph's

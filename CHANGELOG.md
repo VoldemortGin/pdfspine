@@ -13,6 +13,16 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ### Added
 
+- **Public text-measurement API in `pdf-typeset` (§10 TS-10).** New
+  `Typesetter::measure_blocks(blocks, width, wrap)` and
+  `Typesetter::measure_text_box(spec)` report, without emitting a PDF, the
+  laid-out line metrics (`LineMetrics { ascent, descent, height }`) plus total
+  content height and natural width (`Measurement`) at a fixed width. They share
+  the exact measure → wrap → line-box path the emitters run, so the reported
+  height equals what `layout_text_box` / box-mode `layout_flow` actually lay
+  out — pinned by tests. Unblocks consumer-side sizing: pptspine autofit,
+  tables grown to content, docspine cell vertical alignment. The new
+  `Measurement` / `LineMetrics` types are `#[non_exhaustive]`.
 - **Tab-stop advance in `pdf-typeset` (§10 TS-9 / docspine C-9).** A `\t` now
   advances the pen to the next tab stop instead of collapsing to a single
   space; the interval is Word's `defaultTabStop` (0.5 inch default) and is
