@@ -731,19 +731,40 @@ lists why · files · effort · **Acceptance**, the green condition that means "
   its total height; per-line ascent/descent match the bundled face metrics; `measure_text_box` equals
   `measure_blocks` at the rect width; `LineSpacing::Multiple(2.0)` doubles the reported line height while
   ascent/descent stay the raw metrics; an empty (run-less) paragraph measures zero lines / zero height.
+- **TS-11 · Table cell vertical anchoring + run-level hyperlinks** — ✅ DONE 2026-07-13 · *S*. Two
+  docspine-audited gaps only the engine can close, both accumulated off the existing layout path (no
+  layout logic duplicated):
+  - **Cell v-align:** `TableCell` grows `v_align: VAnchor` (default `Top`). The table layouter already
+    knows the cell content height and the finalized row height, so it offsets the content by
+    `(row_h − 2·pad − content_h)·anchor` **after** the row height is fixed — orthogonal to content-driven
+    row growth (and to consumers computing row heights via the TS-10 measure API) (*S*).
+  - **Run hyperlinks:** `RunStyle` grows `link: Option<String>` (target URI). `emit_line` accumulates each
+    linked run's real laid-out rectangles (a fourth pass beside highlight/text/decoration), merging
+    contiguous same-URI fragments into one rect per line; a new `Op::Link` hot-zone op rides the same
+    `translate_ops` / group-transform pipeline as the glyphs, and `emit` turns per-page `Op::Link`s into
+    `/Link` annotations (`/A << /S /URI >>`, `/Border [0 0 0]`) mapped through any enclosing transforms and
+    y-flipped (*S*).
+  - **Acceptance:** middle/bottom-anchored cells place the cell's first baseline at the anchored position
+    ± 1 pt (read back via `get_text("words")`; default cell == explicit Top); `get_links` reads back the
+    URI and the rect landing within ± 1 pt of the linked run's laid extent (x0 at the text edge, box covers
+    the word); adjacent same-URI runs merge to one rect while distinct URIs stay separate; a hard-broken
+    linked run yields **two** vertically-separated rects (one per line); an unlinked run produces no
+    annotation. `cargo test -p pdf-typeset` + clippy `-D warnings` green.
 - **Downstream unblocking:** **Phase B (pptspine `ppt-render`)** starts when the TS-2/3/5/6 gates are
   green; **Phase C (docspine `doc-render`)** when the TS-2/3/4 gates (incl. TS-4's table primitives) are
   green. Phase B/C PRDs live in the consumer repos; each pins a pdfspine rev with its needed TS tasks
   landed.
 
 **Resume pointer.** **Phase A is COMPLETE (TS-1..TS-7 all ✅, 2026-07-02→03; +TS-8 consumer batch 1,
-2026-07-04; +TS-9 tab stops, 2026-07-08; +TS-10 public measure API, 2026-07-13)** — pdf-typeset ships the
+2026-07-04; +TS-9 tab stops, 2026-07-08; +TS-10 public measure API + TS-11 cell v-align / run hyperlinks,
+2026-07-13)** — pdf-typeset ships the
 Typesetter facade (layout_flow / layout_text_box / **measure_blocks / measure_text_box** / emit), fontdb
 resolution, the TTC-aware glyph subsetter (pdf-edit), the 35-preset subset, and the TS-7 gate stack (typeset
 read-back + SSIM in CI accuracy-gate; LO oracle advisory local-only). Consumers pin a git rev of this repo
-(first consumer: pptspine ppt-render at `709b41da`; TS-8/TS-9/TS-10 additions land in later pinned revs —
+(first consumer: pptspine ppt-render at `709b41da`; TS-8..TS-11 additions land in later pinned revs —
 note the `ListLabel` construction change from TS-8). The measure API (TS-10) is what pptspine autofit /
-docspine cell vAlign / content-grown tables call to size before emitting.
+docspine cell vAlign / content-grown tables call to size before emitting; TS-11 adds `TableCell::v_align`
+and `RunStyle::link` (run hyperlinks → `/Link` annotations) for docspine's audited gaps.
 The family-wide decisions stay locked: do not reopen fontdb-vs-alternatives, the
 no-synthetic-bold rule, the ~35-preset subset, or the gradients-out call. `markdown_to_pdf` (§9) stayed
 green and untouched — rewiring pdf-markdown onto pdf-typeset remains a future option, not Phase A. The
