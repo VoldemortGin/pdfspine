@@ -1079,7 +1079,7 @@ checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 
 [[package]]
 name = "pdf-api"
-version = "0.2.0"
+version = "0.3.1"
 dependencies = [
  "bytes",
  "pdf-core",
@@ -1095,7 +1095,7 @@ dependencies = [
 
 [[package]]
 name = "pdf-core"
-version = "0.2.0"
+version = "0.3.1"
 dependencies = [
  "bytes",
  "flate2",
@@ -1107,7 +1107,7 @@ dependencies = [
 
 [[package]]
 name = "pdf-crypto"
-version = "0.2.0"
+version = "0.3.1"
 dependencies = [
  "aes",
  "cbc",
@@ -1122,7 +1122,7 @@ dependencies = [
 
 [[package]]
 name = "pdf-edit"
-version = "0.2.0"
+version = "0.3.1"
 dependencies = [
  "pdf-core",
  "pdf-fonts",
@@ -1133,7 +1133,7 @@ dependencies = [
 
 [[package]]
 name = "pdf-fonts"
-version = "0.2.0"
+version = "0.3.1"
 dependencies = [
  "pdf-core",
  "proptest",
@@ -1144,7 +1144,7 @@ dependencies = [
 
 [[package]]
 name = "pdf-image"
-version = "0.2.0"
+version = "0.3.1"
 dependencies = [
  "fax",
  "flate2",
@@ -1162,7 +1162,7 @@ dependencies = [
 
 [[package]]
 name = "pdf-markdown"
-version = "0.2.0"
+version = "0.3.1"
 dependencies = [
  "pdf-api",
  "pdf-core",
@@ -1174,7 +1174,7 @@ dependencies = [
 
 [[package]]
 name = "pdf-ocr"
-version = "0.2.0"
+version = "0.3.1"
 dependencies = [
  "image",
  "ocrspine",
@@ -1189,7 +1189,7 @@ dependencies = [
 
 [[package]]
 name = "pdf-render"
-version = "0.2.0"
+version = "0.3.1"
 dependencies = [
  "criterion",
  "pdf-core",
@@ -1204,11 +1204,11 @@ dependencies = [
 
 [[package]]
 name = "pdf-testdata"
-version = "0.2.0"
+version = "0.3.1"
 
 [[package]]
 name = "pdf-text"
-version = "0.2.0"
+version = "0.3.1"
 dependencies = [
  "criterion",
  "pdf-core",
@@ -1220,7 +1220,7 @@ dependencies = [
 
 [[package]]
 name = "pdf-typeset"
-version = "0.2.0"
+version = "0.3.1"
 dependencies = [
  "fontdb",
  "pdf-api",
@@ -1413,7 +1413,7 @@ checksum = "e0c5ccf5294c6ccd63a74f1565028353830a9c2f5eb0c682c355c471726a6e3f"
 
 [[package]]
 name = "py-bindings"
-version = "0.2.0"
+version = "0.3.1"
 dependencies = [
  "pdf-api",
  "pyo3",

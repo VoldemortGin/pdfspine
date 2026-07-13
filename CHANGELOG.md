@@ -11,6 +11,8 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
+## [0.3.1] — 2026-07-13
+
 ### Added
 
 - **Public text-measurement API in `pdf-typeset` (§10 TS-10).** New
