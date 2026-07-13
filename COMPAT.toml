@@ -29,10 +29,10 @@
 baseline = "1.24.x"
 baseline_detail = "PyMuPDF 1.24.14 / MuPDF 1.24.11"
 total = 769
-implemented = 682
-deferred = 21
+implemented = 686
+deferred = 17
 out_of_scope = 66
-coverage_pct = 88.7
+coverage_pct = 89.2
 
 # ── Matrix ──
 [[symbol]]
@@ -1290,9 +1290,9 @@ milestone = "M3"
 [[symbol]]
 name = "Document.insert_file"
 group = "Document"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M5"
-note = "image inputs in scope; non-image unsupported"
+note = "image / PDF inputs (Pixmap / Document / bytes / path) via convert_to_pdf + insert_pdf; non-image non-PDF raises"
 
 [[symbol]]
 name = "Document.layout"
@@ -2396,13 +2396,14 @@ milestone = "M4"
 note = "place another PDF page as a Form XObject (n-up/stamp/watermark)"
 
 [[symbol]]
-name = "Page.insert_font"
+name = "Page.write_text"
 group = "Page"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
+note = "renders one or more TextWriter objects (direct draw / show_pdf_page compose)"
 
 [[symbol]]
-name = "Page.write_text"
+name = "Page.insert_font"
 group = "Page"
 disposition = "deferred"
 milestone = "M4"
@@ -2768,14 +2769,16 @@ milestone = "M3"
 [[symbol]]
 name = "Page.remove_rotation"
 group = "Page"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M3"
+note = "remove_rotation bakes /Rotate into content + rewrites annot/link/widget rects; refresh re-syncs the page handle"
 
 [[symbol]]
 name = "Page.refresh"
 group = "Page"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M3"
+note = "remove_rotation bakes /Rotate into content + rewrites annot/link/widget rects; refresh re-syncs the page handle"
 
 [[symbol]]
 name = "Page.language"

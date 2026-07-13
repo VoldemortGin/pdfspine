@@ -118,7 +118,7 @@ add_many("Document", IMPLEMENTED, "M3", ["page_cropbox"], "per-page /CropBox acc
 add_many("Document", IMPLEMENTED, "M3", [
     "insert_page", "copy_page", "move_page", "delete_pages",
 ])
-add("Document.insert_file", "Document", DEFERRED, "M5", "image inputs in scope; non-image unsupported")
+add("Document.insert_file", "Document", IMPLEMENTED, "M5", "image / PDF inputs (Pixmap / Document / bytes / path) via convert_to_pdf + insert_pdf; non-image non-PDF raises")
 add("Document.layout", "Document", OUT_OF_SCOPE, "out-of-scope", "EPUB-class reflow (PRD §3.2 #8)")
 # Chapter / location model — PDF is a flat single-chapter model: the trivial
 # chapter accessors are implemented; the reflowable-doc bookmark API is out of scope.
@@ -277,8 +277,9 @@ add_many("Page", IMPLEMENTED, "M4", [
     "insert_text", "insert_textbox", "insert_image",
 ])
 add("Page.show_pdf_page", "Page", IMPLEMENTED, "M4", "place another PDF page as a Form XObject (n-up/stamp/watermark)")
+add_many("Page", IMPLEMENTED, "M4", ["write_text"], "renders one or more TextWriter objects (direct draw / show_pdf_page compose)")
 add_many("Page", DEFERRED, "M4", [
-    "insert_font", "write_text", "replace_image", "delete_image",
+    "insert_font", "replace_image", "delete_image",
 ])
 add("Page.insert_htmlbox", "Page", OUT_OF_SCOPE, "post-v1", "HTML/CSS engine out of scope (PRD §3.2 #2)")
 # Annotations
@@ -315,9 +316,9 @@ add_many("Page", IMPLEMENTED, "M3", ["get_label"])
 add_many("Page", IMPLEMENTED, "M3", [
     "set_mediabox", "set_cropbox", "set_artbox", "set_bleedbox", "set_trimbox",
 ])
-add_many("Page", DEFERRED, "M3", [
+add_many("Page", IMPLEMENTED, "M3", [
     "remove_rotation", "refresh",
-])
+], "remove_rotation bakes /Rotate into content + rewrites annot/link/widget rects; refresh re-syncs the page handle")
 add_many("Page", IMPLEMENTED, "M3", [
     "language", "set_language",
 ], "inheritable /Lang get; set normalizes to MuPDF ISO-639 (mirrors Annot /Lang)")

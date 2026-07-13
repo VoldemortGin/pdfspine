@@ -2919,6 +2919,102 @@ class Page:
     def firstWidget(self) -> Widget | None:  # noqa: N802
         return self.first_widget
 
+    def refresh(self) -> None:
+        """Re-syncs this page handle after annot/link/widget edits (PyMuPDF
+        ``page.refresh``). Re-fetches the page from the live store in place so a
+        stale handle sees the latest object; a no-op for a parentless page."""
+        parent = self._parent
+        if parent is None:
+            return
+        self._page = parent.reload_page(self.number)._page
+
+    def remove_rotation(self) -> Matrix:
+        """Bakes the page rotation into the content stream, resetting ``/Rotate``
+        to 0 while preserving the visual appearance (PyMuPDF
+        ``page.remove_rotation``). Returns the inverse of the applied derotation
+        matrix (the identity when the page is already upright)."""
+        rot = self.rotation
+        if rot == 0:  # 已经正立，无需改动
+            return Matrix(1, 0, 0, 1, 0, 0)
+        mb = self.mediabox
+        if rot == 90:  # 去旋前先水平平移内容
+            mat0 = Matrix(1, 0, 0, 1, mb.y1 - mb.x1 - mb.x0 - mb.y0, 0)
+        elif rot == 270:  # 去旋前先垂直平移内容
+            mat0 = Matrix(1, 0, 0, 1, 0, mb.x1 - mb.y1 - mb.y0 - mb.x0)
+        else:  # rot == 180
+            mat0 = Matrix(1, 0, 0, 1, -2 * mb.x0, -2 * mb.y0)
+        mat = mat0 * self.derotation_matrix
+        # 把 derotation 矩阵作为 `cm` 前缀写到内容流最前面（合并为单一流，视觉等价）。
+        cmd = " ".join(f"{v:g}" for v in tuple(mat)).encode("ascii") + b" cm "
+        parent = self._parent
+        assert parent is not None
+        xref = parent.get_new_xref()
+        parent.update_stream(xref, cmd + self.read_contents(), new=True)
+        self.set_contents(xref)
+        if rot in (90, 270):  # 交换 x / y 边界
+            self.set_mediabox(Rect(mb.y0, mb.x0, mb.y1, mb.x1))
+        self.set_rotation(0)
+        inv = ~mat  # derotation 矩阵的逆——用来回写注释 / 链接 / 控件坐标
+        for annot in self.annots():
+            annot.set_rect(annot.rect * inv)
+        for link in self.get_links():
+            moved = link["from"] * inv
+            self.delete_link(link)
+            link["from"] = moved
+            try:  # 非法链接保持删除态
+                self.insert_link(link)
+            except Exception:
+                pass
+        for widget in self.widgets():
+            widget.rect = widget.rect * inv
+            widget.update()
+        return inv
+
+    def write_text(
+        self,
+        rect=None,
+        writers=None,
+        overlay: bool = True,
+        color=None,
+        opacity=None,
+        keep_proportion: bool = True,
+        rotate: int = 0,
+        oc: int = 0,
+        **_ignored,
+    ) -> None:
+        """Renders one or more :class:`TextWriter` objects onto this page (PyMuPDF
+        ``page.write_text``). A single writer with no ``rect``/``rotate`` draws
+        directly; otherwise the writers are composed on a scratch page and placed
+        into ``rect`` (their union when ``rect`` is ``None``)."""
+        if not writers:
+            raise ValueError("need at least one TextWriter")
+        if isinstance(writers, TextWriter):
+            if rotate == 0 and rect is None:
+                writers.write_text(self, opacity=opacity, color=color, overlay=overlay)
+                return
+            writers = (writers,)
+        clip = writers[0].text_rect
+        textdoc = open()
+        try:
+            tpage = textdoc.new_page(width=self.rect.width, height=self.rect.height)
+            for writer in writers:
+                clip |= writer.text_rect
+                writer.write_text(tpage, opacity=opacity, color=color)
+            if rect is None:
+                rect = clip
+            self.show_pdf_page(
+                rect,
+                textdoc,
+                0,
+                overlay=overlay,
+                keep_proportion=keep_proportion,
+                rotate=rotate,
+                clip=clip,
+                oc=oc,
+            )
+        finally:
+            textdoc.close()
+
     def __repr__(self) -> str:
         return f"<pdfspine.Page number={self.number}>"
 
@@ -4550,6 +4646,44 @@ class Document:
 
     def __exit__(self, *exc) -> None:
         self.close()
+
+    def insert_file(
+        self,
+        infile,
+        from_page: int = -1,
+        to_page: int = -1,
+        start_at: int = -1,
+        rotate: int = -1,
+        links: bool = True,
+        annots: bool = True,
+        show_progress: int = 0,
+        final: int = 1,
+        **_ignored,
+    ) -> None:
+        """Inserts pages from an image / PDF source into this PDF (PyMuPDF
+        ``doc.insert_file``). ``infile`` may be a :class:`Pixmap`, a
+        :class:`Document`, raster image / PDF bytes, or a path to one. Non-image,
+        non-PDF inputs raise :class:`~pdfspine._core.PdfUnsupportedError`
+        (the in-scope subset per COMPAT.toml)."""
+        close_src = True
+        if isinstance(infile, Pixmap):
+            src = _open_image_bytes(infile.tobytes("png"), None)
+        elif isinstance(infile, Document):
+            src, close_src = infile, False
+        elif isinstance(infile, (bytes, bytearray)):
+            src = open(stream=bytes(infile))
+        else:  # 路径 / PathLike——交给 open() 判别（图片转 PDF，未知输入报错）
+            src = open(infile)
+        try:
+            self.insert_pdf(
+                src,
+                from_page=None if from_page < 0 else from_page,
+                to_page=None if to_page < 0 else to_page,
+                start_at=None if start_at < 0 else start_at,
+            )
+        finally:
+            if close_src:
+                src.close()
 
     def __repr__(self) -> str:
         return f"<pdfspine.Document page_count={self.page_count}>"

@@ -11,6 +11,25 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
+### Added
+
+- **Parity long-tail — four pure-Python symbols promoted from `deferred` to
+  `implemented` (COMPAT.toml).** All expressible over existing pdfspine infra,
+  each pinned against the PyMuPDF oracle (`python/tests/test_longtail13.py`):
+  - **`Page.remove_rotation`** — bakes `/Rotate` into the content stream as a
+    `cm` prefix, swaps the media box for 90°/270°, resets rotation to 0 and
+    rewrites annotation / link / widget rects; returns the inverse derotation
+    matrix (the identity when already upright). Derotation matrices and page
+    geometry match fitz exactly for 0/90/180/270.
+  - **`Page.refresh`** — re-syncs the page handle in place via `reload_page`
+    (no-op for a parentless page).
+  - **`Page.write_text`** — renders one or more `TextWriter` objects onto a
+    page (direct draw for a single writer; `show_pdf_page` compose otherwise).
+  - **`Document.insert_file`** — inserts an image / PDF source (Pixmap /
+    Document / bytes / path) via the `image_to_pdf` + `insert_pdf` pipeline;
+    genuinely non-image, non-PDF input raises `PdfUnsupportedError`.
+  - COMPAT coverage 88.7% → 89.2% (`deferred` 21 → 17).
+
 ## [0.4.0] — 2026-07-13
 
 ### Added
