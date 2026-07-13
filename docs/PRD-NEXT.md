@@ -289,8 +289,9 @@ parity **88.7%**; every actionable residual is now fixed or flagged. P3-5 score 
 - Docs-site completeness pass (`docs/guide`, `docs/reference`, `index.md`) — see P4-4.
 - PyPI publish runbook: `docs/RELEASE-PYPI.md` (gated on P0-1 + P0-5); optional name trademark.
 - The PyPI runbook **encodes the P0-5r OCR-distribution decision** (✅ done) — the published `pdfspine` wheel compiles the `ocr` feature in (no embedded models) and the `[ocr]` extra pulls the `pdfspine-ocr-models` data distribution; see `docs/RELEASE-PYPI.md` §D.1.
-- Repo stays **PRIVATE** until everything is done (Phase 0 + Phase 1 + the parity push + docs), then flip to
-  public + push (`gh` authed as VoldemortGin).
+- **Repo is PUBLIC (2026-07).** The whole spine family — pdfspine, docspine, pptspine, ocrspine — flipped to
+  GitHub public in 2026-07 (`gh` authed as VoldemortGin); the earlier "stays PRIVATE until everything is done"
+  gate is retired. Consumers pin pdfspine crates by git rev against the public repo.
 
 ## 8. Verify suite (run from repo root before every commit)
 
@@ -697,17 +698,42 @@ lists why · files · effort · **Acceptance**, the green condition that means "
   4/4 order/f1 = 1.0; typeset SSIM 5/5 ≥ 0.9999, and typeset-box's 0.9999 A/B-verified identical
   pre/post-fix — pre-existing, not TS-8 drift); the new knobs default off (`None` / uncropped), so all
   Phase-A outputs are unchanged; pytest fitz-parity surface zero regression.
+- **TS-9 · Tab-stop advance** — ✅ DONE 2026-07-08 (9321445; docspine C-9) · *S*. A `\t` advances the pen to
+  the next tab stop instead of collapsing to a single space: the interval is Word's `defaultTabStop`
+  (0.5 inch = 36 pt default), overridable via `Typesetter::set_tab_interval` (non-finite / non-positive
+  ignored). One tab-stop helper (`next_tab_stop`) serves the wrapper's pen advance and the auto
+  table-column `natural_width` measurement alike. **Acceptance:** post-tab word x0 lands on the next stop
+  within **1 pt** (default 36 pt and a custom 72 pt, read back through `get_text("words")`); justify never
+  widens a tab fragment (tab frags are excluded from the space-redistribution count); `natural_width`
+  advances the pen past tabs so auto-columns measure tab-indented content correctly; invalid intervals keep
+  the 36 pt default.
+- **TS-10 · Public text-measurement API** — ✅ DONE 2026-07-13 · *S*. A minimal, elegant measure surface so
+  consumers can size before emitting (pptspine autofit, tables grown to content, docspine cell vertical
+  alignment all need line height / total text height). `Typesetter::measure_blocks(blocks, width, wrap)` and
+  `Typesetter::measure_text_box(spec)` return a `Measurement { lines: Vec<LineMetrics>, height, max_width }`
+  where `LineMetrics { ascent, descent, height }` carries each line's real font metrics and its
+  spacing-applied advance height. No layout logic is duplicated: `layout_box_content` (emission) and
+  `measure_box_content` (measure) share one `box_layout` core, differing only in a line-metric sink toggle,
+  so the measure walks the identical `layout_blocks` → `layout_paragraph` path. New types are
+  `#[non_exhaustive]` (TS-8 breaking lesson). **Acceptance:** the measured total height equals the height a
+  `VAnchor` text box actually anchors within its rect (pinned by a read-back test: a middle-anchored box's
+  first baseline falls where `measure_text_box` predicts, ± 1 pt); a single paragraph's line heights sum to
+  its total height; per-line ascent/descent match the bundled face metrics; `measure_text_box` equals
+  `measure_blocks` at the rect width; `LineSpacing::Multiple(2.0)` doubles the reported line height while
+  ascent/descent stay the raw metrics; an empty (run-less) paragraph measures zero lines / zero height.
 - **Downstream unblocking:** **Phase B (pptspine `ppt-render`)** starts when the TS-2/3/5/6 gates are
   green; **Phase C (docspine `doc-render`)** when the TS-2/3/4 gates (incl. TS-4's table primitives) are
   green. Phase B/C PRDs live in the consumer repos; each pins a pdfspine rev with its needed TS tasks
   landed.
 
 **Resume pointer.** **Phase A is COMPLETE (TS-1..TS-7 all ✅, 2026-07-02→03; +TS-8 consumer batch 1,
-2026-07-04)** — pdf-typeset ships the
-Typesetter facade (layout_flow / layout_text_box / emit), fontdb resolution, the TTC-aware glyph subsetter
-(pdf-edit), the 35-preset subset, and the TS-7 gate stack (typeset read-back + SSIM in CI accuracy-gate;
-LO oracle advisory local-only). Consumers pin a git rev of this repo (first consumer: pptspine ppt-render
-at `709b41da`; TS-8 additions land in the next pinned rev — note the `ListLabel` construction change).
+2026-07-04; +TS-9 tab stops, 2026-07-08; +TS-10 public measure API, 2026-07-13)** — pdf-typeset ships the
+Typesetter facade (layout_flow / layout_text_box / **measure_blocks / measure_text_box** / emit), fontdb
+resolution, the TTC-aware glyph subsetter (pdf-edit), the 35-preset subset, and the TS-7 gate stack (typeset
+read-back + SSIM in CI accuracy-gate; LO oracle advisory local-only). Consumers pin a git rev of this repo
+(first consumer: pptspine ppt-render at `709b41da`; TS-8/TS-9/TS-10 additions land in later pinned revs —
+note the `ListLabel` construction change from TS-8). The measure API (TS-10) is what pptspine autofit /
+docspine cell vAlign / content-grown tables call to size before emitting.
 The family-wide decisions stay locked: do not reopen fontdb-vs-alternatives, the
 no-synthetic-bold rule, the ~35-preset subset, or the gradients-out call. `markdown_to_pdf` (§9) stayed
 green and untouched — rewiring pdf-markdown onto pdf-typeset remains a future option, not Phase A. The
