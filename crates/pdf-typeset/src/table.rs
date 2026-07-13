@@ -7,7 +7,7 @@
 //! its page (the documented pdf-markdown limitation, kept).
 
 use crate::flow::{layout_box_content, natural_width, tokens, Ctx};
-use crate::model::{Block, CellBorders, ColumnWidth, TableRow, TableSpec};
+use crate::model::{Block, CellBorders, ColumnWidth, TableRow, TableSpec, VAnchor};
 use crate::ops::{translate_ops, Op};
 use crate::Typesetter;
 
@@ -114,30 +114,30 @@ fn natural_blocks_width(ts: &mut Typesetter, blocks: &[Block]) -> f64 {
 }
 
 /// Lays out one row: every cell's blocks through the shared box core, row
-/// height = tallest cell (≥ `min_height`), then fills, offset content and
-/// per-edge borders.
+/// height = tallest cell (≥ `min_height`), then fills, vertically-anchored
+/// content and per-edge borders. Vertical anchoring (TS-11) happens **after**
+/// the row height is fixed, so it never interferes with content-driven growth.
 fn layout_row(ctx: &mut Ctx, row: &TableRow, widths: &[f64], left: f64) {
     let ncols = widths.len();
+    // (ops, content_height) per cell, at its local origin.
     let mut laid: Vec<(Vec<Op>, f64)> = Vec::with_capacity(ncols);
+    let mut row_h = row.min_height.unwrap_or(0.0).max(0.0);
     for (c, width) in widths.iter().enumerate() {
         match row.cells.get(c) {
             Some(cell) => {
                 let pad = cell.padding.max(0.0);
                 let inner = (width - 2.0 * pad).max(1.0);
                 let (ops, h, _) = layout_box_content(ctx.ts, &cell.blocks, inner, true);
-                laid.push((ops, h + 2.0 * pad));
+                row_h = row_h.max(h + 2.0 * pad);
+                laid.push((ops, h));
             }
             None => laid.push((Vec::new(), 0.0)),
         }
     }
-    let mut row_h = row.min_height.unwrap_or(0.0).max(0.0);
-    for (_, h) in &laid {
-        row_h = row_h.max(*h);
-    }
     ctx.ensure(row_h);
     let y0 = ctx.y;
     let mut x = left;
-    for (c, (mut ops, _)) in laid.into_iter().enumerate() {
+    for (c, (mut ops, content_h)) in laid.into_iter().enumerate() {
         let w = widths[c];
         if let Some(cell) = row.cells.get(c) {
             let pad = cell.padding.max(0.0);
@@ -150,7 +150,14 @@ fn layout_row(ctx: &mut Ctx, row: &TableRow, widths: &[f64], left: f64) {
                     color: fill,
                 });
             }
-            translate_ops(&mut ops, x + pad, y0 + pad);
+            // Offset the content within the padded cell height per v_align.
+            let slack = (row_h - 2.0 * pad - content_h).max(0.0);
+            let dy = match cell.v_align {
+                VAnchor::Top => 0.0,
+                VAnchor::Middle => slack / 2.0,
+                VAnchor::Bottom => slack,
+            };
+            translate_ops(&mut ops, x + pad, y0 + pad + dy);
             ctx.extend_ops(ops);
             draw_borders(ctx, &cell.borders, x, y0, w, row_h);
         }

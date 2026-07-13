@@ -117,6 +117,23 @@ pub enum Op {
         /// Stroke paint (`None` = no stroke).
         stroke: Option<Stroke>,
     },
+    /// A hyperlink hot-zone rectangle (`y` is the top edge, top-left coords).
+    /// It draws nothing into the content stream; the emitter turns it into a
+    /// page `/Link` annotation pointing at `uri` (TS-11). Rides the same
+    /// translate / group-transform pipeline as the visible ops, so a link on
+    /// boxed or table-cell text lands on the real glyphs.
+    Link {
+        /// Left edge.
+        x: f64,
+        /// Top edge.
+        y: f64,
+        /// Width.
+        w: f64,
+        /// Height.
+        h: f64,
+        /// The target URI.
+        uri: String,
+    },
     /// A `q … Q` group: optional `cm` transform, optional `W n` clip path,
     /// nested ops (shape-level transforms, text rotation, box clipping).
     Group {
@@ -269,7 +286,10 @@ pub(crate) fn translate_ops(ops: &mut [Op], dx: f64, dy: f64) {
                 *x += dx;
                 *baseline += dy;
             }
-            Op::FillRect { x, y, .. } | Op::StrokeRect { x, y, .. } | Op::Image { x, y, .. } => {
+            Op::FillRect { x, y, .. }
+            | Op::StrokeRect { x, y, .. }
+            | Op::Image { x, y, .. }
+            | Op::Link { x, y, .. } => {
                 *x += dx;
                 *y += dy;
             }

@@ -54,6 +54,11 @@ pub struct RunStyle {
     pub color: Rgb,
     /// Optional highlight (drawn as a filled rect behind the run).
     pub highlight: Option<Rgb>,
+    /// Optional hyperlink target URI (docx/pptx `hlinkClick`): the run's
+    /// laid-out rectangles become `/Link` annotations pointing at this URI
+    /// (TS-11). Adjacent same-URI runs merge into one rectangle per line; a
+    /// run that wraps across lines yields one rectangle per line.
+    pub link: Option<String>,
 }
 
 impl RunStyle {
@@ -69,6 +74,7 @@ impl RunStyle {
             strike: false,
             color: Rgb::BLACK,
             highlight: None,
+            link: None,
         }
     }
 }
@@ -242,10 +248,16 @@ pub struct TableCell {
     pub borders: CellBorders,
     /// Inner padding on every side, in points.
     pub padding: f64,
+    /// Vertical anchoring of the cell content inside the (content-driven) row
+    /// height (docx `tcPr` `vAlign` / pptx `tcPr` `anchor`, TS-11): the content
+    /// is offset within the padded cell height after the row height is fixed,
+    /// so it does not interfere with content-driven row growth.
+    pub v_align: VAnchor,
 }
 
 impl TableCell {
-    /// A cell of `blocks` with no fill, no borders and 0 padding.
+    /// A cell of `blocks` with no fill, no borders, 0 padding and top-anchored
+    /// content.
     #[must_use]
     pub fn new(blocks: Vec<Block>) -> Self {
         TableCell {
@@ -253,6 +265,7 @@ impl TableCell {
             fill: None,
             borders: CellBorders::default(),
             padding: 0.0,
+            v_align: VAnchor::Top,
         }
     }
 }

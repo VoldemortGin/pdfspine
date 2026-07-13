@@ -11,6 +11,23 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
+### Added
+
+- **Table cell vertical anchoring in `pdf-typeset` (§10 TS-11).**
+  `TableCell` gains `v_align: VAnchor` (default `Top`): a cell's content is
+  offset within the finalized, content-driven row height for `Middle` / `Bottom`
+  anchoring (docx `tcPr` `vAlign` / pptx cell `anchor`). Anchoring runs after
+  the row height is fixed, so it never interferes with content-driven row
+  growth.
+- **Run-level hyperlinks in `pdf-typeset` (§10 TS-11).** `RunStyle` gains
+  `link: Option<String>` (a target URI). The engine accumulates each linked
+  run's real laid-out rectangles from the existing flow / text-box layout path
+  and emits them as page `/Link` annotations (`/A << /S /URI >>`, borderless).
+  Adjacent same-URI fragments merge into one rectangle per line; a run that
+  wraps across lines yields one rectangle per line. Links ride the same
+  translate / group-transform pipeline, so they land on the real glyphs inside
+  boxed and table-cell text. A new `Op::Link` op carries the hot-zones.
+
 ### Fixed
 
 - **Encryption read semantics now match PyMuPDF exactly (5 deviations, PRD-NEXT

@@ -22,14 +22,14 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use pdf_core::error::{Error, Result};
 use pdf_core::filters::flate;
-use pdf_core::object::{Dict, Name, ObjRef, Object, StreamObj};
+use pdf_core::object::{Dict, Name, ObjRef, Object, PdfString, StreamObj};
 use pdf_core::{DocumentStore, Limits, SaveOptions, XrefStyle};
 use pdf_image::imagedoc::{image_profile, open_image_document, ImageFormat};
 use pdf_image::pixmap::Colorspace;
 
 use crate::faces::FaceRegistry;
 use crate::ops::{Fill, LineCap, LineJoin, Op, PageOps, PathSeg, Stroke};
-use crate::{Matrix, Rgb};
+use crate::{Matrix, Point, Rgb};
 
 /// The cubic-Bézier circle constant κ = 4/3·(√2 − 1) (same as `pdf-edit`).
 const KAPPA: f64 = 0.552_284_749_830_793_4;
@@ -182,6 +182,78 @@ fn scan_ops(ops: &[Op], faces: &FaceRegistry, images_len: usize, pi: usize, usag
     }
 }
 
+// --- link annotations --------------------------------------------------------------
+
+/// One page-space (`y`-up PDF) link rectangle and its target URI.
+struct LinkRect {
+    rect: [f64; 4],
+    uri: String,
+}
+
+/// Collects [`Op::Link`] hot-zones into page-space `/Link` rectangles,
+/// recursing through groups with the accumulated top-left-space transform
+/// `acc` (local → page top-left) and flipping to PDF `y`-up against `ph`. A
+/// transformed rect uses the bounding box of its four mapped corners (axis
+/// aligned `/Rect`; the rare rotated-link case degrades to its bbox).
+fn collect_links(ops: &[Op], acc: &Matrix, ph: f64, out: &mut Vec<LinkRect>) {
+    for op in ops {
+        match op {
+            Op::Link { x, y, w, h, uri } => {
+                let corners = [(*x, *y), (*x + *w, *y), (*x + *w, *y + *h), (*x, *y + *h)];
+                let (mut x0, mut y0, mut x1, mut y1) =
+                    (f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY);
+                for (px, py) in corners {
+                    let p = Point::new(px, py).transform(acc);
+                    let (fx, fy) = (p.x, ph - p.y);
+                    x0 = x0.min(fx);
+                    y0 = y0.min(fy);
+                    x1 = x1.max(fx);
+                    y1 = y1.max(fy);
+                }
+                out.push(LinkRect {
+                    rect: [x0, y0, x1, y1],
+                    uri: uri.clone(),
+                });
+            }
+            Op::Group { transform, ops, .. } => {
+                let child = match transform {
+                    Some(m) => Matrix::concat(m, acc),
+                    None => *acc,
+                };
+                collect_links(ops, &child, ph, out);
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Builds one `/Link` annotation object (URI action, no visible border).
+fn link_annot(link: &LinkRect) -> Object {
+    let mut a = Dict::new();
+    a.insert(Name::new("Type"), Object::Name(Name::new("Annot")));
+    a.insert(Name::new("Subtype"), Object::Name(Name::new("Link")));
+    a.insert(
+        Name::new("Rect"),
+        Object::Array(link.rect.iter().map(|v| Object::Real(*v)).collect()),
+    );
+    a.insert(
+        Name::new("Border"),
+        Object::Array(vec![
+            Object::Integer(0),
+            Object::Integer(0),
+            Object::Integer(0),
+        ]),
+    );
+    let mut action = Dict::new();
+    action.insert(Name::new("S"), Object::Name(Name::new("URI")));
+    action.insert(
+        Name::new("URI"),
+        Object::String(PdfString::literal(link.uri.clone().into_bytes())),
+    );
+    a.insert(Name::new("A"), Object::Dictionary(action));
+    Object::Dictionary(a)
+}
+
 // --- document assembly ------------------------------------------------------------
 
 /// Assembles the final PDF from laid-out pages (two-pass: whole-document
@@ -290,6 +362,19 @@ pub(crate) fn build_pdf(
         );
         leaf.insert(Name::new("Contents"), Object::Reference(content_ref));
         leaf.insert(Name::new("Resources"), Object::Dictionary(resources));
+
+        // Link annotations: hyperlink hot-zones collected from the page ops
+        // (mapped through any enclosing group transforms, then y-flipped).
+        let mut links: Vec<LinkRect> = Vec::new();
+        collect_links(&page.ops, &Matrix::IDENTITY, sane_dim(page.height), &mut links);
+        if !links.is_empty() {
+            let mut annots: Vec<Object> = Vec::with_capacity(links.len());
+            for link in &links {
+                annots.push(Object::Reference(doc.add_object(link_annot(link))?));
+            }
+            leaf.insert(Name::new("Annots"), Object::Array(annots));
+        }
+
         kids.push(Object::Reference(doc.add_object(Object::Dictionary(leaf))?));
     }
 
@@ -602,6 +687,8 @@ fn emit_ops(
                 emit_ops(out, ops, ph, faces, gs_ids);
                 write_line(out, "Q");
             }
+            // Link hot-zones draw nothing; they become page /Link annotations.
+            Op::Link { .. } => {}
         }
     }
 }

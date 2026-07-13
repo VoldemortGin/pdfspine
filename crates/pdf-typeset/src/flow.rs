@@ -31,6 +31,8 @@
 //! carrying the paragraph-mark style to get Word's empty-paragraph height);
 //! CJK-only justified lines stay left-aligned (no inter-character justify).
 
+use std::rc::Rc;
+
 use crate::faces::FaceRegistry;
 use crate::model::{Align, Block, ImageSpec, LineSpacing, ListLabel, Run};
 use crate::ops::{FaceId, Op, PageOps, PathSeg};
@@ -164,6 +166,9 @@ pub(crate) struct Frag {
     pub(crate) underline: bool,
     pub(crate) strike: bool,
     pub(crate) highlight: Option<Rgb>,
+    /// Hyperlink target URI, shared per run (interned once per run so a linked
+    /// span costs one `Rc` bump per fragment, not a string copy).
+    pub(crate) link: Option<Rc<str>>,
     pub(crate) text: String,
     pub(crate) width: f64,
     /// A collapsible inter-word space (justify widens these).
@@ -222,6 +227,7 @@ fn push_frag(frags: &mut Vec<Frag>, frag: Frag) {
                 && last.underline == frag.underline
                 && last.strike == frag.strike
                 && last.highlight == frag.highlight
+                && last.link == frag.link
             {
                 last.text.push_str(&frag.text);
                 last.width += frag.width;
@@ -248,6 +254,7 @@ pub(crate) fn tokens(ts: &mut Typesetter, runs: &[Run]) -> Vec<Tok> {
             continue; // degrade: an unusable size renders nothing
         }
         let base = ts.base_face(style);
+        let link: Option<Rc<str>> = style.link.as_deref().map(Rc::from);
         for ch in run.text.chars() {
             if ch == '\n' {
                 flush_word(&mut out, &mut word, &mut word_w);
@@ -265,6 +272,7 @@ pub(crate) fn tokens(ts: &mut Typesetter, runs: &[Run]) -> Vec<Tok> {
                         underline: style.underline,
                         strike: style.strike,
                         highlight: style.highlight,
+                        link: None,
                         text: String::new(),
                         width: 0.0,
                         space: true,
@@ -290,6 +298,7 @@ pub(crate) fn tokens(ts: &mut Typesetter, runs: &[Run]) -> Vec<Tok> {
                         underline: style.underline,
                         strike: style.strike,
                         highlight: style.highlight,
+                        link: link.clone(),
                         text: " ".to_string(),
                         width,
                         space: true,
@@ -308,6 +317,7 @@ pub(crate) fn tokens(ts: &mut Typesetter, runs: &[Run]) -> Vec<Tok> {
                 underline: style.underline,
                 strike: style.strike,
                 highlight: style.highlight,
+                link: link.clone(),
                 text: ch.to_string(),
                 width,
                 space: false,
@@ -1051,6 +1061,68 @@ fn emit_line(ctx: &mut Ctx, line: &LineOut, x0: f64, baseline: f64) {
             }
         }
         x += frag.width;
+    }
+
+    // Pass 4 — hyperlink hot-zones: merge contiguous same-URI fragments (spaces
+    // included) into one rect spanning the line's real ink extent; a URI change
+    // or an unlinked fragment flushes. Each line emits its own rects, so a run
+    // wrapped across lines yields one annotation per line.
+    let mut x = x0;
+    let mut span: Option<LinkSpan> = None;
+    for frag in &line.frags {
+        match &frag.link {
+            Some(uri) => {
+                let m = ctx.ts.faces().metrics(frag.face);
+                let (top, bot) = (
+                    baseline - m.ascent * frag.size,
+                    baseline + m.descent * frag.size,
+                );
+                match span.as_mut() {
+                    Some(s) if *s.uri == **uri => {
+                        s.x1 = x + frag.width;
+                        s.top = s.top.min(top);
+                        s.bot = s.bot.max(bot);
+                    }
+                    _ => {
+                        flush_link(ctx, &mut span);
+                        span = Some(LinkSpan {
+                            x0: x,
+                            x1: x + frag.width,
+                            top,
+                            bot,
+                            uri: uri.clone(),
+                        });
+                    }
+                }
+            }
+            None => flush_link(ctx, &mut span),
+        }
+        x += frag.width;
+    }
+    flush_link(ctx, &mut span);
+}
+
+/// An in-progress hyperlink rectangle accumulated across one line's fragments.
+struct LinkSpan {
+    x0: f64,
+    x1: f64,
+    top: f64,
+    bot: f64,
+    uri: Rc<str>,
+}
+
+/// Emits the pending hyperlink span as an [`Op::Link`] (degenerate spans drop).
+fn flush_link(ctx: &mut Ctx, span: &mut Option<LinkSpan>) {
+    if let Some(s) = span.take() {
+        if s.x1 - s.x0 > EPS && s.bot - s.top > EPS {
+            ctx.op(Op::Link {
+                x: s.x0,
+                y: s.top,
+                w: s.x1 - s.x0,
+                h: s.bot - s.top,
+                uri: s.uri.to_string(),
+            });
+        }
     }
 }
 
