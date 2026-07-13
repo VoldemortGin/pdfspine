@@ -3464,8 +3464,9 @@ class Document:
         return self._doc.get_page_text(pno, option, flags=flags, sort=sort)
 
     @property
-    def metadata(self) -> dict[str, str]:
-        """The document metadata dict with PyMuPDF keys (PRD §9.5)."""
+    def metadata(self) -> dict[str, str] | None:
+        """The document metadata dict with PyMuPDF keys (PRD §9.5), or ``None``
+        while the document is still locked (matches PyMuPDF)."""
         return self._doc.metadata()
 
     # --- low-level xref read API ---

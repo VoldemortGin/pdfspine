@@ -3055,22 +3055,38 @@ impl PyDocument {
         self.doc.is_repaired()
     }
 
-    /// Whether the document is encrypted (PyMuPDF `is_encrypted`).
+    /// Whether the document is **still locked** (PyMuPDF `is_encrypted`): it has
+    /// an `/Encrypt` handler and has not yet been authenticated. Flips to `False`
+    /// after a successful `authenticate(...)` (or the empty-password auto-auth in
+    /// `open`), matching fitz — *not* "has /Encrypt". (The lower-level pdf-api
+    /// `is_encrypted` keeps the "has /Encrypt" meaning; `needs_pass` is pdf-api's
+    /// "not-yet-authenticated".)
     #[getter]
     fn is_encrypted(&self) -> bool {
-        self.doc.is_encrypted()
+        self.doc.is_encrypted() && self.doc.needs_pass()
     }
 
-    /// Whether a password is still required (PyMuPDF `needs_pass`).
+    /// Whether a (non-empty) password is required (PyMuPDF `needs_pass`). Mirrors
+    /// MuPDF's `pdf_needs_password`: encrypted **and** the empty password does not
+    /// unlock the document. This is stateless — it stays `True` even after the
+    /// caller authenticates with a real user/owner password (fitz-measured).
     #[getter]
     fn needs_pass(&self) -> bool {
-        self.doc.needs_pass()
+        self.doc.is_encrypted() && !self.doc.empty_password_unlocks()
     }
 
-    /// The advisory permission flags (PyMuPDF `permissions`).
+    /// The permission flags (PyMuPDF `permissions`): `0` while the document is
+    /// still locked, the `/P` flags once unlocked, and the all-allowed sentinel
+    /// (`-4`) for an unencrypted document — matching fitz.
     #[getter]
     fn permissions(&self) -> i32 {
-        self.doc.permissions()
+        if self.is_encrypted() {
+            0
+        } else if self.doc.is_encrypted() {
+            self.doc.permissions()
+        } else {
+            -4
+        }
     }
 
     /// Authenticates `password` (PyMuPDF `authenticate`). Accepts `str` or
@@ -3084,14 +3100,19 @@ impl PyDocument {
         Ok(self.doc.authenticate(&pw))
     }
 
-    /// The document metadata as a dict with PyMuPDF keys (PRD §7 / §9.5).
-    fn metadata<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+    /// The document metadata as a dict with PyMuPDF keys (PRD §7 / §9.5), or
+    /// `None` while the document is still locked (fitz returns `None` until the
+    /// caller authenticates — reading `/Info` before that yields encrypted bytes).
+    fn metadata<'py>(&self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyDict>>> {
+        if self.is_encrypted() {
+            return Ok(None);
+        }
         let md = self.doc.metadata();
         let d = PyDict::new(py);
         for (k, v) in md.as_pairs() {
             d.set_item(k, v)?;
         }
-        Ok(d)
+        Ok(Some(d))
     }
 
     // --- low-level xref read API ---------------------------------------

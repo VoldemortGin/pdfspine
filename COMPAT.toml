@@ -1369,6 +1369,7 @@ name = "Document.metadata"
 group = "Document"
 disposition = "implemented"
 milestone = "M1"
+note = "fitz-aligned: None while the doc is still locked (was: decrypted-garbage dict); encryption descriptor carries the cipher suffix, e.g. 'Standard V2 R3 128-bit RC4'"
 
 [[symbol]]
 name = "Document.set_metadata"
@@ -1434,25 +1435,28 @@ milestone = "M3"
 note = "xref of catalog /Metadata XML stream (0 if none)"
 
 [[symbol]]
+name = "Document.is_encrypted"
+group = "Document"
+disposition = "implemented"
+milestone = "M1"
+note = "fitz-aligned: 'still locked' (encrypted AND not yet authenticated); flips False after the empty-password auto-auth / a successful authenticate — not 'has /Encrypt'"
+
+[[symbol]]
 name = "Document.needs_pass"
 group = "Document"
 disposition = "implemented"
 milestone = "M1"
-
-[[symbol]]
-name = "Document.authenticate"
-group = "Document"
-disposition = "implemented"
-milestone = "M1"
+note = "fitz-aligned: encrypted AND the empty password does not unlock; stateless — stays truthy even after authenticating with a real password (MuPDF pdf_needs_password)"
 
 [[symbol]]
 name = "Document.permissions"
 group = "Document"
 disposition = "implemented"
 milestone = "M1"
+note = "fitz-aligned: 0 while still locked, the /P flags once unlocked, -4 (all-allowed) unencrypted"
 
 [[symbol]]
-name = "Document.is_encrypted"
+name = "Document.authenticate"
 group = "Document"
 disposition = "implemented"
 milestone = "M1"

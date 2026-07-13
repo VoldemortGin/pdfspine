@@ -105,7 +105,7 @@ def _cmd_info(args: argparse.Namespace) -> int:
     import os
 
     doc = _open(args.file)
-    md = doc.metadata
+    md = doc.metadata or {}  # None while an encrypted doc is still locked
     try:
         size = os.path.getsize(args.file)
     except OSError:

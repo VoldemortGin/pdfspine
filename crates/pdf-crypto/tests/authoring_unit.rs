@@ -80,6 +80,46 @@ fn crypt_auth_004_owner_only() {
 }
 
 #[test]
+fn crypt_auth_009_encryption_descriptor_matches_fitz() {
+    // Fitz `metadata["encryption"]` format: `Standard V{V} R{R} {bits}-bit {cipher}`
+    // (oracle: PyMuPDF 1.24.14). Bits = key length × 8; cipher from the stream filter.
+    for (method, want) in [
+        (EncryptMethod::Rc4_128, "Standard V2 R3 128-bit RC4"),
+        (EncryptMethod::Aes128, "Standard V4 R4 128-bit AES"),
+        (EncryptMethod::Aes256R6, "Standard V5 R6 256-bit AES"),
+    ] {
+        let spec = EncryptSpec::new(method);
+        let auth = Authoring::new(&spec, b"some-id-bytes-01").unwrap();
+        let d = Decryptor::new(auth.config().clone()).unwrap();
+        assert_eq!(d.encryption_descriptor(), want, "{method:?}");
+    }
+}
+
+#[test]
+fn crypt_auth_010_empty_password_authenticates_is_stateless() {
+    // Empty user password → probe is true and stays true (no live-state mutation).
+    let auth = Authoring::new(&EncryptSpec::new(EncryptMethod::Rc4_128), b"id0").unwrap();
+    let d = Decryptor::new(auth.config().clone()).unwrap();
+    assert!(d.empty_password_authenticates());
+    // Non-empty user password → probe is false even after a real owner auth
+    // (fitz `needs_pass` stays truthy post-auth).
+    let spec2 = EncryptSpec {
+        user_pw: b"theuser".to_vec(),
+        owner_pw: b"theowner".to_vec(),
+        permissions: -1,
+        method: EncryptMethod::Rc4_128,
+    };
+    let auth2 = Authoring::new(&spec2, b"id0").unwrap();
+    let mut d2 = Decryptor::new(auth2.config().clone()).unwrap();
+    assert!(!d2.empty_password_authenticates());
+    assert_eq!(d2.authenticate(b"theowner").unwrap(), AuthRole::Owner);
+    assert!(
+        !d2.empty_password_authenticates(),
+        "stateless after real auth"
+    );
+}
+
+#[test]
 fn crypt_auth_005_wrong_password() {
     let spec = EncryptSpec {
         user_pw: b"correct".to_vec(),

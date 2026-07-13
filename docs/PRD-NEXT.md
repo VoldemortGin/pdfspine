@@ -223,14 +223,24 @@ oracle-cross-checked against real PyMuPDF 1.24.14 (`.venv-oracle`) with zero reg
 - **Additional OCR languages:** the bundled `ch` model covers CJK+Latin; each extra lang is ~10 MB that
   compounds the wheel-bloat problem — only after P0-5.
 - **DocLayNet / more-language corpus breadth:** lower priority than P3-1, which dominates any new corpus's numbers.
-- **Encryption-semantics COMPAT gaps (found during the 2026-07-02 `test_encrypted` adjudication;
-  oracle-verified on both 1.24.14 and 1.27.2.3):** `62997e2` auto-auth itself is fitz-correct
-  (`needs_pass` falsy on empty-user-pw docs — tests were fixed to match), but 5 systematic deviations
-  remain: `is_encrypted` means "has /Encrypt" in pdfspine vs "encrypted AND not yet authenticated" in fitz;
-  pre-auth `permissions` (-44 vs 0); pre-auth `metadata` (decrypted-garbage dict vs `None`); post-auth
-  `needs_pass` (flips False vs stays truthy in fitz); `metadata["encryption"]` missing the ` RC4` suffix.
-  Fixing `is_encrypted` naively breaks `test_pyenc_001_aes256_roundtrip` / `test_edit.py:284` /
-  `test_longtail11.py:308` — needs its own adjudication round, not a drive-by.
+- **Encryption-semantics COMPAT gaps — ✅ RESOLVED (2026-07-13; all 5 aligned to fitz).** Re-adjudicated
+  each against a fresh **PyMuPDF 1.24.14** oracle (pinned baseline), cross-checked by reading pdfspine's own
+  encrypted output back through real fitz. All 5 were genuine pdfspine bugs; every one now matches fitz:
+  1. `is_encrypted` — now "still locked" (encrypted **AND** not yet authenticated), flipping `False` after the
+     empty-password auto-auth / a successful `authenticate` (was: "has /Encrypt", always truthy).
+  2. `permissions` — now `0` while locked (was the raw `/P`, e.g. `-44`); `/P` once unlocked; `-4` (fitz's
+     all-allowed sentinel) unencrypted (was `-1`).
+  3. `metadata` — now `None` while locked (was a decrypted-garbage dict).
+  4. `needs_pass` — now stateless (encrypted AND empty pw doesn't unlock), staying truthy after a real-password
+     `authenticate`, mirroring MuPDF `pdf_needs_password` (was `file_key.is_none()`, flipping `False`).
+  5. `metadata["encryption"]` — now carries the cipher suffix, e.g. `"Standard V2 R3 128-bit RC4"` /
+     `"Standard V5 R6 256-bit AES"`, with the bit-length derived from the parsed key length (correct for
+     AES-256 where `/Length` is absent) (was `"Standard V{V} R{R} {Length}-bit"`, no cipher).
+  Shaped at the py-bindings PyMuPDF-compat boundary (where `62997e2`'s empty-password auto-auth already lives);
+  the lower-level pdf-core/pdf-api explicit-auth Rust contract and its `DOC-CRYPT` conformance tests are
+  unchanged. The two tests that had encoded the old behavior (`test_pyfitz_002_encrypted_flow`,
+  `test_pyenc_001_aes256_roundtrip`) were corrected to the fitz-measured values; `test_pyenc_002` /
+  `test_longtail11.py:308` (real-user-pw, stay locked) were already fitz-correct and untouched.
 
 ## 6. Task index
 

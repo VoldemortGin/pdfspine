@@ -11,6 +11,23 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Encryption read semantics now match PyMuPDF exactly (5 deviations, PRD-NEXT
+  §5; re-adjudicated vs the pinned PyMuPDF 1.24.14 oracle).** For an encrypted
+  `Document`: `is_encrypted` now means "still locked" (encrypted **and** not yet
+  authenticated) and flips to `False` after the empty-password auto-auth or a
+  successful `authenticate` — it is no longer permanently truthy just because a
+  `/Encrypt` dict is present; `needs_pass` is now the stateless "empty password
+  does not unlock" predicate (stays truthy after a real-password authenticate,
+  like MuPDF `pdf_needs_password`); `permissions` returns `0` while locked (the
+  `/P` flags once unlocked, `-4` unencrypted) instead of the raw `/P`;
+  `metadata` returns `None` while locked instead of a decrypted-garbage dict;
+  and `metadata["encryption"]` now carries the cipher suffix
+  (`"Standard V2 R3 128-bit RC4"`, `"Standard V5 R6 256-bit AES"`) with the
+  key-length correct for AES-256. Shaped at the PyMuPDF-compat boundary; the
+  lower-level pdf-core/pdf-api explicit-auth Rust contract is unchanged.
+
 ## [0.3.1] — 2026-07-13
 
 ### Added

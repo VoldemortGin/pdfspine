@@ -336,6 +336,22 @@ impl Document {
         }
     }
 
+    /// Whether the **empty** password unlocks the document, probed without
+    /// mutating auth state (the fitz `needs_pass` predicate — a stateless
+    /// property; MuPDF's `pdf_needs_password` re-tests `""` on every call).
+    /// `false` for an unencrypted document.
+    #[must_use]
+    pub fn empty_password_unlocks(&self) -> bool {
+        #[cfg(feature = "encryption")]
+        {
+            self.store.empty_password_unlocks()
+        }
+        #[cfg(not(feature = "encryption"))]
+        {
+            false
+        }
+    }
+
     // --- save (PRD §8.7 / §8.4) ------------------------------------------
 
     /// Full-saves the document to a byte vector with the given options
@@ -857,46 +873,19 @@ impl Document {
         }
     }
 
-    /// The PyMuPDF-style encryption descriptor (e.g. `"Standard V2 R3 128-bit"`),
-    /// or empty when unencrypted.
+    /// The PyMuPDF-style encryption descriptor (e.g.
+    /// `"Standard V2 R3 128-bit RC4"` / `"Standard V5 R6 256-bit AES"`), or empty
+    /// when unencrypted. Derived from the parsed handler config so the key length
+    /// (bits) and cipher are correct even when `/Length` is absent (AES-256).
     fn encryption_name(&self) -> String {
         #[cfg(feature = "encryption")]
         {
-            if !self.store.is_encrypted() {
-                return String::new();
-            }
-            if let Some(enc) = self.encrypt_dict() {
-                let v = enc
-                    .get(&Name::new("V"))
-                    .and_then(Object::as_i64)
-                    .unwrap_or(0);
-                let r = enc
-                    .get(&Name::new("R"))
-                    .and_then(Object::as_i64)
-                    .unwrap_or(0);
-                let len = enc
-                    .get(&Name::new("Length"))
-                    .and_then(Object::as_i64)
-                    .unwrap_or(40);
-                return format!("Standard V{v} R{r} {len}-bit");
-            }
-            "Standard".to_string()
+            self.store.encryption_descriptor().unwrap_or_default()
         }
         #[cfg(not(feature = "encryption"))]
         {
             String::new()
         }
-    }
-
-    /// The `/Encrypt` dictionary, if present.
-    #[cfg(feature = "encryption")]
-    fn encrypt_dict(&self) -> Option<pdf_core::Dict> {
-        let enc = self.store.trailer().get(&Name::new("Encrypt"))?;
-        let obj = match enc {
-            Object::Reference(r) => self.store.resolve(*r).ok()?,
-            direct => Arc::new(direct.clone()),
-        };
-        obj.as_dict().cloned()
     }
 
     // --- low-level xref read API (PRD §7 P1) ------------------------------

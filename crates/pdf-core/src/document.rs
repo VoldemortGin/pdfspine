@@ -888,6 +888,35 @@ impl DocumentStore {
             .and_then(|guard| guard.as_ref().map(pdf_crypto::Decryptor::permissions))
     }
 
+    /// Whether the **empty** password unlocks the handler, probed without
+    /// mutating the live auth state (the fitz `needs_pass` predicate — stateless).
+    /// `false` for an unencrypted document.
+    #[cfg(feature = "encryption")]
+    #[must_use]
+    pub fn empty_password_unlocks(&self) -> bool {
+        self.decryptor
+            .read()
+            .ok()
+            .and_then(|guard| {
+                guard
+                    .as_ref()
+                    .map(pdf_crypto::Decryptor::empty_password_authenticates)
+            })
+            .unwrap_or(false)
+    }
+
+    /// The PyMuPDF-style encryption descriptor (`"Standard V{V} R{R} {bits}-bit
+    /// {cipher}"`), or `None` for an unencrypted document (PRD §8.4).
+    #[cfg(feature = "encryption")]
+    #[must_use]
+    pub fn encryption_descriptor(&self) -> Option<String> {
+        self.decryptor.read().ok().and_then(|guard| {
+            guard
+                .as_ref()
+                .map(pdf_crypto::Decryptor::encryption_descriptor)
+        })
+    }
+
     /// Authenticates `password` against the security handler, trying the user
     /// role then the owner role (PRD §8.4). On success, subsequent `resolve()` /
     /// `decode_stream()` calls decrypt transparently. Pass `b""` for the common

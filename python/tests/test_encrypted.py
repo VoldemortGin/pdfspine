@@ -165,18 +165,22 @@ def test_pyfitz_002_encrypted_flow(encrypted_path):
     import fitz
 
     doc = fitz.open(encrypted_path)
-    assert doc.is_encrypted is True
     # This fixture has an *empty* user password, so `open` auto-authenticates
-    # with "" exactly like MuPDF's pdf_needs_password (real fitz 1.24.14 oracle,
-    # measured 2026-07-02: needs_pass == 0 right after open). pdfspine matches
-    # via the auto-auth in open() (commit 62997e2).
+    # with "" exactly like MuPDF's pdf_needs_password. Every value below is the
+    # real PyMuPDF 1.24.14 oracle (measured 2026-07-13): once the empty password
+    # unlocks the doc, `is_encrypted` flips to False (fitz means "still locked",
+    # not "has /Encrypt"), permissions become the real /P, and metadata reads.
+    assert doc.is_encrypted is False
     assert doc.needs_pass is False
     assert doc.permissions == -44
     md = doc.metadata
-    assert md["encryption"].startswith("Standard")
+    assert md is not None
+    # The full descriptor, incl. the trailing cipher name (fitz keeps ` RC4`).
+    assert md["encryption"] == "Standard V2 R3 128-bit RC4"
 
     assert doc.authenticate("") is True
     assert doc.needs_pass is False
+    assert doc.is_encrypted is False
     assert doc.page_count == 1
     page = doc[0]
     assert tuple(page.rect) == (0.0, 0.0, 100.0, 100.0)
@@ -186,14 +190,30 @@ def test_pyfitz_002_encrypted_flow(encrypted_path):
 
 def test_encrypted_wrong_password(tmp_path):
     # A real (non-empty) user password: the empty-password auto-auth in open()
-    # fails, so the document still needs a password. Real fitz 1.24.14 oracle
-    # (measured 2026-07-02): needs_pass truthy after open,
-    # authenticate("definitely-wrong") -> 0, needs_pass stays truthy,
-    # authenticate("user") -> 2 (user password accepted).
+    # fails, so the document stays locked. Every value below is the real fitz
+    # 1.24.14 oracle (measured 2026-07-13) for this exact RC4 V2/R3 fixture.
     path = tmp_path / "encrypted-user-pw.pdf"
     path.write_bytes(build_encrypted_pdf(user_pw=b"user"))
     doc = pdfspine.open(str(path))
+
+    # --- while still locked ---
+    assert doc.is_encrypted is True
     assert doc.needs_pass is True
+    assert doc.permissions == 0  # fitz reports 0 permissions until unlocked
+    assert doc.metadata is None  # fitz returns None (not decrypted garbage)
+
     assert doc.authenticate("definitely-wrong") is False
     assert doc.needs_pass is True
+    assert doc.is_encrypted is True
+
+    # --- after authenticating with the real user password ---
     assert doc.authenticate("user") is True
+    # fitz `needs_pass` re-tests the empty password each call, so it STAYS truthy
+    # even after a successful real-password authenticate; `is_encrypted` flips.
+    assert doc.needs_pass is True
+    assert doc.is_encrypted is False
+    assert doc.permissions == -44
+    md = doc.metadata
+    assert md is not None
+    assert md["title"] == "Secret Title"
+    assert md["encryption"] == "Standard V2 R3 128-bit RC4"

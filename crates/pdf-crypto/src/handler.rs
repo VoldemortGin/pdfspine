@@ -152,6 +152,35 @@ impl Decryptor {
         &self.config
     }
 
+    /// Whether the **empty** password (user or owner) unlocks this handler,
+    /// probed **without** mutating the live authentication state (clones the
+    /// config into a throwaway handler). This is the fitz `needs_pass` predicate
+    /// (MuPDF's `pdf_needs_password` re-tests `""` each call, so it is a stateless
+    /// property of the document — it stays `false` even after the caller has
+    /// authenticated with a real password).
+    #[must_use]
+    pub fn empty_password_authenticates(&self) -> bool {
+        match Decryptor::new(self.config.clone()) {
+            Ok(mut probe) => probe.authenticate(b"").is_ok(),
+            Err(_) => false,
+        }
+    }
+
+    /// The PyMuPDF-style encryption descriptor for this handler, e.g.
+    /// `"Standard V2 R3 128-bit RC4"` / `"Standard V5 R6 256-bit AES"` (matches
+    /// MuPDF's `metadata["encryption"]` — `Standard V{V} R{R} {bits}-bit {cipher}`,
+    /// bits = key length × 8, cipher from the stream crypt filter).
+    #[must_use]
+    pub fn encryption_descriptor(&self) -> String {
+        let c = &self.config;
+        let bits = c.key_len * 8;
+        let cipher = match c.stm_method {
+            CryptMethod::AesV2 | CryptMethod::AesV3 => "AES",
+            CryptMethod::Rc4 | CryptMethod::Identity => "RC4",
+        };
+        format!("Standard V{} R{} {bits}-bit {cipher}", c.v, c.r)
+    }
+
     /// Attempts to authenticate `password`, trying the **user** role first then
     /// the **owner** role (PRD §8.4). On success the file key is stashed and the
     /// decryptor becomes usable; the matched [`AuthRole`] is returned.

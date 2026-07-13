@@ -269,7 +269,10 @@ def test_pyenc_001_aes256_roundtrip():
     doc.set_metadata({"title": "Secret"})
     data = doc.tobytes(encryption=pdfspine.PDF_ENCRYPT_AES_256, user_pw="")
     re = pdfspine.open(stream=data)
-    assert re.is_encrypted
+    # Empty user password → open() auto-authenticates → fitz `is_encrypted` is
+    # False (means "still locked", not "has /Encrypt"; fitz 1.24.14 oracle).
+    assert re.is_encrypted is False
+    assert re.metadata["encryption"] == "Standard V5 R6 256-bit AES"
     assert re.authenticate("") is True
     assert re.metadata["title"] == "Secret"
     assert "AAA" in re[0].get_text()

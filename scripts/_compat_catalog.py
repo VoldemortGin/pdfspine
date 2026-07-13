@@ -130,7 +130,9 @@ add_many("Document", OUT_OF_SCOPE, "out-of-scope", [
     "page_number_from_location", "make_bookmark", "find_bookmark",
 ], "EPUB-class reflow (PRD §3.2 #8)")
 # Metadata / TOC / outline
-add_many("Document", IMPLEMENTED, "M1", ["metadata"])
+add("Document.metadata", "Document", IMPLEMENTED, "M1",
+    "fitz-aligned: None while the doc is still locked (was: decrypted-garbage dict); "
+    "encryption descriptor carries the cipher suffix, e.g. 'Standard V2 R3 128-bit RC4'")
 add_many("Document", IMPLEMENTED, "M3", [
     "set_metadata", "get_toc", "set_toc", "get_xml_metadata", "set_xml_metadata",
 ])
@@ -141,10 +143,17 @@ add_many("Document", DEFERRED, "M3", [
     "outline", "del_xml_metadata",
 ])
 add("Document.xref_xml_metadata", "Document", IMPLEMENTED, "M3", "xref of catalog /Metadata XML stream (0 if none)")
-# Security / permissions
-add_many("Document", IMPLEMENTED, "M1", [
-    "needs_pass", "authenticate", "permissions", "is_encrypted",
-])
+# Security / permissions — fitz encryption semantics aligned at the compat layer
+# (adjudicated 2026-07-13 vs the PyMuPDF 1.24.14 oracle; PRD-NEXT §5).
+add("Document.is_encrypted", "Document", IMPLEMENTED, "M1",
+    "fitz-aligned: 'still locked' (encrypted AND not yet authenticated); flips False "
+    "after the empty-password auto-auth / a successful authenticate — not 'has /Encrypt'")
+add("Document.needs_pass", "Document", IMPLEMENTED, "M1",
+    "fitz-aligned: encrypted AND the empty password does not unlock; stateless — "
+    "stays truthy even after authenticating with a real password (MuPDF pdf_needs_password)")
+add("Document.permissions", "Document", IMPLEMENTED, "M1",
+    "fitz-aligned: 0 while still locked, the /P flags once unlocked, -4 (all-allowed) unencrypted")
+add("Document.authenticate", "Document", IMPLEMENTED, "M1")
 add("Document.get_sigflags", "Document", IMPLEMENTED, "M4", "/AcroForm /SigFlags int, -1 when no form")
 # Identity / state props
 add_many("Document", IMPLEMENTED, "M1", ["is_pdf", "is_repaired"])
