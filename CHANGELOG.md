@@ -11,8 +11,26 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-07-13
+
 ### Added
 
+- **Tab-stop advance in `pdf-typeset` (§10 TS-9 / docspine C-9).** A `\t` now
+  advances the pen to the next tab stop instead of collapsing to a single
+  space; the interval is Word's `defaultTabStop` (0.5 inch default) and is
+  configurable via `Typesetter::set_tab_interval`. Post-tab text lands on the
+  stop within 1 pt; justify never widens a tab; auto table-column measurement
+  accounts for tab advances.
+- **Public text-measurement API in `pdf-typeset` (§10 TS-10).** New
+  `Typesetter::measure_blocks(blocks, width, wrap)` and
+  `Typesetter::measure_text_box(spec)` report, without emitting a PDF, the
+  laid-out line metrics (`LineMetrics { ascent, descent, height }`) plus total
+  content height and natural width (`Measurement`) at a fixed width. They share
+  the exact measure → wrap → line-box path the emitters run, so the reported
+  height equals what `layout_text_box` / box-mode `layout_flow` actually lay
+  out — pinned by tests. Unblocks consumer-side sizing: pptspine autofit,
+  tables grown to content, docspine cell vertical alignment. The new
+  `Measurement` / `LineMetrics` types are `#[non_exhaustive]`.
 - **Table cell vertical anchoring in `pdf-typeset` (§10 TS-11).**
   `TableCell` gains `v_align: VAnchor` (default `Top`): a cell's content is
   offset within the finalized, content-driven row height for `Middle` / `Bottom`
@@ -44,27 +62,6 @@ feature-complete, but the public API and on-disk formats may still change.
   (`"Standard V2 R3 128-bit RC4"`, `"Standard V5 R6 256-bit AES"`) with the
   key-length correct for AES-256. Shaped at the PyMuPDF-compat boundary; the
   lower-level pdf-core/pdf-api explicit-auth Rust contract is unchanged.
-
-## [0.3.1] — 2026-07-13
-
-### Added
-
-- **Public text-measurement API in `pdf-typeset` (§10 TS-10).** New
-  `Typesetter::measure_blocks(blocks, width, wrap)` and
-  `Typesetter::measure_text_box(spec)` report, without emitting a PDF, the
-  laid-out line metrics (`LineMetrics { ascent, descent, height }`) plus total
-  content height and natural width (`Measurement`) at a fixed width. They share
-  the exact measure → wrap → line-box path the emitters run, so the reported
-  height equals what `layout_text_box` / box-mode `layout_flow` actually lay
-  out — pinned by tests. Unblocks consumer-side sizing: pptspine autofit,
-  tables grown to content, docspine cell vertical alignment. The new
-  `Measurement` / `LineMetrics` types are `#[non_exhaustive]`.
-- **Tab-stop advance in `pdf-typeset` (§10 TS-9 / docspine C-9).** A `\t` now
-  advances the pen to the next tab stop instead of collapsing to a single
-  space; the interval is Word's `defaultTabStop` (0.5 inch default) and is
-  configurable via `Typesetter::set_tab_interval`. Post-tab text lands on the
-  stop within 1 pt; justify never widens a tab; auto table-column measurement
-  accounts for tab advances.
 
 ## [0.3.0] — 2026-07-04
 
