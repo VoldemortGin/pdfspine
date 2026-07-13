@@ -3741,6 +3741,11 @@ class Document:
         ``/AcroForm`` (PyMuPDF ``doc.get_sigflags``)."""
         return self._doc.get_sigflags()
 
+    @property
+    def FormFonts(self) -> list[str]:  # noqa: N802 — PyMuPDF spelling
+        """The font resource names in /AcroForm /DR /Font (PyMuPDF ``doc.FormFonts``)."""
+        return list(self._doc.form_fonts())
+
     def xref_xml_metadata(self) -> int:
         """The object number of the catalog ``/Metadata`` XMP stream, or ``0``
         when absent (PyMuPDF ``doc.xref_xml_metadata``)."""

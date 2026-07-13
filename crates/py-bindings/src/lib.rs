@@ -3769,6 +3769,12 @@ impl PyDocument {
         self.doc.set_need_appearances(value).map_err(map_err)
     }
 
+    /// The font resource key names in `/AcroForm /DR /Font` (PyMuPDF
+    /// `Document.FormFonts`); the Python layer wraps this as a property.
+    fn form_fonts(&self) -> Vec<String> {
+        self.doc.form_fonts()
+    }
+
     /// The form `/SigFlags`, or `-1` when there is no `/AcroForm` (PyMuPDF
     /// `Document.get_sigflags`).
     fn get_sigflags(&self) -> i32 {

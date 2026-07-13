@@ -167,7 +167,7 @@ add_many("Document", IMPLEMENTED, "M1", [
 ])
 add("Document.version_count", "Document", IMPLEMENTED, "M1", "cross-reference revision count: startxref/`/Prev`-chain length minus the linearized first-page section (matches fitz exactly)")
 add("Document.need_appearances", "Document", IMPLEMENTED, "M4", "/AcroForm /NeedAppearances get/set, None when no form")
-add_many("Document", DEFERRED, "M4", ["FormFonts"])
+add_many("Document", IMPLEMENTED, "M4", ["FormFonts"], "list of /AcroForm /DR /Font resource key names")
 # Conversion / embedded files / fonts
 add("Document.convert_to_pdf", "Document", IMPLEMENTED, "M5", "image inputs converted to a 1-page PDF (fitz.open + convert_to_pdf); non-image raises PdfUnsupportedError")
 add_many("Document", IMPLEMENTED, "M4", [

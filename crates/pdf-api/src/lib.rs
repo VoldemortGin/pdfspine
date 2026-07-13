@@ -1241,6 +1241,13 @@ impl Document {
         Ok(pdf_edit::set_need_appearances(&self.store, value)?)
     }
 
+    /// The font resource key names in `/AcroForm /DR /Font` (PyMuPDF
+    /// `Document.FormFonts`); an empty list when there is no such dict.
+    #[must_use]
+    pub fn form_fonts(&self) -> Vec<String> {
+        pdf_edit::form_fonts(&self.store)
+    }
+
     /// The form `/SigFlags`, or `-1` when there is no `/AcroForm` (PyMuPDF
     /// `Document.get_sigflags`).
     #[must_use]

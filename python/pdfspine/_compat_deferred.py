@@ -12,7 +12,6 @@ DEFERRED: frozenset[str] = frozenset(
         "Annot.get_textbox",
         "DisplayList.get_textpage",
         "DisplayList.run",
-        "Document.FormFonts",
         "Document.add_layer",
         "Document.get_layers",
         "Document.get_oc",

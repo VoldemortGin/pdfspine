@@ -29,6 +29,11 @@ feature-complete, but the public API and on-disk formats may still change.
     Document / bytes / path) via the `image_to_pdf` + `insert_pdf` pipeline;
     genuinely non-image, non-PDF input raises `PdfUnsupportedError`.
   - COMPAT coverage 88.7% → 89.2% (`deferred` 21 → 17).
+- **`Document.FormFonts`** — PyMuPDF read-only property returning the font
+  resource key names in `/AcroForm /DR /Font` (e.g. `"Helv"`, without the
+  leading slash); an empty / missing dict on a valid PDF → `[]`. Reads only, never
+  creates. Promoted from `deferred` to `implemented`, pinned against the oracle in
+  `python/tests/test_longtail14.py`. COMPAT coverage → 89.3% (`deferred` 17 → 16).
 
 ## [0.4.0] — 2026-07-13
 

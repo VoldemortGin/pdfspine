@@ -29,10 +29,10 @@
 baseline = "1.24.x"
 baseline_detail = "PyMuPDF 1.24.14 / MuPDF 1.24.11"
 total = 769
-implemented = 686
-deferred = 17
+implemented = 687
+deferred = 16
 out_of_scope = 66
-coverage_pct = 89.2
+coverage_pct = 89.3
 
 # ── Matrix ──
 [[symbol]]
@@ -1581,8 +1581,9 @@ note = "/AcroForm /NeedAppearances get/set, None when no form"
 [[symbol]]
 name = "Document.FormFonts"
 group = "Document"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
+note = "list of /AcroForm /DR /Font resource key names"
 
 [[symbol]]
 name = "Document.convert_to_pdf"

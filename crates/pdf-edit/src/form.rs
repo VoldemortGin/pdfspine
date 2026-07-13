@@ -163,6 +163,28 @@ pub fn need_appearances(doc: &DocumentStore) -> bool {
         .unwrap_or(false)
 }
 
+/// The font resource key names in `/AcroForm /DR /Font` (PyMuPDF
+/// `Document.FormFonts`). Reads only: walks `/AcroForm → /DR → /Font` and
+/// collects the font dict's key names **without** the leading slash (fitz
+/// returns "Helv", not "/Helv"). Missing `/DR` or `/Font`, or a non-dict along
+/// the way → an empty `Vec` (never panics).
+#[must_use]
+pub fn form_fonts(doc: &DocumentStore) -> Vec<String> {
+    let Some(af) = acroform_dict(doc) else {
+        return Vec::new();
+    };
+    let Some(dr) = af.get(&Name::new("DR")).and_then(|o| resolve_dict(doc, o)) else {
+        return Vec::new();
+    };
+    let Some(fonts) = dr.get(&Name::new("Font")).and_then(|o| resolve_dict(doc, o)) else {
+        return Vec::new();
+    };
+    fonts
+        .keys()
+        .map(|k| String::from_utf8_lossy(k.as_bytes()).into_owned())
+        .collect()
+}
+
 /// Sets the form `/NeedAppearances` flag (PyMuPDF `Document.need_appearances`
 /// with a value). A no-op when the document has no `/AcroForm`.
 ///
