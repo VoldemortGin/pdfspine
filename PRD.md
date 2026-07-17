@@ -132,7 +132,7 @@ Page-label *authoring* and rich label formats are deferred (§3.2 #5), but **rea
 | `Tools.mupdf_warnings()` / `Tools.reset_mupdf_warnings()` | **Mapped** | Returns the formatted contents of our `Warning{offset,kind,detail}` collector (§8.2); reset clears it. |
 | `Tools.store_shrink` / `store_maxsize` / `store_size` | **No-op + warn** | Our cache is `Limits`-bounded (§9.6); these knobs return sentinel values and emit a one-time deprecation warning. |
 | `Tools.set_aa_level` / `set_small_glyph_heights` / `set_subpixel_*` | **No-op + warn (render-era)** | Rendering is M6; these are accepted and ignored with a warning until then. |
-| `Tools.set_annot_stem` | **Implemented** | Affects our generated annotation `/NM` stems. |
+| `Tools.set_annot_stem` | **Deferred** | Affects our generated annotation `/NM` stems. |
 | Raw `mupdf.*` module access | **Out of scope** | `PdfUnsupportedError` with matrix link. |
 
 ---
