@@ -2,8 +2,8 @@
 """ocr_smoke — release gate that proves the BUILT wheel does real OCR.
 
 Run AFTER installing the freshly built ``pdfspine`` wheel into a clean
-environment (so we exercise the wheel-bundled PP-OCRv5 ONNX models at
-``site-packages/pdfspine/_models``, exactly what an end user gets from
+environment (so we exercise the built wheel with the shared
+``ocrspine-models`` runtime dependency, exactly what an end user gets from
 ``pip install pdfspine`` — no source tree, no extra, no network):
 
     python scripts/ocr_smoke.py crates/pdf-ocr/tests/fixtures/ocr_sample.png
@@ -33,7 +33,7 @@ for _stream in (sys.stdout, sys.stderr):
     if _reconfigure is not None:
         _reconfigure(encoding="utf-8")
 
-import pdfspine
+import pdfspine  # noqa: E402  # Must follow Windows UTF-8 stream configuration.
 
 # The three lines printed in the OCR sample raster (must match
 # python/tests/test_ocr_paddle.py — the canonical e2e fixture).
@@ -141,7 +141,7 @@ def main(argv: list[str]) -> int:
         print(f"FAIL: OCR did not recover lines: {missing!r}", file=sys.stderr)
         return 1
 
-    print("OK: PP-OCRv5 recovered all three lines from the wheel-bundled models.")
+    print("OK: PP-OCRv5 recovered all three lines using shared packaged models.")
     return 0
 
 

@@ -1,21 +1,24 @@
 # pdfspine-ocr-models
 
+> **Deprecated and archived.** Current pdfspine releases use the shared
+> `ocrspine-models` base dependency. This directory is retained only to document
+> and support the legacy `pdfspine_ocr_models` fallback; do not publish it.
+
 The PP-OCRv5 ONNX model weights for [pdfspine](https://github.com/VoldemortGin/pdfspine)'s
 pure-Rust PaddleOCR engine (`engine="paddle"`).
 
 This is a **pure-data companion distribution**. The published `pdfspine` wheel
 already contains the OCR *code* (compiled in), but ships **no models**; this
 package supplies the ~16 MB of weights. You normally do not install it directly —
-install the extra instead:
+For current releases install pdfspine normally:
 
 ```bash
-pip install pdfspine[ocr]
+pip install pdfspine
 ```
 
-which pulls this package in. pdfspine then resolves the models at runtime by
-reading `pdfspine_ocr_models.models_dir()` and exporting it as the
-`PDFSPINE_OCR_MODELS` environment variable for the Rust engine. Everything is
-offline — no model download at runtime.
+which pulls in `ocrspine-models`. pdfspine still recognizes this legacy
+package's `models_dir()` when it is already installed, after trying the shared
+package first.
 
 ```python
 import pdfspine_ocr_models

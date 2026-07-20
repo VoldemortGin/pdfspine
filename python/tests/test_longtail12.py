@@ -46,9 +46,10 @@ def test_draw_convenience_return_points_match_fitz() -> None:
     assert tuple(
         page.draw_quad(pdfspine.Quad((10, 10), (90, 12), (8, 90), (92, 88)))
     ) == (10.0, 10.0)
-    assert tuple(
-        round(v, 4) for v in page.draw_sector((100, 100), (140, 100), 90)
-    ) == (100.0, 60.0)
+    assert tuple(round(v, 4) for v in page.draw_sector((100, 100), (140, 100), 90)) == (
+        100.0,
+        60.0,
+    )
     assert tuple(page.draw_squiggle((10, 200), (200, 200))) == (200.0, 200.0)
     assert tuple(page.draw_zigzag((10, 250), (200, 250))) == (200.0, 250.0)
 
@@ -72,7 +73,13 @@ def test_draw_convenience_emit_drawings() -> None:
 
 
 def test_draw_convenience_present_on_fitz_shim() -> None:
-    for name in ("draw_curve", "draw_quad", "draw_sector", "draw_squiggle", "draw_zigzag"):
+    for name in (
+        "draw_curve",
+        "draw_quad",
+        "draw_sector",
+        "draw_squiggle",
+        "draw_zigzag",
+    ):
         assert callable(getattr(fitz.Page, name))
 
 
@@ -257,9 +264,18 @@ def test_is_wrapped_empty_new_page_true() -> None:
 # ---------------------------------------------------------------------------
 def test_all_symbols_resolve_on_page() -> None:
     names = [
-        "draw_curve", "draw_quad", "draw_sector", "draw_squiggle", "draw_zigzag",
-        "load_links", "update_link", "load_annot", "load_widget", "delete_widget",
-        "cluster_drawings", "is_wrapped",
+        "draw_curve",
+        "draw_quad",
+        "draw_sector",
+        "draw_squiggle",
+        "draw_zigzag",
+        "load_links",
+        "update_link",
+        "load_annot",
+        "load_widget",
+        "delete_widget",
+        "cluster_drawings",
+        "is_wrapped",
     ]
     for n in names:
         assert hasattr(pdfspine.Page, n), f"pdfspine.Page missing {n}"

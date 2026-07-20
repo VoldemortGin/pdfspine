@@ -15,7 +15,7 @@
 > split / save (incl. byte-exact incremental), encrypt, annotate, fill & flatten
 > forms, redact (destructively), open image files as documents, **render pages to
 > images**, and **OCR** (Tesseract + a pure-Rust PaddleOCR engine, stronger on CJK).
-> **88.7%** (682 / 769) of the PyMuPDF 1.24 public API is implemented and tested
+> **89.3%** (687 / 769) of the PyMuPDF 1.24 public API is implemented and tested
 > (climbing), with **1349+ Rust tests + 593+ Python tests** green. Text extraction
 > is at fitz parity (and beats fitz on Arabic / RTL), rendering is near-parity and
 > ~1.74× faster, and the pure-Rust PaddleOCR engine beats fitz on CJK scans
@@ -211,10 +211,9 @@ one façade crate, and core logic is split into independently testable units.
 ## Develop / test
 
 ```bash
-cargo fmt --all --check
-cargo clippy --workspace --all-targets --all-features -- -D warnings
-cargo test --workspace
-maturin develop && pytest python/tests       # Python tests
+./ci.sh                                      # complete local/CI/pre-push gate
+# Individual focused checks remain available:
+python scripts/quality_gate.py --help
 python conformance/run_validation.py …       # real-corpus accuracy harness
 ```
 

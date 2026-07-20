@@ -62,7 +62,9 @@ class TestMatrixConstruction:
     def test_single_scalar_general_angle(self):
         # A non-cardinal single scalar rotates by that many degrees.
         r = math.radians(45)
-        approx_seq(Matrix(45), (math.cos(r), math.sin(r), -math.sin(r), math.cos(r), 0, 0))
+        approx_seq(
+            Matrix(45), (math.cos(r), math.sin(r), -math.sin(r), math.cos(r), 0, 0)
+        )
 
     def test_bad_arg_count(self):
         with pytest.raises((ValueError, TypeError)):
@@ -177,15 +179,17 @@ class TestMatrixAlgebra:
         assert tuple(~Matrix(0, 0, 0, 0, 0, 0)) == (1, 0, 0, 1, 0, 0)
 
     def test_add_elementwise(self):
-        approx_seq(Matrix(1, 2, 3, 4, 5, 6) + Matrix(1, 1, 1, 1, 1, 1),
-                   (2, 3, 4, 5, 6, 7))
+        approx_seq(
+            Matrix(1, 2, 3, 4, 5, 6) + Matrix(1, 1, 1, 1, 1, 1), (2, 3, 4, 5, 6, 7)
+        )
 
     def test_add_scalar(self):
         approx_seq(Matrix(1, 2, 3, 4, 5, 6) + 1, (2, 3, 4, 5, 6, 7))
 
     def test_sub_elementwise(self):
-        approx_seq(Matrix(2, 3, 4, 5, 6, 7) - Matrix(1, 1, 1, 1, 1, 1),
-                   (1, 2, 3, 4, 5, 6))
+        approx_seq(
+            Matrix(2, 3, 4, 5, 6, 7) - Matrix(1, 1, 1, 1, 1, 1), (1, 2, 3, 4, 5, 6)
+        )
 
     def test_neg(self):
         approx_seq(-Matrix(1, -2, 3, -4, 5, -6), (-1, 2, -3, 4, -5, 6))
@@ -285,9 +289,7 @@ class TestPoint:
 
     def test_distance_to_rect_corner(self):
         # point past the bottom-right corner
-        assert math.isclose(
-            Point(13, 14).distance_to(Rect(0, 0, 10, 10)), 5.0
-        )
+        assert math.isclose(Point(13, 14).distance_to(Rect(0, 0, 10, 10)), 5.0)
 
     def test_no_pt_unit(self):
         with pytest.raises(KeyError):
@@ -352,8 +354,8 @@ class TestRect:
         assert tuple(r.bottom_right) == (3, 4)
 
     def test_is_empty(self):
-        assert Rect(0, 0, 0, 10).is_empty is True   # zero width
-        assert Rect(0, 0, 10, 0).is_empty is True   # zero height
+        assert Rect(0, 0, 0, 10).is_empty is True  # zero width
+        assert Rect(0, 0, 10, 0).is_empty is True  # zero height
         assert Rect(0, 0, 10, 10).is_empty is False
 
     def test_is_valid(self):
@@ -361,8 +363,15 @@ class TestRect:
         assert Rect(10, 0, 0, 10).is_valid is False
 
     def test_is_infinite(self):
-        assert Rect(geom.FZ_MIN_INF_RECT, geom.FZ_MIN_INF_RECT,
-                    geom.FZ_MAX_INF_RECT, geom.FZ_MAX_INF_RECT).is_infinite is True
+        assert (
+            Rect(
+                geom.FZ_MIN_INF_RECT,
+                geom.FZ_MIN_INF_RECT,
+                geom.FZ_MAX_INF_RECT,
+                geom.FZ_MAX_INF_RECT,
+            ).is_infinite
+            is True
+        )
         assert Rect(0, 0, 10, 10).is_infinite is False
 
     def test_normalize(self):
@@ -671,19 +680,25 @@ class TestModuleHelpers:
 
     def test_empty_infinite_rect_factories(self):
         assert tuple(geom.INFINITE_RECT()) == (
-            geom.FZ_MIN_INF_RECT, geom.FZ_MIN_INF_RECT,
-            geom.FZ_MAX_INF_RECT, geom.FZ_MAX_INF_RECT,
+            geom.FZ_MIN_INF_RECT,
+            geom.FZ_MIN_INF_RECT,
+            geom.FZ_MAX_INF_RECT,
+            geom.FZ_MAX_INF_RECT,
         )
         assert geom.INFINITE_RECT().is_infinite is True
         assert tuple(geom.EMPTY_RECT()) == (
-            geom.FZ_MAX_INF_RECT, geom.FZ_MAX_INF_RECT,
-            geom.FZ_MIN_INF_RECT, geom.FZ_MIN_INF_RECT,
+            geom.FZ_MAX_INF_RECT,
+            geom.FZ_MAX_INF_RECT,
+            geom.FZ_MIN_INF_RECT,
+            geom.FZ_MIN_INF_RECT,
         )
 
     def test_empty_infinite_irect_factories(self):
         assert tuple(geom.INFINITE_IRECT()) == (
-            geom.FZ_MIN_INF_RECT, geom.FZ_MIN_INF_RECT,
-            geom.FZ_MAX_INF_RECT, geom.FZ_MAX_INF_RECT,
+            geom.FZ_MIN_INF_RECT,
+            geom.FZ_MIN_INF_RECT,
+            geom.FZ_MAX_INF_RECT,
+            geom.FZ_MAX_INF_RECT,
         )
 
     def test_empty_infinite_quad_factories(self):

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Smoke-test document HTML export from an installed pdfspine wheel."""
+"""Smoke-test document HTML export from an installed pdfspine distribution."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ def main() -> None:
         assert doc.save_html(output) is None
         assert output.read_text(encoding="utf-8") == html
 
-    print("OK: installed wheel exposes browser-ready Document HTML export.")
+    print("OK: installed distribution exposes browser-ready Document HTML export.")
 
 
 if __name__ == "__main__":

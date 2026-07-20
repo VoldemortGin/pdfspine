@@ -22,13 +22,13 @@
 - `install_fitz_shim()` 用 `dict.setdefault`：若 `sys.modules["fitz"]` 已被真 PyMuPDF 占用，**shim 不会覆盖它**，真 PyMuPDF 赢。
 - shim 里未实现的 PyMuPDF 名访问时抛 `PdfUnsupportedError`（不是 `AttributeError`）。
 
-## 4. OCR：引擎和模型都在 wheel 里
+## 4. OCR：引擎在 wheel，模型来自共享基础依赖
 
-- 一个 `pip install pdfspine` 装的 wheel **既有 OCR 代码，也内嵌了模型** —— 开箱即全功能 OCR、离线可跑，**不需要任何单独数据包、不需要 `[ocr]` extra**。
-- `engine="paddle"` 用 PP-OCRv5 ONNX 模型（det/rec + PP-LCNet_x1_0 textline-ori，~28MB，支持繁中/日文），已随 wheel 装到 `site-packages/pdfspine/_models/`。`[ocr]`/`[all]` extra 现为**向后兼容空壳**（`pip install pdfspine[ocr]` 仍可解析，但不再拉任何东西；旧的 `pdfspine-ocr-models` 数据包已弃用）。
+- 一个 `pip install pdfspine` 会安装含 OCR 代码的 pdfspine wheel 和基础依赖 `ocrspine-models`。模型不在 pdfspine wheel 中，但安装后仍开箱即全功能 OCR、离线可跑，**不需要 `[ocr]` extra**。
+- `engine="paddle"` 使用共享数据包中的 PP-OCRv5 ONNX 模型（det/rec + PP-LCNet_x1_0 textline-ori，支持繁中/日文）。`[ocr]`/`[all]` extra 是**向后兼容空壳**；旧的 `pdfspine-ocr-models` 数据包只作为兼容回退。
 - 默认 `engine="tesseract"` 还需要**系统安装的 tesseract 二进制**（不在 wheel 里）。
 - 缺引擎/缺模型/未知 engine → 抛 `PdfUnsupportedError`（带清晰提示）。
-- 模型解析顺序：`PDFSPINE_OCR_MODELS` 环境变量（显式覆盖）→ wheel 内嵌的 `pdfspine/_models` → 旧 `pdfspine_ocr_models` 伴随包（兼容）→ 源码树 `ocrspine/models`（开发回退）→ 否则报错。可设 `os.environ["PDFSPINE_OCR_MODELS"]` 显式指定（须在调用 OCR 前；内部会镜像到引擎实际读取的 `OCRSPINE_MODELS`）。
+- 模型解析顺序：`PDFSPINE_OCR_MODELS` 环境变量（显式覆盖）→ 共享 `ocrspine_models` 数据包 → 旧 `pdfspine_ocr_models` 伴随包（兼容）→ 源码树 `ocrspine/models`（开发回退）→ 否则报错。可设 `os.environ["PDFSPINE_OCR_MODELS"]` 显式指定（须在调用 OCR 前；内部会镜像到引擎实际读取的 `OCRSPINE_MODELS`）。
 - 注意：对**已有文本层**的 born-digital PDF 调 OCR 通常没意义；OCR 针对扫描件/图片页。
 - `pil_save`/`pil_tobytes` 需要 `Pillow`；numpy 互操作需要 `numpy`——这两者都不是默认依赖。
 
@@ -42,7 +42,7 @@
 ## 6. 与真 PyMuPDF 的差异点
 
 - **异常类型不同名**：pdfspine 用 `PdfError` 体系，不是 PyMuPDF 的 `FileDataError` 等。shim 提供别名（`FileDataError = PdfSyntaxError`、`EmptyFileError = PdfSyntaxError`、`mupdf_display_errors = PdfError`），但若你**直接** `import pdfspine`（不经 shim），就该 catch `pdfspine.PdfError` 系列。
-- **覆盖率不是 100%**：约 88.7%。迁移前用 `COMPAT.toml` 核对你依赖的符号。
+- **覆盖率不是 100%**：当前为 89.3%（687/769）。迁移前用 `COMPAT.toml` 核对你依赖的符号。
 - **渲染/文本是 near-parity 而非逐字节相同**：渲染 SSIM ~0.945；文本在 born-digital 上 parity，Arabic/RTL 更好。像素级/字节级完全一致不要假设。
 - **redaction 是破坏性的**：`apply_redactions()` 真正删除被覆盖内容，不可逆。
 - **camelCase 别名存在但建议用 snake_case**：`getToC`/`insertPDF`/`getPixmap`/`newPage` 等保留以兼容旧代码，新代码用 `get_toc`/`insert_pdf`/`get_pixmap`/`new_page`。

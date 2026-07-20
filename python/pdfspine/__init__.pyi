@@ -13,6 +13,15 @@ from ._core import (
     identity_matrix as identity_matrix,
 )
 from .constants import *  # noqa: F403
+from .constants import (
+    CS_CMYK as CS_CMYK,
+    CS_GRAY as CS_GRAY,
+    CS_RGB as CS_RGB,
+    PDF_ENCRYPT_AES_128 as PDF_ENCRYPT_AES_128,
+    PDF_ENCRYPT_AES_256 as PDF_ENCRYPT_AES_256,
+    PDF_ENCRYPT_NONE as PDF_ENCRYPT_NONE,
+    PDF_ENCRYPT_RC4_128 as PDF_ENCRYPT_RC4_128,
+)
 from .document import (
     Annot as Annot,
     Colorspace as Colorspace,

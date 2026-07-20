@@ -11,14 +11,15 @@ import json
 import zlib
 
 from pdfspine import cli
-import pytest
 
 
 # --- self-generated PDF assembler (classic xref) --------------------------
 # Copied from test_text.py / test_m4.py so this file is fully self-contained.
 
 
-def _build_pdf(objects: list[tuple[int, bytes]], root: int, extra_trailer: bytes = b"") -> bytes:
+def _build_pdf(
+    objects: list[tuple[int, bytes]], root: int, extra_trailer: bytes = b""
+) -> bytes:
     """Assembles a classic-xref PDF from ``(num, body)`` object pairs."""
     out = bytearray(b"%PDF-1.7\n%\xe2\xe3\xcf\xd3\n")
     offsets: dict[int, int] = {}
@@ -58,11 +59,15 @@ def _helvetica_font(first: int = 32, last: int = 125, width: int = 500) -> bytes
         b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica "
         b"/Encoding /WinAnsiEncoding "
         + f"/FirstChar {first} /LastChar {last} ".encode()
-        + b"/Widths " + widths + b" >>"
+        + b"/Widths "
+        + widths
+        + b" >>"
     )
 
 
-def text_pdf(lines: list[str], font_widths: bool = True, ystart: int = 700, leading: int = 20) -> bytes:
+def text_pdf(
+    lines: list[str], font_widths: bool = True, ystart: int = 700, leading: int = 20
+) -> bytes:
     """A 1-page PDF (MediaBox [0 0 612 792]) drawing ``lines`` with /F1."""
     parts = [f"BT /F1 12 Tf 72 {ystart} Td".encode()]
     for i, line in enumerate(lines):
@@ -72,9 +77,13 @@ def text_pdf(lines: list[str], font_widths: bool = True, ystart: int = 700, lead
     parts.append(b"ET")
     content = b" ".join(parts)
 
-    font = _helvetica_font() if font_widths else (
-        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica "
-        b"/Encoding /WinAnsiEncoding >>"
+    font = (
+        _helvetica_font()
+        if font_widths
+        else (
+            b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica "
+            b"/Encoding /WinAnsiEncoding >>"
+        )
     )
     return _build_pdf(
         [
@@ -85,7 +94,14 @@ def text_pdf(lines: list[str], font_widths: bool = True, ystart: int = 700, lead
                 b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
                 b"/Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
             ),
-            (4, b"<< /Length " + str(len(content)).encode() + b" >>\nstream\n" + content + b"\nendstream"),
+            (
+                4,
+                b"<< /Length "
+                + str(len(content)).encode()
+                + b" >>\nstream\n"
+                + content
+                + b"\nendstream",
+            ),
             (5, font),
         ],
         root=1,
@@ -103,7 +119,14 @@ def _raw_content_pdf(content: bytes, font: bytes) -> bytes:
                 b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
                 b"/Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
             ),
-            (4, b"<< /Length " + str(len(content)).encode() + b" >>\nstream\n" + content + b"\nendstream"),
+            (
+                4,
+                b"<< /Length "
+                + str(len(content)).encode()
+                + b" >>\nstream\n"
+                + content
+                + b"\nendstream",
+            ),
             (5, font),
         ],
         root=1,
@@ -116,7 +139,10 @@ def multipage_text_pdf(page_texts: list[str]) -> bytes:
     kids = b" ".join(f"{3 + i} 0 R".encode() for i in range(n))
     objects: list[tuple[int, bytes]] = [
         (1, b"<< /Type /Catalog /Pages 2 0 R >>"),
-        (2, b"<< /Type /Pages /Count " + str(n).encode() + b" /Kids [" + kids + b"] >>"),
+        (
+            2,
+            b"<< /Type /Pages /Count " + str(n).encode() + b" /Kids [" + kids + b"] >>",
+        ),
         (3 + n, _helvetica_font()),  # shared font, last object
     ]
     for i, txt in enumerate(page_texts):
@@ -132,7 +158,14 @@ def multipage_text_pdf(page_texts: list[str]) -> bytes:
             )
         )
         objects.append(
-            (content_obj, b"<< /Length " + str(len(content)).encode() + b" >>\nstream\n" + content + b"\nendstream")
+            (
+                content_obj,
+                b"<< /Length "
+                + str(len(content)).encode()
+                + b" >>\nstream\n"
+                + content
+                + b"\nendstream",
+            )
         )
     return _build_pdf(objects, root=1)
 
@@ -149,12 +182,23 @@ def image_pdf() -> bytes:
             b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
             b"/Resources << /XObject << /Im0 5 0 R >> >> /Contents 4 0 R >>",
         ),
-        (4, b"<< /Length " + str(len(content)).encode() + b" >>\nstream\n" + content + b"\nendstream"),
+        (
+            4,
+            b"<< /Length "
+            + str(len(content)).encode()
+            + b" >>\nstream\n"
+            + content
+            + b"\nendstream",
+        ),
         (
             5,
             b"<< /Type /XObject /Subtype /Image /Width 1 /Height 1 "
             b"/BitsPerComponent 8 /ColorSpace /DeviceRGB /Filter /FlateDecode "
-            b"/Length " + str(len(pix)).encode() + b" >>\nstream\n" + pix + b"\nendstream",
+            b"/Length "
+            + str(len(pix)).encode()
+            + b" >>\nstream\n"
+            + pix
+            + b"\nendstream",
         ),
     ]
     return _build_pdf(objs, root=1)
@@ -219,7 +263,9 @@ def test_cli_004_text_format_json_is_valid(tmp_path, capsys):
 
 
 def test_cli_005_text_pages_range(tmp_path, capsys):
-    pdf = _write(tmp_path, "m.pdf", multipage_text_pdf(["PageOne", "PageTwo", "PageThree"]))
+    pdf = _write(
+        tmp_path, "m.pdf", multipage_text_pdf(["PageOne", "PageTwo", "PageThree"])
+    )
     rc = cli.main(["text", str(pdf), "--pages", "2"])
     out = capsys.readouterr().out
     assert rc == 0

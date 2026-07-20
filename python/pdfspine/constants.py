@@ -371,7 +371,5 @@ PDF_REDACT_IMAGE_REMOVE_UNLESS_INVISIBLE = 3
 
 # Public surface: every constant name defined above (data-only module).
 __all__ = [
-    _n
-    for _n in dir()
-    if not _n.startswith("_") and _n not in ("annotations", "_core")
+    _n for _n in dir() if not _n.startswith("_") and _n not in ("annotations", "_core")
 ]

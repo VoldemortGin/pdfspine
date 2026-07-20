@@ -22,7 +22,9 @@ import pytest
 # --- self-generated PDF fixtures -----------------------------------------
 
 
-def _build_pdf(objects: list[tuple[int, bytes]], root: int, extra_trailer: bytes = b"") -> bytes:
+def _build_pdf(
+    objects: list[tuple[int, bytes]], root: int, extra_trailer: bytes = b""
+) -> bytes:
     out = bytearray(b"%PDF-1.7\n%\xe2\xe3\xcf\xd3\n")
     offsets: dict[int, int] = {}
     max_num = 0
@@ -45,7 +47,13 @@ def _build_pdf(objects: list[tuple[int, bytes]], root: int, extra_trailer: bytes
 
 
 def _stream_obj(num: int, dict_body: bytes, data: bytes) -> tuple[int, bytes]:
-    body = b"<< " + dict_body + f" /Length {len(data)} >>\nstream\n".encode() + data + b"\nendstream"
+    body = (
+        b"<< "
+        + dict_body
+        + f" /Length {len(data)} >>\nstream\n".encode()
+        + data
+        + b"\nendstream"
+    )
     return (num, body)
 
 

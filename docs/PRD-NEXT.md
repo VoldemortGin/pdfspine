@@ -28,9 +28,9 @@
   trusted-publishing `release.yml`. (The only local failures — 3 Rust + 7 pytest OCR tests — stem from a
   broken local tesseract/leptonica install, an env defect, not code; a clean machine still meets the
   1349/593 floors.)
-- **API parity:** **682 / 769 implemented (88.7%)** — consistent across `COMPAT.toml`, README, and PARITY.md.
-  21 deferred · 66 out-of-scope. Phase 2 landed +29; **P4-1** then added `Font.buffer`/`glyph_bbox` (Font class
-  22/23). The remaining 21 deferred are the long tail (OCG layers, device-replay, a few Type0/Type3 edges).
+- **API parity (current):** **687 / 769 implemented (89.3%)** — consistent across `COMPAT.toml`, README, and
+  PARITY.md. 16 deferred · 66 out-of-scope. The remaining deferred symbols are the long tail (OCG layers,
+  device-replay, and a few Type0/Type3 edges).
 - **Text extraction:** at fitz parity for **single-column AND multi-column**. The multi-column engine landed
   (06-16 PM) and **P3-2 verified it** (2026-06-20, fresh GT): PMC order **0.965 / 0.995** vs fitz 0.975/0.997,
   born-digital **0.996** vs 1.000 — within 0.000–0.009 per column doc (PMC212687 0.083→0.996, born 2col
@@ -44,11 +44,10 @@
   page is below 0.92 now (was 3 below 0.72); the new worst-10 are AA/hinting sub-pixel residuals, not missing
   content.
 - **OCR:** Tesseract adapter + pure-Rust PaddleOCR (PP-OCRv5 via `tract`) both shipped, Python-selectable,
-  scanned→searchable proven end-to-end, beats fitz on CJK. Wheel-bloat **resolved** and the publishing path
-  is **decided + implemented** (P0-5r): the published `pdfspine` wheel compiles OCR in but embeds **no
-  models** (~7 MB compressed; the `cargo` build default stays lean), and the ~16 MB models ship as a separate
-  `pdfspine-ocr-models` data distribution the `[ocr]` extra pulls in (`pip install pdfspine[ocr]`); models
-  resolve at runtime `PDFSPINE_OCR_MODELS` → companion → in-repo dev fallback (offline, no download). The
+  scanned→searchable proven end-to-end, beats fitz on CJK. The published `pdfspine` wheel compiles OCR in
+  but embeds **no models**; the shared base dependency `ocrspine-models` supplies the weights, so a bare
+  `pip install pdfspine` is full-OCR-capable offline and `[ocr]`/`[all]` are compatibility no-ops. Models
+  resolve at runtime `PDFSPINE_OCR_MODELS` → shared package → legacy companion → in-repo dev fallback. The
   per-box `recognize()` loop is now **rayon-parallel** (P4-3 done: 3.49× on a 42-box page, byte-identical).
 - **Performance:** pdfspine **beats fitz on open (1.26×)** and **text (2.75×)** — the ops users actually
   call; render is 1.74× faster than before but still ~2.3× slower than pypdfium2 (a C engine, not the parity
@@ -121,6 +120,10 @@ All six blockers landed and were verified (full §8 suite). Done summary:
 
 - **P0-2r · `_core` PyO3 deferred members raised `AttributeError`** — *Rust-core* — **✅ FIXED (2026-06-21).** A Rust `__getattr__` on Pixmap / DisplayList / Tools makes their 5 deferred members (Pixmap.warp, DisplayList.get_textpage/run, Tools.set_annot_stem/set_subset_fontnames) raise `PdfUnsupportedError` on instance access (not `AttributeError`); xfails flipped to real asserts + a drift guard added. (The deferred set is **5 members**, not the 12 an earlier estimate carried.)
 - **P0-5r · OCR publishing — ✅ RESOLVED (2026-06-19, commit `ff6495c`)** — chose **Option A: a model-data companion + the OCR feature compiled into the published wheel**. The published `pdfspine` wheel compiles the `ocr` feature in (via `[tool.maturin] features`) but embeds no models; the ~16 MB models ship as a new `pdfspine-ocr-models` data distribution (`packages/pdfspine-ocr-models/`, hatchling force-include from `crates/pdf-ocr/models` — no git duplication) that the `[ocr]` extra depends on. `document.py` sets `PDFSPINE_OCR_MODELS` from the installed companion for `engine="paddle"`; resolution order PDFSPINE_OCR_MODELS → companion → in-repo dev fallback → clear `PdfUnsupportedError`. `release.yml` publishes both dists via OIDC trusted publishing; `docs/RELEASE-PYPI.md` §D.1 documents the flow.
+  - **Current state (supersedes the distribution detail above):** the family now
+    uses the shared base dependency `ocrspine-models`. The pdfspine wheel still
+    compiles in the engine and embeds no weights; `[ocr]`/`[all]` are compatibility
+    no-ops, and legacy `pdfspine-ocr-models` is only a runtime fallback.
 - **P0-6r · corpus-path rename-proofing — ✅ DONE.** Fixed on the reader side (the approach the summary table records): `run_gt.py::_resolve_corpus_path` falls back to the pdf's basename next to the manifest, so the gitignored/regenerable corpus manifests (`conformance/gt/corpus-*/manifest.json`) resolve even when they still embed dead pre-rename absolute paths — the harness is rename-proof regardless of what a manifest embeds. (`fetch_corpus.py` itself already emits manifest-relative paths, e.g. `corpus/<file>.pdf`, so no writer change was needed.)
 
 ### Phase 1 — COMPLETE (2026-06-19) — committed on `main`
@@ -298,7 +301,10 @@ parity **88.7%**; every actionable residual is now fixed or flagged. P3-5 score 
   `docs/BENCHMARKS.md` §5 refreshed. The committed P1-3 `ssim-refs/` were untouched.
 - Docs-site completeness pass (`docs/guide`, `docs/reference`, `index.md`) — see P4-4.
 - PyPI publish runbook: `docs/RELEASE-PYPI.md` (gated on P0-1 + P0-5); optional name trademark.
-- The PyPI runbook **encodes the P0-5r OCR-distribution decision** (✅ done) — the published `pdfspine` wheel compiles the `ocr` feature in (no embedded models) and the `[ocr]` extra pulls the `pdfspine-ocr-models` data distribution; see `docs/RELEASE-PYPI.md` §D.1.
+- The PyPI runbook records the current shared-model distribution: the published
+  `pdfspine` wheel compiles the OCR engine in (no embedded models), while the
+  base dependency `ocrspine-models` supplies weights; see `docs/RELEASE-PYPI.md`
+  §D.1.
 - **Repo is PUBLIC (2026-07).** The whole spine family — pdfspine, docspine, pptspine, ocrspine — flipped to
   GitHub public in 2026-07 (`gh` authed as VoldemortGin); the earlier "stays PRIVATE until everything is done"
   gate is retired. Consumers pin pdfspine crates by git rev against the public repo.

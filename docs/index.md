@@ -10,11 +10,10 @@ the supported subset via the opt-in shim (`pdfspine.install_fitz_shim()`, or
 `import pdfspine` package directly.
 
 !!! warning "Alpha / work-in-progress"
-    pdfspine is **pre-1.0** (`Development Status :: 2 - Pre-Alpha`, version
-    `0.0.0`). A large surface of the API is implemented and tested
+    pdfspine is **pre-1.0** (`Development Status :: 3 - Alpha`) and published on
+    PyPI. A large surface of the API is implemented and tested
     (see the [PyMuPDF coverage](#status) below), but real-corpus accuracy
-    validation against PyMuPDF is **still in progress**, and the package is
-    **not yet published to PyPI**. APIs may change before 1.0. Treat output as
+    validation against PyMuPDF is **still in progress**. APIs may change before 1.0. Treat output as
     "verify before you trust it" for production workloads.
 
 ## Why pdfspine?
@@ -66,10 +65,10 @@ The current baseline targets **PyMuPDF 1.24.x**. The machine-readable
 
 | Disposition | Count | Meaning |
 |---|---:|---|
-| Implemented | 647 | Present and does not raise on use |
-| Deferred | 56 | Known, planned for a later milestone |
+| Implemented | 687 | Present and does not raise on use |
+| Deferred | 16 | Known, planned for a later milestone |
 | Out-of-scope | 66 | Intentionally never in v1 |
-| **Total baseline** | **769** | **84.1% implemented** |
+| **Total baseline** | **769** | **89.3% implemented** |
 
 Anything not yet implemented raises a typed, catchable
 `PdfUnsupportedError` (never a bare `AttributeError`), so you always get a clear

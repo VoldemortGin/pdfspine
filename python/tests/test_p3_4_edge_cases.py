@@ -19,7 +19,6 @@ from __future__ import annotations
 from collections import Counter
 
 import pdfspine
-import pytest
 
 
 # --- self-generated PDF assembler (classic xref) --------------------------
@@ -50,7 +49,14 @@ def _build_pdf(objects: list[tuple[int, bytes]], root: int = 1) -> bytes:
 
 def _stream_obj(num: int, body: bytes) -> tuple[int, bytes]:
     """A simple ``/Length``-prefixed stream object."""
-    return (num, b"<< /Length " + str(len(body)).encode() + b" >>\nstream\n" + body + b"\nendstream")
+    return (
+        num,
+        b"<< /Length "
+        + str(len(body)).encode()
+        + b" >>\nstream\n"
+        + body
+        + b"\nendstream",
+    )
 
 
 def _equal_width_type1(width: int = 500) -> bytes:
@@ -118,7 +124,10 @@ def _vertical_cjk_pdf(content: bytes) -> bytes:
             b"/FontDescriptor 8 0 R /CIDToGIDMap /Identity /DW 1000 /DW2 [880 -1000] >>",
         ),
         _stream_obj(7, tounicode),
-        (8, b"<< /Type /FontDescriptor /FontName /STSong-Light /Flags 4 /Ascent 880 /Descent -120 >>"),
+        (
+            8,
+            b"<< /Type /FontDescriptor /FontName /STSong-Light /Flags 4 /Ascent 880 /Descent -120 >>",
+        ),
     ]
     return _build_pdf(objs)
 
@@ -146,9 +155,13 @@ def test_vertical_002_multicolumn():
     # Columns read right-to-left, exactly like PyMuPDF: "中文\n字書".
     assert text.split() == ["中文", "字書"]
     # Each line carries vertical writing mode + the (0, 1) device direction.
-    lines = [l for b in page.get_text("dict")["blocks"] for l in b.get("lines", [])]
-    assert all(l["wmode"] == 1 for l in lines)
-    assert all(l["dir"] == (0.0, 1.0) for l in lines)
+    lines = [
+        line
+        for block in page.get_text("dict")["blocks"]
+        for line in block.get("lines", [])
+    ]
+    assert all(line["wmode"] == 1 for line in lines)
+    assert all(line["dir"] == (0.0, 1.0) for line in lines)
 
 
 # =====================================================================
@@ -183,7 +196,10 @@ def _notou_predefined_pdf(content: bytes) -> bytes:
             b"/CIDSystemInfo << /Registry (Adobe) /Ordering (GB1) /Supplement 4 >> "
             b"/FontDescriptor 7 0 R /DW 1000 >>",
         ),
-        (7, b"<< /Type /FontDescriptor /FontName /STSong-Light /Flags 4 /Ascent 880 /Descent -120 >>"),
+        (
+            7,
+            b"<< /Type /FontDescriptor /FontName /STSong-Light /Flags 4 /Ascent 880 /Descent -120 >>",
+        ),
     ]
     return _build_pdf(objs)
 
@@ -231,8 +247,7 @@ def test_overlap_001_double_strike_no_dropped_or_duplicated_text():
     # is that NO glyph is dropped and NONE is duplicated beyond the content — the
     # extracted character multiset equals two copies of "Bold".
     content = (
-        b"BT /F1 24 Tf 1 0 0 1 100 700 Tm (Bold) Tj "
-        b"1 0 0 1 100 700 Tm (Bold) Tj ET"
+        b"BT /F1 24 Tf 1 0 0 1 100 700 Tm (Bold) Tj 1 0 0 1 100 700 Tm (Bold) Tj ET"
     )
     text = _page(_overlap_pdf(content)).get_text()
     letters = [c for c in text if c.isalpha()]
@@ -246,8 +261,7 @@ def test_overlap_002_colocated_runs_keep_all_glyphs():
     # by x; PyMuPDF keeps each run on its own line — the multiset is identical and
     # that is what "handled like fitz, no dropped/duplicated text" requires.)
     content = (
-        b"BT /F1 24 Tf 1 0 0 1 100 700 Tm (Hello) Tj "
-        b"1 0 0 1 102 700 Tm (Hello) Tj ET"
+        b"BT /F1 24 Tf 1 0 0 1 100 700 Tm (Hello) Tj 1 0 0 1 102 700 Tm (Hello) Tj ET"
     )
     text = _page(_overlap_pdf(content)).get_text()
     letters = [c for c in text if c.isalpha()]

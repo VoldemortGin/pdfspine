@@ -17,7 +17,7 @@ from typing import Iterator
 
 from . import _core
 from ._compat_deferred import DEFERRED as _DEFERRED_SYMBOLS
-from ._core import PdfError, PdfRedactionError, PdfUnsupportedError
+from ._core import PdfError, PdfUnsupportedError
 from .constants import CS_CMYK, CS_GRAY, CS_RGB
 
 # Back-compat re-exports: these constants historically lived in this module; keep
@@ -44,7 +44,7 @@ def _deferred_members(group: str) -> frozenset[str]:
     """The deferred baseline members owned by ``group`` (e.g. ``"Page"``)."""
     prefix = f"{group}."
     return frozenset(
-        sym[len(prefix):] for sym in _DEFERRED_SYMBOLS if sym.startswith(prefix)
+        sym[len(prefix) :] for sym in _DEFERRED_SYMBOLS if sym.startswith(prefix)
     )
 
 
@@ -147,10 +147,22 @@ def _rt(r) -> tuple[float, float, float, float]:
     return (float(r[0]), float(r[1]), float(r[2]), float(r[3]))
 
 
-def _intersects(a: tuple[float, float, float, float], b: tuple[float, float, float, float]) -> bool:
+def _intersects(
+    a: tuple[float, float, float, float], b: tuple[float, float, float, float]
+) -> bool:
     """Whether two (un-normalized) rects overlap."""
-    ax0, ay0, ax1, ay1 = min(a[0], a[2]), min(a[1], a[3]), max(a[0], a[2]), max(a[1], a[3])
-    bx0, by0, bx1, by1 = min(b[0], b[2]), min(b[1], b[3]), max(b[0], b[2]), max(b[1], b[3])
+    ax0, ay0, ax1, ay1 = (
+        min(a[0], a[2]),
+        min(a[1], a[3]),
+        max(a[0], a[2]),
+        max(a[1], a[3]),
+    )
+    bx0, by0, bx1, by1 = (
+        min(b[0], b[2]),
+        min(b[1], b[3]),
+        max(b[0], b[2]),
+        max(b[1], b[3]),
+    )
     return ax0 < bx1 and bx0 < ax1 and ay0 < by1 and by0 < ay1
 
 
@@ -187,8 +199,14 @@ def _quad(q) -> tuple[float, float, float, float, float, float, float, float]:
     """
     if isinstance(q, Quad):
         return (
-            q.ul.x, q.ul.y, q.ur.x, q.ur.y,
-            q.ll.x, q.ll.y, q.lr.x, q.lr.y,
+            q.ul.x,
+            q.ul.y,
+            q.ur.x,
+            q.ur.y,
+            q.ll.x,
+            q.ll.y,
+            q.lr.x,
+            q.lr.y,
         )
     seq = tuple(float(v) for v in q)
     if len(seq) == 8:
@@ -278,7 +296,7 @@ def _is_content_wrapped(content: bytes) -> bool:
     first_q = False  # the very first content token was a `q`
     outside = False  # some content token sits outside the outermost q … Q scope
     while i < n:
-        ch = content[i:i + 1]
+        ch = content[i : i + 1]
         if ch == b"%":  # comment to end of line
             j = content.find(b"\n", i)
             i = n if j < 0 else j + 1
@@ -290,7 +308,7 @@ def _is_content_wrapped(content: bytes) -> bool:
             d = 1
             i += 1
             while i < n and d > 0:
-                c = content[i:i + 1]
+                c = content[i : i + 1]
                 if c == b"\\":
                     i += 2
                     continue
@@ -311,7 +329,7 @@ def _is_content_wrapped(content: bytes) -> bool:
             i += 1
             continue
         j = i
-        while j < n and content[j:j + 1] not in b" \t\r\n()<>[]{}/%":
+        while j < n and content[j : j + 1] not in b" \t\r\n()<>[]{}/%":
             j += 1
         if j == i:  # a delimiter byte ([]{}/) etc.) — operand, not an operator
             i += 1
@@ -346,7 +364,9 @@ class Annot:
 
     __slots__ = ("_annot", "_parent", "_siblings", "_index")
 
-    def __init__(self, core_annot: "_core.Annot", parent=None, siblings=None, index=0) -> None:
+    def __init__(
+        self, core_annot: "_core.Annot", parent=None, siblings=None, index=0
+    ) -> None:
         self._annot = core_annot
         self._parent = parent
         self._siblings = siblings
@@ -525,7 +545,9 @@ class Annot:
         """
         r = self._annot.popup_rect
         if r is None:
-            return Rect(FZ_MIN_INF_RECT, FZ_MIN_INF_RECT, FZ_MAX_INF_RECT, FZ_MAX_INF_RECT)
+            return Rect(
+                FZ_MIN_INF_RECT, FZ_MIN_INF_RECT, FZ_MAX_INF_RECT, FZ_MAX_INF_RECT
+            )
         return _rect(r)
 
     @property
@@ -546,7 +568,9 @@ class Annot:
         """
         r = self._annot.apn_bbox()
         if r is None:
-            return Rect(FZ_MIN_INF_RECT, FZ_MIN_INF_RECT, FZ_MAX_INF_RECT, FZ_MAX_INF_RECT)
+            return Rect(
+                FZ_MIN_INF_RECT, FZ_MIN_INF_RECT, FZ_MAX_INF_RECT, FZ_MAX_INF_RECT
+            )
         return _rect(r)
 
     def apn_matrix(self) -> Matrix:
@@ -613,11 +637,15 @@ class Annot:
         """Sanitizes the ``/AP /N`` stream (PyMuPDF ``annot.clean_contents``)."""
         self._annot.clean_contents(int(sanitize))
 
-    def update_file(self, buffer_=None, filename=None, ufilename=None, desc=None) -> None:
+    def update_file(
+        self, buffer_=None, filename=None, ufilename=None, desc=None
+    ) -> None:
         """Replaces the embedded file content / metadata (PyMuPDF
         ``annot.update_file``). The first parameter is ``buffer_`` to match
         fitz's signature."""
-        self._annot.update_file(buffer_=buffer_, filename=filename, ufilename=ufilename, desc=desc)
+        self._annot.update_file(
+            buffer_=buffer_, filename=filename, ufilename=ufilename, desc=desc
+        )
 
     @property
     def next(self) -> "Annot | None":
@@ -625,7 +653,9 @@ class Annot:
         if self._siblings is None or self._index + 1 >= len(self._siblings):
             return None
         nxt = self._siblings[self._index + 1]
-        return Annot(nxt, parent=self._parent, siblings=self._siblings, index=self._index + 1)
+        return Annot(
+            nxt, parent=self._parent, siblings=self._siblings, index=self._index + 1
+        )
 
     def get_textpage(self, clip=None, flags: int = 0) -> "TextPage":
         """A :class:`TextPage` for the annotation's region (PyMuPDF
@@ -731,7 +761,9 @@ class Widget:
     @field_type.setter
     def field_type(self, value: int) -> None:
         if self._new is None:
-            raise PdfUnsupportedError("widget.field_type is read-only for an existing widget")
+            raise PdfUnsupportedError(
+                "widget.field_type is read-only for an existing widget"
+            )
         self._new["field_type"] = int(value)
 
     @property
@@ -749,7 +781,9 @@ class Widget:
     @field_name.setter
     def field_name(self, value: str) -> None:
         if self._new is None:
-            raise PdfUnsupportedError("widget.field_name is read-only for an existing widget")
+            raise PdfUnsupportedError(
+                "widget.field_name is read-only for an existing widget"
+            )
         self._new["field_name"] = str(value)
 
     @property
@@ -788,7 +822,9 @@ class Widget:
     @field_flags.setter
     def field_flags(self, value: int) -> None:
         if self._new is None:
-            raise PdfUnsupportedError("widget.field_flags is read-only for an existing widget")
+            raise PdfUnsupportedError(
+                "widget.field_flags is read-only for an existing widget"
+            )
         self._new["field_flags"] = int(value)
 
     @property
@@ -801,7 +837,9 @@ class Widget:
     @choice_values.setter
     def choice_values(self, value) -> None:
         if self._new is None:
-            raise PdfUnsupportedError("widget.choice_values is read-only for an existing widget")
+            raise PdfUnsupportedError(
+                "widget.choice_values is read-only for an existing widget"
+            )
         self._new["choice_values"] = [str(v) for v in value]
 
     @property
@@ -844,7 +882,9 @@ class Widget:
     @text_color.setter
     def text_color(self, value) -> None:
         if self._new is None:
-            raise PdfUnsupportedError("widget.text_color is read-only for an existing widget")
+            raise PdfUnsupportedError(
+                "widget.text_color is read-only for an existing widget"
+            )
         self._new["text_color"] = tuple(float(c) for c in value)
 
     @property
@@ -857,7 +897,9 @@ class Widget:
     @text_font.setter
     def text_font(self, value: str) -> None:
         if self._new is None:
-            raise PdfUnsupportedError("widget.text_font is read-only for an existing widget")
+            raise PdfUnsupportedError(
+                "widget.text_font is read-only for an existing widget"
+            )
         self._new["text_font"] = str(value)
 
     @property
@@ -870,7 +912,9 @@ class Widget:
     @text_fontsize.setter
     def text_fontsize(self, value: float) -> None:
         if self._new is None:
-            raise PdfUnsupportedError("widget.text_fontsize is read-only for an existing widget")
+            raise PdfUnsupportedError(
+                "widget.text_fontsize is read-only for an existing widget"
+            )
         self._new["text_fontsize"] = float(value)
 
     @property
@@ -1190,8 +1234,12 @@ class Shape:
         if isinstance(text, (list, tuple)):
             text = "\n".join(str(t) for t in text)
         return self._page.insert_text(
-            point, str(text), fontname=fontname, fontsize=float(fontsize),
-            color=color, fontfile=fontfile,
+            point,
+            str(text),
+            fontname=fontname,
+            fontsize=float(fontsize),
+            color=color,
+            fontfile=fontfile,
         )
 
     def insert_textbox(
@@ -1216,8 +1264,13 @@ class Shape:
         if isinstance(buffer, (list, tuple)):
             buffer = "\n".join(str(t) for t in buffer)
         more = self._page.insert_textbox(
-            rect, str(buffer), fontname=fontname, fontsize=float(fontsize),
-            color=color, align=int(align), fontfile=fontfile,
+            rect,
+            str(buffer),
+            fontname=fontname,
+            fontsize=float(fontsize),
+            color=color,
+            align=int(align),
+            fontfile=fontfile,
         )
         self.update_rect(rect)
         return more
@@ -1362,8 +1415,14 @@ class TextPage:
 
     def extractTextbox(self, rect) -> str:  # noqa: N802
         """The text contained in ``rect`` (PyMuPDF ``TextPage.extractTextbox``)."""
-        r = rect if isinstance(rect, (tuple, list)) else (rect.x0, rect.y0, rect.x1, rect.y1)
-        return self._tp.extractTextbox((float(r[0]), float(r[1]), float(r[2]), float(r[3])))
+        r = (
+            rect
+            if isinstance(rect, (tuple, list))
+            else (rect.x0, rect.y0, rect.x1, rect.y1)
+        )
+        return self._tp.extractTextbox(
+            (float(r[0]), float(r[1]), float(r[2]), float(r[3]))
+        )
 
     def extractSelection(self, a, b) -> str:  # noqa: N802
         """Text between two points like a mouse drag (PyMuPDF
@@ -1462,7 +1521,9 @@ class Table:
     def spans(self) -> list:
         """One span per originating cell as
         ``(row, col, row_span, col_span, Rect)`` (PyMuPDF ``Table.spans``)."""
-        return [(r, c, rs, cs, _rect(rect)) for (r, c, rs, cs, rect) in self._table.spans]
+        return [
+            (r, c, rs, cs, _rect(rect)) for (r, c, rs, cs, rect) in self._table.spans
+        ]
 
     def extract(self) -> list[list]:
         """The cell-text grid (row-major); ``None`` for an empty /
@@ -1691,7 +1752,9 @@ class Page:
 
     __slots__ = ("_page", "_parent")
 
-    def __init__(self, core_page: "_core.Page", parent: "Document | None" = None) -> None:
+    def __init__(
+        self, core_page: "_core.Page", parent: "Document | None" = None
+    ) -> None:
         self._page = core_page
         self._parent = parent
 
@@ -1833,20 +1896,28 @@ class Page:
             option, clip=_as_clip(clip), flags=flags, textpage=tp, sort=sort
         )
 
-    def get_text_words(self, *, clip=None, flags: int | None = None, sort: bool = False) -> list[tuple]:
+    def get_text_words(
+        self, *, clip=None, flags: int | None = None, sort: bool = False
+    ) -> list[tuple]:
         """Word tuples ``(x0, y0, x1, y1, word, block, line, word_no)`` (PyMuPDF
         ``page.get_text_words``). When ``clip`` is given, only words whose bbox
         intersects the clip are returned."""
-        words = self._page.get_text("words", clip=None, flags=flags, textpage=None, sort=sort)
+        words = self._page.get_text(
+            "words", clip=None, flags=flags, textpage=None, sort=sort
+        )
         if clip is None:
             return words
         cr = _rt(clip)
         return [w for w in words if _intersects((w[0], w[1], w[2], w[3]), cr)]
 
-    def get_text_blocks(self, *, clip=None, flags: int | None = None, sort: bool = False) -> list[tuple]:
+    def get_text_blocks(
+        self, *, clip=None, flags: int | None = None, sort: bool = False
+    ) -> list[tuple]:
         """Block tuples ``(x0, y0, x1, y1, text, block_no, block_type)`` (PyMuPDF
         ``page.get_text_blocks``). ``clip`` filters by bbox intersection."""
-        blocks = self._page.get_text("blocks", clip=None, flags=flags, textpage=None, sort=sort)
+        blocks = self._page.get_text(
+            "blocks", clip=None, flags=flags, textpage=None, sort=sort
+        )
         if clip is None:
             return blocks
         cr = _rt(clip)
@@ -1857,7 +1928,9 @@ class Page:
         included when its bbox intersects ``rect``; words are joined preserving
         line breaks."""
         cr = _rt(rect)
-        words = self._page.get_text("words", clip=None, flags=None, textpage=None, sort=False)
+        words = self._page.get_text(
+            "words", clip=None, flags=None, textpage=None, sort=False
+        )
         sel = [w for w in words if _intersects((w[0], w[1], w[2], w[3]), cr)]
         # Group selected words by (block, line) preserving order, join with spaces;
         # separate lines with newlines.
@@ -1959,7 +2032,9 @@ class Page:
     def get_image_rects(self, *_args, **_kwargs) -> list[Rect]:
         """The page's image placements as :class:`Rect` (PyMuPDF
         ``page.get_image_rects``). One rectangle per painted image."""
-        return [_rect(bbox) for _name, _inline, bbox, _w, _h in self._page.get_image_rects()]
+        return [
+            _rect(bbox) for _name, _inline, bbox, _w, _h in self._page.get_image_rects()
+        ]
 
     def get_image_info(self, *_args, **_kwargs) -> list[dict]:
         """Per-image placement info dicts (PyMuPDF ``page.get_image_info``).
@@ -1981,7 +2056,11 @@ class Page:
         if isinstance(name_or_xref, (tuple, list)) and name_or_xref:
             # A get_images() tuple: PyMuPDF accepts the whole entry; use its name
             # (index 7) when present, else its xref (index 0).
-            key = name_or_xref[7] if len(name_or_xref) > 7 and name_or_xref[7] else name_or_xref[0]
+            key = (
+                name_or_xref[7]
+                if len(name_or_xref) > 7 and name_or_xref[7]
+                else name_or_xref[0]
+            )
         else:
             key = name_or_xref
         bbox = self._page.get_image_bbox(str(key))
@@ -2040,7 +2119,9 @@ class Page:
         transparent stub (PyMuPDF ``page.delete_image``)."""
         self._page.delete_image(str(name_or_xref))
 
-    def replace_image(self, name_or_xref, *, filename=None, stream=None, pixmap=None, **_kwargs) -> None:
+    def replace_image(
+        self, name_or_xref, *, filename=None, stream=None, pixmap=None, **_kwargs
+    ) -> None:
         """Replaces an image XObject (by name or xref) with a new JPEG, keeping
         the existing placement (PyMuPDF ``page.replace_image``).
 
@@ -2075,7 +2156,9 @@ class Page:
         ``(op, bbox)`` tuples in reading order."""
         return self._page.get_bboxlog(*args, **kwargs)
 
-    def show_pdf_page(self, rect, src: "Document", pno: int = 0, *_args, **_kwargs) -> str:
+    def show_pdf_page(
+        self, rect, src: "Document", pno: int = 0, *_args, **_kwargs
+    ) -> str:
         """Places ``src``'s page ``pno`` onto this page as a Form XObject filling
         ``rect`` (PyMuPDF ``page.show_pdf_page``). Returns the XObject name."""
         return self._page.show_pdf_page(_rt(rect), src._doc, int(pno))
@@ -2203,7 +2286,9 @@ class Page:
         return [ImageTable(t) for t in cores]
 
     # --- SVG export (PRD §7, M7) ---
-    def get_svg_image(self, matrix=None, *, text_as_path: bool = True, **_ignored) -> str:
+    def get_svg_image(
+        self, matrix=None, *, text_as_path: bool = True, **_ignored
+    ) -> str:
         """Renders this page to a standalone SVG document string (PyMuPDF
         ``page.get_svg_image``).
 
@@ -2387,25 +2472,44 @@ class Page:
         """Draws a line segment (PyMuPDF ``page.draw_line``)."""
         self._page.draw_line(_pt(p1), _pt(p2), color=_color(color), width=float(width))
 
-    def draw_rect(self, rect, *, color=(0, 0, 0), fill=None, width: float = 1.0, **_ignored):
+    def draw_rect(
+        self, rect, *, color=(0, 0, 0), fill=None, width: float = 1.0, **_ignored
+    ):
         """Draws a rectangle (PyMuPDF ``page.draw_rect``)."""
         self._page.draw_rect(
             _rt(rect), color=_color(color), fill=_color(fill), width=float(width)
         )
 
-    def draw_circle(self, center, radius, *, color=(0, 0, 0), fill=None, width: float = 1.0, **_ignored):
+    def draw_circle(
+        self,
+        center,
+        radius,
+        *,
+        color=(0, 0, 0),
+        fill=None,
+        width: float = 1.0,
+        **_ignored,
+    ):
         """Draws a circle (PyMuPDF ``page.draw_circle``)."""
         self._page.draw_circle(
-            _pt(center), float(radius), color=_color(color), fill=_color(fill), width=float(width)
+            _pt(center),
+            float(radius),
+            color=_color(color),
+            fill=_color(fill),
+            width=float(width),
         )
 
-    def draw_oval(self, rect, *, color=(0, 0, 0), fill=None, width: float = 1.0, **_ignored):
+    def draw_oval(
+        self, rect, *, color=(0, 0, 0), fill=None, width: float = 1.0, **_ignored
+    ):
         """Draws an ellipse inscribed in ``rect`` (PyMuPDF ``page.draw_oval``)."""
         self._page.draw_oval(
             _rt(rect), color=_color(color), fill=_color(fill), width=float(width)
         )
 
-    def draw_bezier(self, p1, p2, p3, p4, *, color=(0, 0, 0), width: float = 1.0, **_ignored):
+    def draw_bezier(
+        self, p1, p2, p3, p4, *, color=(0, 0, 0), width: float = 1.0, **_ignored
+    ):
         """Draws a cubic Bézier curve (PyMuPDF ``page.draw_bezier``)."""
         self._page.draw_bezier(
             _pt(p1), _pt(p2), _pt(p3), _pt(p4), color=_color(color), width=float(width)
@@ -2417,8 +2521,18 @@ class Page:
             [_pt(p) for p in points], color=_color(color), width=float(width)
         )
 
-    def draw_curve(self, p1, p2, p3, *, color=(0, 0, 0), fill=None, width: float = 1.0,
-                   closePath: bool = False, **_ignored) -> Point:  # noqa: N803
+    def draw_curve(
+        self,
+        p1,
+        p2,
+        p3,
+        *,
+        color=(0, 0, 0),
+        fill=None,
+        width: float = 1.0,
+        closePath: bool = False,
+        **_ignored,
+    ) -> Point:  # noqa: N803
         """Draws a special Bézier curve from ``p1`` to ``p3`` with control points
         derived from ``p2`` (PyMuPDF ``page.draw_curve``)."""
         shape = self.new_shape()
@@ -2427,7 +2541,9 @@ class Page:
         shape.commit()
         return q
 
-    def draw_quad(self, quad, *, color=(0, 0, 0), fill=None, width: float = 1.0, **_ignored) -> Point:
+    def draw_quad(
+        self, quad, *, color=(0, 0, 0), fill=None, width: float = 1.0, **_ignored
+    ) -> Point:
         """Draws a quadrilateral (PyMuPDF ``page.draw_quad``)."""
         ul_x, ul_y, ur_x, ur_y, ll_x, ll_y, lr_x, lr_y = _quad(quad)
         q_obj = Quad((ul_x, ul_y), (ur_x, ur_y), (ll_x, ll_y), (lr_x, lr_y))
@@ -2437,9 +2553,19 @@ class Page:
         shape.commit()
         return q
 
-    def draw_sector(self, center, point, beta, *, color=(0, 0, 0), fill=None,
-                    fullSector: bool = True, width: float = 1.0,  # noqa: N803
-                    closePath: bool = False, **_ignored) -> Point:  # noqa: N803
+    def draw_sector(
+        self,
+        center,
+        point,
+        beta,
+        *,
+        color=(0, 0, 0),
+        fill=None,
+        fullSector: bool = True,
+        width: float = 1.0,  # noqa: N803
+        closePath: bool = False,
+        **_ignored,
+    ) -> Point:  # noqa: N803
         """Draws a circle sector / pie wedge from ``point`` sweeping ``beta``
         degrees around ``center`` (PyMuPDF ``page.draw_sector``)."""
         shape = self.new_shape()
@@ -2448,8 +2574,16 @@ class Page:
         shape.commit()
         return q
 
-    def draw_squiggle(self, p1, p2, breadth: float = 2, *, color=(0, 0, 0),
-                      width: float = 1.0, **_ignored) -> Point:
+    def draw_squiggle(
+        self,
+        p1,
+        p2,
+        breadth: float = 2,
+        *,
+        color=(0, 0, 0),
+        width: float = 1.0,
+        **_ignored,
+    ) -> Point:
         """Draws a wavy / squiggly line from ``p1`` to ``p2`` (PyMuPDF
         ``page.draw_squiggle``)."""
         shape = self.new_shape()
@@ -2458,8 +2592,16 @@ class Page:
         shape.commit()
         return q
 
-    def draw_zigzag(self, p1, p2, breadth: float = 2, *, color=(0, 0, 0),
-                    width: float = 1.0, **_ignored) -> Point:
+    def draw_zigzag(
+        self,
+        p1,
+        p2,
+        breadth: float = 2,
+        *,
+        color=(0, 0, 0),
+        width: float = 1.0,
+        **_ignored,
+    ) -> Point:
         """Draws a zig-zag line from ``p1`` to ``p2`` (PyMuPDF ``page.draw_zigzag``)."""
         shape = self.new_shape()
         q = shape.draw_zigzag(_pt(p1), _pt(p2), breadth=float(breadth))
@@ -2472,9 +2614,13 @@ class Page:
         return Shape(self._page.new_shape(), page=self, doc=self._parent)
 
     # --- annotations (PRD §8.8) ---
-    def add_text_annot(self, point, text: str, *, icon: str = "Note", **_ignored) -> Annot:
+    def add_text_annot(
+        self, point, text: str, *, icon: str = "Note", **_ignored
+    ) -> Annot:
         """Adds a sticky-note text annotation (PyMuPDF ``page.add_text_annot``)."""
-        return Annot(self._page.add_text_annot(_pt(point), text, icon=icon), parent=self)
+        return Annot(
+            self._page.add_text_annot(_pt(point), text, icon=icon), parent=self
+        )
 
     def add_freetext_annot(
         self,
@@ -2500,41 +2646,60 @@ class Page:
             parent=self,
         )
 
-    def add_highlight_annot(self, quads=None, *, start=None, stop=None, clip=None, **_ignored) -> Annot:
+    def add_highlight_annot(
+        self, quads=None, *, start=None, stop=None, clip=None, **_ignored
+    ) -> Annot:
         """Adds a highlight annotation over ``quads`` (PyMuPDF ``page.add_highlight_annot``)."""
         return Annot(self._page.add_highlight_annot(_quads(quads)), parent=self)
 
-    def add_underline_annot(self, quads=None, *, start=None, stop=None, clip=None, **_ignored) -> Annot:
+    def add_underline_annot(
+        self, quads=None, *, start=None, stop=None, clip=None, **_ignored
+    ) -> Annot:
         """Adds an underline annotation over ``quads`` (PyMuPDF ``page.add_underline_annot``)."""
         return Annot(self._page.add_underline_annot(_quads(quads)), parent=self)
 
-    def add_strikeout_annot(self, quads=None, *, start=None, stop=None, clip=None, **_ignored) -> Annot:
+    def add_strikeout_annot(
+        self, quads=None, *, start=None, stop=None, clip=None, **_ignored
+    ) -> Annot:
         """Adds a strike-out annotation over ``quads`` (PyMuPDF ``page.add_strikeout_annot``)."""
         return Annot(self._page.add_strikeout_annot(_quads(quads)), parent=self)
 
-    def add_squiggly_annot(self, quads=None, *, start=None, stop=None, clip=None, **_ignored) -> Annot:
+    def add_squiggly_annot(
+        self, quads=None, *, start=None, stop=None, clip=None, **_ignored
+    ) -> Annot:
         """Adds a squiggly-underline annotation over ``quads`` (PyMuPDF ``page.add_squiggly_annot``)."""
         return Annot(self._page.add_squiggly_annot(_quads(quads)), parent=self)
 
     def add_rect_annot(self, rect, *, color=(0, 0, 0), fill=None, **_ignored) -> Annot:
         """Adds a rectangle annotation (PyMuPDF ``page.add_rect_annot``)."""
         return Annot(
-            self._page.add_rect_annot(_rt(rect), color=_color(color), fill=_color(fill)),
+            self._page.add_rect_annot(
+                _rt(rect), color=_color(color), fill=_color(fill)
+            ),
             parent=self,
         )
 
-    def add_circle_annot(self, rect, *, color=(0, 0, 0), fill=None, **_ignored) -> Annot:
+    def add_circle_annot(
+        self, rect, *, color=(0, 0, 0), fill=None, **_ignored
+    ) -> Annot:
         """Adds a circle/ellipse annotation (PyMuPDF ``page.add_circle_annot``)."""
         return Annot(
-            self._page.add_circle_annot(_rt(rect), color=_color(color), fill=_color(fill)),
+            self._page.add_circle_annot(
+                _rt(rect), color=_color(color), fill=_color(fill)
+            ),
             parent=self,
         )
 
     def add_line_annot(self, p1, p2, *, color=(0, 0, 0), **_ignored) -> Annot:
         """Adds a line annotation from ``p1`` to ``p2`` (PyMuPDF ``page.add_line_annot``)."""
-        return Annot(self._page.add_line_annot(_pt(p1), _pt(p2), color=_color(color)), parent=self)
+        return Annot(
+            self._page.add_line_annot(_pt(p1), _pt(p2), color=_color(color)),
+            parent=self,
+        )
 
-    def add_polygon_annot(self, points, *, color=(0, 0, 0), fill=None, **_ignored) -> Annot:
+    def add_polygon_annot(
+        self, points, *, color=(0, 0, 0), fill=None, **_ignored
+    ) -> Annot:
         """Adds a polygon annotation through ``points`` (PyMuPDF ``page.add_polygon_annot``)."""
         return Annot(
             self._page.add_polygon_annot(
@@ -2546,7 +2711,9 @@ class Page:
     def add_polyline_annot(self, points, *, color=(0, 0, 0), **_ignored) -> Annot:
         """Adds a polyline annotation through ``points`` (PyMuPDF ``page.add_polyline_annot``)."""
         return Annot(
-            self._page.add_polyline_annot([_pt(p) for p in points], color=_color(color)),
+            self._page.add_polyline_annot(
+                [_pt(p) for p in points], color=_color(color)
+            ),
             parent=self,
         )
 
@@ -2556,7 +2723,9 @@ class Page:
         ``handwriting`` is a list of strokes; each stroke is a list of points.
         """
         strokes = [[_pt(p) for p in stroke] for stroke in handwriting]
-        return Annot(self._page.add_ink_annot(strokes, color=_color(color)), parent=self)
+        return Annot(
+            self._page.add_ink_annot(strokes, color=_color(color)), parent=self
+        )
 
     def add_stamp_annot(self, rect, *, stamp: str = "Approved", **_ignored) -> Annot:
         """Adds a rubber-stamp annotation (PyMuPDF ``page.add_stamp_annot``)."""
@@ -2589,20 +2758,37 @@ class Page:
             field_value=str(value),
             field_flags=int(widget.field_flags or 0),
             choice_values=[str(v) for v in (widget.choice_values or [])],
-            text_color=tuple(widget.text_color) if widget.text_color else (0.0, 0.0, 0.0),
+            text_color=tuple(widget.text_color)
+            if widget.text_color
+            else (0.0, 0.0, 0.0),
             text_font=str(widget.text_font or "Helv"),
             text_fontsize=float(widget.text_fontsize or 0.0),
         )
         return Annot(core, parent=self)
 
-    def add_file_annot(self, point, buffer, filename: str, *, ufilename=None, desc=None, icon=None, **_ignored) -> Annot:
+    def add_file_annot(
+        self,
+        point,
+        buffer,
+        filename: str,
+        *,
+        ufilename=None,
+        desc=None,
+        icon=None,
+        **_ignored,
+    ) -> Annot:
         """Adds a file-attachment annotation (PyMuPDF ``page.add_file_annot``)."""
-        return Annot(self._page.add_file_annot(_pt(point), bytes(buffer), filename, desc=desc), parent=self)
+        return Annot(
+            self._page.add_file_annot(_pt(point), bytes(buffer), filename, desc=desc),
+            parent=self,
+        )
 
     def add_redact_annot(self, quad, *, text=None, fill=None, **_ignored) -> Annot:
         """Adds a redaction annotation over ``quad`` (PyMuPDF ``page.add_redact_annot``)."""
         return Annot(
-            self._page.add_redact_annot(_rt(_rect_from_corners(_quad(quad))), fill=_color(fill), text=text),
+            self._page.add_redact_annot(
+                _rt(_rect_from_corners(_quad(quad))), fill=_color(fill), text=text
+            ),
             parent=self,
         )
 
@@ -2718,9 +2904,12 @@ class Page:
             )
 
         paths = [
-            p for p in drawings
-            if p["rect"].x0 >= parea.x0 and p["rect"].x1 <= parea.x1
-            and p["rect"].y0 >= parea.y0 and p["rect"].y1 <= parea.y1
+            p
+            for p in drawings
+            if p["rect"].x0 >= parea.x0
+            and p["rect"].x1 <= parea.x1
+            and p["rect"].y0 >= parea.y0
+            and p["rect"].y1 <= parea.y1
         ]
         prects = sorted((p["rect"] for p in paths), key=lambda r: (r.y1, r.x0))
 
@@ -2757,7 +2946,15 @@ class Page:
                 if op == "l":
                     new_items.append(("l", Point(*it[1]), Point(*it[2])))
                 elif op == "c":
-                    new_items.append(("c", Point(*it[1]), Point(*it[2]), Point(*it[3]), Point(*it[4])))
+                    new_items.append(
+                        (
+                            "c",
+                            Point(*it[1]),
+                            Point(*it[2]),
+                            Point(*it[3]),
+                            Point(*it[4]),
+                        )
+                    )
                 elif op == "re":
                     new_items.append(("re", _rect(it[1])))
                 else:
@@ -3281,7 +3478,11 @@ class Colorspace:
         return f"Colorspace({self._name})"
 
     def __eq__(self, other) -> bool:
-        return isinstance(other, Colorspace) and other.n == self.n and other._name == self._name
+        return (
+            isinstance(other, Colorspace)
+            and other.n == self.n
+            and other._name == self._name
+        )
 
     def __hash__(self) -> int:
         return hash((self.n, self._name))
@@ -3301,7 +3502,15 @@ class TextWriter:
     :meth:`write_text`. Backed by the page content emitter / font metrics.
     """
 
-    __slots__ = ("page_rect", "opacity", "color", "_segments", "last_point", "_font", "_fontsize")
+    __slots__ = (
+        "page_rect",
+        "opacity",
+        "color",
+        "_segments",
+        "last_point",
+        "_font",
+        "_fontsize",
+    )
 
     def __init__(self, page_rect, opacity: float = 1.0, color=None) -> None:
         self.page_rect = _rect(page_rect)
@@ -3324,7 +3533,9 @@ class TextWriter:
         y1 = max(s[0][1] for s in self._segments)
         return Rect(x0, y0, x1, y1)
 
-    def append(self, pos, text, font=None, fontsize: float = 11.0, *, language=None, **_ignored):
+    def append(
+        self, pos, text, font=None, fontsize: float = 11.0, *, language=None, **_ignored
+    ):
         """Appends ``text`` starting at ``pos`` (PyMuPDF ``tw.append``).
 
         Returns ``(self, last_point)`` mirroring PyMuPDF's return shape.
@@ -3350,7 +3561,9 @@ class TextWriter:
         self.last_point = Point(x, y)
         return (self, self.last_point)
 
-    def fill_textbox(self, rect, text, *, font=None, fontsize: float = 11.0, align=0, **_ignored):
+    def fill_textbox(
+        self, rect, text, *, font=None, fontsize: float = 11.0, align=0, **_ignored
+    ):
         """Wraps and fills ``text`` into ``rect`` (PyMuPDF ``tw.fill_textbox``).
 
         Greedy word-wrap at ``rect`` width; returns the list of lines that did
@@ -3378,12 +3591,18 @@ class TextWriter:
             if y > r[3]:
                 overflow.append(line)
                 continue
-            self._segments.append(((r[0], y), line, fontname, float(fontsize), self.color))
-            self.last_point = Point(r[0] + _text_width(line, fontname, float(fontsize)), y)
+            self._segments.append(
+                ((r[0], y), line, fontname, float(fontsize), self.color)
+            )
+            self.last_point = Point(
+                r[0] + _text_width(line, fontname, float(fontsize)), y
+            )
             y += line_h
         return overflow
 
-    def write_text(self, page, *, opacity=None, color=None, overlay=True, **_ignored) -> None:
+    def write_text(
+        self, page, *, opacity=None, color=None, overlay=True, **_ignored
+    ) -> None:
         """Renders the accumulated text onto ``page`` (PyMuPDF ``tw.write_text``)."""
         col = _color(color) if color is not None else None
         for (px, py), text, fontname, fontsize, seg_color in self._segments:
@@ -3854,7 +4073,9 @@ class Document:
 
     def save_html(self, path: str | os.PathLike[str]) -> None:
         """Writes :meth:`to_html` to ``path`` using UTF-8."""
-        with builtins.open(os.fspath(path), "w", encoding="utf-8", newline="\n") as output:
+        with builtins.open(
+            os.fspath(path), "w", encoding="utf-8", newline="\n"
+        ) as output:
             output.write(self.to_html())
 
     def extractImage(self, xref: int) -> dict:  # noqa: N802
@@ -3915,7 +4136,9 @@ class Document:
 
     write = tobytes
 
-    def convert_to_pdf(self, from_page: int = 0, to_page: int = -1, rotate: int = 0) -> bytes:
+    def convert_to_pdf(
+        self, from_page: int = 0, to_page: int = -1, rotate: int = 0
+    ) -> bytes:
         """Converts the document to PDF and returns the bytes (PyMuPDF
         ``doc.convert_to_pdf``).
 
@@ -3954,7 +4177,11 @@ class Document:
         if engine == "paddle":
             _ensure_ocr_models_env()
         return self._doc.pdfocr_tobytes(
-            compress=compress, language=language, tessdata=tessdata, dpi=dpi, engine=engine
+            compress=compress,
+            language=language,
+            tessdata=tessdata,
+            dpi=dpi,
+            engine=engine,
         )
 
     def pdfocr_save(
@@ -3995,7 +4222,9 @@ class Document:
     # --- metadata write (PRD §8.9) ---
     def set_metadata(self, metadata: dict) -> None:
         """Writes the ``/Info`` metadata dict (PyMuPDF ``doc.set_metadata``)."""
-        self._doc.set_metadata({k: ("" if v is None else str(v)) for k, v in metadata.items()})
+        self._doc.set_metadata(
+            {k: ("" if v is None else str(v)) for k, v in metadata.items()}
+        )
 
     def setMetadata(self, metadata: dict) -> None:  # noqa: N802
         self.set_metadata(metadata)
@@ -4169,11 +4398,15 @@ class Document:
     def insertPDF(self, docsrc: "Document", **kwargs) -> None:  # noqa: N802
         self.insert_pdf(docsrc, **kwargs)
 
-    def new_page(self, pno: int = -1, width: float = 595.0, height: float = 842.0) -> Page:
+    def new_page(
+        self, pno: int = -1, width: float = 595.0, height: float = 842.0
+    ) -> Page:
         """Inserts a blank page, returning it (PyMuPDF ``doc.new_page``)."""
         return Page(self._doc.new_page(pno, width, height), self)
 
-    def newPage(self, pno: int = -1, width: float = 595.0, height: float = 842.0) -> Page:  # noqa: N802
+    def newPage(
+        self, pno: int = -1, width: float = 595.0, height: float = 842.0
+    ) -> Page:  # noqa: N802
         return self.new_page(pno, width, height)
 
     def delete_page(self, pno: int = -1) -> None:
@@ -4251,7 +4484,9 @@ class Document:
         elif len(args) == 1:
             numbers = [_norm(args[0])]
         else:
-            raise ValueError("delete_pages: expected (from, to), a list, or numbers=[...]")
+            raise ValueError(
+                "delete_pages: expected (from, to), a list, or numbers=[...]"
+            )
 
         drop = {n for n in numbers if 0 <= n < count}
         keep = [i for i in range(count) if i not in drop]
@@ -4279,7 +4514,11 @@ class Document:
         page = self.new_page(pno, width=width, height=height)
         if text is None:
             return 0
-        lines = text if isinstance(text, (list, tuple)) else str(text).splitlines() or [str(text)]
+        lines = (
+            text
+            if isinstance(text, (list, tuple))
+            else str(text).splitlines() or [str(text)]
+        )
         page.insert_text(
             Point(50, 72),
             "\n".join(str(line) for line in lines),
@@ -4367,7 +4606,9 @@ class Document:
         embedded, or when ``xref`` is not a font (which yields
         ``("", "", "", b"")``). With ``named`` truthy, returns a dict
         ``{"name", "ext", "type", "content"}`` instead."""
-        basefont, ext, ftype, buffer = self._doc.extract_font(int(xref), bool(info_only))
+        basefont, ext, ftype, buffer = self._doc.extract_font(
+            int(xref), bool(info_only)
+        )
         if named:
             return {"name": basefont, "ext": ext, "type": ftype, "content": buffer}
         return (basefont, ext, ftype, buffer)

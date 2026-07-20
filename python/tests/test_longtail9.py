@@ -131,6 +131,7 @@ def _assert_rect_matches(got, gt) -> None:
 
 # === search ==================================================================
 
+
 def test_search_hello_rect(tp):
     hits = tp.search("Hello", quads=False)
     assert len(hits) == 1
@@ -227,6 +228,7 @@ def test_search_no_space_does_not_bridge_break(xtp):
 
 # === extractTextbox =========================================================
 
+
 def test_textbox_single_line(tp):
     assert tp.extractTextbox((40, 108, 400, 124)) == _GT_TEXTBOX_LINE2
 
@@ -245,6 +247,7 @@ def test_textbox_empty_region(tp):
 
 
 # === extractSelection =======================================================
+
 
 def test_selection_cross_lines(tp):
     assert tp.extractSelection((60, 80), (110, 120)) == _GT_SEL_CROSS
@@ -265,6 +268,7 @@ def test_selection_accepts_points(tp):
 
 
 # === extractHTML / extractXHTML / extractXML ================================
+
 
 def test_html_structure(tp):
     html = tp.extractHTML()
@@ -307,7 +311,9 @@ def test_xml_structure_and_chars(tp):
     assert lines[0].getAttribute("wmode") == "0"
     # Char nodes carry quad / x / y / color / c, fitz-shaped.
     chars = page.getElementsByTagName("char")
-    assert len(chars) == len("Hello World" + "Second Line here" + "Third paragraph text")
+    assert len(chars) == len(
+        "Hello World" + "Second Line here" + "Third paragraph text"
+    )
     first = chars[0]
     assert first.getAttribute("c") == "H"
     assert first.getAttribute("color") == "#000000"
@@ -339,6 +345,7 @@ def test_xml_escapes_special_chars():
 
 # === extractIMGINFO =========================================================
 
+
 def test_imginfo_no_images(tp):
     # The text-only fixture has no images → empty list (matches fitz).
     assert tp.extractIMGINFO() == []
@@ -367,8 +374,18 @@ def test_imginfo_with_image():
     d = info[0]
     # fitz key set.
     assert set(d) >= {
-        "number", "bbox", "transform", "width", "height",
-        "colorspace", "cs-name", "xres", "yres", "bpc", "size", "has-mask",
+        "number",
+        "bbox",
+        "transform",
+        "width",
+        "height",
+        "colorspace",
+        "cs-name",
+        "xres",
+        "yres",
+        "bpc",
+        "size",
+        "has-mask",
     }
     assert d["width"] == 20
     assert d["height"] == 20
@@ -384,6 +401,7 @@ def test_imginfo_with_image():
 
 
 # === poolsize ===============================================================
+
 
 def test_poolsize_positive_and_scales(tp):
     # A populated page → positive footprint.
@@ -403,6 +421,7 @@ def test_poolsize_positive_and_scales(tp):
 
 
 # === sanity: the model the serializers build on ============================
+
 
 def test_text_matches_oracle(tp):
     assert tp.extractText() == _GT_TEXT
@@ -616,7 +635,6 @@ def test_font_valid_codepoints_subset_of_fitz():
     # Cross-check vs REAL PyMuPDF (.venv-oracle) embedded as literals: pdfspine's
     # set must be a strict subset of fitz's (no false positives), and smaller.
     import subprocess
-    import sys
     import os
 
     oracle = os.path.join(

@@ -39,12 +39,17 @@ wildcards = "warn"
 [advisories]
 # Use the RustSec advisory DB; CI fails on known vulnerabilities.
 yanked = "deny"
-# RUSTSEC-2024-0436: `paste` 已归档/不再维护（仅 unmaintained 通告，非安全漏洞）。
-# proc-macro 传递依赖，广泛使用、无已知 CVE；在上游依赖迁移掉它之前先精准豁免此一条，
-# 避免一个“不再维护”通告把 CI 卡红。其余 advisory 仍一律 deny。
-ignore = ["RUSTSEC-2024-0436"]
+# These are unmaintained notices, not memory-safety/security vulnerabilities:
+# - RUSTSEC-2024-0436: transitive `paste` proc macro.
+# - RUSTSEC-2026-0192: `ttf-parser`; no safe upgrade exists and replacing it
+#   requires a deliberate font-engine migration to skrifa.
+# Keep the exceptions precise; every actual vulnerability remains denied.
+ignore = ["RUSTSEC-2024-0436", "RUSTSEC-2026-0192"]
 
 [sources]
 unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+# OCR is pinned to an audited immutable revision until ocrspine publishes the
+# matching crate release. `unknown-git = deny` still rejects every other source.
+allow-git = ["https://github.com/VoldemortGin/ocrspine"]

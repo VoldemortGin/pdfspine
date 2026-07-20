@@ -39,7 +39,12 @@ fn uri(link: &pdf_api::Link) -> &str {
 fn single_run_link_lands_on_the_word() {
     let ph = 500.0;
     let margin = 50.0;
-    let pdf = export_runs(vec![Run::new("Linked", linked(12.0, URL))], 400.0, ph, margin);
+    let pdf = export_runs(
+        vec![Run::new("Linked", linked(12.0, URL))],
+        400.0,
+        ph,
+        margin,
+    );
     let doc = open(&pdf);
     let links = doc.get_links(0);
     assert_eq!(links.len(), 1, "one link for one linked run");
@@ -70,7 +75,10 @@ fn single_run_link_lands_on_the_word() {
 #[test]
 fn adjacent_same_uri_runs_merge_into_one_rect() {
     let pdf = export_runs(
-        vec![Run::new("Two ", linked(12.0, URL)), Run::new("words", linked(12.0, URL))],
+        vec![
+            Run::new("Two ", linked(12.0, URL)),
+            Run::new("words", linked(12.0, URL)),
+        ],
         400.0,
         500.0,
         50.0,
@@ -81,7 +89,10 @@ fn adjacent_same_uri_runs_merge_into_one_rect() {
     // The merged rect spans both words' ink extent.
     let w = words(&pdf, 0);
     let right = w.iter().map(|t| t.2).fold(f64::MIN, f64::max);
-    assert!(links[0].from.x1 >= right - 1.0, "merged rect reaches the last word");
+    assert!(
+        links[0].from.x1 >= right - 1.0,
+        "merged rect reaches the last word"
+    );
 }
 
 #[test]
@@ -100,13 +111,21 @@ fn different_uris_do_not_merge() {
     links.sort_by(|a, b| a.from.x0.total_cmp(&b.from.x0));
     assert_eq!(uri(&links[0]), "https://a.test/1");
     assert_eq!(uri(&links[1]), "https://b.test/2");
-    assert!(links[0].from.x1 <= links[1].from.x0 + 1.0, "rects are side by side");
+    assert!(
+        links[0].from.x1 <= links[1].from.x0 + 1.0,
+        "rects are side by side"
+    );
 }
 
 #[test]
 fn link_broken_across_lines_yields_one_rect_per_line() {
     // A hard break splits the linked run into two lines ⇒ two annotations.
-    let pdf = export_runs(vec![Run::new("first\nsecond", linked(12.0, URL))], 400.0, 500.0, 50.0);
+    let pdf = export_runs(
+        vec![Run::new("first\nsecond", linked(12.0, URL))],
+        400.0,
+        500.0,
+        50.0,
+    );
     let links = open(&pdf).get_links(0);
     assert_eq!(links.len(), 2, "one rect per line");
     for l in &links {
@@ -115,11 +134,19 @@ fn link_broken_across_lines_yields_one_rect_per_line() {
     // The first line sits above the second (larger PDF y, y grows upward).
     let mut ys: Vec<f64> = links.iter().map(|l| l.from.y0).collect();
     ys.sort_by(f64::total_cmp);
-    assert!(ys[1] > ys[0] + 1.0, "the two line rects are vertically separated");
+    assert!(
+        ys[1] > ys[0] + 1.0,
+        "the two line rects are vertically separated"
+    );
 }
 
 #[test]
 fn unlinked_run_produces_no_annotation() {
-    let pdf = export_runs(vec![Run::new("plain text", style(12.0))], 400.0, 500.0, 50.0);
+    let pdf = export_runs(
+        vec![Run::new("plain text", style(12.0))],
+        400.0,
+        500.0,
+        50.0,
+    );
     assert!(open(&pdf).get_links(0).is_empty(), "no link, no annotation");
 }

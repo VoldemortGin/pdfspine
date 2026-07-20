@@ -13,7 +13,6 @@ import struct
 import zlib
 
 import pdfspine
-import pytest
 
 
 # --- self-generated image-only PDF fixtures -------------------------------

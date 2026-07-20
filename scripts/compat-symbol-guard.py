@@ -163,7 +163,9 @@ def check_generated_deferred_lockstep(dispositions: dict[str, str]) -> list[str]
     """
     gen = PYTHON_SRC / "pdfspine" / "_compat_deferred.py"
     if not gen.exists():
-        return [f"generated deferred set missing: {gen} (run scripts/_compat_catalog.py)"]
+        return [
+            f"generated deferred set missing: {gen} (run scripts/_compat_catalog.py)"
+        ]
     ns: dict[str, object] = {}
     try:
         exec(compile(gen.read_text(encoding="utf-8"), str(gen), "exec"), ns)  # noqa: S102
@@ -227,7 +229,9 @@ def check_deferred_runtime(dispositions: dict[str, str]) -> tuple[list[str], str
         except AttributeError:
             errors.append(f"{sym}: raised AttributeError (want PdfUnsupportedError)")
         except Exception as exc:  # noqa: BLE001
-            errors.append(f"{sym}: raised {type(exc).__name__} (want PdfUnsupportedError)")
+            errors.append(
+                f"{sym}: raised {type(exc).__name__} (want PdfUnsupportedError)"
+            )
         else:
             errors.append(f"{sym}: did not raise (want PdfUnsupportedError)")
     doc.close()
@@ -268,7 +272,9 @@ def main(argv: list[str]) -> int:
     print("compat-symbol-guard — PyMuPDF baseline disposition gate")
     print(f"  baseline symbols : {len(baseline)}  ({BASELINE.name})")
     print(f"  dispositioned    : {len(dispositions)}  ({COMPAT.name})")
-    counts = {d: sum(1 for v in dispositions.values() if v == d) for d in VALID_DISPOSITIONS}
+    counts = {
+        d: sum(1 for v in dispositions.values() if v == d) for d in VALID_DISPOSITIONS
+    }
     total = len(dispositions) or 1
     print(
         f"  implemented={counts['implemented']} "

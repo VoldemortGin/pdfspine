@@ -1,10 +1,8 @@
 # Installation
 
-!!! warning "Not yet on PyPI"
-    pdfspine is pre-1.0 and is **not yet published to PyPI**. The
-    `pip install pdfspine` command below is the *planned* path once the first
-    release ships. For now, build from source with
-    [maturin](https://www.maturin.rs/).
+!!! warning "Alpha status"
+    pdfspine is on PyPI but remains pre-1.0. Verify output on your own documents
+    before relying on it in production.
 
 ## Requirements
 
@@ -16,9 +14,9 @@
 - [uv](https://docs.astral.sh/uv/) is recommended for managing the virtualenv,
   but any virtualenv tool works.
 
-## Install from PyPI (planned)
+## Install from PyPI
 
-Once published, installation will be the usual:
+pdfspine is published on PyPI:
 
 ```bash
 pip install pdfspine
@@ -28,8 +26,10 @@ This provides the `pdfspine` (native) package from one wheel, plus the opt-in
 `pdfspine.fitz` / `pdfspine.pymupdf` compatibility submodules. By default it does
 **not** claim the global `fitz` / `pymupdf` import names, so it is collision-safe
 alongside a real PyMuPDF; call `pdfspine.install_fitz_shim()` to register them.
+OCR works out of the box: the PP-OCRv5 weights come from the shared
+`ocrspine-models` data package, installed automatically as a runtime dependency.
 
-## Build from source (today)
+## Build from source
 
 Clone the repository and build the extension in place:
 

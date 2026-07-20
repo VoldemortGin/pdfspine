@@ -123,7 +123,12 @@ class Point:
         else:
             raise ValueError("arg1 must be point-like or rect-like")
         unit = args[1] if len(args) > 1 else "px"
-        u = {"px": (1.0, 1.0), "in": (1.0, 72.0), "cm": (2.54, 72.0), "mm": (25.4, 72.0)}
+        u = {
+            "px": (1.0, 1.0),
+            "in": (1.0, 72.0),
+            "cm": (2.54, 72.0),
+            "mm": (25.4, 72.0),
+        }
         f = u[unit][0] / u[unit][1]
         if isinstance(x, Point):
             return abs(self - x) * f
@@ -233,7 +238,12 @@ class Rect:
         return math.sqrt(sum(c * c for c in self))
 
     def get_area(self, unit: str = "px") -> float:
-        u = {"px": (1.0, 1.0), "in": (1.0, 72.0), "cm": (2.54, 72.0), "mm": (25.4, 72.0)}
+        u = {
+            "px": (1.0, 1.0),
+            "in": (1.0, 72.0),
+            "cm": (2.54, 72.0),
+            "mm": (25.4, 72.0),
+        }
         f = (u[unit][0] / u[unit][1]) ** 2
         return abs(self) * f
 
@@ -434,7 +444,10 @@ class Rect:
     def __truediv__(self, m) -> "Rect":
         if hasattr(m, "__float__"):
             return Rect(
-                self.x0 * 1.0 / m, self.y0 * 1.0 / m, self.x1 * 1.0 / m, self.y1 * 1.0 / m
+                self.x0 * 1.0 / m,
+                self.y0 * 1.0 / m,
+                self.x1 * 1.0 / m,
+                self.y1 * 1.0 / m,
             )
         sign, im = _invert_matrix(m)
         if sign == 1:
@@ -611,7 +624,14 @@ class Matrix:
             vals = (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
         elif len(args) == 1 and isinstance(args[0], (int, float)):
             # Matrix(degree) → anti-clockwise rotation matrix (PyMuPDF docs).
-            self.a, self.b, self.c, self.d, self.e, self.f = (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+            self.a, self.b, self.c, self.d, self.e, self.f = (
+                1.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+            )
             self.prerotate(float(args[0]))
             return
         elif len(args) == 1:
@@ -863,7 +883,8 @@ class Quad:
     def __eq__(self, other: object) -> bool:
         try:
             return len(other) == 4 and all(  # type: ignore[arg-type]
-                tuple(a) == tuple(b) for a, b in zip(self, other)  # type: ignore[arg-type]
+                tuple(a) == tuple(b)
+                for a, b in zip(self, other)  # type: ignore[arg-type]
             )
         except TypeError:
             return NotImplemented

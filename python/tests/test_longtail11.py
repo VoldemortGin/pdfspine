@@ -9,8 +9,11 @@ Each family is asserted both as raw values (parity vs the documented fitz value)
 and re-exported through the ``pdfspine`` top level + the ``fitz`` shim.
 """
 
+import math
+
 import pdfspine
 import pdfspine.constants as C
+import pytest
 
 import fitz
 
@@ -312,11 +315,6 @@ def test_encryption_roundtrip_with_fitz_method_constants() -> None:
 # Module-level HELPER FUNCTIONS (PRD §C, Task 1) — values captured from real
 # PyMuPDF 1.27 (.venv-oracle); also asserted through the ``fitz`` shim.
 # ---------------------------------------------------------------------------
-import math
-
-import pytest
-
-
 def _q(q):
     return (
         tuple(round(v, 3) for v in q.ul),
@@ -465,9 +463,14 @@ def test_conversion_header_trailer_match_fitz() -> None:
     assert "DOCTYPE html" in pdfspine.ConversionHeader("html")
     assert pdfspine.ConversionTrailer("html") == "</body>\n</html>\n"
     assert pdfspine.ConversionTrailer("xhtml") == "</body>\n</html>\n"
-    assert pdfspine.ConversionHeader("xml", "f.pdf").endswith('<document name="f.pdf">\n')
+    assert pdfspine.ConversionHeader("xml", "f.pdf").endswith(
+        '<document name="f.pdf">\n'
+    )
     assert pdfspine.ConversionTrailer("xml") == "</document>\n"
-    assert pdfspine.ConversionHeader("json", "f.pdf") == '{"document": "f.pdf", "pages": [\n'
+    assert (
+        pdfspine.ConversionHeader("json", "f.pdf")
+        == '{"document": "f.pdf", "pages": [\n'
+    )
     assert pdfspine.ConversionTrailer("json") == "]\n}"
     assert fitz.ConversionHeader("html") == pdfspine.ConversionHeader("html")
     # Default header is the empty (text) wrapper.
@@ -496,12 +499,25 @@ def test_message_and_log_shims(capsys, tmp_path) -> None:
 
 def test_helpers_exported_via_pdfspine_and_shim() -> None:
     names = [
-        "recover_quad", "recover_char_quad", "recover_line_quad",
-        "recover_span_quad", "recover_bbox_quad", "planish_line",
-        "glyph_name_to_unicode", "unicode_to_glyph_name", "sRGB_to_rgb",
-        "sRGB_to_pdf", "get_pdf_now", "get_pdf_str", "get_text_length",
-        "ConversionHeader", "ConversionTrailer", "set_messages", "message",
-        "set_log", "log",
+        "recover_quad",
+        "recover_char_quad",
+        "recover_line_quad",
+        "recover_span_quad",
+        "recover_bbox_quad",
+        "planish_line",
+        "glyph_name_to_unicode",
+        "unicode_to_glyph_name",
+        "sRGB_to_rgb",
+        "sRGB_to_pdf",
+        "get_pdf_now",
+        "get_pdf_str",
+        "get_text_length",
+        "ConversionHeader",
+        "ConversionTrailer",
+        "set_messages",
+        "message",
+        "set_log",
+        "log",
     ]
     for n in names:
         assert hasattr(pdfspine, n), f"pdfspine missing {n}"

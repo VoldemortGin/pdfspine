@@ -8,7 +8,7 @@
 
 - 引擎：纯 Rust（PDF 解析 / 渲染 / 文本 / OCR 全部 Rust 实现），`_core.abi3.so` 是编译产物。
 - 目标：**“PyMuPDF 有的我们都要”**——按 PyMuPDF 1.24.x 基线做符号级对齐（见 PARITY.md / COMPAT.toml）。
-- 当前覆盖：约 **88.7%（682/769）** 的 PyMuPDF 1.24 公开 API 已实现且有测试；其余为 deferred（21）或 out-of-scope（66）。
+- 当前覆盖：**89.3%（687/769）** 的 PyMuPDF 1.24 公开 API 已实现且有测试；其余为 deferred（16）或 out-of-scope（66）。
 
 ## 核心概念（对象模型）
 
@@ -53,10 +53,10 @@ pdfspine 自带 PyMuPDF 兼容 shim，让大量现有 `import fitz` 代码**几�
 ## OCR（PaddleOCR + Tesseract）
 
 - OCR **引擎代码已编进 wheel**（纯 Rust PaddleOCR，PP-OCRv5 det/rec + PP-LCNet_x1_0 textline-ori；以及 Tesseract 适配器）。
-- **~28MB PP-OCRv5 ONNX 模型也已内嵌进 wheel**（装后位于 `site-packages/pdfspine/_models/`）。所以一个**裸 `pip install pdfspine` 即全功能 OCR、离线可跑**——不需要任何单独数据包，也不需要 `[ocr]` extra。PP-OCRv5 相比 v4 还支持繁体中文 / 日文。`[ocr]`/`[all]` extra 现为**向后兼容空壳**（仍可解析，但不再拉任何依赖）；旧的 `pdfspine-ocr-models` 数据包已弃用。
+- **PP-OCRv5 ONNX 模型不内嵌在 pdfspine wheel**，而是来自共享的 `ocrspine-models` 数据包。它是基础运行时依赖，所以一个**裸 `pip install pdfspine` 即全功能 OCR、离线可跑**，不需要 `[ocr]` extra。PP-OCRv5 相比 v4 还支持繁体中文 / 日文。`[ocr]`/`[all]` extra 现为**向后兼容空壳**；旧的 `pdfspine-ocr-models` 数据包仅保留为运行时回退兼容。
 - 运行时模型解析顺序（见 `document.py::_ensure_ocr_models_env`）：
   1. 环境变量 `PDFSPINE_OCR_MODELS`（用户显式覆盖）；
-  2. wheel 内嵌的 `pdfspine/_models`（默认，开箱即用）；
+  2. 已安装的共享 `ocrspine_models` 数据包（默认）；
   3. 已安装的旧 `pdfspine_ocr_models` 伴随包（向后兼容）；
   4. 源码树内 `ocrspine/models`（开发回退）；
   5. 都没有 → 抛 `PdfUnsupportedError`。

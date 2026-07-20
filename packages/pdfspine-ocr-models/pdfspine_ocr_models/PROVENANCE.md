@@ -2,8 +2,9 @@
 
 This data distribution redistributes the *permissively-licensed* PaddleOCR
 **PP-OCRv5** model weights (converted to ONNX, then made `tract`-parseable) that
-pdfspine's pure-Rust PaddleOCR engine loads at runtime. It is the data companion
-that the `pdfspine[ocr]` extra pulls in; the models are the same files tracked in
+pdfspine's pure-Rust PaddleOCR engine loads at runtime. It is the archived legacy
+companion retained as a fallback; current releases use the shared
+`ocrspine-models` base dependency. The models are the same files tracked in
 the pdfspine repo at `crates/pdf-ocr/models/` (the build force-includes them from
 there, it does not keep a second copy).
 

@@ -173,7 +173,9 @@ def bake_dict(src: str, dst: str) -> None:
     out = "\n".join(baked) + "\n"
     with open(dst, "w", encoding="utf-8", newline="") as f:
         f.write(out)
-    print(f"baked dict {src} -> {dst} ({len(baked)} 行 = 1 blank + {len(chars)} 字符 + 1 space)")
+    print(
+        f"baked dict {src} -> {dst} ({len(baked)} 行 = 1 blank + {len(chars)} 字符 + 1 space)"
+    )
 
 
 def _parse_pairs(args: list[str]) -> list[tuple[str, str]]:
@@ -199,12 +201,16 @@ def main(argv: list[str]) -> int:
         print(__doc__)
         print("用法: python scripts/strip_onnx_dims.py IN.onnx OUT.onnx")
         print("  或: python scripts/strip_onnx_dims.py IN1:OUT1 IN2:OUT2 ...")
-        print("  字典: python scripts/strip_onnx_dims.py dict RAW_keys.txt BAKED_keys.txt")
+        print(
+            "  字典: python scripts/strip_onnx_dims.py dict RAW_keys.txt BAKED_keys.txt"
+        )
         return 2
     # ``dict`` 子命令:烘焙识别字典。
     if argv[1] == "dict":
         if len(argv) != 4:
-            raise SystemExit("用法: python scripts/strip_onnx_dims.py dict RAW_keys.txt BAKED_keys.txt")
+            raise SystemExit(
+                "用法: python scripts/strip_onnx_dims.py dict RAW_keys.txt BAKED_keys.txt"
+            )
         bake_dict(argv[2], argv[3])
         return 0
     for src, dst in _parse_pairs(argv[1:]):

@@ -46,7 +46,13 @@ def _build_pdf(objects: list[tuple[int, bytes]], root: int) -> bytes:
 
 
 def _stream_obj(num: int, dict_body: bytes, data: bytes) -> tuple[int, bytes]:
-    body = b"<< " + dict_body + f" /Length {len(data)} >>\nstream\n".encode() + data + b"\nendstream"
+    body = (
+        b"<< "
+        + dict_body
+        + f" /Length {len(data)} >>\nstream\n".encode()
+        + data
+        + b"\nendstream"
+    )
     return (num, body)
 
 
@@ -322,7 +328,9 @@ def test_lt2_set_page_labels_roundtrip():
 
 def test_lt2_fitz_set_page_labels():
     doc = fitz.open(stream=multi_page_pdf(3))
-    doc.set_page_labels([{"startpage": 0, "style": "A", "prefix": "", "firstpagenum": 1}])
+    doc.set_page_labels(
+        [{"startpage": 0, "style": "A", "prefix": "", "firstpagenum": 1}]
+    )
     assert doc.get_page_label(0) == "A"
     assert doc.get_page_label(1) == "B"
 

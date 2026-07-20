@@ -14,7 +14,9 @@ import pytest
 # --- self-generated PDF fixtures (raw bytes) ------------------------------
 
 
-def _build_pdf(objects: list[tuple[int, bytes]], root: int, extra_trailer: bytes = b"") -> bytes:
+def _build_pdf(
+    objects: list[tuple[int, bytes]], root: int, extra_trailer: bytes = b""
+) -> bytes:
     """Assembles a classic-xref PDF from ``(num, body)`` object pairs."""
     out = bytearray(b"%PDF-1.7\n%\xe2\xe3\xcf\xd3\n")
     offsets: dict[int, int] = {}

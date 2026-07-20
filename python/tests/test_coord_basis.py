@@ -58,7 +58,9 @@ def _page_pdf(mediabox, cropbox, text, tx, ty, *, size=40, rotate=0) -> bytes:
         (3, b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"),
         (
             4,
-            f"<< /Length {len(content)} >>\nstream\n".encode() + content + b"\nendstream",
+            f"<< /Length {len(content)} >>\nstream\n".encode()
+            + content
+            + b"\nendstream",
         ),
         (5, page),
     ]
@@ -87,7 +89,9 @@ def _content_page_pdf(mediabox, cropbox, content: bytes, *, with_font=False) -> 
         (3, b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"),
         (
             4,
-            f"<< /Length {len(content)} >>\nstream\n".encode() + content + b"\nendstream",
+            f"<< /Length {len(content)} >>\nstream\n".encode()
+            + content
+            + b"\nendstream",
         ),
         (5, page),
     ]
@@ -270,7 +274,12 @@ def test_coord_basis_005_find_tables_cell_shares_cropbox_origin():
     for x0, y0, x1, y1 in grid:
         c += f"{x0} {y0} m {x1} {y1} l S\n"
     c += "BT /F1 10 Tf\n"
-    for x, y, t in [(135, 270, "A1"), (215, 270, "B1"), (135, 220, "A2"), (215, 220, "B2")]:
+    for x, y, t in [
+        (135, 270, "A1"),
+        (215, 270, "B1"),
+        (135, 220, "A2"),
+        (215, 220, "B2"),
+    ]:
         c += f"1 0 0 1 {x} {y} Tm ({t}) Tj\n"
     c += "ET\n"
     doc = pdfspine.open(stream=_content_page_pdf(mb, cb, c.encode(), with_font=True))

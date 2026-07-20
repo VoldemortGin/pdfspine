@@ -34,7 +34,9 @@ import pytest
 _HAS_TESS = shutil.which("tesseract") is not None
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_SAMPLE_PNG = _REPO_ROOT / "crates" / "pdf-ocr" / "tests" / "fixtures" / "ocr_sample.png"
+_SAMPLE_PNG = (
+    _REPO_ROOT / "crates" / "pdf-ocr" / "tests" / "fixtures" / "ocr_sample.png"
+)
 
 # The three lines printed in the OCR sample raster (CJK must match exactly;
 # Latin lines allow minor whitespace differences).

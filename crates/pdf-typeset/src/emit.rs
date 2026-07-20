@@ -200,8 +200,12 @@ fn collect_links(ops: &[Op], acc: &Matrix, ph: f64, out: &mut Vec<LinkRect>) {
         match op {
             Op::Link { x, y, w, h, uri } => {
                 let corners = [(*x, *y), (*x + *w, *y), (*x + *w, *y + *h), (*x, *y + *h)];
-                let (mut x0, mut y0, mut x1, mut y1) =
-                    (f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY);
+                let (mut x0, mut y0, mut x1, mut y1) = (
+                    f64::INFINITY,
+                    f64::INFINITY,
+                    f64::NEG_INFINITY,
+                    f64::NEG_INFINITY,
+                );
                 for (px, py) in corners {
                     let p = Point::new(px, py).transform(acc);
                     let (fx, fy) = (p.x, ph - p.y);
@@ -366,7 +370,12 @@ pub(crate) fn build_pdf(
         // Link annotations: hyperlink hot-zones collected from the page ops
         // (mapped through any enclosing group transforms, then y-flipped).
         let mut links: Vec<LinkRect> = Vec::new();
-        collect_links(&page.ops, &Matrix::IDENTITY, sane_dim(page.height), &mut links);
+        collect_links(
+            &page.ops,
+            &Matrix::IDENTITY,
+            sane_dim(page.height),
+            &mut links,
+        );
         if !links.is_empty() {
             let mut annots: Vec<Object> = Vec::with_capacity(links.len());
             for link in &links {

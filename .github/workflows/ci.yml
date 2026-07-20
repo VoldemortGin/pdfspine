@@ -16,6 +16,29 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
+  # ---------------------------------------- authoritative repository gate
+  quality-gate:
+    name: unified Rust/Python quality gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install Rust toolchain (pinned)
+        uses: dtolnay/rust-toolchain@1.96.0
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Cargo dependency policy gate
+        run: cargo install cargo-deny --locked
+      - name: Install Python build and quality dependencies
+        run: python -m pip install -e ".[test,quality]"
+      - name: Run the authoritative repository gate
+        run: ./ci.sh
+
   # ----------------------------------------------------------------- lint
   lint:
     name: lint (fmt / clippy / deny / geiger)
@@ -136,7 +159,7 @@ jobs:
       - name: Build + install (editable; pip 走 maturin PEP 660,无需 venv)
         run: pip install -e .
       - name: pytest (incl. doctests)
-        run: pytest --doctest-modules python/pdfspine || pytest
+        run: python -m pytest -W error --doctest-modules python/pdfspine python/tests
 
   # ----------------------------------------------------------- TDD guards
   tdd-guards:

@@ -16,14 +16,15 @@ from __future__ import annotations
 import json
 
 import pdfspine
-import pytest
 
 
 # --- self-generated PDF assembler (classic xref) --------------------------
 # Copied from test_document.py so this file is fully self-contained.
 
 
-def _build_pdf(objects: list[tuple[int, bytes]], root: int, extra_trailer: bytes = b"") -> bytes:
+def _build_pdf(
+    objects: list[tuple[int, bytes]], root: int, extra_trailer: bytes = b""
+) -> bytes:
     """Assembles a classic-xref PDF from ``(num, body)`` object pairs."""
     out = bytearray(b"%PDF-1.7\n%\xe2\xe3\xcf\xd3\n")
     offsets: dict[int, int] = {}
@@ -68,11 +69,15 @@ def _helvetica_font(first: int = 32, last: int = 125, width: int = 500) -> bytes
         b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica "
         b"/Encoding /WinAnsiEncoding "
         + f"/FirstChar {first} /LastChar {last} ".encode()
-        + b"/Widths " + widths + b" >>"
+        + b"/Widths "
+        + widths
+        + b" >>"
     )
 
 
-def text_pdf(lines: list[str], font_widths: bool = True, ystart: int = 700, leading: int = 20) -> bytes:
+def text_pdf(
+    lines: list[str], font_widths: bool = True, ystart: int = 700, leading: int = 20
+) -> bytes:
     """A 1-page PDF (MediaBox [0 0 612 792]) drawing ``lines`` with /F1.
 
     ``BT /F1 12 Tf 72 <ystart> Td (line0) Tj 0 -<leading> Td (line1) Tj ... ET``.
@@ -103,7 +108,14 @@ def text_pdf(lines: list[str], font_widths: bool = True, ystart: int = 700, lead
                 b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
                 b"/Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
             ),
-            (4, b"<< /Length " + str(len(content)).encode() + b" >>\nstream\n" + content + b"\nendstream"),
+            (
+                4,
+                b"<< /Length "
+                + str(len(content)).encode()
+                + b" >>\nstream\n"
+                + content
+                + b"\nendstream",
+            ),
             (5, font),
         ],
         root=1,
@@ -121,7 +133,14 @@ def _raw_content_pdf(content: bytes, font: bytes) -> bytes:
                 b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
                 b"/Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
             ),
-            (4, b"<< /Length " + str(len(content)).encode() + b" >>\nstream\n" + content + b"\nendstream"),
+            (
+                4,
+                b"<< /Length "
+                + str(len(content)).encode()
+                + b" >>\nstream\n"
+                + content
+                + b"\nendstream",
+            ),
             (5, font),
         ],
         root=1,
@@ -169,7 +188,14 @@ def cid_identity_h_pdf() -> tuple[bytes, str]:
             b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
             b"/Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
         ),
-        (4, b"<< /Length " + str(len(content)).encode() + b" >>\nstream\n" + content + b"\nendstream"),
+        (
+            4,
+            b"<< /Length "
+            + str(len(content)).encode()
+            + b" >>\nstream\n"
+            + content
+            + b"\nendstream",
+        ),
         (
             5,
             b"<< /Type /Font /Subtype /Type0 /BaseFont /F0 /Encoding /Identity-H "
@@ -181,8 +207,18 @@ def cid_identity_h_pdf() -> tuple[bytes, str]:
             b"/CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> "
             b"/FontDescriptor 8 0 R /CIDToGIDMap /Identity /DW 1000 >>",
         ),
-        (7, b"<< /Length " + str(len(tounicode)).encode() + b" >>\nstream\n" + tounicode + b"\nendstream"),
-        (8, b"<< /Type /FontDescriptor /FontName /F0 /Flags 4 /Ascent 800 /Descent -200 >>"),
+        (
+            7,
+            b"<< /Length "
+            + str(len(tounicode)).encode()
+            + b" >>\nstream\n"
+            + tounicode
+            + b"\nendstream",
+        ),
+        (
+            8,
+            b"<< /Type /FontDescriptor /FontName /F0 /Flags 4 /Ascent 800 /Descent -200 >>",
+        ),
     ]
     return _build_pdf(objs, root=1), "HELLO"
 
@@ -201,12 +237,23 @@ def image_pdf() -> bytes:
             b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
             b"/Resources << /XObject << /Im0 5 0 R >> >> /Contents 4 0 R >>",
         ),
-        (4, b"<< /Length " + str(len(content)).encode() + b" >>\nstream\n" + content + b"\nendstream"),
+        (
+            4,
+            b"<< /Length "
+            + str(len(content)).encode()
+            + b" >>\nstream\n"
+            + content
+            + b"\nendstream",
+        ),
         (
             5,
             b"<< /Type /XObject /Subtype /Image /Width 1 /Height 1 "
             b"/BitsPerComponent 8 /ColorSpace /DeviceRGB /Filter /FlateDecode "
-            b"/Length " + str(len(pix)).encode() + b" >>\nstream\n" + pix + b"\nendstream",
+            b"/Length "
+            + str(len(pix)).encode()
+            + b" >>\nstream\n"
+            + pix
+            + b"\nendstream",
         ),
     ]
     return _build_pdf(objs, root=1)
@@ -273,7 +320,11 @@ def test_pytext_002_words_arity8_with_bbox():
     assert word == "World"
     assert (x1 - x0) > 0  # explicit /Widths → non-zero glyph box
     assert (y1 - y0) > 0
-    assert isinstance(block_no, int) and isinstance(line_no, int) and isinstance(word_no, int)
+    assert (
+        isinstance(block_no, int)
+        and isinstance(line_no, int)
+        and isinstance(word_no, int)
+    )
 
 
 def test_pytext_003_dict_keys_and_types():
@@ -294,8 +345,15 @@ def test_pytext_003_dict_keys_and_types():
 
     span = line["spans"][0]
     assert set(span.keys()) == {
-        "size", "flags", "font", "color", "ascender",
-        "descender", "origin", "bbox", "text",
+        "size",
+        "flags",
+        "font",
+        "color",
+        "ascender",
+        "descender",
+        "origin",
+        "bbox",
+        "text",
     }
     assert isinstance(span["color"], int)
     assert isinstance(span["bbox"], tuple) and len(span["bbox"]) == 4
@@ -408,7 +466,9 @@ def test_pysearch_002_quads():
     quads = page.search_for("World", quads=True)
     assert len(quads) == 1
     q = quads[0]
-    assert hasattr(q, "ul") and hasattr(q, "ur") and hasattr(q, "ll") and hasattr(q, "lr")
+    assert (
+        hasattr(q, "ul") and hasattr(q, "ur") and hasattr(q, "ll") and hasattr(q, "lr")
+    )
     assert hasattr(q.ul, "x") and hasattr(q.ul, "y")
     # The quad's enclosing rect matches the default (rect) search.
     r = page.search_for("World")[0]
@@ -443,7 +503,13 @@ def test_pyinv_001_get_fonts():
     assert len(f) == 7
     xref, ext, ftype, basefont, name, encoding, referencer = f
     assert (xref, ext, ftype, basefont, name, encoding, referencer) == (
-        5, "n/a", "Type1", "Helvetica", "F1", "WinAnsiEncoding", 3,
+        5,
+        "n/a",
+        "Type1",
+        "Helvetica",
+        "F1",
+        "WinAnsiEncoding",
+        3,
     )
 
 
@@ -535,5 +601,7 @@ def test_accuracy_gt_003_cid_identity_h(capsys):
     extracted = _normalize(_page(pdf).get_text("text"))
     sim = _similarity(extracted, ground_truth)
     with capsys.disabled():
-        print(f"ACCURACY-GT-003 similarity={sim:.4f} extracted={extracted!r} gt={ground_truth!r}")
+        print(
+            f"ACCURACY-GT-003 similarity={sim:.4f} extracted={extracted!r} gt={ground_truth!r}"
+        )
     assert sim >= 0.95, (extracted, ground_truth, sim)

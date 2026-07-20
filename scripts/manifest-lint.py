@@ -52,8 +52,17 @@ MANIFEST = FIXTURES_DIR / "MANIFEST.toml"
 CONFORMANCE_DIR = REPO_ROOT / "conformance"
 
 ALLOWED_LICENSES = {
-    "MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "Zlib",
-    "Unicode-DFS-2016", "ISC", "CC0-1.0", "Unlicense", "PD", "Public-Domain",
+    "MIT",
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "Zlib",
+    "Unicode-DFS-2016",
+    "ISC",
+    "CC0-1.0",
+    "Unlicense",
+    "PD",
+    "Public-Domain",
 }
 REQUIRED_FIELDS = ("path", "source", "license", "sha256", "cleared_by", "cleared_date")
 
@@ -101,11 +110,15 @@ def lint_fixtures() -> list[str]:
             )
 
         if not entry.get("cleared_by"):
-            errors.append(f"{path}: empty cleared_by (every fixture needs a named clearer)")
+            errors.append(
+                f"{path}: empty cleared_by (every fixture needs a named clearer)"
+            )
 
         sha = entry.get("sha256")
         if not (isinstance(sha, str) and SHA256_RE.match(sha)):
-            errors.append(f"{path}: sha256 {sha!r} is not a 64-char lowercase hex digest")
+            errors.append(
+                f"{path}: sha256 {sha!r} is not a 64-char lowercase hex digest"
+            )
 
         if isinstance(entry.get("path"), str):
             fpath = FIXTURES_DIR / entry["path"]
@@ -125,7 +138,9 @@ def lint_fixtures() -> list[str]:
                 continue
             if p.resolve() not in declared:
                 rel = p.relative_to(FIXTURES_DIR)
-                errors.append(f"{rel}: present under fixtures/ but not declared in MANIFEST.toml")
+                errors.append(
+                    f"{rel}: present under fixtures/ but not declared in MANIFEST.toml"
+                )
 
     return errors
 
@@ -164,7 +179,7 @@ def main(argv: list[str]) -> int:
 
     print("manifest-lint — affirmative-license fixtures + manifest hygiene")
     print(f"  fixtures manifest    : {MANIFEST.relative_to(REPO_ROOT)}")
-    print(f"  conformance manifests: git-tracked *.json under conformance/")
+    print("  conformance manifests: git-tracked *.json under conformance/")
 
     if errors:
         print(f"\n  FAIL ({len(errors)} problem(s)):", file=sys.stderr)
@@ -172,8 +187,10 @@ def main(argv: list[str]) -> int:
             print(f"    - {e}", file=sys.stderr)
         return 1
 
-    print("  OK — every fixture is affirmatively cleared; "
-          "conformance manifests are well-formed with no stale absolute paths.")
+    print(
+        "  OK — every fixture is affirmatively cleared; "
+        "conformance manifests are well-formed with no stale absolute paths."
+    )
     return 0
 
 

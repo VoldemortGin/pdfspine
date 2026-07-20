@@ -60,8 +60,8 @@ pub use embfile::{
 pub use fontfile::{fonts_in_collection, EmbeddedFont};
 pub use form::{
     acroform_dict, default_appearance, fill, first_widget, flatten, form_fields, form_fonts,
-    has_acroform, is_form_pdf, need_appearances, set_need_appearances, sigflags, terminal_field_refs,
-    widget_refs, widgets, Field, FieldType, Widget,
+    has_acroform, is_form_pdf, need_appearances, set_need_appearances, sigflags,
+    terminal_field_refs, widget_refs, widgets, Field, FieldType, Widget,
 };
 pub use image::{insert_image_jpeg, insert_image_rgb};
 pub use links::{delete_link, get_links, insert_link, update_link, Link, LinkKind};

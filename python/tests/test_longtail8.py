@@ -127,6 +127,7 @@ def _approx(a, b, tol: float = 1e-4) -> bool:
 
 # === MK colors + captions ====================================================
 
+
 def test_border_and_fill_color(tmp_path):
     w = _widgets_by_name(_write(tmp_path, "f.pdf", _FORM_PDF))
     assert _approx(w["txt1"].border_color, [0.0, 0.0, 1.0])
@@ -145,6 +146,7 @@ def test_button_caption(tmp_path):
 
 # === DA: font / size / color =================================================
 
+
 def test_text_da_properties(tmp_path):
     w = _widgets_by_name(_write(tmp_path, "f.pdf", _FORM_PDF))
     assert w["txt1"].text_font == "Helv"
@@ -161,6 +163,7 @@ def test_text_da_defaults_when_no_da(tmp_path):
 
 
 # === BS: style / width / dashes ==============================================
+
 
 def test_border_style_width_dashes(tmp_path):
     w = _widgets_by_name(_write(tmp_path, "f.pdf", _FORM_PDF))
@@ -188,6 +191,7 @@ def test_border_width_defaults_to_one(tmp_path):
 
 # === Q / MaxLen ==============================================================
 
+
 def test_text_maxlen(tmp_path):
     w = _widgets_by_name(_write(tmp_path, "f.pdf", _FORM_PDF))
     assert w["txt1"].text_maxlen == 30
@@ -203,11 +207,12 @@ def test_text_format_reads_quadding(tmp_path):
 
 # === field_display (/F mapping) ==============================================
 
+
 def test_field_display_mapping(tmp_path):
     w = _widgets_by_name(_write(tmp_path, "fd.pdf", _DISPLAY_PDF))
-    assert w["f0"].field_display == 2   # Print clear → no-print
-    assert w["f4"].field_display == 0   # Print set, visible → normal
-    assert w["f2"].field_display == 1   # Hidden
+    assert w["f0"].field_display == 2  # Print clear → no-print
+    assert w["f4"].field_display == 0  # Print set, visible → normal
+    assert w["f2"].field_display == 1  # Hidden
     assert w["f32"].field_display == 1  # NoView
 
 
@@ -219,6 +224,7 @@ def test_field_display_print_form(tmp_path):
 
 
 # === is_signed ===============================================================
+
 
 def test_is_signed_unsigned_signature(tmp_path):
     w = _widgets_by_name(_write(tmp_path, "sig.pdf", _SIG_PDF))
@@ -234,6 +240,7 @@ def test_is_signed_none_for_non_signature(tmp_path):
 
 
 # === on_state ================================================================
+
 
 def test_on_state_checkbox(tmp_path):
     w = _widgets_by_name(_write(tmp_path, "f.pdf", _FORM_PDF))
@@ -261,6 +268,7 @@ def test_rb_parent_none_for_non_radio(tmp_path):
 
 # === reset ===================================================================
 
+
 def test_reset_reverts_to_default(tmp_path):
     path = _write(tmp_path, "reset.pdf", _RESET_PDF)
     doc = pdfspine.open(path)
@@ -271,6 +279,7 @@ def test_reset_reverts_to_default(tmp_path):
 
 
 # === next (page widget linked list) ==========================================
+
 
 def test_next_links_page_widgets(tmp_path):
     doc = pdfspine.open(_write(tmp_path, "f.pdf", _FORM_PDF))

@@ -24,7 +24,7 @@ to the shim, call `pdfspine.install_fitz_shim()` once at startup — see
 
 | Page | What it covers |
 |---|---|
-| [Installation](installation.md) | Building and installing the wheel (not yet on PyPI). |
+| [Installation](installation.md) | Installing from PyPI or building the wheel from source. |
 | [Quickstart](quickstart.md) | Open, extract, search, render, and save. |
 | [Text extraction](text-extraction.md) | `get_text` variants, `search_for`, `TextPage`, tables. |
 | [Editing & saving](editing.md) | Merge / split, metadata, TOC, annotations, forms, redaction. |

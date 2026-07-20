@@ -88,9 +88,9 @@ def test_compat_toml_parses_and_is_well_formed() -> None:
     for s in symbols:
         assert "name" in s and s["name"], f"entry missing name: {s!r}"
         assert "group" in s and s["group"], f"{s['name']} missing group"
-        assert (
-            s["disposition"] in VALID_DISPOSITIONS
-        ), f"{s['name']} has invalid disposition {s.get('disposition')!r}"
+        assert s["disposition"] in VALID_DISPOSITIONS, (
+            f"{s['name']} has invalid disposition {s.get('disposition')!r}"
+        )
 
 
 def test_compat_meta_counts_match_entries() -> None:

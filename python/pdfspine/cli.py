@@ -76,9 +76,7 @@ def parse_page_range(spec: str | None, page_count: int) -> list[int]:
 
     for p in pages:
         if p < 1 or p > page_count:
-            raise CLIError(
-                f"page {p} out of range (document has {page_count} page(s))"
-            )
+            raise CLIError(f"page {p} out of range (document has {page_count} page(s))")
 
     # de-duplicate while preserving sorted order, then convert to 0-based.
     return [p - 1 for p in sorted(set(pages))]
@@ -201,7 +199,9 @@ def _cmd_merge(args: argparse.Namespace) -> int:
         out.save(args.output)
     except PdfError as exc:
         raise CLIError(f"cannot write {args.output}: {exc}")
-    print(f"merged {len(args.files)} file(s) → {args.output} ({out.page_count} page(s))")
+    print(
+        f"merged {len(args.files)} file(s) → {args.output} ({out.page_count} page(s))"
+    )
     return 0
 
 
@@ -214,8 +214,7 @@ def _cmd_split(args: argparse.Namespace) -> int:
 
     if args.ranges:
         groups = [
-            parse_page_range(token, doc.page_count)
-            for token in args.ranges.split(",")
+            parse_page_range(token, doc.page_count) for token in args.ranges.split(",")
         ]
     else:
         groups = [[i] for i in range(doc.page_count)]
@@ -340,7 +339,18 @@ def build_parser() -> argparse.ArgumentParser:
     p_text.add_argument(
         "--format",
         default="text",
-        choices=["text", "json", "html", "xhtml", "xml", "blocks", "words", "dict", "rawdict", "rawjson"],
+        choices=[
+            "text",
+            "json",
+            "html",
+            "xhtml",
+            "xml",
+            "blocks",
+            "words",
+            "dict",
+            "rawdict",
+            "rawjson",
+        ],
         help="text output format (default: text)",
     )
     p_text.add_argument("-o", "--output", help="write to this file instead of stdout")

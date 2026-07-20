@@ -1,0 +1,11 @@
+#!/usr/bin/env sh
+set -eu
+
+repo_root=$(git rev-parse --show-toplevel)
+if command -v python3 >/dev/null 2>&1; then
+    python_bin=python3
+else
+    python_bin=python
+fi
+
+exec "$python_bin" "$repo_root/scripts/quality_gate.py" "$@"

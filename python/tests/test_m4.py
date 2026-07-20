@@ -10,7 +10,6 @@ self-generated in-test (PRD §10). Catalog IDs ``PYM4-*``.
 from __future__ import annotations
 
 import pdfspine
-import pytest
 
 
 # --- fixtures (self-built raw PDF bytes; no external files) ----------------
@@ -48,7 +47,9 @@ def _widths_font() -> bytes:
     )
 
 
-def blank_doc(media: tuple[int, int, int, int] = (0, 0, 612, 792)) -> "pdfspine.Document":
+def blank_doc(
+    media: tuple[int, int, int, int] = (0, 0, 612, 792),
+) -> "pdfspine.Document":
     """A one-page doc with a shared ``/Widths`` Helvetica under ``/F1`` and no
     content."""
     mb = " ".join(str(v) for v in media).encode()
@@ -66,7 +67,9 @@ def blank_doc(media: tuple[int, int, int, int] = (0, 0, 612, 792)) -> "pdfspine.
     return pdfspine.open(stream=_build_pdf(objects, root=1))
 
 
-def secret_doc(lead: str, secret: str) -> tuple[bytes, tuple[float, float, float, float]]:
+def secret_doc(
+    lead: str, secret: str
+) -> tuple[bytes, tuple[float, float, float, float]]:
     """A page showing ``lead`` then ``secret`` on one line; returns the bytes and
     the top-left rect covering only ``secret`` (mirrors the Rust harness)."""
     char_w = 12.0 * 0.6
@@ -85,7 +88,14 @@ def secret_doc(lead: str, secret: str) -> tuple[bytes, tuple[float, float, float
             b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
             b"/Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
         ),
-        (4, b"<< /Length " + str(len(body)).encode() + b" >>\nstream\n" + body + b"\nendstream"),
+        (
+            4,
+            b"<< /Length "
+            + str(len(body)).encode()
+            + b" >>\nstream\n"
+            + body
+            + b"\nendstream",
+        ),
         (5, _widths_font()),
     ]
     # Top-left rect: user y 698..710 → top-left y (792-710)..(792-698) = 82..94.
@@ -276,7 +286,9 @@ def test_pym4_widget_002_update_value_persists():
 
 def test_pym4_embfile_001_roundtrip():
     doc = blank_doc()
-    doc.embfile_add("data.bin", b"\x00\x01payload\xff", filename="data.bin", desc="a blob")
+    doc.embfile_add(
+        "data.bin", b"\x00\x01payload\xff", filename="data.bin", desc="a blob"
+    )
     assert doc.embfile_names() == ["data.bin"]
     assert doc.embfile_count() == 1
     assert doc.embfile_get("data.bin") == b"\x00\x01payload\xff"

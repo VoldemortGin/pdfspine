@@ -75,7 +75,9 @@ def check_sync(mod) -> list[str]:
         (BASELINE_TXT, mod.render_baseline()),
     ):
         if not path.exists():
-            errors.append(f"{path} not found (regenerate via scripts/_compat_catalog.py)")
+            errors.append(
+                f"{path} not found (regenerate via scripts/_compat_catalog.py)"
+            )
             continue
         committed = path.read_text(encoding="utf-8")
         if committed != expected:
@@ -153,8 +155,10 @@ def main(argv: list[str]) -> int:
             print(f"    - {e}", file=sys.stderr)
         return 1
 
-    print("  OK — committed COMPAT.toml/baseline match the generator; "
-          "dispositions + meta counters are consistent.")
+    print(
+        "  OK — committed COMPAT.toml/baseline match the generator; "
+        "dispositions + meta counters are consistent."
+    )
     return 0
 
 

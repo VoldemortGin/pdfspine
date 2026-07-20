@@ -94,8 +94,8 @@ def test_links_iterator() -> None:
     p = d[0]
     p.insert_link({"kind": 2, "from": (0, 0, 10, 10), "uri": "https://a.test"})
     p.insert_link({"kind": 1, "from": (0, 20, 10, 30), "page": 1})
-    assert [l.kind for l in p.links()] == [2, 1]
-    assert [l.kind for l in p.links(kinds=[2])] == [2]
+    assert [link.kind for link in p.links()] == [2, 1]
+    assert [link.kind for link in p.links(kinds=[2])] == [2]
 
 
 def test_link_border_color_flags() -> None:
@@ -248,9 +248,7 @@ def test_textwriter_fill_textbox_wraps() -> None:
 def test_textwriter_fill_textbox_overflow() -> None:
     tw = pdfspine.TextWriter((0, 0, 200, 200))
     # A very short box forces overflow lines.
-    overflow = tw.fill_textbox(
-        (0, 0, 30, 12), "aaa bbb ccc ddd eee fff", fontsize=10
-    )
+    overflow = tw.fill_textbox((0, 0, 30, 12), "aaa bbb ccc ddd eee fff", fontsize=10)
     assert overflow  # some lines did not fit
 
 
@@ -298,7 +296,7 @@ def test_annot_get_textpage() -> None:
 def test_annot_next() -> None:
     d = _doc_with_text()
     p = d[0]
-    a1 = p.add_rect_annot((60, 85, 320, 110))
+    p.add_rect_annot((60, 85, 320, 110))
     a2 = p.add_rect_annot((60, 120, 320, 140))
     first = p.first_annot
     assert first.next is not None

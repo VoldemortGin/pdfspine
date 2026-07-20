@@ -24,45 +24,44 @@ OUT = ROOT / "docs" / "reference" / "constants.md"
 # Ordered (label, predicate) families. First match wins, so order matters.
 FAMILIES: list[tuple[str, object]] = [
     ("Colorspace (`CS_*`)", lambda n: n.startswith("CS_")),
-    ("Annotation types (`PDF_ANNOT_*`)",
-     lambda n: n.startswith("PDF_ANNOT_")
-     and not n.startswith(("PDF_ANNOT_IT", "PDF_ANNOT_LE",
-                           "PDF_ANNOT_IS", "PDF_ANNOT_Q"))),
-    ("Annotation flags (`PDF_ANNOT_IS_*` / `PDF_ANNOT_Q_*`)",
-     lambda n: n.startswith(("PDF_ANNOT_IS", "PDF_ANNOT_Q"))),
-    ("Annotation intents (`PDF_ANNOT_IT_*`)",
-     lambda n: n.startswith("PDF_ANNOT_IT")),
-    ("Line endings (`PDF_ANNOT_LE_*`)",
-     lambda n: n.startswith("PDF_ANNOT_LE")),
+    (
+        "Annotation types (`PDF_ANNOT_*`)",
+        lambda n: (
+            n.startswith("PDF_ANNOT_")
+            and not n.startswith(
+                ("PDF_ANNOT_IT", "PDF_ANNOT_LE", "PDF_ANNOT_IS", "PDF_ANNOT_Q")
+            )
+        ),
+    ),
+    (
+        "Annotation flags (`PDF_ANNOT_IS_*` / `PDF_ANNOT_Q_*`)",
+        lambda n: n.startswith(("PDF_ANNOT_IS", "PDF_ANNOT_Q")),
+    ),
+    ("Annotation intents (`PDF_ANNOT_IT_*`)", lambda n: n.startswith("PDF_ANNOT_IT")),
+    ("Line endings (`PDF_ANNOT_LE_*`)", lambda n: n.startswith("PDF_ANNOT_LE")),
     ("Blend modes (`PDF_BM_*`)", lambda n: n.startswith("PDF_BM")),
-    ("Border styles (`PDF_BORDER_STYLE_*`)",
-     lambda n: n.startswith("PDF_BORDER")),
+    ("Border styles (`PDF_BORDER_STYLE_*`)", lambda n: n.startswith("PDF_BORDER")),
     ("Encryption (`PDF_ENCRYPT_*`)", lambda n: n.startswith("PDF_ENCRYPT")),
     ("Form-field flags (`PDF_FIELD_*`)", lambda n: n.startswith("PDF_FIELD")),
-    ("Page labels (`PDF_PAGE_LABEL_*`)",
-     lambda n: n.startswith("PDF_PAGE_LABEL")),
+    ("Page labels (`PDF_PAGE_LABEL_*`)", lambda n: n.startswith("PDF_PAGE_LABEL")),
     ("Permissions (`PDF_PERM_*`)", lambda n: n.startswith("PDF_PERM")),
     ("Redaction (`PDF_REDACT_*`)", lambda n: n.startswith("PDF_REDACT")),
-    ("Signatures (`PDF_SIGNATURE_*`)",
-     lambda n: n.startswith("PDF_SIGNATURE")),
+    ("Signatures (`PDF_SIGNATURE_*`)", lambda n: n.startswith("PDF_SIGNATURE")),
     ("Tokenizer (`PDF_TOK_*`)", lambda n: n.startswith("PDF_TOK")),
-    ("Widget text formats (`PDF_WIDGET_TX_FORMAT_*`)",
-     lambda n: n.startswith("PDF_WIDGET_TX")),
-    ("Widget types (`PDF_WIDGET_TYPE_*`)",
-     lambda n: n.startswith("PDF_WIDGET")),
+    (
+        "Widget text formats (`PDF_WIDGET_TX_FORMAT_*`)",
+        lambda n: n.startswith("PDF_WIDGET_TX"),
+    ),
+    ("Widget types (`PDF_WIDGET_TYPE_*`)", lambda n: n.startswith("PDF_WIDGET")),
     ("Stamps (`STAMP_*`)", lambda n: n.startswith("STAMP")),
     ("Signature flags (`SigFlag_*`)", lambda n: n.startswith("SigFlag")),
-    ("Text extraction presets (`TEXTFLAGS_*`)",
-     lambda n: n.startswith("TEXTFLAGS")),
+    ("Text extraction presets (`TEXTFLAGS_*`)", lambda n: n.startswith("TEXTFLAGS")),
     ("Text alignment (`TEXT_ALIGN_*`)", lambda n: n.startswith("TEXT_ALIGN")),
-    ("Text encodings (`TEXT_ENCODING_*`)",
-     lambda n: n.startswith("TEXT_ENCODING")),
+    ("Text encodings (`TEXT_ENCODING_*`)", lambda n: n.startswith("TEXT_ENCODING")),
     ("Font flags (`TEXT_FONT_*`)", lambda n: n.startswith("TEXT_FONT")),
-    ("Text output formats (`TEXT_OUTPUT_*`)",
-     lambda n: n.startswith("TEXT_OUTPUT")),
+    ("Text output formats (`TEXT_OUTPUT_*`)", lambda n: n.startswith("TEXT_OUTPUT")),
     ("Text extraction flags (`TEXT_*`)", lambda n: n.startswith("TEXT_")),
-    ("Version", lambda n: n.startswith("Version") or n in ("version",
-                                                            "version_info")),
+    ("Version", lambda n: n.startswith("Version") or n in ("version", "version_info")),
 ]
 
 
@@ -124,16 +123,23 @@ def main() -> None:
     lines.append("")
     lines.append(
         "These pre-built objects are re-exported at the top level for "
-        "PyMuPDF compatibility:")
+        "PyMuPDF compatibility:"
+    )
     lines.append("")
     lines.append("| Name | Type | Description |")
     lines.append("|---|---|---|")
     lines.append("| `csGRAY` | `Colorspace` | The DeviceGray colorspace singleton. |")
     lines.append("| `csRGB` | `Colorspace` | The DeviceRGB colorspace singleton. |")
     lines.append("| `csCMYK` | `Colorspace` | The DeviceCMYK colorspace singleton. |")
-    lines.append("| `TOOLS` | `Tools` | The shared `Tools` helper instance (PyMuPDF `fitz.TOOLS`). |")
-    lines.append("| `Base14_fontnames` | `tuple[str, ...]` | Names of the 14 standard PDF fonts. |")
-    lines.append("| `Base14_fontdict` | `dict[str, str]` | Alias → canonical Base-14 font name. |")
+    lines.append(
+        "| `TOOLS` | `Tools` | The shared `Tools` helper instance (PyMuPDF `fitz.TOOLS`). |"
+    )
+    lines.append(
+        "| `Base14_fontnames` | `tuple[str, ...]` | Names of the 14 standard PDF fonts. |"
+    )
+    lines.append(
+        "| `Base14_fontdict` | `dict[str, str]` | Alias → canonical Base-14 font name. |"
+    )
     lines.append("| `__version__` | `str` | The installed `pdfspine` version string. |")
     lines.append("")
 

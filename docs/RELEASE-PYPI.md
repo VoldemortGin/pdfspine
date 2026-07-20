@@ -1,7 +1,7 @@
-# pdfspine — GO-LIVE RUNBOOK (PyPI + public GitHub)
+# pdfspine — PyPI release runbook
 
-> **Audience:** the maintainer (or an automated agent) executing the first public
-> release of `pdfspine`. This is the ordered, end-to-end runbook. Each step is
+> **Audience:** the maintainer (or an automated agent) publishing a
+> `pdfspine` release. The package and repository are already public. Each step is
 > tagged:
 >
 > - **DONE** — already applied in the repo; nothing to do.
@@ -19,18 +19,18 @@
 
 | Fact | Value | Status |
 |---|---|---|
-| PyPI distribution name | **`pdfspine`** (reserved / verified free) | USER-GATED (publish) |
+| PyPI distribution name | **`pdfspine`** | PUBLISHED |
 | crates.io name | **`pdfspine`** (reserved for brand protection) | NOT PUBLISHED (Python-first, like ragspine; all crates `publish=false`) |
 | Python import package | **`pdfspine`** (+ opt-in `pdfspine.fitz` / `pdfspine.pymupdf` compat shims via `install_fitz_shim()`) | DONE |
 | License | **Apache-2.0** (`LICENSE` + `NOTICE` + per-data `PROVENANCE.md`) | DONE |
-| GitHub repo | `github.com/VoldemortGin/pdfspine` — **currently PRIVATE** | USER-GATED (flip public) |
+| GitHub repo | `github.com/VoldemortGin/pdfspine` — **public** | DONE |
 | Build backend | **maturin** (PyO3 compiled Rust extension `pdfspine._core`) | DONE |
 | ABI | **abi3-py311** → ONE wheel per (OS, arch), CPython **≥ 3.11** | DONE |
 | `requires-python` | `>=3.11` | DONE |
 | Native build deps | pure-Rust codecs/crypto, **BUT** the OCR `tract` kernels compile per-arch **assembly** → a C/asm toolchain is needed to *build from source* (GH runners + maturin-action containers already have it) | DONE (documented in README) |
-| OCR delivery | **Option A (P0-5r):** ONE `pdfspine` wheel with the PaddleOCR engine compiled IN, but the ~16 MB ONNX models NOT embedded; models ship as the separate `pdfspine-ocr-models` data distribution that the `pdfspine[ocr]` extra pulls in | DONE (§D.1) |
-| Wheel size | `pdfspine` ~7 MB (compressed; OCR code in, models out); `pdfspine-ocr-models` ~15 MB universal `py3-none-any` data wheel | DONE |
-| PyPI projects | **two**: `pdfspine` + `pdfspine-ocr-models` (each needs its own pending publisher — see §F.1) | USER-GATED (publish) |
+| OCR delivery | `pdfspine` wheel contains the engine but not weights; the shared base dependency **`ocrspine-models`** supplies weights for the whole spine family | DONE (§D.1) |
+| Optional extras | `[ocr]` and `[all]` are compatibility no-ops; a bare install is full-OCR-capable | DONE |
+| PyPI project released here | **`pdfspine`** (`ocrspine-models` is released from the ocrspine repository) | PUBLISHED |
 
 ---
 
@@ -39,28 +39,16 @@
 Run from the repo root; all must be green before tagging.
 
 ```bash
-cargo fmt --all --check
-cargo clippy --workspace --all-targets --all-features -- -D warnings
-cargo test --workspace --all-features
-cargo deny check                       # license/advisory gate (no GPL/AGPL/LGPL/MPL/SSPL)
-
-# Python side
-maturin develop
-pytest python/tests
-
-# Drift / parity guards
-python scripts/compat-symbol-guard.py
-python scripts/manifest-lint.py
-python scripts/test-order-guard.py
-python scripts/catalog-status-guard.py
+./ci.sh
 ```
 
-CI (`.github/workflows/ci.yml`) already runs all of the above on the 3-OS matrix
-across Python 3.10–3.13; confirm the run on the release commit is green.
+CI (`.github/workflows/ci.yml`) mirrors the quality gate and tests the supported
+Python 3.11–3.13 range on Linux, macOS, and Windows. Confirm the release commit
+is green before tagging.
 
 ---
 
-## B. Docs + version final pass — PARTLY DONE
+## B. Docs + version final pass
 
 Already applied in this audit pass (**DONE**):
 
@@ -78,51 +66,9 @@ Already applied in this audit pass (**DONE**):
 - `docs/index.md`, `docs/guide/migrating-from-pymupdf.md`, `PARITY.md`: coverage
   tables regenerated from `COMPAT.toml [meta]` → 647 / 56 / 66 / 769 / 84.1%.
 
-Still to do (**USER-GATED — version decision**):
-
-1. **Bump the version** from `0.0.0` to a real release. `0.0.0` cannot be uploaded
-   to PyPI. Recommended first artifact: **`0.1.0a1`** (PyPI alpha
-   pre-release; `pip install pdfspine` won't pick it up without `--pre`), or
-   `0.1.0` if you want it to be the default install target immediately. Keep the
-   two in sync:
-   - `Cargo.toml` `[workspace.package] version = "0.1.0a1"` → Cargo uses
-     `0.1.0-a1` form; for the wheel set `pyproject.toml` `version = "0.1.0a1"`
-     (PEP 440). (The two version strings differ in spelling by ecosystem; that is
-     expected.)
-2. **(Optional) CHANGELOG.md / first release notes** — recommended for the public
-   narrative.
-3. **(Optional, recommended) Community files** — `CONTRIBUTING.md`,
-   `CODE_OF_CONDUCT.md`, `SECURITY.md` (GitHub surfaces their absence). Not a
-   blocker.
-
----
-
-## C. LOCAL folder rename — USER-GATED — **DO THIS LAST (build-env step)**
-
-> This invalidates the current `.venv` (absolute paths) and any cached build. Do
-> it only when steps A–B are settled and you are ready to build/publish. The git
-> remote and repo name are unaffected (they are already `pdfspine`).
-
-```bash
-# 1. Deactivate any active venv first.
-deactivate 2>/dev/null || true
-
-# 2. Rename the working tree.
-mv ~/workspace/pypdf ~/workspace/pdfspine
-
-# 3. Recreate the venv at the new path (old .venv hardcodes the old path).
-cd ~/workspace/pdfspine
-rm -rf .venv
-uv venv .venv && source .venv/bin/activate
-pip install "maturin>=1.12,<2" pytest hypothesis
-
-# 4. Re-verify the build at the new location.
-maturin develop
-python -c "import pdfspine; print(pdfspine.__version__)"
-pytest python/tests -q
-```
-
-From here on, all commands run from `~/workspace/pdfspine`.
+The workspace Cargo version is the canonical source. Tagged builds run
+`scripts/set_version_from_tag.py` before building, and the release must include
+the corresponding changelog entry and synchronized current-state docs.
 
 ---
 
@@ -151,28 +97,25 @@ python -m zipfile -l dist/pdfspine-*.whl | head    # inspect wheel contents
 
 ---
 
-### D.1 OCR delivery — two distributions (Option A, P0-5r)
+### D.1 OCR delivery — shared model distribution
 
-**Decision (P0-5r):** OCR ships as **one wheel with the PaddleOCR engine compiled
-in + a separate models data package** — NOT as a second "fat" wheel, and NOT with
-the ~16 MB ONNX models embedded in every wheel.
+The `pdfspine` wheel has the PaddleOCR engine compiled in but does not embed the
+ONNX weights. The shared `ocrspine-models` base dependency supplies one copy of
+the weights for pdfspine, docspine, and pptspine.
 
 | Distribution | What | How it is built |
 |---|---|---|
 | **`pdfspine`** | the engine wheel — OCR *code* compiled in (`[tool.maturin] features = ["pyo3/abi3-py311", "ocr"]`), models **NOT** embedded | the `wheels` + `sdist` jobs (maturin) |
-| **`pdfspine-ocr-models`** | pure-data, universal `py3-none-any` wheel — the 3 PP-OCRv5 ONNX weights only (import package `pdfspine_ocr_models`, exposes `models_dir()`) | the `ocr-models` job (`python -m build packages/pdfspine-ocr-models`) |
+| **`ocrspine-models`** | shared pure-data `py3-none-any` wheel (import package `ocrspine_models`) | released from the sibling `ocrspine` repository |
 
-The companion does **not** keep a second copy of the models in git: its hatchling
-build hook (`packages/pdfspine-ocr-models/hatch_build.py`) `force_include`s the 3
-ONNX from the repo's single source of truth `crates/pdf-ocr/models/` into both its
-sdist and its wheel at build time. `crates/pdf-ocr/models/` also remains the Rust
-**dev fallback** for source checkouts.
+`packages/pdfspine-ocr-models/` is an archived legacy companion retained for
+compatibility archaeology; the release workflow must not build or publish it.
 
 **End-user UX:**
 
 ```bash
-pip install pdfspine          # OCR code present, NO models -> engine="paddle" raises a clear error
-pip install pdfspine[ocr]     # + pdfspine-ocr-models -> OCR works, fully offline
+pip install pdfspine          # engine + shared models dependency; OCR works offline
+pip install pdfspine[ocr]     # equivalent compatibility spelling
 ```
 
 **Runtime model resolution order** (`python/pdfspine/document.py`
@@ -180,22 +123,10 @@ pip install pdfspine[ocr]     # + pdfspine-ocr-models -> OCR works, fully offlin
 `crates/pdf-ocr/src/paddle/model.rs` resolves it):
 
 1. **`PDFSPINE_OCR_MODELS`** env var, if already set — explicit user override;
-2. else the installed **`pdfspine_ocr_models`** companion (the `[ocr]` extra) —
-   Python exports its `models_dir()` as `PDFSPINE_OCR_MODELS`;
-3. else the in-repo **`crates/pdf-ocr/models`** dev fallback (source checkout);
-4. else a clear **`PdfUnsupportedError`** pointing at `pip install pdfspine[ocr]`.
-
-Local sanity build of the companion (optional, before tagging):
-
-```bash
-python -m build packages/pdfspine-ocr-models --outdir dist   # data sdist + universal wheel
-python -c "import pdfspine_ocr_models, os; d=pdfspine_ocr_models.models_dir(); print(d, sorted(os.listdir(d)))"
-```
-
-The `ocr-models` job stamps the companion's version from the tag so it tracks the
-`pdfspine` release it ships alongside, and the `publish` job uploads BOTH
-distributions through the same OIDC trusted-publishing call (each matched to its
-own pending publisher by project name).
+2. else the installed **`ocrspine_models`** shared data package (default);
+3. else the legacy **`pdfspine_ocr_models`** companion (backward compatibility);
+4. else the in-repo **`ocrspine/models`** dev fallback (source checkout);
+5. else a clear **`PdfUnsupportedError`** pointing at `pip install pdfspine`.
 
 ---
 
@@ -213,8 +144,9 @@ own pending publisher by project name).
 
 ## E. Test-install the wheels — READY
 
-The release workflow does NOT auto-smoke before publish, so verify the TestPyPI
-dry run from a clean machine/venv first:
+The release workflow installs every natively runnable wheel and performs HTML
+export plus real OCR smoke tests before publish. It also installs and imports
+the sdist on Python 3.11. Verify the TestPyPI dry run as an additional check:
 
 ```bash
 python -m venv /tmp/v && . /tmp/v/bin/activate
@@ -231,20 +163,19 @@ does a `--no-index` install + `import pdfspine` per OS on every push).
 
 ## F. Publish — USER-GATED
 
-### F.1 PyPI (Trusted Publishing — preferred, no tokens)
+### F.1 PyPI publishing
 
-One-time setup in the PyPI web UI (do BEFORE the first publish). There are **two**
-PyPI projects (§D.1), so add the pending publisher **twice** — same Owner /
-Repository / Workflow / Environment, once per project name:
+The `pdfspine` PyPI project already exists. Configure its publisher for this
+repository and `release.yml`; `ocrspine-models` has an independent release
+workflow in the ocrspine repository.
 
 1. **https://pypi.org** → account → **Publishing** → **Add a pending publisher**
-   (do this for BOTH project names):
-   - Project name: `pdfspine`  **and**  `pdfspine-ocr-models`
+   - Project name: `pdfspine`
    - Owner: `VoldemortGin`
    - Repository: `pdfspine`
    - Workflow: `release.yml`
    - Environment: `pypi`
-2. Repeat both on **https://test.pypi.org** with Environment `testpypi` (dry run).
+2. Repeat on **https://test.pypi.org** with Environment `testpypi` (dry run).
 3. GitHub repo → Settings → Environments → create `pypi` and `testpypi`
    (optionally add a required reviewer on `pypi`).
 
@@ -306,11 +237,10 @@ python -c "import pdfspine; print(pdfspine.__version__); print(pdfspine.open)"
 | A | Final gate (fmt/clippy/test/deny/pytest/guards) | READY |
 | B | Docs accuracy + classifiers + URLs + NOTICE/PROVENANCE | DONE |
 | B | Version bump `0.0.0` → `0.1.0a1` (+ optional CHANGELOG/community files) | USER-GATED |
-| C | Local folder rename `pypdf` → `pdfspine` + recreate `.venv` (**LAST build step**) | USER-GATED |
 | D | Build wheel matrix + sdist (`release.yml`) | READY |
-| D.1 | OCR = `pdfspine` (engine-in wheel) + `pdfspine-ocr-models` (data) — Option A (P0-5r) | READY |
+| D.1 | OCR = engine in `pdfspine` + shared base dependency `ocrspine-models` | READY |
 | E | Test-install wheels (TestPyPI dry run) | READY |
-| F.1 | PyPI Trusted Publishing setup + publish (**two** pending publishers) | USER-GATED |
+| F.1 | Publish the `pdfspine` project | USER-GATED |
 | F.2 | crates.io — name reserved, NOT published (Python-first) | DONE (decided) |
 | G | Tag `v*` + flip repo public + push | USER-GATED |
 | H | Post-publish verification | READY |

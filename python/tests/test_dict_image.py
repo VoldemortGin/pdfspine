@@ -70,7 +70,12 @@ def _image_only_pdf(w: int, h: int, samples: bytes) -> bytes:
                 b"/Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>",
             ),
             (4, img_obj),
-            (5, f"<< /Length {len(content)} >>\nstream\n".encode() + content + b"\nendstream"),
+            (
+                5,
+                f"<< /Length {len(content)} >>\nstream\n".encode()
+                + content
+                + b"\nendstream",
+            ),
         ],
         root=1,
     )
@@ -81,12 +86,21 @@ def _png(w: int, h: int, rgb: tuple[int, int, int] = (255, 0, 0)) -> bytes:
 
     def chunk(typ: bytes, data: bytes) -> bytes:
         body = typ + data
-        return struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body) & 0xFFFFFFFF)
+        return (
+            struct.pack(">I", len(data))
+            + body
+            + struct.pack(">I", zlib.crc32(body) & 0xFFFFFFFF)
+        )
 
     sig = b"\x89PNG\r\n\x1a\n"
     ihdr = struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)
     raw = b"".join(b"\x00" + bytes(rgb) * w for _ in range(h))
-    return sig + chunk(b"IHDR", ihdr) + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b"")
+    return (
+        sig
+        + chunk(b"IHDR", ihdr)
+        + chunk(b"IDAT", zlib.compress(raw))
+        + chunk(b"IEND", b"")
+    )
 
 
 def _image_blocks(blocks: list[dict]) -> list[dict]:
@@ -105,8 +119,19 @@ def test_dictimg_001_dict_block_has_real_bytes_and_header():
     b = imgs[0]
     # Full PyMuPDF image-block key set is present.
     assert set(b.keys()) == {
-        "number", "type", "bbox", "width", "height", "ext",
-        "colorspace", "xres", "yres", "bpc", "transform", "size", "image",
+        "number",
+        "type",
+        "bbox",
+        "width",
+        "height",
+        "ext",
+        "colorspace",
+        "xres",
+        "yres",
+        "bpc",
+        "transform",
+        "size",
+        "image",
     }
     # Real encoded bytes, not a stub.
     assert isinstance(b["image"], bytes) and len(b["image"]) > 0

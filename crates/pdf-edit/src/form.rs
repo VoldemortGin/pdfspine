@@ -176,7 +176,10 @@ pub fn form_fonts(doc: &DocumentStore) -> Vec<String> {
     let Some(dr) = af.get(&Name::new("DR")).and_then(|o| resolve_dict(doc, o)) else {
         return Vec::new();
     };
-    let Some(fonts) = dr.get(&Name::new("Font")).and_then(|o| resolve_dict(doc, o)) else {
+    let Some(fonts) = dr
+        .get(&Name::new("Font"))
+        .and_then(|o| resolve_dict(doc, o))
+    else {
         return Vec::new();
     };
     fonts

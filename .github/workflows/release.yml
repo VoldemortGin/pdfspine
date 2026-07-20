@@ -1,11 +1,10 @@
 # Release workflow: builds the full abi3 wheel matrix + sdist for `pdfspine`,
 # then publishes them to PyPI on a `v*` tag via PyPI Trusted Publishing (OIDC — no
-# API tokens). The `pdfspine` wheel has the PaddleOCR engine compiled IN (P0-5r /
-# Option A, via `[tool.maturin] features = [..., "ocr"]`) AND ships the ~28 MB
-# PP-OCRv5 ONNX models inside the package (at `pdfspine/_models`, see
-# `[tool.maturin] include`). So a bare `pip install pdfspine` is full-OCR-capable
-# offline — no separate data package, no `[ocr]` extra needed. (The legacy
-# `pdfspine-ocr-models` companion is DEPRECATED and no longer built/published.)
+# API tokens). The `pdfspine` wheel has the PaddleOCR engine compiled IN (via
+# `[tool.maturin] features = [..., "ocr"]`) but does NOT embed model weights.
+# A bare install remains full-OCR-capable offline because the shared
+# `ocrspine-models` data package is a hard runtime dependency. The legacy
+# `pdfspine-ocr-models` companion is deprecated and no longer built/published.
 #
 # Before uploading each platform wheel we INSTALL it into a clean env and run a
 # real OCR recognition (scripts/ocr_smoke.py) as an all-platform release gate: if
@@ -90,7 +89,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          # Build and smoke against the oldest supported interpreter. The
+          # resulting abi3-py311 wheel also loads on every newer CPython.
+          python-version: "3.11"
       - name: Set version from tag
         if: github.ref_type == 'tag'
         run: python scripts/set_version_from_tag.py "${{ github.ref_name }}"
@@ -102,8 +103,8 @@ jobs:
           args: --release --out dist --strip
           sccache: "true"
       # Release gate: install the JUST-BUILT wheel into a clean venv and run a
-      # real PP-OCRv5 recognition on the in-repo sample raster (using only the
-      # wheel-bundled models — exactly what `pip install pdfspine` gives a user).
+      # real PP-OCRv5 recognition on the in-repo sample raster (using the
+      # wheel plus its shared ocrspine-models runtime dependency).
       # If recognition fails, this job fails and `publish` (needs wheels) is
       # skipped → no release. Only on targets that run natively on the runner
       # (see the matrix note for why the cross legs are excluded).
@@ -136,7 +137,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.11"
       - name: Set version from tag
         if: github.ref_type == 'tag'
         run: python scripts/set_version_from_tag.py "${{ github.ref_name }}"
@@ -145,6 +146,14 @@ jobs:
         with:
           command: sdist
           args: --out dist
+      - name: Smoke install sdist on minimum Python
+        shell: bash
+        run: |
+          python -m venv .sdistsmoke
+          .sdistsmoke/bin/python -m pip install --upgrade pip
+          .sdistsmoke/bin/python -m pip install dist/*.tar.gz
+          .sdistsmoke/bin/python -c "import pdfspine; print(pdfspine.__version__)"
+          .sdistsmoke/bin/python scripts/html_export_smoke.py
       - uses: actions/upload-artifact@v4
         with:
           name: sdist
@@ -181,7 +190,6 @@ jobs:
         if: github.event_name == 'push' || github.event.inputs.publish_target == 'pypi'
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          password: ${{ secrets.PYPI_API_TOKEN }}
           # 跳过已存在的文件:本地手动发过 0.0.1 的 macOS-arm64 wheel + sdist,
           # 让 tag 重跑只补传缺的平台 wheel,不因重复文件而整批失败。
           skip-existing: true

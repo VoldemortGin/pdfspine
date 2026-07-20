@@ -1,8 +1,8 @@
 # pdfspine
 
-> 纯 Rust 实现的 PyMuPDF(fitz) 重实现，通过 PyO3 暴露 Python API。不依赖 MuPDF/pdfium 等 C 库，自包含 abi3 wheel，许可证 Apache-2.0（PyMuPDF 是 AGPL-3.0）。目标：与 PyMuPDF 1.24.x 符号级对齐（当前约 88.7% 覆盖）。
+> 纯 Rust 实现的 PyMuPDF(fitz) 重实现，通过 PyO3 暴露 Python API。不依赖 MuPDF/pdfium 等 C 库，自包含 abi3 wheel，许可证 Apache-2.0（PyMuPDF 是 AGPL-3.0）。目标：与 PyMuPDF 1.24.x 符号级对齐（当前 89.3%，687/769）。
 
-- pip 安装名: `pdfspine`（OCR 全功能用 `pip install pdfspine[ocr]`，`[all] == [ocr]`）
+- pip 安装名: `pdfspine`（裸安装自动带上共享 `ocrspine-models` 数据包；`[ocr]`/`[all]` 是兼容性空壳）
 - import 名: `import pdfspine`
 - 要求: CPython >= 3.11（abi3 wheel）
 
@@ -13,8 +13,8 @@
 
 ## OCR
 
-- OCR 引擎(纯 Rust PaddleOCR PP-OCRv5 + Tesseract)已编进 wheel；~16MB ONNX 模型不内嵌
-- 模型靠 `pip install pdfspine[ocr]` 拉入数据包 `pdfspine-ocr-models`，运行时解析
+- OCR 引擎(纯 Rust PaddleOCR PP-OCRv5 + Tesseract)已编进 wheel；ONNX 模型不内嵌
+- 模型来自基础运行时依赖 `ocrspine-models`，`pip install pdfspine` 自动安装并可离线运行
 
 ## 面向 AI 的使用文档（随 wheel 分发）
 
@@ -24,7 +24,7 @@
 - `pdfspine/_llms/docs/overview.md` — 是什么、核心概念、fitz 兼容层、OCR、与 PyMuPDF 的关系与差异、能力范围
 - `pdfspine/_llms/docs/api.md` — Python 公开 API 真实签名 + 契约（标注 fitz 兼容别名）
 - `pdfspine/_llms/docs/recipes.md` — 可运行最小示例（提取文本/渲染/shim/编辑/表格/注释/redaction/表单/OCR/CLI）
-- `pdfspine/_llms/docs/gotchas.md` — 陷阱（预编译 wheel/abi3≥3.11、shim 须显式 install、OCR 模型要 [ocr] extra、未实现的抛 PdfUnsupportedError、与真 PyMuPDF 的差异）
+- `pdfspine/_llms/docs/gotchas.md` — 陷阱（预编译 wheel/abi3≥3.11、shim 须显式 install、OCR 模型来自共享基础依赖、未实现的抛 PdfUnsupportedError、与真 PyMuPDF 的差异）
 
 仓库内同样可见于 [python/pdfspine/_llms/](python/pdfspine/_llms/)。
 

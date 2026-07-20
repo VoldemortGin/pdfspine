@@ -96,10 +96,12 @@ def _labelled() -> pdfspine.Document:
     """A 6-page doc: pages 0-2 lowercase roman (i, ii, iii), pages 3-5 decimal
     with an 'A-' prefix starting at 1 (A-1, A-2, A-3)."""
     d = _doc(6)
-    d.set_page_labels([
-        {"startpage": 0, "style": "r", "prefix": "", "firstpagenum": 1},
-        {"startpage": 3, "style": "D", "prefix": "A-", "firstpagenum": 1},
-    ])
+    d.set_page_labels(
+        [
+            {"startpage": 0, "style": "r", "prefix": "", "firstpagenum": 1},
+            {"startpage": 3, "style": "D", "prefix": "A-", "firstpagenum": 1},
+        ]
+    )
     return d
 
 
@@ -134,10 +136,12 @@ def test_lt6_get_page_numbers():
 def test_lt6_get_page_numbers_only_one():
     # Build a doc where two pages share a label (decimal restart).
     d = _doc(4)
-    d.set_page_labels([
-        {"startpage": 0, "style": "D", "prefix": "", "firstpagenum": 1},
-        {"startpage": 2, "style": "D", "prefix": "", "firstpagenum": 1},
-    ])
+    d.set_page_labels(
+        [
+            {"startpage": 0, "style": "D", "prefix": "", "firstpagenum": 1},
+            {"startpage": 2, "style": "D", "prefix": "", "firstpagenum": 1},
+        ]
+    )
     # Labels: 1, 2, 1, 2 -> "1" appears on pages 0 and 2.
     assert d.get_page_numbers("1") == [0, 2]
     assert d.get_page_numbers("1", only_one=True) == [0]
@@ -147,7 +151,9 @@ def test_lt6_labels_via_fitz_shim():
     d = fitz.open()
     for _ in range(3):
         d.new_page(width=300, height=400)
-    d.set_page_labels([{"startpage": 0, "style": "R", "prefix": "Ch-", "firstpagenum": 5}])
+    d.set_page_labels(
+        [{"startpage": 0, "style": "R", "prefix": "Ch-", "firstpagenum": 5}]
+    )
     assert d.get_page_labels() == [
         {"startpage": 0, "prefix": "Ch-", "style": "R", "firstpagenum": 5}
     ]

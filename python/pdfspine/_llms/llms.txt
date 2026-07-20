@@ -1,8 +1,8 @@
 # pdfspine
 
-> 纯 Rust 实现的 PyMuPDF(fitz) 重实现，通过 PyO3 暴露 Python API。不依赖 MuPDF/pdfium 等 C 库，自包含 abi3 wheel，许可证 Apache-2.0（PyMuPDF 是 AGPL-3.0）。目标：与 PyMuPDF 1.24.x 符号级对齐（当前约 88.7% 覆盖）。
+> 纯 Rust 实现的 PyMuPDF(fitz) 重实现，通过 PyO3 暴露 Python API。不依赖 MuPDF/pdfium 等 C 库，自包含 abi3 wheel，许可证 Apache-2.0（PyMuPDF 是 AGPL-3.0）。目标：与 PyMuPDF 1.24.x 符号级对齐（当前 89.3%，687/769）。
 
-- pip 安装名: `pdfspine`（OCR 模型已内嵌进 wheel，`pip install pdfspine` 即全功能 OCR；`[ocr]`/`[all]` extra 现为兼容性空壳）
+- pip 安装名: `pdfspine`（OCR 模型来自基础依赖 `ocrspine-models`，`pip install pdfspine` 自动安装；`[ocr]`/`[all]` extra 为兼容性空壳）
 - import 名: `import pdfspine`
 - 要求: CPython >= 3.11（abi3 wheel）
 - 版本: `pdfspine.__version__`（dev 构建为 "0.0.0"，正式版由 CI 按 git tag 注入）
@@ -16,7 +16,7 @@
 ## OCR
 
 - OCR 引擎(纯 Rust PaddleOCR PP-OCRv5 det/rec + PP-LCNet_x1_0 textline-ori + Tesseract 适配器)已编进 wheel
-- ~28MB PP-OCRv5 ONNX 模型也已内嵌进 wheel（装后位于 `site-packages/pdfspine/_models/`），`pip install pdfspine` 即全功能 OCR、离线可跑，无需单独数据包、无需 `[ocr]` extra（PP-OCRv5 支持繁中/日文）
+- PP-OCRv5 ONNX 模型来自共享 `ocrspine-models` 数据包（基础运行时依赖），`pip install pdfspine` 会自动安装，全功能 OCR 可离线运行，无需 `[ocr]` extra（PP-OCRv5 支持繁中/日文）
 - 入口: `page.get_textpage_ocr(engine="paddle"|"tesseract", ...)`、`doc.pdfocr_save(...)` / `doc.pdfocr_tobytes(...)`
 - 缺引擎/缺模型 → 抛 `PdfUnsupportedError`；GPU/CPU 由 tract 运行时自适应
 
@@ -25,7 +25,7 @@
 - [overview.md](docs/overview.md): 是什么、解决什么、核心概念(Document/Page/TextPage/Pixmap 对象模型)、fitz 兼容层、OCR、与 PyMuPDF 的关系与差异、能力范围(参考 PARITY.md)
 - [api.md](docs/api.md): Python 公开 API 真实签名 + 契约（open/markdown_to_pdf(Markdown→PDF 原创扩展)/页面/文本/表格/图像/渲染/保存/注释/表单/redaction/OCR/几何/常量/异常），标注 fitz 兼容别名
 - [recipes.md](docs/recipes.md): 可运行最小示例（造 PDF、提取文本、渲染为图、fitz shim 替换 PyMuPDF、编辑合并、表格、注释/redaction、表单、OCR、Markdown→PDF(含中文 cjk_font 示例)、CLI）
-- [gotchas.md](docs/gotchas.md): 陷阱（预编译 wheel/abi3≥3.11、shim 须显式 install、OCR 模型已内嵌进 wheel 无需 extra、未实现的抛 PdfUnsupportedError、与真 PyMuPDF 的差异、markdown_to_pdf 默认无 CJK 字形——中文必传 cjk_font）
+- [gotchas.md](docs/gotchas.md): 陷阱（预编译 wheel/abi3≥3.11、shim 须显式 install、OCR 模型来自共享基础依赖、未实现的抛 PdfUnsupportedError、与真 PyMuPDF 的差异、markdown_to_pdf 默认无 CJK 字形——中文必传 cjk_font）
 
 ## 30 秒 hello-world
 

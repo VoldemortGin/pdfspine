@@ -17,7 +17,14 @@ import pdfspine
 import pytest
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
-SANS_TTF = REPO_ROOT / "crates" / "pdf-fonts" / "fonts" / "liberation" / "LiberationSans-Regular.ttf"
+SANS_TTF = (
+    REPO_ROOT
+    / "crates"
+    / "pdf-fonts"
+    / "fonts"
+    / "liberation"
+    / "LiberationSans-Regular.ttf"
+)
 
 
 def _png(w: int, h: int, rgb: tuple[int, int, int] = (255, 0, 0)) -> bytes:
@@ -25,12 +32,21 @@ def _png(w: int, h: int, rgb: tuple[int, int, int] = (255, 0, 0)) -> bytes:
 
     def chunk(typ: bytes, data: bytes) -> bytes:
         body = typ + data
-        return struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body) & 0xFFFFFFFF)
+        return (
+            struct.pack(">I", len(data))
+            + body
+            + struct.pack(">I", zlib.crc32(body) & 0xFFFFFFFF)
+        )
 
     sig = b"\x89PNG\r\n\x1a\n"
     ihdr = struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)
     raw = b"".join(b"\x00" + bytes(rgb) * w for _ in range(h))
-    return sig + chunk(b"IHDR", ihdr) + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b"")
+    return (
+        sig
+        + chunk(b"IHDR", ihdr)
+        + chunk(b"IDAT", zlib.compress(raw))
+        + chunk(b"IEND", b"")
+    )
 
 
 def _full_text(doc: pdfspine.Document) -> str:
@@ -96,7 +112,12 @@ def test_markdown_to_pdf_003_headings_lists_tables():
 
 def test_markdown_to_pdf_004_font_path_and_bytes():
     md = "# Custom Face\n\nUser font body."
-    for font in (SANS_TTF, str(SANS_TTF), SANS_TTF.read_bytes(), bytearray(SANS_TTF.read_bytes())):
+    for font in (
+        SANS_TTF,
+        str(SANS_TTF),
+        SANS_TTF.read_bytes(),
+        bytearray(SANS_TTF.read_bytes()),
+    ):
         doc = pdfspine.markdown_to_pdf(md, font=font)
         text = _full_text(doc)
         assert "Custom Face" in text

@@ -211,4 +211,3 @@ version: tuple[str, str, None]
 version_info: tuple[str, str, None]
 
 __all__: list[str]
-

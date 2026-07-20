@@ -97,7 +97,9 @@ def test_page_deferred_symbols_never_raise_attributeerror(doc_and_page) -> None:
         except PdfUnsupportedError:
             continue
         except AttributeError:  # pragma: no cover - this is the failure we forbid
-            pytest.fail(f"Page.{member} raised AttributeError, want PdfUnsupportedError")
+            pytest.fail(
+                f"Page.{member} raised AttributeError, want PdfUnsupportedError"
+            )
 
 
 def test_document_deferred_symbols_never_raise_attributeerror(doc_and_page) -> None:
@@ -108,7 +110,9 @@ def test_document_deferred_symbols_never_raise_attributeerror(doc_and_page) -> N
         except PdfUnsupportedError:
             continue
         except AttributeError:  # pragma: no cover - this is the failure we forbid
-            pytest.fail(f"Document.{member} raised AttributeError, want PdfUnsupportedError")
+            pytest.fail(
+                f"Document.{member} raised AttributeError, want PdfUnsupportedError"
+            )
 
 
 # An attribute that is NOT deferred and NOT real must still be a plain
@@ -201,9 +205,7 @@ def test_core_alias_deferred_set_matches_rust() -> None:
     guard against the Rust list drifting from ``_compat_deferred.DEFERRED``."""
     for group in ("Pixmap", "DisplayList", "Tools"):
         members = sorted(
-            sym.split(".", 1)[1]
-            for sym in DEFERRED
-            if sym.startswith(f"{group}.")
+            sym.split(".", 1)[1] for sym in DEFERRED if sym.startswith(f"{group}.")
         )
         obj = _core_alias_instance(group)
         for member in members:

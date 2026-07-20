@@ -32,17 +32,17 @@
 
 ## Summary / Progress Dashboard
 
-> **Snapshot (2026-06-20, after API batches 1–5 + P2-3 clusters).** Numbers below are recomputed from the
+> **Current snapshot.** Numbers below are recomputed from the
 > live `COMPAT.toml` per-symbol dispositions. `COMPAT.toml [meta]` is always the authoritative live figure;
-> the current remaining-work list (the 21 deferred symbols, grouped + prioritized) lives in
+> the current remaining-work list (the 16 deferred symbols, grouped + prioritized) lives in
 > [`docs/PRD-NEXT.md`](docs/PRD-NEXT.md) §3.B.
 
-**Overall: 682 / 769 implemented (88.7% coverage).**
+**Overall: 687 / 769 implemented (89.3% coverage).**
 
 | Disposition | Count | Share |
 |---|---:|---:|
-| **implemented** | **682** | **88.7%** |
-| deferred (planned, later milestone / post-v1) | 21 | 2.7% |
+| **implemented** | **687** | **89.3%** |
+| deferred (planned, later milestone / post-v1) | 16 | 2.1% |
 | out-of-scope (raises `PdfUnsupportedError`) | 66 | 8.6% |
 | **Total catalogued symbols** | **769** | 100% |
 
@@ -59,8 +59,8 @@
 | `Rect` | 45 | 45 | 0 | 0 | 100% |
 | `IRect` | 25 | 25 | 0 | 0 | 100% |
 | `Quad` | 17 | 17 | 0 | 0 | 100% |
-| `Document` | 150 | 127 | 9 | 14 | 85% |
-| `Page` | 117 | 109 | 6 | 2 | 93% |
+| `Document` | 150 | 129 | 7 | 14 | 86% |
+| `Page` | 117 | 112 | 3 | 2 | 96% |
 | `TextPage` | 17 | 17 | 0 | 0 | 100% |
 | `Pixmap` | 43 | 42 | 1 | 0 | 98% |
 | `Annot` | 51 | 46 | 1 | 4 | 90% |
@@ -79,7 +79,7 @@
 | Module-level functions | 32 | 29 | 0 | 3 | 91% |
 | `Tools` / `TOOLS` | 22 | 13 | 2 | 7 | 59% |
 | `exceptions` | 10 | 10 | 0 | 0 | 100% |
-| **Total** | **769** | **682** | **21** | **66** | **88.7%** |
+| **Total** | **769** | **687** | **16** | **66** | **89.3%** |
 
 ### Per-milestone breakdown
 

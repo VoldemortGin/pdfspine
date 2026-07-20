@@ -128,8 +128,15 @@ _FIT_PDF = (
 _GT_GOVINFO_CATALOG = 704
 _GT_GOVINFO_XREF_LEN = 744
 _GT_GOVINFO_CATKEYS = [
-    "AcroForm", "Legal", "Metadata", "Names", "PageLabels", "Pages",
-    "Perms", "Type", "Version",
+    "AcroForm",
+    "Legal",
+    "Metadata",
+    "Names",
+    "PageLabels",
+    "Pages",
+    "Perms",
+    "Type",
+    "Version",
 ]
 _GT_GOVINFO_FORM_XOBJECT = 719
 _GT_GOVINFO_FORM_KEYS = ["BBox", "Filter", "Length", "Resources", "Subtype", "Type"]
@@ -402,6 +409,7 @@ def test_update_object_roundtrip_persists():
         reopened.close()
     finally:
         Path(out).unlink(missing_ok=True)
+
 
 # === state / meta (PRD §C batch-5 state/meta half) ==========================
 #

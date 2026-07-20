@@ -12,7 +12,9 @@ import pdfspine
 import pytest
 
 
-def _build_pdf(objects: list[tuple[int, bytes]], root: int, extra_trailer: bytes = b"") -> bytes:
+def _build_pdf(
+    objects: list[tuple[int, bytes]], root: int, extra_trailer: bytes = b""
+) -> bytes:
     out = bytearray(b"%PDF-1.7\n%\xe2\xe3\xcf\xd3\n")
     offsets: dict[int, int] = {}
     max_num = 0
@@ -54,7 +56,10 @@ def multi_page_pdf(markers: list[str]) -> bytes:
             )
         )
         objects.append(
-            (content, f"<< /Length {len(body)} >>\nstream\n".encode() + body + b"\nendstream")
+            (
+                content,
+                f"<< /Length {len(body)} >>\nstream\n".encode() + body + b"\nendstream",
+            )
         )
     objects.append((1, b"<< /Type /Catalog /Pages 2 0 R >>"))
     objects.append(
@@ -237,7 +242,9 @@ def test_pyedit_002_new_page():
 def test_pylink_001_get_and_insert():
     doc = _open(["AAA", "BBB"])
     page = doc[0]
-    page.insert_link({"kind": 2, "from": (10, 10, 100, 30), "uri": "https://pdfspine.dev"})
+    page.insert_link(
+        {"kind": 2, "from": (10, 10, 100, 30), "uri": "https://pdfspine.dev"}
+    )
     re = pdfspine.open(stream=doc.tobytes())
     links = re[0].get_links()
     assert len(links) == 1
