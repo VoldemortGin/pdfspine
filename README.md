@@ -100,6 +100,7 @@ for t in tables.tables:
     print(t.to_markdown())                    # or t.to_html() for merged cells
 
 doc.save("output.pdf", garbage=4, deflate=True)
+doc.save_html("output.html")                 # complete UTF-8 HTML5 document
 
 # Markdown → PDF (pdfspine original extension — not part of the PyMuPDF surface)
 pdfspine.markdown_to_pdf("# Title\n\nHello **Markdown**!").save("hello.pdf")

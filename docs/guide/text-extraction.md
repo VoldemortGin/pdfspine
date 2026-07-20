@@ -51,6 +51,17 @@ There is also a document-level convenience:
 text = doc.get_page_text(0, "text", sort=True)
 ```
 
+To export every page as one browser-openable HTML5 document:
+
+```python
+html = doc.to_html()
+doc.save_html("document.html")  # UTF-8; accepts str and os.PathLike paths
+```
+
+The document title comes from PDF metadata when available, then the input
+filename, and otherwise defaults to `PDF document`. Page HTML fragments are
+preserved in document order.
+
 ## Searching
 
 `Page.search_for(needle, *, hit_max=0, quads=False, clip=None, flags=None, textpage=None)`

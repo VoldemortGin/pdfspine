@@ -10,6 +10,7 @@ PyMuPDF methods raise :class:`~pdfspine._core.PdfUnsupportedError` (never
 from __future__ import annotations
 
 import builtins
+import html
 import math
 import os
 from typing import Iterator
@@ -3827,6 +3828,34 @@ class Document:
 
         Returns a list of :class:`Quad` (``quads=True``) or :class:`Rect`."""
         return self.load_page(int(pno)).search_for(text, **kw)
+
+    def to_html(self) -> str:
+        """Returns all pages as a complete, browser-openable HTML5 document."""
+        metadata = self.metadata or {}
+        title = metadata.get("title", "").strip()
+        if not title and self.name:
+            title = os.path.basename(self.name)
+        escaped_title = html.escape(title or "PDF document", quote=True)
+        fragments = "\n".join(page.get_text("html") for page in self)
+        body = f"{fragments}\n" if fragments else ""
+        return (
+            "<!doctype html>\n"
+            "<html>\n"
+            "<head>\n"
+            '  <meta charset="utf-8">\n'
+            '  <meta name="viewport" content="width=device-width, initial-scale=1">\n'
+            f"  <title>{escaped_title}</title>\n"
+            "</head>\n"
+            "<body>\n"
+            f"{body}"
+            "</body>\n"
+            "</html>\n"
+        )
+
+    def save_html(self, path: str | os.PathLike[str]) -> None:
+        """Writes :meth:`to_html` to ``path`` using UTF-8."""
+        with builtins.open(os.fspath(path), "w", encoding="utf-8", newline="\n") as output:
+            output.write(self.to_html())
 
     def extractImage(self, xref: int) -> dict:  # noqa: N802
         return self.extract_image(xref)

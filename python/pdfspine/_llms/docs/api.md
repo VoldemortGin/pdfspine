@@ -101,6 +101,8 @@ doc.get_page_images(pno, full=False) -> list[tuple]
 doc.get_page_fonts(pno, full=False) -> list[tuple]
 doc.search_page_for(pno, text, **kw) -> list
 doc.extract_image(xref) -> dict[str, Any]   # {"image": bytes, "ext": str, "width", "height", ...}; 别名 extractImage
+doc.to_html() -> str                        # 全部页面组成完整 HTML5 文档；标题来自元数据/文件名
+doc.save_html(path: str | os.PathLike[str]) -> None  # UTF-8 写入；I/O 错误直接抛出
 ```
 
 ### 保存 / 序列化
