@@ -11,8 +11,16 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
+## [0.4.1] — 2026-07-20
+
 ### Added
 
+- **Browser-ready HTML export.** New `Document.to_html()` combines each page's
+  `Page.get_text("html")` fragment, in order, into a complete UTF-8 HTML5
+  document. The safely escaped title falls back from PDF metadata to the input
+  filename and then `PDF document`. `Document.save_html(path)` accepts
+  `str` / `os.PathLike`, writes the same document as UTF-8, and follows the
+  existing save convention by returning `None`.
 - **Parity long-tail — four pure-Python symbols promoted from `deferred` to
   `implemented` (COMPAT.toml).** All expressible over existing pdfspine infra,
   each pinned against the PyMuPDF oracle (`python/tests/test_longtail13.py`):
@@ -269,7 +277,10 @@ published wheel's version is set from the `v0.1.0` git tag at build time.
   2858 ms → 819 ms). `rayon` is a feature-gated (`paddle-ocr`) optional dep and
   is not in the lean base wheel.
 
-[Unreleased]: https://github.com/VoldemortGin/pdfspine/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/VoldemortGin/pdfspine/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/VoldemortGin/pdfspine/compare/v0.4.0...v0.4.1
+[0.4.0]: https://github.com/VoldemortGin/pdfspine/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/VoldemortGin/pdfspine/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/VoldemortGin/pdfspine/compare/v0.1.2...v0.2.0
 [0.0.6]: https://github.com/VoldemortGin/pdfspine/compare/v0.0.5...v0.0.6
 [0.1.0]: https://github.com/VoldemortGin/pdfspine/releases/tag/v0.1.0

@@ -255,7 +255,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install --no-index --find-links dist pdfspine
-          python -c "import pdfspine; print('pdfspine', pdfspine.__version__)"
+          python scripts/html_export_smoke.py
       - uses: actions/upload-artifact@v4
         with:
           name: wheels-${{ matrix.os }}
