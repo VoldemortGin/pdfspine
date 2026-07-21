@@ -4,7 +4,8 @@
 //! xref) whose content stream shows known text via the embedded `ocrtest.ttf`
 //! (a glyph subset of DejaVu Sans), renders it via [`pdf_render::render_page`],
 //! and then exercises the public OCR surface: the [`pdf_ocr::OcrEngine`] trait
-//! (Tesseract default), [`pdf_ocr::textpage_ocr`], and [`pdf_ocr::pdfocr_bytes`].
+//! (explicit Tesseract adapter), [`pdf_ocr::textpage_ocr`], and
+//! [`pdf_ocr::pdfocr_bytes`].
 //!
 //! Tesseract-dependent tests no-op skip when `tesseract` is absent.
 

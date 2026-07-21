@@ -1,4 +1,4 @@
-//! The default OCR adapter: shell out to the system **Tesseract** CLI.
+//! The explicit compatibility OCR adapter for the system **Tesseract** CLI.
 //!
 //! Tesseract is **not bundled** (it is GPL/Apache C++ with large language data);
 //! exactly like PyMuPDF, the user is expected to have `tesseract` installed. The
@@ -34,7 +34,7 @@ pub const ENV_TESSDATA: &str = "OXIDE_TESSDATA";
 /// PyMuPDF default for `get_textpage_ocr`).
 pub const DEFAULT_PSM: u32 = 3;
 
-/// The default OCR adapter: drives the system `tesseract` CLI.
+/// The explicit compatibility OCR adapter that drives the system `tesseract` CLI.
 #[derive(Clone, Debug)]
 pub struct TesseractCli {
     binary: String,

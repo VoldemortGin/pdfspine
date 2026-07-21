@@ -15,7 +15,7 @@
 
 ## OCR
 
-- OCR 引擎(纯 Rust PaddleOCR PP-OCRv5 det/rec + PP-LCNet_x1_0 textline-ori + Tesseract 适配器)已编进 wheel
+- OCR 默认引擎是纯 Rust PaddleOCR PP-OCRv5 det/rec + PP-LCNet_x1_0 textline-ori；Tesseract 是显式兼容后端；两者代码已编进 wheel
 - PP-OCRv5 ONNX 模型来自共享 `ocrspine-models` 数据包（基础运行时依赖），`pip install pdfspine` 会自动安装，全功能 OCR 可离线运行，无需 `[ocr]` extra（PP-OCRv5 支持繁中/日文）
 - 入口: `page.get_textpage_ocr(engine="paddle"|"tesseract", ...)`、`doc.pdfocr_save(...)` / `doc.pdfocr_tobytes(...)`
 - 缺引擎/缺模型 → 抛 `PdfUnsupportedError`；GPU/CPU 由 tract 运行时自适应

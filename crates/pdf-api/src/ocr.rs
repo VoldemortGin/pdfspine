@@ -8,12 +8,12 @@
 //!
 //! The `engine` string picks the backend:
 //!
-//! - `"tesseract"` (default) — the system Tesseract CLI adapter (PyMuPDF
-//!   compatible; `tessdata` applies here).
-//! - `"paddle"` — pdfspine's pure-Rust PaddleOCR (PP-OCRv5) engine, stronger on
-//!   mixed CJK+Latin text. Available only in the opt-in OCR build (the
-//!   `paddle-ocr` feature, shipped as `pip install pdfspine[ocr]`); the lean
-//!   base build compiles it out. `tessdata` is irrelevant to it.
+//! - `"paddle"` — the public Python API default: pdfspine's pure-Rust PaddleOCR
+//!   (PP-OCRv5) engine, stronger on mixed CJK+Latin text. It is available when
+//!   the `paddle-ocr` feature is enabled (all published wheels enable it).
+//!   `tessdata` is irrelevant to it.
+//! - `"tesseract"` — the system Tesseract CLI compatibility adapter;
+//!   `tessdata` applies here.
 //!
 //! An unknown engine string, or `"paddle"` in the lean build (feature off),
 //! yields the unified [`Error::Unsupported`](crate::error::Error::Unsupported).
@@ -36,8 +36,8 @@ use pdf_text::TextPage;
 /// # Errors
 ///
 /// [`Error::Unsupported`](crate::error::Error::Unsupported) when the selected
-/// engine is unavailable (Tesseract not installed, an unknown engine string, or
-/// `"paddle"` in the lean build without the OCR feature); render / recognition
+/// engine is unavailable (missing PaddleOCR support/models, Tesseract not
+/// installed, or an unknown engine string); render / recognition
 /// errors propagate.
 pub fn page_textpage_ocr(
     page: &Page,
@@ -104,14 +104,15 @@ fn with_engine<T>(
         #[cfg(not(feature = "paddle-ocr"))]
         "paddle" => Err(Error::Unsupported(
             "OCR engine \"paddle\" is not available in this lean build of \
-             pdfspine. Install the OCR build with `pip install pdfspine[ocr]` to \
-             use the pure-Rust PaddleOCR engine (or fall back to \
-             engine=\"tesseract\")."
+             pdfspine. Install a published pdfspine wheel or rebuild from source \
+             with the `ocr` feature to use the default PaddleOCR engine. You may \
+             explicitly select engine=\"tesseract\" when the system Tesseract CLI \
+             is installed."
                 .to_string(),
         )),
         other => Err(Error::Unsupported(format!(
             "unknown OCR engine {other:?}; expected \"tesseract\" or \"paddle\" \
-             (\"paddle\" requires the OCR build, `pip install pdfspine[ocr]`)"
+             (\"paddle\" requires a published wheel or an `ocr` feature build)"
         ))),
     }
 }

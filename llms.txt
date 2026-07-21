@@ -13,7 +13,7 @@
 
 ## OCR
 
-- OCR 引擎(纯 Rust PaddleOCR PP-OCRv5 + Tesseract)已编进 wheel；ONNX 模型不内嵌
+- OCR 默认引擎是纯 Rust PaddleOCR PP-OCRv5；Tesseract 是显式兼容后端；两者代码已编进 wheel，ONNX 模型不内嵌
 - 模型来自基础运行时依赖 `ocrspine-models`，`pip install pdfspine` 自动安装并可离线运行
 
 ## 面向 AI 的使用文档（随 wheel 分发）

@@ -1653,14 +1653,15 @@ impl PyPage {
 
     /// Builds an OCR [`PyTextPage`] by rasterizing the page and recognizing it
     /// with the selected `engine` (PyMuPDF `page.get_textpage_ocr`). `flags` is
-    /// accepted for API symmetry; `language` is a Tesseract code (e.g. `"eng"`);
+    /// accepted for API symmetry; `language` is used by Tesseract;
     /// `dpi` is the render resolution; `full=False` (image-region-only OCR) is
     /// not yet implemented and falls back to full-page OCR; `tessdata` overrides
-    /// the language-data directory (Tesseract only). `engine` is `"tesseract"`
-    /// (default) or `"paddle"` (pdfspine's pure-Rust PaddleOCR, the opt-in OCR
-    /// build `pip install pdfspine[ocr]`). Raises `PdfUnsupportedError` if the
-    /// engine is unavailable. Heavy render + OCR work runs with the GIL released.
-    #[pyo3(signature = (flags=3, language="eng", dpi=72, full=true, tessdata=None, engine="tesseract"))]
+    /// the language-data directory (Tesseract only). `engine` is `"paddle"`
+    /// (default; pdfspine's bundled pure-Rust PaddleOCR) or `"tesseract"` (the
+    /// system CLI compatibility adapter). Raises `PdfUnsupportedError` if the
+    /// selected engine is unavailable. Heavy render + OCR work runs with the GIL
+    /// released.
+    #[pyo3(signature = (flags=3, language="eng", dpi=72, full=true, tessdata=None, engine="paddle"))]
     // Mirrors PyMuPDF's `get_textpage_ocr` keyword surface plus the pdfspine
     // `engine` selector; the arg count is the public API, not a refactor target.
     #[allow(clippy::too_many_arguments)]
@@ -3359,12 +3360,12 @@ impl PyDocument {
     /// `engine`, and rebuilt with the page image plus an invisible OCR text
     /// layer. `compress` is accepted for API symmetry; `language` is a Tesseract
     /// code; `tessdata` overrides the language-data directory (Tesseract only).
-    /// `engine` is `"tesseract"` (default) or `"paddle"` (pdfspine's pure-Rust
-    /// PaddleOCR, the opt-in OCR build `pip install pdfspine[ocr]`). Raises
-    /// `PdfUnsupportedError` if the engine is unavailable. The heavy render + OCR
-    /// work runs with the GIL released. `dpi` (an pdfspine extension) tunes the
-    /// recognition resolution.
-    #[pyo3(signature = (*, compress=true, language="eng", tessdata=None, dpi=300, engine="tesseract"))]
+    /// `engine` is `"paddle"` (default; pdfspine's bundled pure-Rust PaddleOCR)
+    /// or `"tesseract"` (the system CLI compatibility adapter). Raises
+    /// `PdfUnsupportedError` if the selected engine is unavailable. The heavy
+    /// render + OCR work runs with the GIL released. `dpi` (a pdfspine extension)
+    /// tunes the recognition resolution.
+    #[pyo3(signature = (*, compress=true, language="eng", tessdata=None, dpi=300, engine="paddle"))]
     fn pdfocr_tobytes<'py>(
         &self,
         py: Python<'py>,
@@ -3388,7 +3389,7 @@ impl PyDocument {
 
     /// Writes a searchable "sandwich" PDF to `filename` (PyMuPDF
     /// `Document.pdfocr_save`). See [`PyDocument::pdfocr_tobytes`].
-    #[pyo3(signature = (filename, *, compress=true, language="eng", tessdata=None, dpi=300, engine="tesseract"))]
+    #[pyo3(signature = (filename, *, compress=true, language="eng", tessdata=None, dpi=300, engine="paddle"))]
     // Mirrors PyMuPDF's `pdfocr_save` keyword surface plus the pdfspine `engine`
     // selector; the arg count is the public API, not a refactor target.
     #[allow(clippy::too_many_arguments)]

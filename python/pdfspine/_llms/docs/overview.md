@@ -60,7 +60,7 @@ pdfspine 自带 PyMuPDF 兼容 shim，让大量现有 `import fitz` 代码**几�
   3. 已安装的旧 `pdfspine_ocr_models` 伴随包（向后兼容）；
   4. 源码树内 `ocrspine/models`（开发回退）；
   5. 都没有 → 抛 `PdfUnsupportedError`。
-- 入口：`page.get_textpage_ocr(...)`（返回 OCR `TextPage`）、`doc.pdfocr_save(...)` / `doc.pdfocr_tobytes(...)`（生成“可搜索三明治” PDF）。`engine="paddle"` 走纯 Rust PaddleOCR（CJK 更强）；默认 `engine="tesseract"`（需系统 tesseract 二进制）。GPU/CPU 由 tract 运行时自适应，无需区分。
+- 入口：`page.get_textpage_ocr(...)`（返回 OCR `TextPage`）、`doc.pdfocr_save(...)` / `doc.pdfocr_tobytes(...)`（生成“可搜索三明治” PDF）。默认 `engine="paddle"`，走纯 Rust PaddleOCR（CJK 更强）；显式 `engine="tesseract"` 需系统 tesseract 二进制。GPU/CPU 由 tract 运行时自适应，无需区分。
 
 ## 与 PyMuPDF 的关系与差异
 

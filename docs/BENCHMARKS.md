@@ -170,7 +170,7 @@ text-dense scans `govdocs1-00000` (0.954) / `govdocs1-00012` (0.955). Remaining 
 ## 6. OCR accuracy — PaddleOCR vs Tesseract (= fitz's OCR) (2026-06-19)
 
 pdfspine ships **two** OCR backends behind one API (`page.get_textpage_ocr(engine=...)` /
-`doc.pdfocr_*`): the default `"tesseract"` (the system Tesseract CLI — exactly what PyMuPDF/fitz
+`doc.pdfocr_*`): explicit `"tesseract"` (the system Tesseract CLI — exactly what PyMuPDF/fitz
 uses, since **fitz's OCR is Tesseract-only**) and `"paddle"` (pdfspine's pure-Rust PP-OCRv5 engine,
 embedded in the wheel, no external binary). This benchmark quantifies the CJK win.
 

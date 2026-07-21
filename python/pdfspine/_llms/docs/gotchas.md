@@ -26,7 +26,7 @@
 
 - 一个 `pip install pdfspine` 会安装含 OCR 代码的 pdfspine wheel 和基础依赖 `ocrspine-models`。模型不在 pdfspine wheel 中，但安装后仍开箱即全功能 OCR、离线可跑，**不需要 `[ocr]` extra**。
 - `engine="paddle"` 使用共享数据包中的 PP-OCRv5 ONNX 模型（det/rec + PP-LCNet_x1_0 textline-ori，支持繁中/日文）。`[ocr]`/`[all]` extra 是**向后兼容空壳**；旧的 `pdfspine-ocr-models` 数据包只作为兼容回退。
-- 默认 `engine="tesseract"` 还需要**系统安装的 tesseract 二进制**（不在 wheel 里）。
+- 默认 `engine="paddle"` 不需要外部二进制；只有显式选择 `engine="tesseract"` 才需要**系统安装的 tesseract 二进制**（不在 wheel 里）。
 - 缺引擎/缺模型/未知 engine → 抛 `PdfUnsupportedError`（带清晰提示）。
 - 模型解析顺序：`PDFSPINE_OCR_MODELS` 环境变量（显式覆盖）→ 共享 `ocrspine_models` 数据包 → 旧 `pdfspine_ocr_models` 伴随包（兼容）→ 源码树 `ocrspine/models`（开发回退）→ 否则报错。可设 `os.environ["PDFSPINE_OCR_MODELS"]` 显式指定（须在调用 OCR 前；内部会镜像到引擎实际读取的 `OCRSPINE_MODELS`）。
 - 注意：对**已有文本层**的 born-digital PDF 调 OCR 通常没意义；OCR 针对扫描件/图片页。

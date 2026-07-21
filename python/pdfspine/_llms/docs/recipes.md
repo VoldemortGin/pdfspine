@@ -220,7 +220,7 @@ doc.save("book-toc.pdf")
 
 ## 11. OCR（`pip install pdfspine` 即全功能，无需额外步骤）
 
-OCR 引擎（纯 Rust PaddleOCR PP-OCRv5）已编进 wheel，模型来自基础运行时依赖 `ocrspine-models`。一个裸 `pip install pdfspine` 会自动安装两者，因此全功能 OCR 可离线运行，**无需 `[ocr]` extra**。`engine="paddle"` 走 PP-OCRv5（支持繁中/日文）；默认 `engine="tesseract"` 还需系统 tesseract 二进制。
+OCR 引擎（纯 Rust PaddleOCR PP-OCRv5）已编进 wheel，模型来自基础运行时依赖 `ocrspine-models`。一个裸 `pip install pdfspine` 会自动安装两者，因此全功能 OCR 可离线运行，**无需 `[ocr]` extra**。默认 `engine="paddle"`，走 PP-OCRv5（支持繁中/日文）；显式 `engine="tesseract"` 还需系统 tesseract 二进制。
 
 ```python
 import pdfspine

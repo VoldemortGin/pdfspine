@@ -88,11 +88,12 @@ impl OcrEngine for PaddleOcr {
 /// being unavailable maps to `PdfUnsupportedError` at the Python boundary, exactly
 /// as a missing Tesseract binary does. The underlying `ocrspine` cause is kept
 /// verbatim (so the failing model path stays legible), and the pdfspine-facing
-/// remediation (`pip install pdfspine[ocr]`) is appended — that is the install
-/// the user runs, not `ocrspine`'s internal `OCRSPINE_MODELS` hint.
+/// remediation is appended. Published pdfspine wheels include the engine and
+/// depend on the separate `ocrspine-models` data package.
 fn map_ocrspine_err(e: ocrspine::OcrError) -> Error {
     Error::Unsupported(format!(
-        "ocrspine: {e} (install the OCR build with `pip install pdfspine[ocr]`)"
+        "ocrspine: {e} (reinstall `pdfspine` and its `ocrspine-models` dependency, \
+         or set OCRSPINE_MODELS to a valid model directory)"
     ))
 }
 

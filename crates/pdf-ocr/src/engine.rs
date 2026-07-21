@@ -1,10 +1,11 @@
 //! The pluggable OCR engine seam (PRD §3.2 #3, post-v1 design).
 //!
 //! There is no formal OCR API standard, so pdfspine follows the agreed pattern:
-//! a small engine trait ([`OcrEngine`]) that any backend can implement, with
-//! [`crate::tesseract::TesseractCli`] as the default adapter. A cloud OCR
-//! service or an in-process engine can be dropped in later by implementing this
-//! one trait — nothing else in the OCR pipeline depends on Tesseract directly.
+//! a small engine trait ([`OcrEngine`]) that any backend can implement. The
+//! public pdfspine API selects PaddleOCR by default, while
+//! [`crate::tesseract::TesseractCli`] remains available explicitly. A cloud OCR
+//! service or another in-process engine can be dropped in later by implementing
+//! this one trait — nothing else in the OCR pipeline depends on Tesseract.
 
 use pdf_core::geom::Rect;
 

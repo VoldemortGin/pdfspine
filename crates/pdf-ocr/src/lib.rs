@@ -13,10 +13,10 @@
 //! # Engine-agnostic
 //!
 //! There is no formal OCR API standard, so the design is a small pluggable
-//! [`OcrEngine`] trait with [`TesseractCli`] as the default adapter. Tesseract is
-//! **not bundled** — exactly like PyMuPDF, the user must have the system
-//! `tesseract` installed; this keeps the wheel pure-Rust. A cloud or in-process
-//! engine can be added later by implementing [`OcrEngine`] alone.
+//! [`OcrEngine`] trait. Published pdfspine wheels select the pure-Rust
+//! [`PaddleOcr`] backend by default; [`TesseractCli`] remains an explicit
+//! compatibility adapter and requires a system `tesseract` installation. A
+//! cloud or other in-process engine can be added by implementing [`OcrEngine`].
 //!
 //! # `#![forbid(unsafe_code)]` / no panics
 //!

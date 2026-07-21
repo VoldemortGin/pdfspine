@@ -12,6 +12,7 @@ absent-engine test runs unconditionally (it forces an absent binary).
 
 from __future__ import annotations
 
+import inspect
 import shutil
 from pathlib import Path
 
@@ -103,7 +104,7 @@ if not _FONT_PATH.exists():  # pragma: no cover
 @pytest.mark.skipif(not _HAS_TESS, reason="tesseract not installed")
 def test_ocr_py_get_textpage_ocr():
     doc = pdfspine.open(stream=_text_pdf())
-    tp = doc[0].get_textpage_ocr(dpi=150)
+    tp = doc[0].get_textpage_ocr(dpi=150, engine="tesseract")
     t = tp.extractText().lower()
     assert "hello" in t
     assert "world" in t
@@ -115,7 +116,7 @@ def test_ocr_py_get_textpage_ocr():
 @pytest.mark.skipif(not _HAS_TESS, reason="tesseract not installed")
 def test_ocr_py_camelcase_alias():
     doc = pdfspine.open(stream=_text_pdf())
-    t = doc[0].getTextPageOCR(dpi=150).extractText().lower()
+    t = doc[0].getTextPageOCR(dpi=150, engine="tesseract").extractText().lower()
     assert "hello" in t
 
 
@@ -125,7 +126,7 @@ def test_ocr_py_camelcase_alias():
 @pytest.mark.skipif(not _HAS_TESS, reason="tesseract not installed")
 def test_ocr_py_pdfocr_tobytes_searchable():
     doc = pdfspine.open(stream=_text_pdf())
-    sb = doc.pdfocr_tobytes(dpi=150)
+    sb = doc.pdfocr_tobytes(dpi=150, engine="tesseract")
     assert len(sb) > 1000
     assert sb[:5] == b"%PDF-"
     d2 = pdfspine.open(stream=sb)
@@ -143,7 +144,7 @@ def test_ocr_py_pdfocr_tobytes_searchable():
 def test_ocr_py_pdfocr_save_file(tmp_path):
     doc = pdfspine.open(stream=_text_pdf())
     out = tmp_path / "out.pdf"
-    doc.pdfocr_save(str(out), dpi=150)
+    doc.pdfocr_save(str(out), dpi=150, engine="tesseract")
     assert out.exists()
     data = out.read_bytes()
     assert data[:5] == b"%PDF-"
@@ -159,25 +160,44 @@ def test_ocr_py_pdfocr_save_file(tmp_path):
 @pytest.mark.skipif(not _HAS_TESS, reason="tesseract not installed")
 def test_ocr_py_search_in_sandwich():
     doc = pdfspine.open(stream=_text_pdf())
-    sb = doc.pdfocr_tobytes(dpi=150)
+    sb = doc.pdfocr_tobytes(dpi=150, engine="tesseract")
     d2 = pdfspine.open(stream=sb)
     assert len(d2[0].search_for("HELLO")) >= 1
 
 
-# --- OCR-PY-006: absent OCR engine raises (runs without tesseract) --------
+# --- OCR-PY-006: explicit absent Tesseract engine raises ------------------
 
 
 def test_ocr_py_absent_engine_raises(monkeypatch):
     monkeypatch.setenv("OXIDE_TESSERACT", "/nonexistent/tesseract-xyz")
     doc = pdfspine.open(stream=_text_pdf())
     with pytest.raises(pdfspine.PdfUnsupportedError):
-        doc[0].get_textpage_ocr(dpi=72)
+        doc[0].get_textpage_ocr(dpi=72, engine="tesseract")
     doc2 = pdfspine.open(stream=_text_pdf())
     with pytest.raises(pdfspine.PdfUnsupportedError):
-        doc2.pdfocr_tobytes(dpi=72)
+        doc2.pdfocr_tobytes(dpi=72, engine="tesseract")
 
 
-# --- OCR-PY-007: fitz shim parity -----------------------------------------
+# --- OCR-PY-007: public OCR entrypoints default to PaddleOCR -------------
+
+
+def test_ocr_py_public_entrypoints_default_to_paddle():
+    """Omitting ``engine`` is public-API-equivalent to ``engine="paddle"``."""
+    assert (
+        inspect.signature(pdfspine.Page.get_textpage_ocr).parameters["engine"].default
+        == "paddle"
+    )
+    assert (
+        inspect.signature(pdfspine.Document.pdfocr_tobytes).parameters["engine"].default
+        == "paddle"
+    )
+    assert (
+        inspect.signature(pdfspine.Document.pdfocr_save).parameters["engine"].default
+        == "paddle"
+    )
+
+
+# --- OCR-PY-008: fitz shim parity -----------------------------------------
 
 
 @pytest.mark.skipif(not _HAS_TESS, reason="tesseract not installed")
@@ -185,4 +205,7 @@ def test_ocr_py_fitz_shim():
     import fitz
 
     fd = fitz.open(stream=_text_pdf())
-    assert "hello" in fd[0].get_textpage_ocr(dpi=150).extractText().lower()
+    assert (
+        "hello"
+        in fd[0].get_textpage_ocr(dpi=150, engine="tesseract").extractText().lower()
+    )

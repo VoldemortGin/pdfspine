@@ -1851,7 +1851,7 @@ class Page:
         dpi: int = 72,
         full: bool = True,
         tessdata: str | None = None,
-        engine: str = "tesseract",
+        engine: str = "paddle",
     ) -> TextPage:
         """Builds an OCR :class:`TextPage` from the selected engine (PyMuPDF
         ``page.get_textpage_ocr``).
@@ -1861,11 +1861,11 @@ class Page:
         result. ``full=False`` (image-region-only OCR) is not yet implemented and
         falls back to full-page OCR.
 
-        ``engine`` selects the backend: ``"tesseract"`` (default; the system
-        Tesseract CLI, using ``language`` / ``tessdata``, kept for PyMuPDF
-        compatibility) or ``"paddle"`` (pdfspine's pure-Rust PaddleOCR — stronger on
-        mixed CJK+Latin text, needs no external binary; ``tessdata`` is ignored,
-        and it requires the opt-in OCR build, ``pip install pdfspine[ocr]``).
+        ``engine`` selects the backend: ``"paddle"`` (default; pdfspine's
+        pure-Rust PaddleOCR, stronger on mixed CJK+Latin text and requiring no
+        external binary) or ``"tesseract"`` (the system Tesseract CLI kept for
+        PyMuPDF compatibility, using ``language`` / ``tessdata``). ``tessdata``
+        is ignored by PaddleOCR.
         Raises ``PdfUnsupportedError`` if the selected engine is unavailable.
         """
         if engine == "paddle":
@@ -4158,7 +4158,7 @@ class Document:
         language: str = "eng",
         tessdata: str | None = None,
         dpi: int = 300,
-        engine: str = "tesseract",
+        engine: str = "paddle",
     ) -> bytes:
         """Produces a searchable OCR "sandwich" PDF as bytes (PyMuPDF
         ``doc.pdfocr_tobytes``).
@@ -4168,10 +4168,10 @@ class Document:
         selectable / searchable. ``dpi`` (an pdfspine extension) tunes the
         recognition resolution.
 
-        ``engine`` selects the backend: ``"tesseract"`` (default; the system
-        Tesseract CLI, kept for PyMuPDF compatibility) or ``"paddle"`` (pdfspine's
-        pure-Rust PaddleOCR — stronger on CJK; ``tessdata`` is ignored, and it
-        requires the opt-in OCR build, ``pip install pdfspine[ocr]``). Raises
+        ``engine`` selects the backend: ``"paddle"`` (default; pdfspine's
+        pure-Rust PaddleOCR, stronger on CJK and requiring no external binary) or
+        ``"tesseract"`` (the system Tesseract CLI kept for PyMuPDF compatibility).
+        ``tessdata`` is ignored by PaddleOCR. Raises
         ``PdfUnsupportedError`` if the selected engine is unavailable.
         """
         if engine == "paddle":
@@ -4192,7 +4192,7 @@ class Document:
         language: str = "eng",
         tessdata: str | None = None,
         dpi: int = 300,
-        engine: str = "tesseract",
+        engine: str = "paddle",
     ) -> None:
         """Writes a searchable OCR "sandwich" PDF to ``filename`` (PyMuPDF
         ``doc.pdfocr_save``). See :meth:`pdfocr_tobytes` for ``engine``."""

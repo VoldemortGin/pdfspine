@@ -135,12 +135,12 @@ def test_ensure_ocr_models_env_noop_without_packages(monkeypatch):
 
 def test_missing_models_raises_clear_error(monkeypatch, tmp_path):
     """A true base install (OCR compiled in, but no models at all) raises a clear
-    ``PdfUnsupportedError`` pointing at ``pip install pdfspine[ocr]``.
+    ``PdfUnsupportedError`` pointing at the shared ``ocrspine-models`` package.
 
     Simulated by pointing ``PDFSPINE_OCR_MODELS`` at an empty directory: the Rust
     engine cannot read the ONNX and maps that to the documented error. Skipped on
-    a lean build (paddle compiled out) since the error text there is the same
-    'install pdfspine[ocr]' message but raised before any model lookup.
+    a lean build (PaddleOCR compiled out), which reports its build-feature
+    remediation before attempting model lookup.
     """
     monkeypatch.setenv(_ENV, str(tmp_path))  # empty dir: no ONNX present
 
@@ -150,4 +150,4 @@ def test_missing_models_raises_clear_error(monkeypatch, tmp_path):
 
     with pytest.raises(pdfspine.PdfUnsupportedError) as excinfo:
         doc[0].get_textpage_ocr(dpi=72, engine="paddle")
-    assert "pdfspine[ocr]" in str(excinfo.value)
+    assert "ocrspine-models" in str(excinfo.value)

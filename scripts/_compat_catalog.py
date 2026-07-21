@@ -746,7 +746,7 @@ add(
     "Page",
     IMPLEMENTED,
     "M8",
-    "OCR via pluggable engine (Tesseract default)",
+    "OCR via pluggable engine (PaddleOCR default; explicit Tesseract adapter)",
 )
 add("Page.TEXTFLAGS", "Page", IMPLEMENTED, "M2", "per-method default flag sets pinned")
 # Search & links

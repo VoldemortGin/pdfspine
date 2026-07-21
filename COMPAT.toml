@@ -2139,7 +2139,7 @@ name = "Page.get_textpage_ocr"
 group = "Page"
 disposition = "implemented"
 milestone = "M8"
-note = "OCR via pluggable engine (Tesseract default)"
+note = "OCR via pluggable engine (PaddleOCR default; explicit Tesseract adapter)"
 
 [[symbol]]
 name = "Page.TEXTFLAGS"

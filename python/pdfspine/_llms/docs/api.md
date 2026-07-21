@@ -366,9 +366,9 @@ page.first_widget -> Widget | None   # 别名 firstWidget
 ### OCR（页级）
 ```python
 page.get_textpage_ocr(flags=3, language="eng", dpi=72, full=True,
-                      tessdata=None, engine="tesseract") -> TextPage   # 别名 getTextPageOCR
+                      tessdata=None, engine="paddle") -> TextPage   # 别名 getTextPageOCR
 ```
-- `engine="paddle"` → 纯 Rust PaddleOCR（需模型，见 OCR 一节）；`engine="tesseract"`（默认）→ 需系统 tesseract。
+- `engine="paddle"`（默认）→ 纯 Rust PaddleOCR（模型见 OCR 一节）；`engine="tesseract"` → 需系统 tesseract。
 - 引擎不可用/未知 → `PdfUnsupportedError`。
 
 ## `TextPage`

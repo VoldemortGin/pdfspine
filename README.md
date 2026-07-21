@@ -63,7 +63,7 @@ pdfspine is a **drop-in-shaped, permissively-licensed (Apache-2.0)** alternative
 | **Images** | open PNG/JPEG/TIFF/GIF/BMP/WEBP as documents, `convert_to_pdf`, image-XObject decode (DCT/CCITT/JBIG2/JPX), `extract_image` |
 | **Markdown** | `markdown_to_pdf()` — a **pdfspine original extension** (not a PyMuPDF API): CommonMark + GFM tables / strikethrough / task lists → PDF via a deterministic pure-Rust layout engine; local & `data:`-URI images (never the network); optional user TTF via `font=` / `cjk_font=` (CJK) |
 | **Layers** | Optional Content Groups read/write (`get_ocgs` / `add_ocg` / `set_layer`) |
-| **OCR** | pluggable engine: Tesseract adapter **and** a pure-Rust PaddleOCR engine (PP-OCRv5, weights from the shared `ocrspine-models` package, stronger on CJK) → searchable-sandwich PDF |
+| **OCR** | pure-Rust PaddleOCR by default (PP-OCRv5, weights from the shared `ocrspine-models` package, stronger on CJK), with an explicit Tesseract compatibility adapter → searchable-sandwich PDF |
 | **CLI** | `pdfspine info / text / render / merge / split / pages / images / toc` |
 
 Planned next: reading-order accuracy improvements, Type1/Type3 glyph rendering,

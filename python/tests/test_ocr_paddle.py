@@ -12,17 +12,14 @@ models load from disk in the OCR build):
    PDF; reopening it and calling ``page.get_text()`` finds the same three lines
    in the now-present invisible text layer.
 
-The PaddleOCR engine is an OPT-IN build (P0-5): the lean base wheel compiles it
-out, so these paddle assertions are SKIPPED unless the wheel was built with the
-``ocr`` feature (``maturin develop --features ocr``). The default
-``engine="tesseract"`` path is exercised regardless, but its recognition
-assertions are guarded with a skip when Tesseract is not installed (it is an
-external dependency).
+Published wheels compile PaddleOCR in and use it by default. Lean source builds
+may compile it out, so these assertions are skipped unless the ``ocr`` feature
+is enabled (``maturin develop --features ocr``). Tesseract remains available as
+an explicit compatibility backend when its external binary is installed.
 """
 
 from __future__ import annotations
 
-import shutil
 import struct
 import zlib
 from pathlib import Path
@@ -30,8 +27,6 @@ from pathlib import Path
 import pdfspine
 import pytest
 
-
-_HAS_TESS = shutil.which("tesseract") is not None
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SAMPLE_PNG = (
@@ -161,17 +156,17 @@ _HAS_PADDLE = _paddle_available()
 
 _requires_paddle = pytest.mark.skipif(
     not _HAS_PADDLE,
-    reason="PaddleOCR engine not compiled in (lean build); install pdfspine[ocr]",
+    reason="PaddleOCR engine not compiled in (lean source build); enable feature `ocr`",
 )
 
 
-# --- OCR-PADDLE-001: get_textpage_ocr(engine="paddle") -> the 3 lines -------
+# --- OCR-PADDLE-001: omitted engine defaults to PaddleOCR -------------------
 
 
 @_requires_paddle
-def test_paddle_get_textpage_ocr():
+def test_default_paddle_get_textpage_ocr():
     doc = _scanned_pdf()
-    tp = doc[0].get_textpage_ocr(dpi=150, engine="paddle")
+    tp = doc[0].get_textpage_ocr(dpi=150)
     text = tp.extractText()
     assert _contains_line(text, _LINE_LATIN_1), f"missing line 1 in:\n{text!r}"
     assert _LINE_CJK in "".join(text.split()), f"missing CJK line in:\n{text!r}"
@@ -197,32 +192,7 @@ def test_paddle_pdfocr_tobytes_searchable():
     assert _contains_line(text, _LINE_LATIN_2), f"missing line 3 in:\n{text!r}"
 
 
-# --- OCR-PADDLE-003: the default tesseract path still works (untouched) -----
-
-
-def test_default_engine_unchanged():
-    """The default engine is still Tesseract and the signature is unchanged for
-    positional / omitted callers. Tesseract is an external dependency, so its
-    recognition assertions are skipped when it is absent — but the call path
-    (default engine, no ``engine=`` kwarg) must still resolve to Tesseract."""
-    doc = _scanned_pdf()
-    if not _HAS_TESS:
-        # No tesseract binary: the DEFAULT path must raise the unified
-        # unsupported error (proving the default is still Tesseract, not paddle).
-        with pytest.raises(pdfspine.PdfUnsupportedError):
-            doc[0].get_textpage_ocr(dpi=150)
-        pytest.skip("tesseract not installed; default-path recognition not asserted")
-
-    # Tesseract present: the default path recognizes the Latin content (Tesseract
-    # has no CJK pack by default, and may garble the made-up word "pdfspine" — it
-    # reads it as "odfspine"). The point of this test is that the default path
-    # ROUTES to Tesseract and returns recognized text, so assert on the tokens
-    # Tesseract reads reliably, not the fragile coined word.
-    text = doc[0].get_textpage_ocr(dpi=150).extractText().lower()
-    assert "ocr" in text and "2026" in text
-
-
-# --- OCR-PADDLE-004: an unknown engine raises the unified unsupported error -
+# --- OCR-PADDLE-003: an unknown engine raises the unified unsupported error -
 
 
 def test_unknown_engine_raises():
