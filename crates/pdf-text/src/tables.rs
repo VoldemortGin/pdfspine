@@ -1112,52 +1112,24 @@ fn word_center(w: &Word) -> Point {
     Point::new((w.bbox.x0 + w.bbox.x1) / 2.0, (w.bbox.y0 + w.bbox.y1) / 2.0)
 }
 
-/// The joined text of all words whose center lies inside `rect`, in reading
-/// order (top→bottom, then left→right). `None` when the cell holds no word.
-fn cell_text(rect: Rect, words: &[Word]) -> Option<String> {
+/// The words whose center lies inside `rect`, grouped into visual lines and
+/// x-sorted within each line.
+///
+/// Words are first ordered by vertical center (ties by `x0`), then clustered:
+/// a new line begins when a word's vertical center separates from the running
+/// line's center by more than half the word's height. Words **within a line
+/// are re-sorted by `x0`**, so styled spans whose centers differ slightly
+/// (mixed font sizes, raised / lowered fragments) still read left→right
+/// instead of leaking their sub-point center offsets into the order. Empty
+/// when the cell holds no word.
+fn cell_lines(rect: Rect, words: &[Word]) -> Vec<Vec<&Word>> {
     let mut hits: Vec<&Word> = words
         .iter()
         .filter(|w| rect.contains_point(word_center(w)))
         .collect();
     if hits.is_empty() {
-        return None;
+        return Vec::new();
     }
-    hits.sort_by(|a, b| {
-        let ay = center_y(a);
-        let by = center_y(b);
-        ay.partial_cmp(&by)
-            .unwrap_or(std::cmp::Ordering::Equal)
-            .then(
-                a.bbox
-                    .x0
-                    .partial_cmp(&b.bbox.x0)
-                    .unwrap_or(std::cmp::Ordering::Equal),
-            )
-    });
-    // Join words on the same line by space, different lines by space too
-    // (cell text reads as a single string, matching PyMuPDF's cell text).
-    let text = hits
-        .iter()
-        .map(|w| w.text.as_str())
-        .collect::<Vec<_>>()
-        .join(" ");
-    Some(text)
-}
-
-/// The HTML-escaped, multi-line cell text for `rect`: words grouped into lines
-/// by vertical proximity (a new line starts when a word's center drops below the
-/// running line baseline by more than half the line's height), words within a
-/// line joined by a space, lines joined by `<br>`. Each word's text is
-/// HTML-escaped (`& < > "`). `None` when the cell holds no word.
-fn cell_html_text(rect: Rect, words: &[Word]) -> Option<String> {
-    let mut hits: Vec<&Word> = words
-        .iter()
-        .filter(|w| rect.contains_point(word_center(w)))
-        .collect();
-    if hits.is_empty() {
-        return None;
-    }
-    // Reading order: top→bottom, then left→right.
     hits.sort_by(|a, b| {
         center_y(a)
             .partial_cmp(&center_y(b))
@@ -1188,19 +1160,51 @@ fn cell_html_text(rect: Rect, words: &[Word]) -> Option<String> {
     if !cur.is_empty() {
         lines.push(cur);
     }
-    let mut out = String::new();
-    for (i, line) in lines.iter().enumerate() {
-        if i > 0 {
-            out.push_str("<br>");
-        }
-        let mut sorted = line.clone();
-        sorted.sort_by(|a, b| {
+    for line in &mut lines {
+        line.sort_by(|a, b| {
             a.bbox
                 .x0
                 .partial_cmp(&b.bbox.x0)
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
-        for (j, w) in sorted.iter().enumerate() {
+    }
+    lines
+}
+
+/// The joined text of all words whose center lies inside `rect`, in reading
+/// order: visual lines top→bottom (see [`cell_lines`]), words within a line
+/// left→right. Lines and words alike are joined by single spaces (cell text
+/// reads as a single string, matching PyMuPDF's cell text). `None` when the
+/// cell holds no word.
+fn cell_text(rect: Rect, words: &[Word]) -> Option<String> {
+    let lines = cell_lines(rect, words);
+    if lines.is_empty() {
+        return None;
+    }
+    let text = lines
+        .iter()
+        .flat_map(|line| line.iter().map(|w| w.text.as_str()))
+        .collect::<Vec<_>>()
+        .join(" ");
+    Some(text)
+}
+
+/// The HTML-escaped, multi-line cell text for `rect`: words grouped into
+/// visual lines (see [`cell_lines`] — the same grouping `cell_text` uses, so
+/// all three exports agree on word order), words within a line joined by a
+/// space, lines joined by `<br>`. Each word's text is HTML-escaped
+/// (`& < > "`). `None` when the cell holds no word.
+fn cell_html_text(rect: Rect, words: &[Word]) -> Option<String> {
+    let lines = cell_lines(rect, words);
+    if lines.is_empty() {
+        return None;
+    }
+    let mut out = String::new();
+    for (i, line) in lines.iter().enumerate() {
+        if i > 0 {
+            out.push_str("<br>");
+        }
+        for (j, w) in line.iter().enumerate() {
             if j > 0 {
                 out.push(' ');
             }
