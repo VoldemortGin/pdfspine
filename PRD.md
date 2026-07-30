@@ -843,7 +843,7 @@ This reconciles D1 (every catalogued test for the feature green at merge of the 
 
 ### 10.5 CI & Definition-of-Done gate
 
-CI jobs (PR + main): `fmt --check`; `clippy --all-targets --all-features -D warnings`; multi-OS `test` (Linux/macOS/Windows); **`test-order-guard`** (git-history test-precedes-impl check, §10.1.1); **`catalog-status-guard`** (milestone has 0 remaining RED tags at exit); `coverage` (`cargo-llvm-cov` → Codecov, 90% diff threshold); `mutants-diff`; **`fuzz-smoke`** (Linux+nightly, 60 s/target, 0 crashes, run in `mmap:Never` mode per §9.6.1); `pytest` (matrix py 3.10–3.13, doctests, hypothesis); `wheels` (build + smoke-import + pytest on 3 OSes); `conformance` (`qpdf --check` / pikepdf / pdfminer / pdf.js / veraPDF); `cargo-deny` license + advisory + **shipped-vs-dev graph split** (§6.3) + AGPL-provenance/manifest lint; `cargo-geiger` whole-tree unsafe-surface tracking (§9.6.1); `compat-symbol-guard` (every baseline PyMuPDF public symbol has a `COMPAT.toml` disposition, §7). Scheduled: long fuzz (`-max_total_time=3600`, persisted minimized corpus), full sharded mutation, full-corpus conformance, **mmap-truncation nightly fuzz** (§9.6.1), supply-chain attestation refresh (§11.4).
+CI jobs (PR + main): `fmt --check`; `clippy --all-targets --all-features -D warnings`; multi-OS `test` (Linux/macOS/Windows); **`test-order-guard`** (git-history test-precedes-impl check, §10.1.1); **`catalog-status-guard`** (milestone has 0 remaining RED tags at exit); `coverage` (`cargo-llvm-cov` → Codecov, 90% diff threshold); `mutants-diff`; **`fuzz-smoke`** (Linux+nightly, 60 s/target, 0 crashes, run in `mmap:Never` mode per §9.6.1); `pytest` (matrix py 3.12–3.14, doctests, hypothesis); `wheels` (build + smoke-import + pytest on 3 OSes); `conformance` (`qpdf --check` / pikepdf / pdfminer / pdf.js / veraPDF); `cargo-deny` license + advisory + **shipped-vs-dev graph split** (§6.3) + AGPL-provenance/manifest lint; `cargo-geiger` whole-tree unsafe-surface tracking (§9.6.1); `compat-symbol-guard` (every baseline PyMuPDF public symbol has a `COMPAT.toml` disposition, §7). Scheduled: long fuzz (`-max_total_time=3600`, persisted minimized corpus), full sharded mutation, full-corpus conformance, **mmap-truncation nightly fuzz** (§9.6.1), supply-chain attestation refresh (§11.4).
 
 **Definition of Done (per PR):**
 
@@ -932,7 +932,7 @@ Order: 001→002→003 (working decode) → 006/007 (errors) → predictors → 
 | test | ubuntu/macos/windows | — | `--all-features` |
 | coverage / mutants-diff | ubuntu | — | 90% diff gate; in-diff mutation |
 | fuzz-smoke | ubuntu (nightly) | — | libFuzzer; `mmap:Never` mode |
-| pytest | ubuntu/macos/windows | 3.10–3.13 | doctests + hypothesis |
+| pytest | ubuntu/macos/windows | 3.12–3.14 | doctests + hypothesis |
 | wheels | ubuntu/macos/windows | abi3-py310 | build+import+smoke; publish on tag |
 | conformance | ubuntu | — | qpdf/pikepdf/pdfminer/pdf.js/veraPDF |
 | supply-chain | ubuntu | — | cargo-vet/cargo-deny advisories + checksum pin verify (§11.4) |

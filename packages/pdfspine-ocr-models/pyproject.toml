@@ -15,7 +15,7 @@ version = "0.0.0"
 description = "Deprecated legacy PP-OCRv5 model companion for pdfspine."
 readme = "README.md"
 license = "Apache-2.0"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 authors = [{ name = "pdfspine contributors" }]
 keywords = ["pdf", "ocr", "paddleocr", "pp-ocr", "onnx", "pdfspine"]
 classifiers = [

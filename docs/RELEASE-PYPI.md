@@ -25,8 +25,8 @@
 | License | **Apache-2.0** (`LICENSE` + `NOTICE` + per-data `PROVENANCE.md`) | DONE |
 | GitHub repo | `github.com/VoldemortGin/pdfspine` — **public** | DONE |
 | Build backend | **maturin** (PyO3 compiled Rust extension `pdfspine._core`) | DONE |
-| ABI | **abi3-py311** → ONE wheel per (OS, arch), CPython **≥ 3.11** | DONE |
-| `requires-python` | `>=3.11` | DONE |
+| ABI | **abi3-py311** → ONE wheel per (OS, arch), CPython **≥ 3.12** (floor set by `requires-python`) | DONE |
+| `requires-python` | `>=3.12` | DONE |
 | Native build deps | pure-Rust codecs/crypto, **BUT** the OCR `tract` kernels compile per-arch **assembly** → a C/asm toolchain is needed to *build from source* (GH runners + maturin-action containers already have it) | DONE (documented in README) |
 | OCR delivery | `pdfspine` wheel contains the engine but not weights; the shared base dependency **`ocrspine-models`** supplies weights for the whole spine family | DONE (§D.1) |
 | Optional extras | `[ocr]` and `[all]` are compatibility no-ops; a bare install is full-OCR-capable | DONE |
@@ -43,7 +43,7 @@ Run from the repo root; all must be green before tagging.
 ```
 
 CI (`.github/workflows/ci.yml`) mirrors the quality gate and tests the supported
-Python 3.11–3.13 range on Linux, macOS, and Windows. Confirm the release commit
+Python 3.12–3.14 range on Linux, macOS, and Windows. Confirm the release commit
 is green before tagging.
 
 ---
@@ -54,7 +54,7 @@ Already applied in this audit pass (**DONE**):
 
 - `pyproject.toml` classifiers: `Development Status :: 3 - Alpha`,
   `Intended Audience :: Developers`, OS classifiers (OS-Independent + Linux/MacOS/
-  Windows), per-minor Python (3.11/3.12/3.13), extra Topic classifiers.
+  Windows), per-minor Python (3.12/3.13/3.14), extra Topic classifiers.
 - `pyproject.toml` `project.urls` → `VoldemortGin/pdfspine`, and `Cargo.toml`
   `[workspace.package] repository` aligned to the same URL.
 - `NOTICE` + `crates/pdf-ocr/models/PROVENANCE.md` now attribute the bundled
@@ -146,7 +146,7 @@ pip install pdfspine[ocr]     # equivalent compatibility spelling
 
 The release workflow installs every natively runnable wheel and performs HTML
 export plus real OCR smoke tests before publish. It also installs and imports
-the sdist on Python 3.11. Verify the TestPyPI dry run as an additional check:
+the sdist on Python 3.12. Verify the TestPyPI dry run as an additional check:
 
 ```bash
 python -m venv /tmp/v && . /tmp/v/bin/activate

@@ -4,7 +4,7 @@
 
 - pip 安装名: `pdfspine`（裸安装自动带上共享 `ocrspine-models` 数据包；`[ocr]`/`[all]` 是兼容性空壳）
 - import 名: `import pdfspine`
-- 要求: CPython >= 3.11（abi3 wheel）
+- 要求: CPython >= 3.12（abi3 wheel；`requires-python = ">=3.12"`）
 
 ## fitz / pymupdf 兼容
 
@@ -24,7 +24,7 @@
 - `pdfspine/_llms/docs/overview.md` — 是什么、核心概念、fitz 兼容层、OCR、与 PyMuPDF 的关系与差异、能力范围
 - `pdfspine/_llms/docs/api.md` — Python 公开 API 真实签名 + 契约（标注 fitz 兼容别名）
 - `pdfspine/_llms/docs/recipes.md` — 可运行最小示例（提取文本/渲染/shim/编辑/表格/注释/redaction/表单/OCR/CLI）
-- `pdfspine/_llms/docs/gotchas.md` — 陷阱（预编译 wheel/abi3≥3.11、shim 须显式 install、OCR 模型来自共享基础依赖、未实现的抛 PdfUnsupportedError、与真 PyMuPDF 的差异）
+- `pdfspine/_llms/docs/gotchas.md` — 陷阱（预编译 wheel/abi3≥3.12、shim 须显式 install、OCR 模型来自共享基础依赖、未实现的抛 PdfUnsupportedError、与真 PyMuPDF 的差异）
 
 仓库内同样可见于 [python/pdfspine/_llms/](python/pdfspine/_llms/)。
 

@@ -5,7 +5,7 @@
 ## 1. 需要预编译 wheel（这是 Rust 扩展）
 
 - pdfspine 的核心是 Rust 编译产物 `pdfspine/_core.abi3.so`。`import pdfspine` 实际加载这个二进制。
-- **abi3 wheel，要求 CPython ≥ 3.11**（`requires-python = ">=3.11"`，maturin `features = ["pyo3/abi3-py311", ...]`）。3.11 下限是 `Pixmap` 零拷贝 buffer 协议（`bf_getbuffer`/`bf_releasebuffer` 稳定 ABI 槽，CPython 3.11 才有）所要求。
+- **abi3 wheel，要求 CPython ≥ 3.12**（`requires-python = ">=3.12"`，maturin `features = ["pyo3/abi3-py311", ...]`）。abi3 的 3.11 ABI 下限是 `Pixmap` 零拷贝 buffer 协议（`bf_getbuffer`/`bf_releasebuffer` 稳定 ABI 槽，CPython 3.11 才有）所要求；3.12 安装下限由 `requires-python` 元数据承担。
 - 从源码构建需要 C/asm 编译器（`cc`/`clang`，Windows 上是 MSVC Build Tools，含 `ml64.exe`）——因为内置 PaddleOCR 依赖 `tract`，构建期会编译目标架构的汇编 kernel。**预编译 wheel 不需要这些。**
 - 跨平台 wheel 见 GitHub Release。`maturin develop`/`maturin build --release` 自行构建。
 

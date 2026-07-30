@@ -91,7 +91,7 @@ jobs:
         with:
           # Build and smoke against the oldest supported interpreter. The
           # resulting abi3-py311 wheel also loads on every newer CPython.
-          python-version: "3.11"
+          python-version: "3.12"
       - name: Set version from tag
         if: github.ref_type == 'tag'
         run: python scripts/set_version_from_tag.py "${{ github.ref_name }}"
@@ -137,7 +137,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
       - name: Set version from tag
         if: github.ref_type == 'tag'
         run: python scripts/set_version_from_tag.py "${{ github.ref_name }}"
