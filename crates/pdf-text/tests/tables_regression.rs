@@ -203,3 +203,81 @@ fn tables_regr_004_jittered_rulings_do_not_over_segment() {
     assert_eq!(t.row_count, 2, "snapped to 2 rows, not over-segmented");
     assert_eq!(t.col_count, 2, "snapped to 2 cols, not over-segmented");
 }
+
+/// A 2×2 ruled grid whose top-left cell holds ONE visual line of four words with
+/// mixed font sizes and small baseline offsets (a lowered 14pt `*`, two 10pt
+/// words, and a raised 7pt `New` badge — the "styled spans in one cell" shape).
+/// Their vertical centers all differ slightly, but visually they read
+/// left→right as `* (Group) Leading New`.
+fn mixed_size_cell_content() -> Vec<u8> {
+    let mut c = String::new();
+    // Ruled 2×2 grid: x ∈ {100,300,400}, y ∈ {700,640,580}.
+    c.push_str("1 w\n");
+    for y in [700, 640, 580] {
+        c.push_str(&format!("100 {y} m 400 {y} l S\n"));
+    }
+    for x in [100, 300, 400] {
+        c.push_str(&format!("{x} 580 m {x} 700 l S\n"));
+    }
+    // One visual line in cell (0,0): same nominal baseline y=670, but the `*`
+    // sits 2pt low and the `New` badge 3.5pt high; font sizes 14/10/10/7 make
+    // every word's bbox center differ. A naive exact-center sort reads this as
+    // `New (Group) Leading *`.
+    c.push_str("BT\n");
+    for (txt, size, x, dy) in [
+        ("*", 14, 106, -2.0),
+        ("(Group)", 10, 120, 0.0),
+        ("Leading", 10, 190, 0.0),
+        ("New", 7, 250, 3.5),
+    ] {
+        c.push_str(&format!(
+            "/F1 {size} Tf 1 0 0 1 {x} {} Tm ({txt}) Tj\n",
+            670.0 + dy
+        ));
+    }
+    // Anchor words in the remaining cells so every cell is non-empty.
+    c.push_str("/F1 10 Tf 1 0 0 1 310 670 Tm (c01) Tj\n");
+    c.push_str("/F1 10 Tf 1 0 0 1 106 600 Tm (c10) Tj\n");
+    c.push_str("/F1 10 Tf 1 0 0 1 310 600 Tm (c11) Tj\n");
+    c.push_str("ET\n");
+    c.into_bytes()
+}
+
+#[test]
+fn tables_regr_005_mixed_size_spans_keep_visual_order() {
+    let (tp, ws, dev) = build(&mixed_size_cell_content());
+    let finder = find_tables(
+        &tp,
+        &ws,
+        &dev,
+        &TableOptions::with_strategy(Strategy::Lines),
+    );
+    assert_eq!(finder.len(), 1, "one ruled table");
+    let t = &finder.tables[0];
+    assert_eq!((t.row_count, t.col_count), (2, 2));
+
+    let expected = "* (Group) Leading New";
+
+    // extract(): words on one visual line follow x order, not raw center-y order.
+    let grid = t.extract(&ws);
+    assert_eq!(
+        grid[0][0].as_deref(),
+        Some(expected),
+        "extract keeps the visual left→right order"
+    );
+
+    // to_markdown() shares extract()'s cell text.
+    let md = t.to_markdown(&ws);
+    let header = md.lines().next().unwrap_or("");
+    assert!(
+        header.contains(expected),
+        "markdown header keeps the visual order (got {header:?})"
+    );
+
+    // to_html() must agree with extract()/to_markdown() on the same cell.
+    let html = t.to_html(&ws);
+    assert!(
+        html.contains(expected),
+        "html cell keeps the same visual order (got {html:?})"
+    );
+}

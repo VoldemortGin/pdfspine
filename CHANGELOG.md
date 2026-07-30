@@ -11,6 +11,19 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Table cell text follows visual order for mixed-style spans.**
+  `Table.extract()` and `Table.to_markdown()` sorted a cell's words by exact
+  bbox-center *y* before *x*, so spans sharing one visual line but differing in
+  font size or baseline offset (a raised `New` badge, a lowered `*`) leaked
+  their sub-point center differences into the order — e.g.
+  `* (Group) Leading Organizational Resilience New` exported as
+  `New (Group) Leading Organizational Resilience *`. Cell words are now grouped
+  into visual lines by vertical proximity and re-sorted by *x* within each line
+  (the grouping `Table.to_html()` already used), so all three exports agree on
+  word order (`TABLES-REGR-005`).
+
 ## [0.4.1] — 2026-07-20
 
 ### Added
