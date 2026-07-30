@@ -13,3 +13,18 @@ HTML5 document, or `doc.save_html(path)` to write it as UTF-8.
 ## Page
 
 ::: pdfspine.Page
+
+## Typed page content (pdfspine extension)
+
+Frozen value objects returned by the native typed `Page` API —
+`page.content_blocks()`, `page.link_annotations()` and
+`page.filled_rectangles()`. They are a pdfspine-original extension, not part
+of the PyMuPDF-compatible surface.
+
+::: pdfspine.TextBlock
+
+::: pdfspine.ImageBlock
+
+::: pdfspine.LinkAnnotation
+
+::: pdfspine.FilledRectangle

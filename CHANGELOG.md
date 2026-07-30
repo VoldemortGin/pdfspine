@@ -24,6 +24,30 @@ feature-complete, but the public API and on-disk formats may still change.
   (the grouping `Table.to_html()` already used), so all three exports agree on
   word order (`TABLES-REGR-005`).
 
+### Added
+
+- **Typed page-content API (pdfspine-original extension, not part of the
+  fitz-compat surface / COMPAT.toml).** Four new `Page` methods return frozen
+  dataclass value objects (new module `pdfspine.models`, re-exported at the
+  top level) instead of raw dicts:
+  - **`Page.content_blocks(sort=True)`** — the `get_text("dict", sort=...)`
+    block sequence as `tuple[TextBlock | ImageBlock, ...]`, same order; image
+    blocks keep the original encoded bytes + extension untouched (no OCR, no
+    re-encoding; `image=None` when the payload is unavailable).
+  - **`Page.link_annotations()`** — the external-URI subset of `get_links()`
+    as `tuple[LinkAnnotation, ...]` (`uri` + `from` rect); GoTo/named links
+    and malformed entries are skipped, never raising. Named
+    `link_annotations` because `Page.links()` is the PyMuPDF-compatible
+    `Link` iterator, which is unchanged.
+  - **`Page.text_in_rect(rect, *, sort="visual")`** — visually ordered text
+    of the spans whose bbox center lies inside `rect`: lines regrouped by
+    y-band and ordered `(y0, x0)`, spans ordered by `x0`, a single space
+    inserted on a clear horizontal gap, whitespace compressed.
+  - **`Page.filled_rectangles(include_white=False)`** — the rectangular fill
+    paths of `get_drawings()` (type `"f"`/`"fs"`, all items `("re", Rect)`)
+    as `tuple[FilledRectangle, ...]` with the fill color; white fills dropped
+    by default.
+
 ## [0.4.1] — 2026-07-20
 
 ### Added
