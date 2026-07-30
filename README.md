@@ -154,8 +154,8 @@ broader CJK) is tracked in [`docs/PRD-NEXT.md`](docs/PRD-NEXT.md).
 
 ## Build & install
 
-Requirements: Rust (pinned to **1.96.0** by `rust-toolchain.toml`), **Python ≥
-3.11**, [maturin](https://www.maturin.rs/) ≥ 1.7. [uv](https://docs.astral.sh/uv/)
+Requirements: Rust (pinned to **1.96.0** by `rust-toolchain.toml`), **Python
+3.14**, [maturin](https://www.maturin.rs/) ≥ 1.7. [uv](https://docs.astral.sh/uv/)
 recommended.
 
 ```bash

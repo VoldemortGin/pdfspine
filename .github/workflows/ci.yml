@@ -31,7 +31,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.14"
       - name: Install Cargo dependency policy gate
         run: cargo install cargo-deny --locked
       - name: Install Python build and quality dependencies
@@ -80,7 +80,7 @@ jobs:
       # plain `cargo test` path.
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.14"
       - name: cargo test --workspace --all-features
         run: cargo test --workspace --all-features
 
@@ -100,7 +100,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.14"
       - name: cargo-llvm-cov (diff coverage)
         run: |
           cargo install cargo-llvm-cov --locked
@@ -145,7 +145,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        python: ["3.11", "3.12", "3.13"]
+        python: ["3.14"]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -171,7 +171,7 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.14"
       - name: test-order-guard (catalog ⇄ RED-tag consistency)
         run: python scripts/test-order-guard.py
       - name: catalog-status-guard (COMPAT.toml ⇄ generator sync)
@@ -191,7 +191,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.14"
       - name: Install maturin
         run: pip install "maturin>=1.12,<2"
       - name: Build + install pdfspine (editable; pip 走 maturin PEP 660,无需 venv)
@@ -267,7 +267,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.96.0
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.14"
       - name: Build abi3 wheel
         uses: PyO3/maturin-action@v1
         with:

@@ -6,9 +6,10 @@
 
 ## Requirements
 
-- **Python ≥ 3.11.** The 3.11 floor is required by the `Pixmap` zero-copy buffer
-  protocol (the stable-ABI buffer slots landed in CPython 3.11). The wheel is an
-  `abi3` wheel, so a single build covers 3.11 and newer.
+- **Python 3.14** (`requires-python = ">=3.14,<3.15"`). The wheel is an `abi3`
+  (`abi3-py311`) wheel — the 3.11 ABI floor comes from the `Pixmap` zero-copy
+  buffer protocol (the stable-ABI buffer slots landed in CPython 3.11) — but
+  installation is gated to CPython 3.14 by the package metadata.
 - **Rust** (pinned by `rust-toolchain.toml`) and **maturin ≥ 1.12** — only needed
   to build from source.
 - [uv](https://docs.astral.sh/uv/) is recommended for managing the virtualenv,
