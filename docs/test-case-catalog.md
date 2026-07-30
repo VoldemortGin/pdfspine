@@ -2472,3 +2472,54 @@ network.
 | `MARKDOWN-TO-PDF-008` | `margins=` scalar + 4-tuple; `page_width`/`page_height` land in the page rect | PRD-NEXT §9 | green |
 | `MARKDOWN-TO-PDF-009` | bad inputs → typed `TypeError`/`ValueError`/`OSError`/`PdfError`, never a panic | PRD-NEXT §9 | green |
 | `MARKDOWN-TO-PDF-010` | relative images: file input defaults `base_dir` to the file's parent; explicit `base_dir=`; none → typed error | PRD-NEXT §9 | green |
+
+---
+
+## Typed page-content API — original extension
+
+`page.content_blocks()` / `page.link_annotations()` / `page.text_in_rect()` /
+`page.filled_rectangles()` — pdfspine-original typed wrappers over the
+`get_text("dict")` / `get_links()` / `get_drawings()` dict surfaces (NOT in the
+fitz-compat surface / COMPAT.toml). Value objects are frozen dataclasses in
+`pdfspine.models`. Tests live in `python/tests/test_page_content_api.py`;
+fixtures are self-generated raw PDF bytes, no network.
+
+### `Page.content_blocks` — `CONTENT-BLOCKS-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `CONTENT-BLOCKS-001` | mixed text+image page → `(TextBlock, ImageBlock)` matching `get_text("dict", sort=True)` order | extension | green |
+| `CONTENT-BLOCKS-002` | `TextBlock.text` = span texts concatenated per line, lines joined with newlines | extension | green |
+| `CONTENT-BLOCKS-003` | `ImageBlock` keeps raw encoded bytes + ext, byte-for-byte == `Document.extract_image` | extension | green |
+| `CONTENT-BLOCKS-004` | `sort=False` mirrors the unsorted dict block order | extension | green |
+| `CONTENT-BLOCKS-005` | returned value objects are frozen dataclasses | extension | green |
+
+### `Page.link_annotations` — `LINK-ANNOT-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `LINK-ANNOT-001` | external URI link → `LinkAnnotation(uri, rect)` from the dict's `uri`/`from` | extension | green |
+| `LINK-ANNOT-002` | internal GoTo links are not returned | extension | green |
+| `LINK-ANNOT-003` | empty-URI link skipped (tolerant parse, no error) | extension | green |
+| `LINK-ANNOT-004` | page without links → empty tuple | extension | green |
+| `LINK-ANNOT-005` | PyMuPDF-compatible `Page.links()` iterator unchanged alongside the typed API | extension | green |
+
+### `Page.text_in_rect` — `TEXT-IN-RECT-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `TEXT-IN-RECT-001` | one visual line: spans ordered by x0; clear gap → single space, touching span → none | extension | green |
+| `TEXT-IN-RECT-002` | span selected iff its bbox center lies in the rect (intersection alone is not enough) | extension | green |
+| `TEXT-IN-RECT-003` | multiple visual lines ordered by (y0, x0), joined with newlines; rect_like accepted | extension | green |
+| `TEXT-IN-RECT-004` | whitespace runs collapse to single spaces, edges stripped | extension | green |
+| `TEXT-IN-RECT-005` | empty selection → empty string | extension | green |
+| `TEXT-IN-RECT-006` | `sort` other than `"visual"` → `ValueError` | extension | green |
+
+### `Page.filled_rectangles` — `FILLED-RECT-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `FILLED-RECT-001` | fill ("f") + fill-stroke ("fs") rectangles returned with rect + fill color; stroke-only / non-rectangular fills not | extension | green |
+| `FILLED-RECT-002` | white fills dropped by default, kept with `include_white=True` | extension | green |
+| `FILLED-RECT-003` | page without fill paths → empty tuple | extension | green |
+| `FILLED-RECT-004` | returned value objects are frozen dataclasses | extension | green |

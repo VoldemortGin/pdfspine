@@ -322,6 +322,30 @@ page.update_link(link: dict) -> None
 page.delete_link(link: dict) -> None
 ```
 
+### typed 页面内容（pdfspine 原创扩展，非 PyMuPDF 表面）
+```python
+page.content_blocks(sort=True) -> tuple[TextBlock | ImageBlock, ...]
+page.link_annotations() -> tuple[LinkAnnotation, ...]
+page.text_in_rect(rect, *, sort="visual") -> str
+page.filled_rectangles(*, include_white=False) -> tuple[FilledRectangle, ...]
+```
+契约（核对自 `document.py` / `models.py`，实跑验证）：
+- 模型全部是 frozen dataclass（定义在 `pdfspine.models`，顶层可见）：
+  `TextBlock(number, bbox: Rect, text)`、`ImageBlock(number, bbox: Rect, width, height, ext, image: bytes | None)`、
+  `LinkAnnotation(uri, rect: Rect)`、`FilledRectangle(rect: Rect, fill: tuple[float, ...])`。
+- `content_blocks`：把 `get_text("dict", sort=...)` 的 block 转成 typed 值对象，顺序一致；
+  text block 的 `text` = 行内 span 直接拼接、行间 `"\n"`；image block 保留原始编码字节 + 扩展名
+  （不 OCR、不改写；拿不到字节时 `image=None`）；其他 block 类型跳过。
+- `link_annotations`：只返回带非空外部 URI 的链接（`kind == 2`）；GoTo/命名跳转不返回；
+  URI 为空或 `from` 畸形的条目按容错惯例跳过、绝不抛错。
+  **命名说明**：`links()` 已被 PyMuPDF 兼容层占用（返回 `Link` 迭代器），typed 版本因此叫 `link_annotations()`。
+- `text_in_rect`：span 的 bbox 中心点落入 rect 才选中；按视觉行重组（行内按 x0、多行按 (y0, x0)）；
+  行内相邻 span 有明显水平空隙（> 0.25 × 字号，至少 1pt）时插入单个空格；空白压缩、行间 `"\n"`；
+  仅支持 `sort="visual"`，其他值抛 `ValueError`。
+- `filled_rectangles`：基于 `get_drawings()`，只取 fill 类（type ∈ {"f","fs"}）且 items 全为
+  `("re", Rect)` 的绘制，逐矩形返回；默认剔除白色填充（各分量与 1.0 相差 ≤ 1e-3），
+  `include_white=True` 保留。
+
 ### 文本/图片/绘图写入
 ```python
 page.insert_text(point, text, *, fontname="helv", fontsize=11, color=None, fontfile=None, **_) -> int

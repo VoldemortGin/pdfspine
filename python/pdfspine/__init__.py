@@ -79,6 +79,7 @@ from .helpers import (
     set_messages,
     unicode_to_glyph_name,
 )
+from .models import FilledRectangle, ImageBlock, LinkAnnotation, TextBlock
 
 try:
     # The single source of truth: the version baked into the installed wheel's
@@ -144,6 +145,10 @@ __all__ = [
     "csGRAY",
     "csRGB",
     "csCMYK",
+    "TextBlock",
+    "ImageBlock",
+    "LinkAnnotation",
+    "FilledRectangle",
     "Rect",
     "IRect",
     "Point",

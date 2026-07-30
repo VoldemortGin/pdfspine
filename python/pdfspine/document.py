@@ -32,6 +32,7 @@ from .constants import PDF_ENCRYPT_RC4_128 as PDF_ENCRYPT_RC4_128  # noqa: F401,
 from .constants import PDF_ENCRYPT_UNKNOWN as PDF_ENCRYPT_UNKNOWN  # noqa: F401,PLC0414
 from .constants import PDF_PERM_ACCESSIBILITY as PDF_PERM_ACCESSIBILITY  # noqa: F401,PLC0414
 from .geometry import FZ_MAX_INF_RECT, FZ_MIN_INF_RECT, Matrix, Point, Quad, Rect
+from .models import FilledRectangle, ImageBlock, LinkAnnotation, TextBlock
 
 # Deferred baseline symbols carry richer, human-facing hints where we have one;
 # the authoritative deferred set itself is the generated ``_compat_deferred``
@@ -2352,6 +2353,214 @@ class Page:
         """
         self.delete_link(link)
         self.insert_link(link)
+
+    # --- typed page content (pdfspine-original extension) ---
+    def content_blocks(self, sort: bool = True) -> tuple["TextBlock | ImageBlock", ...]:
+        """The page's content as typed blocks (pdfspine-original extension).
+
+        Converts the ``get_text("dict", sort=sort)`` block sequence into value
+        objects, preserving its order: a ``type == 0`` block becomes a
+        :class:`~pdfspine.models.TextBlock` (span texts concatenated per line,
+        lines joined with newlines), a ``type == 1`` block becomes an
+        :class:`~pdfspine.models.ImageBlock` keeping the original encoded
+        image bytes and extension untouched (no OCR, no re-encoding);
+        :attr:`~pdfspine.models.ImageBlock.image` is ``None`` when the payload
+        is unavailable. Blocks of any other type are skipped.
+
+        >>> import pdfspine
+        >>> page = pdfspine.open().new_page(width=300, height=200)
+        >>> lines = page.insert_text((50, 100), "Hello", fontsize=12)
+        >>> [type(block).__name__ for block in page.content_blocks()]
+        ['TextBlock']
+        >>> page.content_blocks()[0].text
+        'Hello'
+        """
+        blocks: list[TextBlock | ImageBlock] = []
+        for block in self.get_text("dict", sort=sort)["blocks"]:
+            block_type = block.get("type")
+            bbox = _rect(_rt(block["bbox"]))
+            if block_type == 0:
+                text = "\n".join(
+                    "".join(span.get("text", "") for span in line.get("spans", ()))
+                    for line in block.get("lines", ())
+                )
+                blocks.append(
+                    TextBlock(number=int(block["number"]), bbox=bbox, text=text)
+                )
+            elif block_type == 1:
+                payload = block.get("image")
+                blocks.append(
+                    ImageBlock(
+                        number=int(block["number"]),
+                        bbox=bbox,
+                        width=int(block.get("width", 0)),
+                        height=int(block.get("height", 0)),
+                        ext=str(block.get("ext", "")),
+                        image=bytes(payload) if payload else None,
+                    )
+                )
+        return tuple(blocks)
+
+    def link_annotations(self) -> tuple[LinkAnnotation, ...]:
+        """The page's external-URI links, typed (pdfspine-original extension).
+
+        Filters :meth:`get_links` down to links carrying a non-empty external
+        URI (``kind == 2`` / ``LINK_URI``): internal GoTo/named destinations
+        are not returned, and entries with an empty URI or a malformed
+        ``from`` rectangle are skipped (tolerant-parse convention — this never
+        raises on odd link data). Named ``link_annotations`` — not ``links``
+        — because :meth:`links` is the PyMuPDF-compatible :class:`Link`
+        iterator, which keeps its fitz semantics unchanged.
+
+        >>> import pdfspine
+        >>> page = pdfspine.open().new_page(width=300, height=200)
+        >>> page.insert_link(
+        ...     {"kind": 2, "from": (10, 10, 60, 30), "uri": "https://example.org"}
+        ... )
+        >>> page.link_annotations()
+        (LinkAnnotation(uri='https://example.org', rect=Rect(10.0, 10.0, 60.0, 30.0)),)
+        """
+        out: list[LinkAnnotation] = []
+        for link in self.get_links():
+            if link.get("kind") != 2:
+                continue
+            uri = link.get("uri")
+            if not uri:
+                continue
+            try:
+                rect = _rect(_rt(link["from"]))
+            except (KeyError, TypeError, IndexError, ValueError):
+                continue
+            out.append(LinkAnnotation(uri=str(uri), rect=rect))
+        return tuple(out)
+
+    def text_in_rect(self, rect, *, sort: str = "visual") -> str:
+        """Text of the spans centered inside ``rect``, in visual order
+        (pdfspine-original extension).
+
+        Walks the text spans of ``get_text("dict")`` (image blocks are
+        ignored) and selects a span when its bbox center point lies inside
+        ``rect`` (a :class:`Rect` or any 4-sequence). Selected spans are
+        regrouped into visual lines — a span joins a line when its vertical
+        center falls inside the line's y-band — so label text reads correctly
+        even when ``Table.extract()`` (or the block order) does not: lines are
+        ordered by ``(y0, x0)`` and joined with newlines; spans within a line
+        are ordered by ``x0`` and concatenated, inserting a single space when
+        a clear horizontal gap (more than a quarter of the span's font size,
+        at least 1 pt) separates two neighbors. Whitespace is compressed: runs
+        collapse to single spaces, line edges are stripped and empty lines
+        dropped. ``sort`` selects the ordering strategy; only ``"visual"``
+        (the default) is supported and any other value raises ``ValueError``.
+
+        >>> import pdfspine
+        >>> page = pdfspine.open().new_page(width=300, height=200)
+        >>> lines = page.insert_text((50, 100), "Hello", fontsize=12)
+        >>> page.text_in_rect(pdfspine.Rect(0, 80, 300, 120))
+        'Hello'
+        >>> page.text_in_rect(pdfspine.Rect(0, 0, 300, 50))
+        ''
+        """
+        if sort != "visual":
+            raise ValueError(
+                f"text_in_rect: unsupported sort mode {sort!r} (only 'visual')"
+            )
+        rx0, ry0, rx1, ry1 = _rt(rect)
+        if rx1 < rx0:
+            rx0, rx1 = rx1, rx0
+        if ry1 < ry0:
+            ry0, ry1 = ry1, ry0
+
+        # (y0, x0, x1, y1, text, size) per selected span.
+        selected: list[tuple[float, float, float, float, str, float]] = []
+        for block in self.get_text("dict")["blocks"]:
+            if block.get("type") != 0:
+                continue
+            for line in block.get("lines", ()):
+                for span in line.get("spans", ()):
+                    text = span.get("text", "")
+                    bbox = span.get("bbox")
+                    if not text or bbox is None:
+                        continue
+                    x0, y0, x1, y1 = (float(v) for v in bbox)
+                    cx = (x0 + x1) / 2.0
+                    cy = (y0 + y1) / 2.0
+                    if rx0 <= cx <= rx1 and ry0 <= cy <= ry1:
+                        size = float(span.get("size", 0.0) or 0.0)
+                        selected.append((y0, x0, x1, y1, text, size))
+        selected.sort(key=lambda s: (s[0], s[1]))
+
+        # Regroup into visual lines: a span belongs to a line when its
+        # vertical center falls inside the line's growing y-band.
+        bands: list[list] = []  # [y0, y1, spans]
+        for span in selected:
+            y0, _x0, _x1, y1, _text, _size = span
+            cy = (y0 + y1) / 2.0
+            for band in bands:
+                if band[0] <= cy <= band[1]:
+                    band[0] = min(band[0], y0)
+                    band[1] = max(band[1], y1)
+                    band[2].append(span)
+                    break
+            else:
+                bands.append([y0, y1, [span]])
+        bands.sort(key=lambda band: (band[0], min(s[1] for s in band[2])))
+
+        out_lines: list[str] = []
+        for _y0, _y1, spans in bands:
+            spans.sort(key=lambda s: s[1])
+            parts: list[str] = []
+            reach: float | None = None
+            for _sy0, x0, x1, _sy1, text, size in spans:
+                if reach is not None and x0 - reach > max(1.0, 0.25 * size):
+                    parts.append(" ")
+                parts.append(text)
+                reach = x1 if reach is None else max(reach, x1)
+            normalized = " ".join("".join(parts).split())
+            if normalized:
+                out_lines.append(normalized)
+        return "\n".join(out_lines)
+
+    def filled_rectangles(
+        self, *, include_white: bool = False
+    ) -> tuple[FilledRectangle, ...]:
+        """The page's filled vector rectangles, typed (pdfspine-original
+        extension).
+
+        Filters :meth:`get_drawings` down to fill paths (``type`` ``"f"`` or
+        ``"fs"``) whose geometry is purely rectangular — every path item is a
+        ``("re", Rect)`` — and yields one
+        :class:`~pdfspine.models.FilledRectangle` per rectangle item, in
+        drawing order, carrying the path's fill color. White fills (every
+        color component within ``1e-3`` of 1.0) are dropped unless
+        ``include_white=True``. Stroke-only paths and fills with
+        non-rectangular geometry are never returned.
+
+        >>> import pdfspine
+        >>> page = pdfspine.open().new_page(width=300, height=200)
+        >>> page.draw_rect(pdfspine.Rect(10, 10, 50, 40), fill=(1, 0, 0))
+        >>> page.filled_rectangles()
+        (FilledRectangle(rect=Rect(10.0, 10.0, 50.0, 40.0), fill=(1.0, 0.0, 0.0)),)
+        """
+        out: list[FilledRectangle] = []
+        for drawing in self.get_drawings():
+            if drawing.get("type") not in ("f", "fs"):
+                continue
+            fill = drawing.get("fill")
+            if fill is None:
+                continue
+            fill_color = tuple(float(c) for c in fill)
+            if (
+                not include_white
+                and fill_color
+                and all(abs(c - 1.0) <= 1e-3 for c in fill_color)
+            ):
+                continue
+            items = drawing.get("items") or []
+            rects = [item[1] for item in items if item and item[0] == "re"]
+            if not rects or len(rects) != len(items):
+                continue
+            out.extend(FilledRectangle(rect=Rect(r), fill=fill_color) for r in rects)
+        return tuple(out)
 
     def get_label(self) -> str:
         """The page's label under ``/PageLabels`` (PyMuPDF ``page.get_label``)."""

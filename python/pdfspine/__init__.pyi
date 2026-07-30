@@ -74,6 +74,12 @@ from .helpers import (
     set_messages as set_messages,
     unicode_to_glyph_name as unicode_to_glyph_name,
 )
+from .models import (
+    FilledRectangle as FilledRectangle,
+    ImageBlock as ImageBlock,
+    LinkAnnotation as LinkAnnotation,
+    TextBlock as TextBlock,
+)
 
 __version__: str
 
@@ -103,6 +109,10 @@ __all__ = [
     "csGRAY",
     "csRGB",
     "csCMYK",
+    "TextBlock",
+    "ImageBlock",
+    "LinkAnnotation",
+    "FilledRectangle",
     "Rect",
     "IRect",
     "Point",

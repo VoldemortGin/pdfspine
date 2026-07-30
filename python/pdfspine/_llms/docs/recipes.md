@@ -57,6 +57,26 @@ tp.search("Hello")        # list[Rect]
 
 实跑核对输出：`words[0] == (50.0, 85.6, 91.0..., 103.6, 'Hello', 0, 0, 0)`；`dict` 顶层键 `['blocks','height','width']`。
 
+### typed 页面内容（pdfspine 原创扩展）
+
+免手写 dict 解析的 typed API（frozen dataclass，详见 api.md）：
+
+```python
+import pdfspine
+
+doc = pdfspine.open()
+page = doc.new_page(width=300, height=200)
+page.insert_text((50, 100), "Hello pdfspine", fontsize=18)
+page.insert_link({"kind": 2, "from": (10, 10, 60, 30), "uri": "https://example.org"})
+page.draw_rect(pdfspine.Rect(10, 150, 50, 190), fill=(1, 0, 0))
+
+page.content_blocks()          # (TextBlock(number=0, bbox=Rect(...), text='Hello pdfspine'),)
+                               # 图片页会得到 ImageBlock(..., ext='png', image=b'\x89PNG...')
+page.link_annotations()        # (LinkAnnotation(uri='https://example.org', rect=Rect(...)),)
+page.text_in_rect(pdfspine.Rect(0, 80, 300, 120))   # 'Hello pdfspine'（span 中心点判定，视觉序）
+page.filled_rectangles()       # (FilledRectangle(rect=Rect(...), fill=(1.0, 0.0, 0.0)),)
+```
+
 ## 3. 渲染页面为图片（PNG）
 
 ```python
