@@ -11,6 +11,15 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-07-30
+
+### Changed
+
+- **Breaking: Python 3.14 only.** `requires-python` narrowed to
+  `>=3.14,<3.15`; CPython 3.11–3.13 are no longer supported install targets.
+  The extension module itself still builds against the abi3-py311 stable ABI
+  (unchanged binary interface) — only the supported interpreter set changed.
+
 ### Fixed
 
 - **Table cell text follows visual order for mixed-style spans.**
@@ -314,7 +323,8 @@ published wheel's version is set from the `v0.1.0` git tag at build time.
   2858 ms → 819 ms). `rayon` is a feature-gated (`paddle-ocr`) optional dep and
   is not in the lean base wheel.
 
-[Unreleased]: https://github.com/VoldemortGin/pdfspine/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/VoldemortGin/pdfspine/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/VoldemortGin/pdfspine/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/VoldemortGin/pdfspine/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/VoldemortGin/pdfspine/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/VoldemortGin/pdfspine/compare/v0.2.0...v0.3.0
