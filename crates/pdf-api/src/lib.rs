@@ -185,6 +185,17 @@ impl Document {
     /// Wraps an already-opened store, computing the ordered page list once.
     fn from_store(store: DocumentStore) -> Self {
         let store = Arc::new(store);
+        // Try the empty user password **before** the page tree is walked (PyMuPDF
+        // does the same on open). An encrypted document's object streams cannot be
+        // inflated until the security handler is authenticated; the `/Pages` root
+        // commonly lives inside one. Walking first would fail to resolve it, and
+        // `page_refs` would silently fall back to an object-number scan — which
+        // yields the right page COUNT but the WRONG ORDER, and that wrong order is
+        // then cached here for the document's lifetime.
+        #[cfg(feature = "encryption")]
+        if store.needs_pass() {
+            let _ = store.authenticate(b"");
+        }
         let pages = pdf_core::pagetree::page_refs(&store);
         Document {
             store,
