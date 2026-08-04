@@ -418,10 +418,74 @@ impl PyTextPage {
 
 // --- get_text conversion (TextOutput → native Python object, PRD §9.4) ----
 
+/// Serializes plain text after sorting every structured-text line by `(y0, x0)`.
+///
+/// Sorting only block tuples is insufficient: MuPDF can place independently
+/// painted left/right fragments in two lines of the same text block. Keep each
+/// reconstructed line's existing glyph order, but sort the lines themselves so
+/// those fragments participate in the same geometry-first ordering as blocks.
+fn sorted_plain_text(tp: &pdf_api::TextPage, flags: u32) -> String {
+    struct TextLine {
+        x0: f64,
+        y0: f64,
+        block_index: usize,
+        line_index: usize,
+        text: String,
+    }
+
+    let mut lines = Vec::new();
+    for (block_index, block) in tp.blocks.iter().enumerate() {
+        for (line_index, line) in block.lines.iter().enumerate() {
+            let bbox = line.bbox.normalize();
+            let text = line.spans.iter().map(|span| span.text.as_str()).collect();
+            lines.push(TextLine {
+                x0: bbox.x0,
+                y0: bbox.y0,
+                block_index,
+                line_index,
+                text,
+            });
+        }
+    }
+    lines.sort_by(|a, b| {
+        a.y0.total_cmp(&b.y0)
+            .then(a.x0.total_cmp(&b.x0))
+            .then(a.block_index.cmp(&b.block_index))
+            .then(a.line_index.cmp(&b.line_index))
+    });
+
+    // TEXT_DEHYPHENATE is bit 16. Preserve the ordinary text serializer's
+    // behavior when two originally consecutive lines remain consecutive after
+    // sorting; geometry reordering must not join unrelated blocks.
+    let dehyphenate = flags & 16 != 0;
+    let mut out = String::new();
+    let mut previous: Option<(usize, usize)> = None;
+    let mut first = true;
+    for line in lines {
+        if !first {
+            let follows_original_line = previous.is_some_and(|(block, index)| {
+                block == line.block_index && index.checked_add(1) == Some(line.line_index)
+            });
+            if dehyphenate && follows_original_line && out.ends_with('-') {
+                out.pop();
+            } else {
+                out.push('\n');
+            }
+        }
+        out.push_str(&line.text);
+        previous = Some((line.block_index, line.line_index));
+        first = false;
+    }
+    if !first {
+        out.push('\n');
+    }
+    out
+}
+
 /// Runs `get_text` for `page`/`opt` (heavy work GIL-released) and converts the
 /// neutral [`TextOutput`] into the native Python object PyMuPDF returns:
 /// strings for text/markup/json; `list[tuple]` for blocks/words; `dict` for
-/// dict/rawdict (PRD §9.4). `sort` orders blocks/words by `(y0, x0)`.
+/// dict/rawdict (PRD §9.4). `sort` orders text/blocks/words by `(y0, x0)`.
 fn text_output_to_py(
     py: Python<'_>,
     page: &pdf_api::Page,
@@ -430,6 +494,17 @@ fn text_output_to_py(
     tp: Option<&pdf_api::TextPage>,
     sort: bool,
 ) -> PyResult<Py<PyAny>> {
+    // Plain text needs line geometry until after sorting. Build or reuse the
+    // TextPage under the detached GIL, then serialize its lines directly.
+    if sort && opt.eq_ignore_ascii_case("text") {
+        let flags = flags.unwrap_or(pdf_api::defaults::TEXT);
+        let text = py.detach(|| match tp {
+            Some(tp) => sorted_plain_text(tp, flags),
+            None => sorted_plain_text(&pdf_api::textpage(page, flags, None), flags),
+        });
+        return Ok(text.into_pyobject(py)?.into_any().unbind());
+    }
+
     // Heavy: build-or-reuse the model + serialize, GIL released (PRD §9.4).
     let out = py.detach(|| pdf_api::get_text(page, opt, flags, tp));
     // Only the final Python-object construction holds the GIL.
@@ -1693,7 +1768,8 @@ impl PyPage {
     /// Extracts text in `option` (PyMuPDF `page.get_text`). Returns the native
     /// Python object per option: `str` for text/html/xhtml/xml/json/rawjson,
     /// `list[tuple]` for blocks/words, `dict` for dict/rawdict. `textpage`
-    /// reuses a pre-built [`PyTextPage`]; `sort=True` orders blocks by `(y, x)`.
+    /// reuses a pre-built [`PyTextPage`]; `sort=True` orders text/blocks by
+    /// `(y, x)`.
     #[pyo3(signature = (option="text", *, clip=None, flags=None, textpage=None, sort=false))]
     fn get_text(
         &self,

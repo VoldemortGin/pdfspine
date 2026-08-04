@@ -8,7 +8,7 @@
 use std::sync::Arc;
 
 use pdf_core::colorspace::ColorSpace;
-use pdf_core::geom::Matrix;
+use pdf_core::geom::{Matrix, Rect};
 
 /// The text-state parameters (ISO §9.3) that persist across `BT`/`ET` and are
 /// part of the saved graphics state.
@@ -71,6 +71,11 @@ pub struct GraphicsState {
     pub fill_alpha: f64,
     /// The current constant **stroke** alpha `CA` (0.0–1.0; default 1.0).
     pub stroke_alpha: f64,
+    /// The active rectangular clipping envelope in page space when it can be
+    /// derived from a single `re` path / Form `/BBox`. It is part of `q`/`Q`.
+    /// MuPDF structured text applies the transformed envelope as its scissor;
+    /// complex non-rectangular paths remain in the render-op stream only.
+    pub clip: Option<Rect>,
     /// The text-state parameters.
     pub text: TextState,
 }
@@ -90,6 +95,7 @@ impl GraphicsState {
             dashes: String::new(),
             fill_alpha: 1.0,
             stroke_alpha: 1.0,
+            clip: None,
             text: TextState::default(),
         }
     }

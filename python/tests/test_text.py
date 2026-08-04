@@ -440,6 +440,31 @@ def test_pytext_009_sort_orders_blocks_by_y():
     assert "Top block" in joined and "Bottom block" in joined
 
 
+def test_pytext_010_sort_orders_plain_text_by_y_then_x():
+    # PYTEXT-010: plain text preserves content-stream order by default, while
+    # sort=True serializes visual lines in (y, x) order. The two top fragments
+    # intentionally share both a baseline and a text block: sorting only block
+    # tuples cannot fix their right-before-left content order.
+    content = (
+        b"BT /F1 12 Tf 72 100 Td (Bottom block) Tj ET "
+        b"BT /F1 12 Tf 1 0 0 1 400 700 Tm (Right block) Tj ET "
+        b"BT /F1 12 Tf 1 0 0 1 72 700 Tm (Left block) Tj ET"
+    )
+    page = _page(_raw_content_pdf(content, _helvetica_font()))
+
+    blocks = page.get_text("blocks", sort=False)
+    assert any("Right block" in block[4] and "Left block" in block[4] for block in blocks)
+
+    unsorted = page.get_text("text", sort=False)
+    sorted_text = page.get_text("text", sort=True)
+
+    assert unsorted.index("Bottom block") < unsorted.index("Right block")
+    assert unsorted.index("Right block") < unsorted.index("Left block")
+    assert sorted_text.index("Left block") < sorted_text.index("Right block")
+    assert sorted_text.index("Right block") < sorted_text.index("Bottom block")
+    assert page.get_text("TEXT", sort=True) == sorted_text
+
+
 # ==========================================================================
 # PYSEARCH-* — search_for
 # ==========================================================================

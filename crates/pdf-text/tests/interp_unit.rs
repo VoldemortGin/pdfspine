@@ -685,6 +685,46 @@ fn interp_form_005_image_xobject() {
     approx(im.ctm.f, 20.0, 1e-9);
 }
 
+// === INTERP-FORM-006: Form text state starts from defaults =================
+
+#[test]
+fn interp_form_006_does_not_borrow_parent_font_for_pre_tf_spaces() {
+    let mut pd = PageDoc::new();
+    let form = raw_stream(
+        [
+            ("Type", name_obj("XObject")),
+            ("Subtype", name_obj("Form")),
+            (
+                "BBox",
+                Object::Array(vec![
+                    Object::Integer(0),
+                    Object::Integer(0),
+                    Object::Integer(100),
+                    Object::Integer(100),
+                ]),
+            ),
+        ],
+        // No `Tf`: these padding spaces must not use the font selected by the
+        // caller before `/Fm Do`.
+        b"BT 1 0 0 1 5 5 Tm (   ) Tj ET",
+    );
+    let form_num = pd.add(form);
+    let (doc, page) = pd
+        .font("F1", font_w500())
+        .xobject_ref("Fm", form_num)
+        .content(
+            b"BT /F1 10 Tf ET /Fm Do \
+              BT 1 0 0 1 20 20 Tm (A) Tj ET",
+        )
+        .open();
+    let res = ContentInterpreter::new(&doc).run_page(&page);
+
+    // The caller's text state remains intact after the Form, but is not visible
+    // inside it until the Form selects its own font.
+    assert_eq!(glyph_text(&res), "A");
+    assert_eq!(res.glyphs.len(), 1);
+}
+
 // === INTERP-INLINE-001/002/003: inline image skipped robustly =============
 
 #[test]
@@ -751,4 +791,124 @@ fn interp_differences_encoding() {
     ]));
     let res = run_with_font(font, b"BT /F1 10 Tf (A) Tj ET");
     assert_eq!(res.glyphs[0].unicode.as_str(), "\u{2022}");
+}
+
+// === COMPAT-CLIP-SPACE-001: clipped padding spaces ========================
+
+#[test]
+fn compat_clip_space_001_boundary_inside_visible_and_restore() {
+    // Page-interior PyMuPDF 1.28 boundary probes: whitespace is left-inclusive,
+    // right-exclusive, and vertically open. A visible glyph needs more than a
+    // 0.1pt sliver of overlap. `Q` restores the prior (unclipped) state.
+    let content = b"q 20 90 20 20 re W* n \
+                    BT /F1 10 Tf 1 0 0 1 19.9 100 Tm ( ) Tj ET \
+                    BT /F1 10 Tf 1 0 0 1 20 100 Tm ( ) Tj ET \
+                    BT /F1 10 Tf 1 0 0 1 30 90 Tm ( ) Tj ET \
+                    BT /F1 10 Tf 1 0 0 1 30 90.1 Tm ( ) Tj ET \
+                    BT /F1 10 Tf 1 0 0 1 40 100 Tm ( ) Tj ET \
+                    BT /F1 10 Tf 1 0 0 1 30 110 Tm ( ) Tj ET \
+                    BT /F1 10 Tf 1 0 0 1 20 100 Tm (A) Tj ET \
+                    BT /F1 10 Tf 1 0 0 1 39.8 100 Tm (A) Tj ET \
+                    BT /F1 10 Tf 1 0 0 1 39.9 100 Tm (A) Tj ET \
+                    BT /F1 10 Tf 1 0 0 1 50 100 Tm (X) Tj ET Q \
+                    BT /F1 10 Tf 1 0 0 1 50 100 Tm ( ) Tj ET";
+    let res = run_with_font(font_w500(), content);
+
+    assert_eq!(glyph_text(&res), "  AA ");
+    assert_eq!(res.glyphs.len(), 5);
+    assert_origin(&res.glyphs[0], 20.0, 100.0, 1e-9);
+    assert_origin(&res.glyphs[1], 30.0, 90.1, 1e-9);
+    assert_origin(&res.glyphs[2], 20.0, 100.0, 1e-9);
+    assert_origin(&res.glyphs[3], 39.8, 100.0, 1e-9);
+    assert_origin(&res.glyphs[4], 50.0, 100.0, 1e-9);
+}
+
+#[test]
+fn compat_clip_space_003_skewed_rect_uses_envelope() {
+    // The shear maps [0,10]² to a parallelogram with AABB [0,0,20,10]. The
+    // space lands at page (1,9): outside the true path but inside its envelope.
+    // MuPDF structured text uses that envelope/scissor and retains the space.
+    let content = b"q 1 0 1 1 0 0 cm 0 0 10 10 re W n \
+                    BT /F1 10 Tf 1 0 0 1 -8 9 Tm ( ) Tj ET \
+                    BT /F1 10 Tf 1 0 0 1 0 5 Tm (A) Tj ET Q";
+    let res = run_with_font(font_w500(), content);
+    assert_eq!(glyph_text(&res), " A");
+}
+
+#[test]
+fn compat_clip_space_004_mirrored_cells_and_visible_ink_threshold() {
+    // PyMuPDF 1.28.0 calibration for Core-14 Helvetica at 10pt. With a 5pt
+    // extraction cell, 0.15pt (3%) visible at the right edge is dropped while
+    // 0.18pt survives. A negative text x-axis reverses the cell: an origin on
+    // x=40 survives for visible ink, while an empty-outline space on x=20 does
+    // not (its tiny bbox extends out of the clip).
+    let content = b"q 20 90 20 20 re W n \
+                    BT /F1 10 Tf 1 0 0 1 39.85 100 Tm (A) Tj ET \
+                    BT /F1 10 Tf 1 0 0 1 39.82 100 Tm (A) Tj ET \
+                    BT /F1 10 Tf -1 0 0 1 40 100 Tm (A) Tj ET \
+                    BT /F1 10 Tf -1 0 0 1 20 100 Tm (A) Tj ET \
+                    BT /F1 10 Tf -1 0 0 1 20 100 Tm ( ) Tj ET \
+                    BT /F1 10 Tf -1 0 0 1 20.1 100 Tm ( ) Tj ET \
+                    BT /F1 10 Tf -1 0 0 1 40 100 Tm ( ) Tj ET Q";
+    let res = run_with_font(font_w500(), content);
+
+    assert_eq!(glyph_text(&res), "AA ");
+    assert_eq!(res.glyphs.len(), 3);
+    assert_origin(&res.glyphs[0], 39.82, 100.0, 1e-9);
+    assert_origin(&res.glyphs[1], 40.0, 100.0, 1e-9);
+    assert_origin(&res.glyphs[2], 20.1, 100.0, 1e-9);
+}
+
+#[test]
+fn compat_clip_space_005_decimal_scissor_uses_float_precision() {
+    // MuPDF stores its scissor and the empty space bbox in f32. At x=20 the
+    // transformed 1e-7-em box rounds upward and intersects; at x=60.504 it
+    // rounds back onto the clip edge and is empty, so the space is discarded.
+    let content = b"q 20 90 20 20 re W n \
+                    BT /F1 12 Tf 1 0 0 1 20 100 Tm ( ) Tj ET Q \
+                    q 60.504 90 20 20 re W n \
+                    BT /F1 12 Tf 1 0 0 1 60.504 100 Tm ( ) Tj ET Q";
+    let res = run_with_font(font_w500(), content);
+
+    assert_eq!(glyph_text(&res), " ");
+    assert_eq!(res.glyphs.len(), 1);
+    assert_origin(&res.glyphs[0], 20.0, 100.0, 1e-9);
+}
+
+#[test]
+fn compat_clip_space_002_form_inherits_parent_clip_and_bbox() {
+    let mut pd = PageDoc::new();
+    let form_resources = Object::Dictionary(dict([(
+        "Font",
+        Object::Dictionary(dict([("FF", font_w500())])),
+    )]));
+    let form = raw_stream(
+        [
+            ("Type", name_obj("XObject")),
+            ("Subtype", name_obj("Form")),
+            ("Resources", form_resources),
+            (
+                "BBox",
+                Object::Array(vec![
+                    Object::Integer(0),
+                    Object::Integer(0),
+                    Object::Integer(20),
+                    Object::Integer(20),
+                ]),
+            ),
+        ],
+        b"BT /FF 10 Tf 1 0 0 1 50 5 Tm (A) Tj ET \
+          BT /FF 10 Tf 1 0 0 1 15 5 Tm (B) Tj ET \
+          BT /FF 10 Tf 1 0 0 1 5 5 Tm (C) Tj ET",
+    );
+    let form_num = pd.add(form);
+    let (doc, page) = pd
+        .xobject_ref("Fm", form_num)
+        .content(b"0 0 10 20 re W n /Fm Do")
+        .open();
+    let res = ContentInterpreter::new(&doc).run_page(&page);
+
+    // A is outside the Form BBox, B is outside the inherited parent clip, and
+    // only C lies in their intersection.
+    assert_eq!(glyph_text(&res), "C");
 }

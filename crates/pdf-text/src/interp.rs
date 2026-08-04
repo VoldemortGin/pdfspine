@@ -80,15 +80,23 @@ struct CurrentPath {
     /// Set by `W`/`W*`: the next paint op also intersects the clip with this
     /// path (`Some(even_odd)`). Consumed (and emitted) at the next paint op.
     clip_pending: Option<bool>,
+    /// Page-space envelope when this path consists solely of one `re`.
+    rectangular_clip: Option<Rect>,
+    /// Whether a non-`re` construction operator has participated in this path.
+    non_rect_construction: bool,
 }
 
 impl CurrentPath {
     fn moveto(&mut self, p: Point) {
+        self.non_rect_construction = true;
+        self.rectangular_clip = None;
         self.current = Some(p);
         self.subpath_start = Some(p);
     }
 
     fn lineto(&mut self, p: Point) {
+        self.non_rect_construction = true;
+        self.rectangular_clip = None;
         if let Some(from) = self.current {
             self.items.push(PathItem::Line(from, p));
         }
@@ -96,6 +104,8 @@ impl CurrentPath {
     }
 
     fn curveto(&mut self, c1: Point, c2: Point, end: Point) {
+        self.non_rect_construction = true;
+        self.rectangular_clip = None;
         if let Some(from) = self.current {
             self.items.push(PathItem::Curve(from, c1, c2, end));
         }
@@ -103,6 +113,11 @@ impl CurrentPath {
     }
 
     fn rect(&mut self, r: Rect) {
+        self.rectangular_clip = if self.items.is_empty() && !self.non_rect_construction {
+            Some(r.normalize())
+        } else {
+            None
+        };
         self.items.push(PathItem::Rect(r));
         // A `re` sets the current point to its lower-left and starts a sub-path.
         let p = Point::new(r.x0, r.y0);
@@ -114,6 +129,8 @@ impl CurrentPath {
         self.closed = true;
         if let (Some(start), Some(cur)) = (self.subpath_start, self.current) {
             if start != cur {
+                self.non_rect_construction = true;
+                self.rectangular_clip = None;
                 self.items.push(PathItem::Line(cur, start));
             }
         }
@@ -126,6 +143,15 @@ impl CurrentPath {
         self.subpath_start = None;
         self.closed = false;
         self.clip_pending = None;
+        self.rectangular_clip = None;
+        self.non_rect_construction = false;
+    }
+
+    /// Returns the path as an exact rectangular clip when it consists solely
+    /// of one `re` item. Arbitrary paths continue through the render-op stream,
+    /// but are not approximated by their envelope for text extraction.
+    fn single_rect(&self) -> Option<Rect> {
+        self.rectangular_clip
     }
 
     /// The axis-aligned envelope of all item points (user space).
@@ -326,10 +352,29 @@ impl<'a> ContentInterpreter<'a> {
         depth: u32,
         visited: &mut HashSet<u32>,
     ) {
+        self.run_with_state(
+            content,
+            resources,
+            GraphicsState::new(base_ctm),
+            depth,
+            visited,
+        );
+    }
+
+    /// Runs content from an inherited graphics state. Form XObjects use this
+    /// path so the caller's active clip and other graphics parameters survive
+    /// recursion while the form supplies its own CTM and local `q`/`Q` stack.
+    fn run_with_state(
+        &mut self,
+        content: &[u8],
+        resources: &Dict,
+        mut gs: GraphicsState,
+        depth: u32,
+        visited: &mut HashSet<u32>,
+    ) {
         let events = tokenize(content);
 
         // Graphics-state stack (q/Q). The top is `gs`.
-        let mut gs = GraphicsState::new(base_ctm);
         let mut stack: Vec<GraphicsState> = Vec::new();
 
         // Text-object matrices (reset at each BT; not on the q/Q stack).
@@ -509,14 +554,15 @@ impl<'a> ContentInterpreter<'a> {
             }
             b"n" => {
                 // `n` may follow `W`/`W*` to apply a clip with no paint.
-                if self.recording() {
-                    if let Some(eo) = path.clip_pending.take() {
-                        if !path.items.is_empty() {
+                if let Some(eo) = path.clip_pending.take() {
+                    if !path.items.is_empty() {
+                        if self.recording() {
                             self.emit(RenderOp::Clip {
                                 items: path.items.clone(),
                                 even_odd: eo,
                             });
                         }
+                        apply_rectangular_clip(gs, path.single_rect());
                     }
                 }
                 path.reset();
@@ -788,10 +834,7 @@ impl<'a> ContentInterpreter<'a> {
         let mut trms: Vec<Matrix> = Vec::new();
         let recording = self.render_ops.is_some();
         for (code, n_bytes) in cached.mapper.iter_codes(bytes) {
-            if recording {
-                gids.push(cached.mapper.gid(code));
-            }
-            emit_glyph_into(
+            let emitted = emit_glyph_into(
                 &mut self.out.glyphs,
                 if recording { Some(&mut trms) } else { None },
                 cached,
@@ -801,6 +844,9 @@ impl<'a> ContentInterpreter<'a> {
                 gs,
                 tm,
             );
+            if recording && emitted {
+                gids.push(cached.mapper.gid(code));
+            }
         }
 
         if recording {
@@ -1048,6 +1094,24 @@ impl<'a> ContentInterpreter<'a> {
                     .and_then(array_to_matrix)
                     .unwrap_or(Matrix::IDENTITY);
                 let inner_ctm = Matrix::concat(&form_matrix, &gs.ctm);
+                let mut inner_gs = gs.clone();
+                inner_gs.ctm = inner_ctm;
+                // MuPDF starts a Form with a fresh text state. In particular,
+                // a show operator before the Form's own `Tf` must not borrow
+                // the caller's font/size (real-world appearance streams often
+                // contain positioning + padding spaces before selecting one).
+                inner_gs.text = Default::default();
+                // A Form XObject is implicitly clipped to the transformed
+                // envelope of its `/BBox`, matching MuPDF structured text's
+                // scissor behavior for rotated/skewed boxes.
+                if let Some(bbox) = stream
+                    .dict
+                    .get(&Name::new("BBox"))
+                    .and_then(Object::as_array)
+                    .and_then(rect_from_array)
+                {
+                    apply_rectangular_clip(&mut inner_gs, Some(bbox.transform(&inner_ctm)));
+                }
 
                 // Form /Resources (fall back to the parent's per spec).
                 let form_res = self
@@ -1063,7 +1127,7 @@ impl<'a> ContentInterpreter<'a> {
                     .decode_stream(stream)
                     .and_then(|o| o.into_decoded())
                 {
-                    self.run(&bytes, &form_res, inner_ctm, depth + 1, visited);
+                    self.run_with_state(&bytes, &form_res, inner_gs, depth + 1, visited);
                 }
                 if let Some(num) = obj_num {
                     visited.remove(&num);
@@ -1120,10 +1184,12 @@ impl<'a> ContentInterpreter<'a> {
     fn paint_path(
         &mut self,
         path: &mut CurrentPath,
-        gs: &GraphicsState,
+        gs: &mut GraphicsState,
         kind: PaintKind,
         eo: bool,
     ) {
+        let pending_clip = path.clip_pending.take();
+        let rectangular_clip = pending_clip.and_then(|_| path.single_rect());
         if !path.items.is_empty() {
             let (color, fill) = match kind {
                 PaintKind::Stroke => (Some(gs.stroke_color), None),
@@ -1167,13 +1233,14 @@ impl<'a> ContentInterpreter<'a> {
                         dashes: gs.dashes.clone(),
                     });
                 }
-                if let Some(clip_eo) = path.clip_pending.take() {
+                if let Some(clip_eo) = pending_clip {
                     self.emit(RenderOp::Clip {
                         items: path.items.clone(),
                         even_odd: clip_eo,
                     });
                 }
             }
+            apply_rectangular_clip(gs, rectangular_clip);
         }
         path.reset();
     }
@@ -1331,7 +1398,7 @@ fn emit_glyph_into(
     font_name: &SmolStr,
     gs: &GraphicsState,
     tm: &mut Matrix,
-) {
+) -> bool {
     let ts = &gs.text;
     let w0 = cached.mapper.width(code) / 1000.0; // glyph advance, text units
     let unicode = normalize_cjk_radicals(cached.mapper.to_unicode(code).unwrap_or_default());
@@ -1347,11 +1414,6 @@ fn emit_glyph_into(
     );
     // Trm = params · Tm · CTM
     let trm = Matrix::concat(&Matrix::concat(&params, tm), &gs.ctm);
-    // Surface the full Trm to the render path (parallel to the emitted glyph) so
-    // the renderer can scale the outline by the true text-rendering matrix.
-    if let Some(trms) = trms {
-        trms.push(trm);
-    }
     // Per-glyph advance direction = normalized text x-axis of Trm (user space).
     // `(1,0)` for upright text; a rotated `Tm` (turned table header) gives `(0,±1)`.
     let advance_dir = {
@@ -1385,7 +1447,47 @@ fn emit_glyph_into(
         let (vx, vy) = (vx / 1000.0, vy / 1000.0);
         let cell = Rect::new(-vx, desc - vy, w0 - vx, asc - vy);
         let bbox = cell.transform(&trm);
+        let emitted = glyph_survives_clip(&unicode, bbox, &trm, gs.clip);
 
+        if emitted {
+            if let Some(trms) = trms {
+                trms.push(trm);
+            }
+            out.push(PositionedGlyph {
+                unicode,
+                code,
+                origin: sanitize_point(origin),
+                bbox: sanitize_rect(bbox),
+                font_name: font_name.clone(),
+                size: ts.font_size,
+                color: gs.fill_color,
+                render_mode: ts.render_mode,
+                writing_dir: WritingDir::Vertical,
+                advance_dir,
+                ascender: asc,
+                descender: desc,
+            });
+        }
+
+        // Advance along −y: ty = w1y·Tfs + Tc + Tw (ISO 32000-1 §9.4.4; w1y
+        // already /1000 and normally negative). Horizontal scaling `Th` does not
+        // apply to the vertical advance.
+        let w1y = cached.mapper.vertical_displacement(code) / 1000.0;
+        let ty = w1y * ts.font_size + ts.char_spacing + tw;
+        *tm = Matrix::concat(&Matrix::translate(0.0, ty), tm);
+        return emitted;
+    }
+
+    let cell = Rect::new(0.0, desc, w0, asc);
+    // Transform the cell by Trm and take the axis-aligned envelope (correct
+    // for rotated Tm).
+    let bbox = cell.transform(&trm);
+    let emitted = glyph_survives_clip(&unicode, bbox, &trm, gs.clip);
+
+    if emitted {
+        if let Some(trms) = trms {
+            trms.push(trm);
+        }
         out.push(PositionedGlyph {
             unicode,
             code,
@@ -1395,44 +1497,105 @@ fn emit_glyph_into(
             size: ts.font_size,
             color: gs.fill_color,
             render_mode: ts.render_mode,
-            writing_dir: WritingDir::Vertical,
+            writing_dir: WritingDir::Horizontal,
             advance_dir,
             ascender: asc,
             descender: desc,
         });
-
-        // Advance along −y: ty = w1y·Tfs + Tc + Tw (ISO 32000-1 §9.4.4; w1y
-        // already /1000 and normally negative). Horizontal scaling `Th` does not
-        // apply to the vertical advance.
-        let w1y = cached.mapper.vertical_displacement(code) / 1000.0;
-        let ty = w1y * ts.font_size + ts.char_spacing + tw;
-        *tm = Matrix::concat(&Matrix::translate(0.0, ty), tm);
-        return;
     }
-
-    let cell = Rect::new(0.0, desc, w0, asc);
-    // Transform the cell by Trm and take the axis-aligned envelope (correct
-    // for rotated Tm).
-    let bbox = cell.transform(&trm);
-
-    out.push(PositionedGlyph {
-        unicode,
-        code,
-        origin: sanitize_point(origin),
-        bbox: sanitize_rect(bbox),
-        font_name: font_name.clone(),
-        size: ts.font_size,
-        color: gs.fill_color,
-        render_mode: ts.render_mode,
-        writing_dir: WritingDir::Horizontal,
-        advance_dir,
-        ascender: asc,
-        descender: desc,
-    });
 
     // Advance: tx = ((w0)·Tfs + Tc + Tw_if_space)·Th  (w0 already /1000).
     let tx = (w0 * ts.font_size + ts.char_spacing + tw) * ts.h_scale;
     *tm = Matrix::concat(&Matrix::translate(tx, 0.0), tm);
+    emitted
+}
+
+/// Applies PyMuPDF 1.28's structured-text scissor behavior.
+///
+/// MuPDF intersects the transformed *ink* bbox using half-open edges. This
+/// interpreter carries glyph cells rather than outlines, so visible glyphs use
+/// a calibrated cell-overlap proxy (the 1/30 boundary matches the Core-14
+/// Helvetica probe). Empty-outline glyphs such as spaces are more exact: MuPDF
+/// stores a `1e-7` glyph-space box and transforms it with single-precision
+/// matrices. Reproducing that tiny box also reproduces its direction-sensitive
+/// boundary behavior for mirrored / RTL text.
+fn glyph_survives_clip(unicode: &str, bbox: Rect, trm: &Matrix, clip: Option<Rect>) -> bool {
+    const MIN_VISIBLE_OVERLAP_FRAC: f64 = 1.0 / 30.0;
+    let Some(clip) = clip.map(|rect| rect.normalize()) else {
+        return true;
+    };
+    // MuPDF stores both glyph and scissor rectangles as `float`. Comparing the
+    // f32-rounded empty-glyph box with our original f64 path coordinates makes
+    // decimal clip edges such as 60.504 spuriously look inside by ~1e-6pt.
+    let clip = Rect::new(
+        f64::from(clip.x0 as f32),
+        f64::from(clip.y0 as f32),
+        f64::from(clip.x1 as f32),
+        f64::from(clip.y1 as f32),
+    );
+    if !unicode.is_empty() && unicode.chars().all(char::is_whitespace) {
+        let tiny = mupdf_empty_glyph_bbox(trm);
+        return tiny.x1 > clip.x0 && tiny.y1 > clip.y0 && tiny.x0 < clip.x1 && tiny.y0 < clip.y1;
+    }
+    let bbox = bbox.normalize();
+    let overlap_x = (bbox.x1.min(clip.x1) - bbox.x0.max(clip.x0)).max(0.0);
+    let overlap_y = (bbox.y1.min(clip.y1) - bbox.y0.max(clip.y0)).max(0.0);
+    let width = bbox.width();
+    let height = bbox.height();
+    if width <= f64::EPSILON || height <= f64::EPSILON {
+        return bbox.x1 > clip.x0 && bbox.y1 > clip.y0 && bbox.x0 < clip.x1 && bbox.y0 < clip.y1;
+    }
+    overlap_x / width > MIN_VISIBLE_OVERLAP_FRAC && overlap_y / height > MIN_VISIBLE_OVERLAP_FRAC
+}
+
+/// MuPDF replaces an empty glyph outline with `[0, 0, 1e-7, 1e-7]` before
+/// transforming it. Its geometry uses `float`, whose rounding is observable at
+/// clip boundaries (for example +x at x=20 survives while -x at x=20 does not).
+fn mupdf_empty_glyph_bbox(trm: &Matrix) -> Rect {
+    const EDGE: f32 = 1.0e-7;
+    let (a, b, c, d, e, f) = (
+        trm.a as f32,
+        trm.b as f32,
+        trm.c as f32,
+        trm.d as f32,
+        trm.e as f32,
+        trm.f as f32,
+    );
+    let transform = |x: f32, y: f32| (a * x + c * y + e, b * x + d * y + f);
+    let points = [
+        transform(0.0, 0.0),
+        transform(EDGE, 0.0),
+        transform(0.0, EDGE),
+        transform(EDGE, EDGE),
+    ];
+    let mut x0 = f32::INFINITY;
+    let mut y0 = f32::INFINITY;
+    let mut x1 = f32::NEG_INFINITY;
+    let mut y1 = f32::NEG_INFINITY;
+    for (x, y) in points {
+        x0 = x0.min(x);
+        y0 = y0.min(y);
+        x1 = x1.max(x);
+        y1 = y1.max(y);
+    }
+    Rect::new(f64::from(x0), f64::from(y0), f64::from(x1), f64::from(y1))
+}
+
+/// Intersects the extraction-time scissor with a transformed `re`/Form `/BBox`
+/// envelope.
+fn apply_rectangular_clip(gs: &mut GraphicsState, rect: Option<Rect>) {
+    let Some(rect) = rect else {
+        return;
+    };
+    gs.clip = Some(match gs.clip {
+        Some(active) => active.intersect(&rect),
+        None => rect.normalize(),
+    });
+}
+
+fn rect_from_array(values: &[Object]) -> Option<Rect> {
+    let values = four_f64(values)?;
+    Some(Rect::new(values[0], values[1], values[2], values[3]))
 }
 
 /// The `n`-th numeric operand as `f64` (operands are in source order).

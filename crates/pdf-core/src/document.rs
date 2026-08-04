@@ -76,6 +76,11 @@ pub struct DocumentStore {
     /// feature so the default build does not depend on `pdf-crypto` (PRD §9.1).
     #[cfg(feature = "encryption")]
     decryptor: RwLock<Option<pdf_crypto::Decryptor>>,
+    /// Authentication epoch for object loads. A cache miss snapshots this before
+    /// parsing and rechecks it under the arena write lock, preventing an object
+    /// loaded pre-authentication from being inserted after the auth clear.
+    #[cfg(feature = "encryption")]
+    arena_generation: std::sync::atomic::AtomicU64,
     /// The object number of the `/Encrypt` dictionary, if it is an indirect
     /// reference (so its own strings are never decrypted — PRD §8.4 exemption).
     #[cfg(feature = "encryption")]
@@ -310,6 +315,8 @@ impl DocumentStore {
             trailer_overrides: RwLock::new(Dict::new()),
             #[cfg(feature = "encryption")]
             decryptor: RwLock::new(decryptor),
+            #[cfg(feature = "encryption")]
+            arena_generation: std::sync::atomic::AtomicU64::new(0),
             #[cfg(feature = "encryption")]
             encrypt_obj_num,
         };
@@ -941,10 +948,16 @@ impl DocumentStore {
         let role = dec.authenticate(password)?;
         drop(guard);
         // Drop any cached objects parsed before authentication so they re-load
-        // through the decrypting path.
-        if let Ok(mut a) = self.arena.write() {
-            a.clear();
-        }
+        // through the decrypting path. Advance the epoch while holding the arena
+        // write lock: a concurrent cache miss either inserts before this clear or
+        // observes the new epoch and retries its load afterwards.
+        let mut arena = self
+            .arena
+            .write()
+            .map_err(|_| Error::Unsupported("object arena lock poisoned"))?;
+        self.arena_generation
+            .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+        arena.clear();
         Ok(role)
     }
 
@@ -970,27 +983,44 @@ impl DocumentStore {
     /// [`Error::MissingObject`] when there is no usable entry; [`Error::Xref`] /
     /// parse / decode errors propagate.
     pub fn get_object(&self, num: u32, _gen: u16) -> Result<Arc<Object>> {
-        // The pending-edit overlay takes precedence over the arena / original
-        // (PRD §8.7: a `resolve` after `update_object` returns the new value).
-        if let Ok(changes) = self.changes.read() {
-            match changes.get(num) {
-                Some(Change::Set(obj)) => return Ok(Arc::clone(obj)),
-                // A deleted object reads back as Null (its slot is freed on save).
-                Some(Change::Deleted) => return Ok(Arc::new(Object::Null)),
-                None => {}
+        loop {
+            // The pending-edit overlay takes precedence over the arena / original
+            // (PRD §8.7: a `resolve` after `update_object` returns the new value).
+            if let Ok(changes) = self.changes.read() {
+                match changes.get(num) {
+                    Some(Change::Set(obj)) => return Ok(Arc::clone(obj)),
+                    // A deleted object reads back as Null (its slot is freed on save).
+                    Some(Change::Deleted) => return Ok(Arc::new(Object::Null)),
+                    None => {}
+                }
             }
+            if let Some(cached) = self.arena.read().ok().and_then(|a| a.get(&num).cloned()) {
+                return Ok(cached);
+            }
+
+            #[cfg(feature = "encryption")]
+            let generation = self
+                .arena_generation
+                .load(std::sync::atomic::Ordering::Acquire);
+
+            let obj = self.load_object(num)?;
+            let arc = Arc::new(obj);
+            if let Ok(mut arena) = self.arena.write() {
+                #[cfg(feature = "encryption")]
+                if self
+                    .arena_generation
+                    .load(std::sync::atomic::Ordering::Acquire)
+                    != generation
+                {
+                    drop(arena);
+                    continue;
+                }
+                // Another thread may have filled it; keep the first (identical) Arc.
+                let entry = arena.entry(num).or_insert_with(|| Arc::clone(&arc));
+                return Ok(Arc::clone(entry));
+            }
+            return Ok(arc);
         }
-        if let Some(cached) = self.arena.read().ok().and_then(|a| a.get(&num).cloned()) {
-            return Ok(cached);
-        }
-        let obj = self.load_object(num)?;
-        let arc = Arc::new(obj);
-        if let Ok(mut a) = self.arena.write() {
-            // Another thread may have filled it; keep the first (identical) Arc.
-            let entry = a.entry(num).or_insert_with(|| Arc::clone(&arc));
-            return Ok(Arc::clone(entry));
-        }
-        Ok(arc)
     }
 
     /// Resolves `r` to its final **non-reference** object, following

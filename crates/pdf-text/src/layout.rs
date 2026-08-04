@@ -28,6 +28,7 @@ use crate::model::{
 /// same line when their baseline (along the cross-axis) differs by less than
 /// this times the larger size — tolerant to small super/subscript rises.
 const LINE_TOL_FRAC: f64 = 0.5;
+const LINE_BASELINE_EPSILON: f64 = 1e-6;
 
 /// Baseline offset (× the larger size) up to which an orphaned short run is
 /// reattached to a horizontally-containing line as a super/subscript. Covers a
@@ -40,13 +41,45 @@ const SUPERSCRIPT_RISE_FRAC: f64 = 0.85;
 /// x-containment reattachment from ever merging two genuine lines.
 const FRAGMENT_MAX_WIDTH_FRAC: f64 = 3.0;
 
-/// Minimum vertical gap (as a fraction of the typical line height) that starts a
-/// new block. Lines closer than this fall into one paragraph block.
-const BLOCK_GAP_FRAC: f64 = 1.3;
+/// Two independent painted runs on one baseline become separate lines when the
+/// true glyph-edge gap reaches this fraction of the device-space font size.
+const LINE_RUN_GAP_FRAC: f64 = 0.8;
+const LINE_RUN_GAP_EPSILON: f64 = 1e-6;
 
-/// Minimum horizontal overlap fraction for two lines to be considered part of
-/// the same column during block grouping.
-const BLOCK_OVERLAP_FRAC: f64 = 0.1;
+/// Baseline movement, in effective font-size units, below which text remains in
+/// the current paragraph regardless of horizontal movement.
+const BLOCK_BASELINE_NEAR: f64 = 0.8;
+
+/// Baseline movement, in effective font-size units, above which a new text block
+/// starts. The strict boundary is compatibility-significant: a 1.5× step stays
+/// in the block, while anything larger starts a new one.
+const BLOCK_BASELINE_FAR: f64 = 1.5;
+
+/// A rightward line-start shift larger than this many device-space points marks
+/// an indented paragraph when the baseline movement is in the middle band.
+const BLOCK_INDENT_EPSILON: f64 = 0.5;
+
+/// Two disjoint regions are treated as side-by-side columns when they overlap
+/// by at least this fraction of the shorter region's vertical extent.
+const COLUMN_REGION_OVERLAP_FRAC: f64 = 0.5;
+
+/// Minimum evidence required before bypassing XY-cut for a dense table. Tables
+/// need same-row cells to remain together; cutting them into vertical regions
+/// makes a borderline row step fragment every cell into its own block.
+const TABLE_MIN_VISIBLE_LINES: usize = 12;
+const TABLE_MIN_DENSE_BASELINES: usize = 3;
+const TABLE_MIN_CELLS_PER_BASELINE: usize = 3;
+const TABLE_SUPPORT_LINE_FRAC: f64 = 0.65;
+const TABLE_DOMINANT_DIR_FRAC: f64 = 0.8;
+const TABLE_BASELINE_TOL_FRAC: f64 = 0.1;
+const TABLE_BASELINE_TOL_MIN: f64 = 0.5;
+const TABLE_BASELINE_TOL_MAX: f64 = 2.0;
+
+/// Minimum empty horizontal-band height used by the recursive page-region cut.
+/// This deliberately stays much larger than the paragraph-break threshold: ordinary line
+/// spacing may split PyMuPDF text blocks, but it must not split a two-column page
+/// into row bands and destroy column-major reading order.
+const REGION_BAND_GAP_FRAC: f64 = 1.3;
 
 // === public API ===========================================================
 
@@ -419,15 +452,11 @@ fn group_lines(dev: &[DevGlyph]) -> Vec<Line> {
     // robust for the well-behaved inputs we target; rotated text uses the same
     // cross axis derived from `dir`.
     //
-    // Tolerance keys on the *larger* of the cluster representative's size and
-    // the candidate glyph's size so a smaller super/subscript glyph still joins
-    // the main baseline. The size measure is the **device-space glyph cell
-    // height**, not the `Tf` operand size: PDFs that emit `Tf 1` and bake the real
-    // scale into the CTM report operand size ≈ 1.0, which would collapse the
-    // tolerance to `LINE_TOL_FRAC` (≈0.5pt) and split every super/subscript onto
-    // its own baseline — shattering words like `LNv` / `cyc01`. Keying off the
-    // device height (the same fix `words.rs` uses for the word-gap threshold)
-    // makes the tolerance invariant to where the scale lives.
+    // Tolerance keys on the larger of the cluster representative's effective
+    // size and the candidate's. The size measure is device-space geometry, not
+    // the raw `Tf` operand: PDFs may bake scale into either direction (`Tf 1`
+    // plus a large CTM, or `Tf 327.68` plus a shrinking CTM). Geometry-first
+    // sizing keeps both forms invariant while still joining superscripts.
     let mut clusters: Vec<Vec<usize>> = Vec::new();
     let mut cluster_cross: Vec<f64> = Vec::new();
     // Representative size/dir per cluster, kept in parallel arrays so the hot
@@ -439,19 +468,14 @@ fn group_lines(dev: &[DevGlyph]) -> Vec<Line> {
 
     for (i, g) in dev.iter().enumerate() {
         let cross = g.cross();
-        // Size measure for the baseline tolerance: the larger of the `Tf` operand
-        // size and the device-space cell height (see the tolerance note above).
-        // The operand size is the stable measure for normal PDFs (ink height
-        // varies per glyph — an x-height lowercase vs a full-height cap), while the
-        // device height rescues `Tf 1` + CTM-scaled PDFs where the operand collapses
-        // to ~1.0. Taking the max keeps normal-PDF behavior intact and only lifts
-        // the tolerance when the operand is degenerate.
-        let g_size = g.size.abs().max(g.bbox.normalize().height());
+        let g_size = dev_glyph_effective_size(g);
         let g_dir = g.dir;
         let mut found = None;
         for ci in 0..cluster_cross.len() {
             let tol = cluster_size[ci].max(g_size).max(1.0) * LINE_TOL_FRAC;
-            if (cluster_cross[ci] - cross).abs() <= tol && dir_matches(&cluster_dir[ci], &g_dir) {
+            if (cluster_cross[ci] - cross).abs() <= tol + LINE_BASELINE_EPSILON
+                && dir_matches(&cluster_dir[ci], &g_dir)
+            {
                 found = Some(ci);
                 break;
             }
@@ -677,7 +701,7 @@ fn split_on_baseline(idxs: &[usize], dev: &[DevGlyph]) -> Vec<Vec<usize>> {
     // rule as the line sweep). Device y-down, so smaller cross = higher on page.
     let mut keyed: Vec<(f64, f64, usize)> = idxs
         .iter()
-        .map(|&i| (dev[i].cross(), dev[i].size.abs(), i))
+        .map(|&i| (dev[i].cross(), dev_glyph_effective_size(&dev[i]), i))
         .collect();
     keyed.sort_by(|a, b| a.0.total_cmp(&b.0));
 
@@ -690,7 +714,7 @@ fn split_on_baseline(idxs: &[usize], dev: &[DevGlyph]) -> Vec<Vec<usize>> {
     let mut prev_size = keyed[0].1;
     for &(cross, size, i) in &keyed[1..] {
         let tol = size.max(prev_size).max(1.0) * LINE_TOL_FRAC;
-        if cross - prev_cross > tol {
+        if cross - prev_cross > tol + LINE_BASELINE_EPSILON {
             groups.push(std::mem::take(&mut cur));
         }
         cur.push(i);
@@ -869,7 +893,7 @@ fn detect_page_gutters(runs: &[Vec<usize>], dev: &[DevGlyph]) -> Vec<f64> {
 /// Splits an advance-ordered baseline run into per-column sub-runs. A break is
 /// taken wherever the run crosses a detected page column `gutter` (the principled
 /// cut), or — as a fallback when no gutter applies — wherever the along-axis gap
-/// between consecutive glyphs exceeds a generous multiple of the font size.
+/// between consecutive glyph edges reaches the independent-run threshold.
 /// Normal inter-word spaces never trigger either rule.
 ///
 /// A large-type heading/title legitimately spans the body's column gutters (e.g.
@@ -889,6 +913,7 @@ fn split_on_gutter(
     let mut runs: Vec<Vec<usize>> = Vec::new();
     let mut cur: Vec<usize> = Vec::new();
     let mut prev_end: Option<f64> = None;
+    let mut prev_size: Option<f64> = None;
     // The device-x left edge of the previous glyph, so a gutter crossing fires
     // even when a wide glyph's bbox straddles the gutter line. Gutters are
     // device-x midpoints (from [`detect_page_gutters`], over horizontal glyphs),
@@ -898,8 +923,8 @@ fn split_on_gutter(
     for &i in idxs {
         let g = &dev[i];
         // Project the glyph's leading/trailing edges onto the reading axis.
-        let start = g.along();
-        let extent = (g.bbox.width().hypot(g.bbox.height())).max(g.size.abs());
+        let (start, end) = g.along_span();
+        let effective_size = dev_glyph_effective_size(g);
         let x0 = g.bbox.normalize().x0;
         if let Some(pe) = prev_end {
             let px = prev_x0.unwrap_or(x0);
@@ -907,20 +932,59 @@ fn split_on_gutter(
             // one: the previous glyph starts left of the gutter and this glyph
             // starts at/right of it.
             let crosses_gutter = gutters.iter().any(|&gx| px < gx - 0.5 && x0 >= gx - 0.5);
-            // Fallback: no gutter in play but a gap far wider than a word space.
-            let huge_gap = start - pe > g.size.abs().max(1.0) * 4.0;
-            if crosses_gutter || huge_gap {
+            // Fallback: two independently painted runs with a device-space gap
+            // at the compatibility boundary form distinct lines. Use the true
+            // projected glyph edges — origin + AABB diagonal overestimates the
+            // prior extent and hides this split on CTM-scaled PDFs.
+            let gap_size = prev_size.unwrap_or(effective_size).max(effective_size);
+            let independent_run_gap =
+                start - pe >= gap_size * LINE_RUN_GAP_FRAC - LINE_RUN_GAP_EPSILON;
+            if crosses_gutter || independent_run_gap {
                 runs.push(std::mem::take(&mut cur));
             }
         }
         cur.push(i);
-        prev_end = Some(start + extent);
+        prev_end = Some(end);
+        prev_size = Some(effective_size);
         prev_x0 = Some(x0);
     }
     if !cur.is_empty() {
         runs.push(cur);
     }
     runs
+}
+
+/// Device-space font-size estimate for a positioned glyph. Raw `Tf` can be much
+/// smaller *or* larger than the rendered size when reciprocal scale lives in the
+/// text matrix / CTM, so axis-aligned cell geometry is authoritative. For an
+/// oblique run, however, `bbox` is already an axis-aligned envelope; projecting
+/// that envelope again double-counts the glyph's advance extent. Keep the raw
+/// size there until the interpreter exposes an exact cell quad.
+fn dev_glyph_effective_size(glyph: &DevGlyph) -> f64 {
+    let raw = glyph.size.abs();
+    let axis_aligned = glyph.dir.0.abs() <= 1e-6 || glyph.dir.1.abs() <= 1e-6;
+    if !axis_aligned && raw.is_finite() && raw > f64::EPSILON {
+        return raw;
+    }
+
+    let normal = (-glyph.dir.1, glyph.dir.0);
+    let bbox = glyph.bbox.normalize();
+    let projected = if normal.0.abs() >= normal.1.abs() {
+        bbox.width()
+    } else {
+        bbox.height()
+    };
+    let metric_height = (glyph.ascender - glyph.descender).abs();
+    let geometric = if metric_height > f64::EPSILON {
+        projected / metric_height
+    } else {
+        0.0
+    };
+    if geometric.is_finite() && geometric > f64::EPSILON {
+        geometric
+    } else {
+        raw.max(f64::EPSILON)
+    }
 }
 
 /// The median glyph cell height over all horizontal-writing glyphs — a robust
@@ -1289,52 +1353,338 @@ fn group_blocks_columned(lines: Vec<Line>, width: f64, height: f64) -> Vec<Block
     if lines.is_empty() {
         return Vec::new();
     }
-    // Typical line height (computed over all lines) drives the paragraph-gap
-    // threshold uniformly across regions.
-    let typical_h = typical_line_height(&lines);
-
     let idxs: Vec<usize> = (0..lines.len()).collect();
-    let mut regions: Vec<Vec<usize>> = Vec::new();
-    cut_lines(&lines, &idxs, width, height, &mut regions);
+    let table_dominant = is_table_dominant(&lines);
+    let regions: Vec<Vec<usize>> = if table_dominant {
+        vec![idxs]
+    } else {
+        let mut cut = Vec::new();
+        cut_lines(&lines, &idxs, width, height, &mut cut);
+        cut
+    };
 
-    let mut blocks: Vec<Block> = Vec::new();
+    // A fine paragraph split inside both halves of a multi-column layout would
+    // make the later content-order sort interleave the columns line-by-line.
+    // Identify only genuinely side-by-side regions here; single-column and
+    // vertically stacked regions keep the fine compatibility grouping.
+    let region_boxes: Vec<Rect> = regions
+        .iter()
+        .map(|region| {
+            region
+                .iter()
+                .fold(Rect::default(), |bbox, &i| bbox.union(&lines[i].bbox))
+                .normalize()
+        })
+        .collect();
+    let side_by_side: Vec<bool> = region_boxes
+        .iter()
+        .enumerate()
+        .map(|(i, bbox)| {
+            region_boxes
+                .iter()
+                .enumerate()
+                .any(|(j, other)| i != j && regions_are_side_by_side(bbox, other))
+        })
+        .collect();
+
+    // Each ordinary block is one order group. A side-by-side column is an atomic
+    // group: its fine-grained blocks stay contiguous and top-to-bottom instead
+    // of being interleaved with the neighbouring column by content sequence.
+    let mut order_groups: Vec<(usize, Vec<Block>)> = Vec::new();
     // `lines` is consumed region-by-region: move each line out exactly once.
     let mut slots: Vec<Option<Line>> = lines.into_iter().map(Some).collect();
-    for region in regions {
+    for (region_index, region) in regions.into_iter().enumerate() {
         // Take the region's lines (top-to-bottom) and split into paragraphs.
         let mut region_lines: Vec<Line> = region
             .iter()
             .map(|&i| slots[i].take().expect("each line placed once"))
             .collect();
-        region_lines.sort_by(|a, b| a.bbox.y0.total_cmp(&b.bbox.y0));
-        group_region_paragraphs(region_lines, typical_h, &mut blocks);
+        region_lines.sort_by_key(|line| line.seq);
+        let mut region_blocks = Vec::new();
+        group_region_paragraphs(region_lines, &mut region_blocks);
+        if side_by_side[region_index] {
+            let order_key = region_blocks
+                .iter()
+                .map(|block| block.seq)
+                .min()
+                .unwrap_or(usize::MAX);
+            order_groups.push((order_key, region_blocks));
+        } else {
+            order_groups.extend(
+                region_blocks
+                    .into_iter()
+                    .map(|block| (block.seq, vec![block])),
+            );
+        }
     }
-    blocks
+    order_groups.sort_by_key(|(order_key, _)| *order_key);
+    order_groups
+        .into_iter()
+        .flat_map(|(_, blocks)| blocks)
+        .collect()
 }
 
-/// Groups one column region's (y-sorted) lines into paragraph blocks by vertical
-/// proximity + horizontal overlap, appending to `out`.
-fn group_region_paragraphs(lines: Vec<Line>, typical_h: f64, out: &mut Vec<Block>) {
+/// Detects a page region dominated by a seeded grid. Three-or-more same-row
+/// cells prove that the region is a table; two-cell rows may then support its
+/// coverage (for subtotals, spanning headers, and continuation rows). This is
+/// deliberately conservative: two-column prose never creates the three-cell
+/// seed required to pass the detector.
+fn is_table_dominant(lines: &[Line]) -> bool {
+    let visible: Vec<usize> = lines
+        .iter()
+        .enumerate()
+        .filter_map(|(index, line)| line_has_visible_text(line).then_some(index))
+        .collect();
+    if visible.len() < TABLE_MIN_VISIBLE_LINES {
+        return false;
+    }
+
+    // Bucket near-identical writing directions, then retain the dominant one so
+    // a rotated caption or marginal note cannot manufacture baseline clusters.
+    let mut direction_groups: Vec<(u8, (f64, f64), Vec<usize>)> = Vec::new();
+    for index in visible.iter().copied() {
+        let line = &lines[index];
+        if let Some((_, _, members)) = direction_groups.iter_mut().find(|(wmode, dir, _)| {
+            *wmode == line.wmode && dir.0 * line.dir.0 + dir.1 * line.dir.1 >= 0.999
+        }) {
+            members.push(index);
+        } else {
+            direction_groups.push((line.wmode, line.dir, vec![index]));
+        }
+    }
+    let Some((_, dominant_dir, dominant)) = direction_groups
+        .into_iter()
+        .max_by_key(|(_, _, members)| members.len())
+    else {
+        return false;
+    };
+    if (dominant.len() as f64) < visible.len() as f64 * TABLE_DOMINANT_DIR_FRAC {
+        return false;
+    }
+
+    let normal = (-dominant_dir.1, dominant_dir.0);
+    let mut baselines = Vec::with_capacity(dominant.len());
+    let mut sizes = Vec::with_capacity(dominant.len());
+    for index in dominant {
+        let metrics = paragraph_line_metrics(&lines[index]);
+        baselines.push(metrics.baseline_origin.x * normal.0 + metrics.baseline_origin.y * normal.1);
+        sizes.push(metrics.effective_size);
+    }
+    let Some(typical_size) = median_finite(&mut sizes) else {
+        return false;
+    };
+    let tolerance = (typical_size * TABLE_BASELINE_TOL_FRAC)
+        .clamp(TABLE_BASELINE_TOL_MIN, TABLE_BASELINE_TOL_MAX);
+    baselines.sort_by(f64::total_cmp);
+
+    let mut dense_baselines = 0usize;
+    let mut support_lines = 0usize;
+    let mut index = 0usize;
+    while index < baselines.len() {
+        let anchor = baselines[index];
+        let mut end = index + 1;
+        while end < baselines.len() && baselines[end] - anchor <= tolerance {
+            end += 1;
+        }
+        let cluster_size = end - index;
+        if cluster_size >= 2 {
+            support_lines += cluster_size;
+        }
+        if cluster_size >= TABLE_MIN_CELLS_PER_BASELINE {
+            dense_baselines += 1;
+        }
+        index = end;
+    }
+
+    dense_baselines >= TABLE_MIN_DENSE_BASELINES
+        && support_lines as f64 >= visible.len() as f64 * TABLE_SUPPORT_LINE_FRAC
+}
+
+fn line_has_visible_text(line: &Line) -> bool {
+    line.spans
+        .iter()
+        .flat_map(|span| span.chars.iter())
+        .any(|ch| !ch.c.is_whitespace())
+}
+
+/// Whether two region boxes form horizontally disjoint columns with substantial
+/// vertical overlap. Touching edges count as disjoint; glyph bboxes from two
+/// columns do not need a rounded-coordinate gap to prove separation.
+fn regions_are_side_by_side(a: &Rect, b: &Rect) -> bool {
+    let horizontally_disjoint = a.x1 <= b.x0 || b.x1 <= a.x0;
+    let vertical_overlap = (a.y1.min(b.y1) - a.y0.max(b.y0)).max(0.0);
+    let shorter_height = a.height().min(b.height()).max(f64::EPSILON);
+    horizontally_disjoint && vertical_overlap >= shorter_height * COLUMN_REGION_OVERLAP_FRAC
+}
+
+/// Groups one column region's (y-sorted) lines into paragraph blocks by baseline,
+/// writing direction, and paragraph-indent compatibility, appending to `out`.
+fn group_region_paragraphs(lines: Vec<Line>, out: &mut Vec<Block>) {
     let mut cur: Vec<Line> = Vec::new();
-    let mut prev_bottom: Option<f64> = None;
+    let mut prev: Option<ParagraphLineMetrics> = None;
     for line in lines {
-        let top = line.bbox.y0;
-        let start_new = match prev_bottom {
+        let metrics = paragraph_line_metrics(&line);
+        let start_new = match prev {
             None => false,
-            Some(pb) => {
-                let gap = top - pb;
-                gap > typical_h * BLOCK_GAP_FRAC || !overlaps_block(&cur, &line)
+            Some(prior) => {
+                let same_direction = prior.wmode == metrics.wmode
+                    && prior.dir.0 * metrics.dir.0 + prior.dir.1 * metrics.dir.1 >= 0.999;
+                if !same_direction {
+                    true
+                } else {
+                    let normal = (-metrics.dir.1, metrics.dir.0);
+                    let baseline_delta = (
+                        metrics.baseline_origin.x - prior.baseline_origin.x,
+                        metrics.baseline_origin.y - prior.baseline_origin.y,
+                    );
+                    let baseline_step = (baseline_delta.0 * normal.0 + baseline_delta.1 * normal.1)
+                        .abs()
+                        / metrics.effective_size.max(f64::EPSILON);
+                    let start_delta = (
+                        metrics.start_origin.x - prior.start_origin.x,
+                        metrics.start_origin.y - prior.start_origin.y,
+                    );
+                    let indent = start_delta.0 * metrics.dir.0 + start_delta.1 * metrics.dir.1;
+                    baseline_step > BLOCK_BASELINE_FAR
+                        || (baseline_step >= BLOCK_BASELINE_NEAR
+                            && metrics.wmode == 0
+                            && indent > BLOCK_INDENT_EPSILON
+                            && !prior.starts_with_bullet)
+                }
             }
         };
         if start_new && !cur.is_empty() {
-            out.push(make_text_block(std::mem::take(&mut cur)));
+            push_text_blocks(std::mem::take(&mut cur), out);
         }
-        prev_bottom = Some(line.bbox.y1);
+        prev = Some(metrics);
         cur.push(line);
     }
     if !cur.is_empty() {
-        out.push(make_text_block(cur));
+        push_text_blocks(cur, out);
     }
+}
+
+/// Device-space measurements needed for PyMuPDF-compatible paragraph breaks.
+#[derive(Clone, Copy)]
+struct ParagraphLineMetrics {
+    baseline_origin: Point,
+    effective_size: f64,
+    start_origin: Point,
+    wmode: u8,
+    dir: (f64, f64),
+    starts_with_bullet: bool,
+}
+
+/// Measures a reconstructed line in the same coordinate frame as its glyphs.
+/// `Span::size` can be only `1` when the real scale lives in the CTM, so the
+/// effective size is recovered from character geometry and font metrics first.
+fn paragraph_line_metrics(line: &Line) -> ParagraphLineMetrics {
+    let dir = line.dir;
+    let normal = (-dir.1, dir.0);
+    let dot = |p: Point, axis: (f64, f64)| p.x * axis.0 + p.y * axis.1;
+
+    let mut origins = Vec::new();
+    let mut sizes = Vec::new();
+    let mut fallback_sizes = Vec::new();
+    for span in &line.spans {
+        if span.size.is_finite() && span.size.abs() > f64::EPSILON {
+            fallback_sizes.push(span.size.abs());
+        }
+        let metric_height = (span.ascender - span.descender).abs();
+        for ch in &span.chars {
+            if ch.origin.x.is_finite() && ch.origin.y.is_finite() {
+                origins.push(ch.origin);
+            }
+            if metric_height.is_finite() && metric_height > f64::EPSILON {
+                let bbox = ch.bbox.normalize();
+                let projected = normal.0.abs() * bbox.width() + normal.1.abs() * bbox.height();
+                let size = projected / metric_height;
+                if size.is_finite() && size > f64::EPSILON {
+                    sizes.push(size);
+                }
+            }
+        }
+    }
+    if origins.is_empty() {
+        origins.extend(
+            line.spans
+                .iter()
+                .map(|span| span.origin)
+                .filter(|origin| origin.x.is_finite() && origin.y.is_finite()),
+        );
+    }
+
+    let fallback_origin = {
+        let bbox = line.bbox.normalize();
+        Point::new(bbox.x0, bbox.y0)
+    };
+    let mut baselines: Vec<f64> = origins.iter().map(|origin| dot(*origin, normal)).collect();
+    let baseline_value =
+        median_finite(&mut baselines).unwrap_or_else(|| dot(fallback_origin, normal));
+    let baseline_origin = origins
+        .iter()
+        .min_by(|left, right| {
+            (dot(**left, normal) - baseline_value)
+                .abs()
+                .total_cmp(&(dot(**right, normal) - baseline_value).abs())
+        })
+        .copied()
+        .unwrap_or(fallback_origin);
+    let effective_size = median_finite(&mut sizes)
+        .or_else(|| median_finite(&mut fallback_sizes))
+        .unwrap_or(1.0)
+        .max(f64::EPSILON);
+    let start_origin = origins
+        .iter()
+        .min_by(|left, right| dot(**left, dir).total_cmp(&dot(**right, dir)))
+        .copied()
+        .unwrap_or(fallback_origin);
+
+    ParagraphLineMetrics {
+        baseline_origin,
+        effective_size,
+        start_origin,
+        wmode: line.wmode,
+        dir,
+        starts_with_bullet: line_starts_with_plausible_bullet(line),
+    }
+}
+
+/// Returns the upper median of finite values, matching the robust medians used
+/// elsewhere in this layout pipeline.
+fn median_finite(values: &mut Vec<f64>) -> Option<f64> {
+    values.retain(|v| v.is_finite());
+    if values.is_empty() {
+        return None;
+    }
+    values.sort_by(f64::total_cmp);
+    Some(values[values.len() / 2])
+}
+
+/// A compact compatibility set for the bullet and numbered-list forms exercised
+/// by the public corpus. A bullet suppresses the ordinary first-line-indent
+/// paragraph split for its continuation line.
+fn line_starts_with_plausible_bullet(line: &Line) -> bool {
+    let first = line
+        .spans
+        .iter()
+        .flat_map(|span| span.chars.iter())
+        .map(|ch| ch.c)
+        .find(|c| !c.is_whitespace());
+    first.is_some_and(|c| {
+        c.is_ascii_digit()
+            || matches!(
+                c,
+                '*' | '\u{00B7}'
+                    | '\u{2022}'
+                    | '\u{2023}'
+                    | '\u{2043}'
+                    | '\u{2219}'
+                    | '\u{25CB}'
+                    | '\u{25CF}'
+                    | '\u{25E6}'
+            )
+    })
 }
 
 /// Recursive XY-cut over **lines** into column / band regions.
@@ -1357,72 +1707,32 @@ fn cut_lines(lines: &[Line], idxs: &[usize], width: f64, height: f64, out: &mut 
         return;
     }
     let typ_h = typical_line_height_idx(lines, idxs);
-    let min_y_gut = (typ_h * BLOCK_GAP_FRAC).max(1.0);
+    let min_y_gut = (typ_h * REGION_BAND_GAP_FRAC).max(1.0);
 
-    // Column gutters are probed over **narrow** lines only, so a full-width
-    // header/title that bridges the gutter does not defeat column detection.
-    let region_w = region_width(lines, idxs);
-    // A real inter-column gutter is comfortably wider than a word space but on
-    // letter-size multi-column layouts is only ≈4% of the region width (≈22pt
-    // observed) — well under the 5% page-width rule used previously. Use a
-    // line-height floor (a gutter exceeds ~1.2 line heights) and a small
-    // region-relative term; an empty vertical band this wide that no narrow line
-    // crosses across the whole region does not occur in ordinary single-column
-    // justified text, so this does not over-split.
-    let min_x_gut = (typ_h * 1.2).max(region_w * 0.03);
-    // Column gutter via a coverage-profile valley that tolerates a few
-    // crossings: a centered title line or a footer string can clip across the
-    // gutter without filling it, so requiring *zero* crossings (a plain empty
-    // gutter) misses the column break. A valley whose crossing count stays at or
-    // below `tol` over a band ≥ `min_x_gut` wide is treated as the gutter.
-    let best_x = column_gutter(lines, idxs, min_x_gut, region_w);
+    let column_cut = find_column_cut(lines, idxs, typ_h);
+    let best_x_width = column_cut.as_ref().map(|(width, _, _, _)| *width);
     let best_y = widest_y_gutter(lines, idxs, min_y_gut);
-
-    // Validate a candidate column cut: partition into left / right / straddling
-    // lines at the gutter midpoint, and accept only when **both** sides are
-    // substantial columns. A narrow marginal strip — e.g. a column of line
-    // numbers beside legal text — is not a real second column and must not be
-    // split off (fitz keeps the number with its line in content order).
-    let column_cut = best_x.and_then(|(_, at)| {
-        let mut left = Vec::new();
-        let mut right = Vec::new();
-        let mut spanning = Vec::new();
-        for &i in idxs {
-            let b = lines[i].bbox.normalize();
-            if b.x1 <= at {
-                left.push(i);
-            } else if b.x0 >= at {
-                right.push(i);
-            } else {
-                spanning.push(i);
-            }
-        }
-        if is_substantial_column(lines, &left, region_w)
-            && is_substantial_column(lines, &right, region_w)
-        {
-            Some((left, right, spanning))
-        } else {
-            None
-        }
-    });
 
     // Cut on the axis whose widest empty gutter is larger. Ties prefer the
     // vertical (column) cut so side-by-side columns separate before bands.
-    let prefer_x = match (best_x, best_y) {
-        _ if column_cut.is_none() => false,
-        (Some((xg, _)), Some((yg, _))) => xg >= yg,
+    let prefer_x = match (best_x_width, best_y) {
+        (Some(xg), Some((yg, _))) => xg >= yg,
         (Some(_), None) => true,
         _ => false,
     };
 
     if prefer_x {
-        if let Some((left, right, spanning)) = column_cut {
-            // Recurse each side; spanning lines form their own (band-cut) region.
-            cut_lines(lines, &left, width, height, out);
+        if let Some((_, left, right, spanning)) = column_cut {
+            // Once an X-cut has established real columns, do not Y-cut inside a
+            // column: a large paragraph gap must not break the column into leaf
+            // regions that later interleave by content sequence. Paragraph
+            // grouping still performs its fine 1.5x splits inside each atomic
+            // column. Nested X-cuts remain supported for three-or-more columns.
+            cut_column_subtree(lines, &left, width, height, out);
             if !spanning.is_empty() {
                 cut_spanning(lines, &spanning, width, height, out);
             }
-            cut_lines(lines, &right, width, height, out);
+            cut_column_subtree(lines, &right, width, height, out);
             return;
         }
     }
@@ -1445,6 +1755,71 @@ fn cut_lines(lines: &[Line], idxs: &[usize], width: f64, height: f64, out: &mut 
     out.push(idxs.to_vec());
 }
 
+/// Recurses through X-cuts only after an ancestor has established a column.
+/// Keeping every final column in one region makes its paragraph blocks atomic
+/// during document-order sorting, even when the column contains large Y gaps.
+fn cut_column_subtree(
+    lines: &[Line],
+    idxs: &[usize],
+    width: f64,
+    height: f64,
+    out: &mut Vec<Vec<usize>>,
+) {
+    if idxs.len() <= 1 {
+        if !idxs.is_empty() {
+            out.push(idxs.to_vec());
+        }
+        return;
+    }
+    let typ_h = typical_line_height_idx(lines, idxs);
+    if let Some((_, left, right, spanning)) = find_column_cut(lines, idxs, typ_h) {
+        cut_column_subtree(lines, &left, width, height, out);
+        if !spanning.is_empty() {
+            cut_spanning(lines, &spanning, width, height, out);
+        }
+        cut_column_subtree(lines, &right, width, height, out);
+    } else {
+        out.push(idxs.to_vec());
+    }
+}
+
+/// Finds and validates one vertical column cut. The returned width is used to
+/// choose between competing X/Y cuts; both sides must be substantial so line
+/// numbers and other marginal strips do not become columns.
+fn find_column_cut(
+    lines: &[Line],
+    idxs: &[usize],
+    typ_h: f64,
+) -> Option<(f64, Vec<usize>, Vec<usize>, Vec<usize>)> {
+    let region_w = region_width(lines, idxs);
+    // A real inter-column gutter is comfortably wider than a word space but on
+    // letter-size layouts can be only ≈4% of the region width. Combine a
+    // line-height floor with a small region-relative term.
+    let min_x_gut = (typ_h * 1.2).max(region_w * 0.03);
+    let (gutter_width, at) = column_gutter(lines, idxs, min_x_gut, region_w)?;
+
+    let mut left = Vec::new();
+    let mut right = Vec::new();
+    let mut spanning = Vec::new();
+    for &i in idxs {
+        let bbox = lines[i].bbox.normalize();
+        if bbox.x1 <= at {
+            left.push(i);
+        } else if bbox.x0 >= at {
+            right.push(i);
+        } else {
+            spanning.push(i);
+        }
+    }
+    if is_substantial_column(lines, &left, region_w)
+        && is_substantial_column(lines, &right, region_w)
+    {
+        Some((gutter_width, left, right, spanning))
+    } else {
+        None
+    }
+}
+
 /// Handles a group of full-width "spanning" lines peeled out of a column cut:
 /// they are stacked bands (header line, title, caption, …). A `Y`-cut separates
 /// them into bands; each band becomes its own region so it is never merged into a
@@ -1462,7 +1837,7 @@ fn cut_spanning(
         }
         return;
     }
-    let min_y_gut = (typical_line_height_idx(lines, idxs) * BLOCK_GAP_FRAC).max(1.0);
+    let min_y_gut = (typical_line_height_idx(lines, idxs) * REGION_BAND_GAP_FRAC).max(1.0);
     let groups = split_y_bands(lines, idxs, min_y_gut);
     for g in groups {
         // Recurse so a spanning band that itself contains columns (rare) still
@@ -1662,39 +2037,6 @@ fn typical_line_height_idx(lines: &[Line], idxs: &[usize]) -> f64 {
     hs[hs.len() / 2].max(1.0)
 }
 
-/// The median line height (a robust "typical" measure for gap thresholds).
-fn typical_line_height(lines: &[Line]) -> f64 {
-    let mut hs: Vec<f64> = lines
-        .iter()
-        .map(|l| l.bbox.height())
-        .filter(|h| *h > 0.0)
-        .collect();
-    if hs.is_empty() {
-        return 1.0;
-    }
-    hs.sort_by(f64::total_cmp);
-    hs[hs.len() / 2].max(1.0)
-}
-
-/// Whether `line` horizontally overlaps the current block enough to belong to
-/// the same column (uses the block's running x-extent).
-fn overlaps_block(cur: &[Line], line: &Line) -> bool {
-    if cur.is_empty() {
-        return true;
-    }
-    let mut bx0 = f64::INFINITY;
-    let mut bx1 = f64::NEG_INFINITY;
-    for l in cur {
-        bx0 = bx0.min(l.bbox.x0);
-        bx1 = bx1.max(l.bbox.x1);
-    }
-    let lo = bx0.max(line.bbox.x0);
-    let hi = bx1.min(line.bbox.x1);
-    let overlap = (hi - lo).max(0.0);
-    let min_w = (bx1 - bx0).min(line.bbox.width()).max(1.0);
-    overlap >= min_w * BLOCK_OVERLAP_FRAC
-}
-
 /// Wraps a run of lines into a text [`Block`] (number assigned later). The
 /// block's content-order `seq` is the smallest line `seq` it contains.
 fn make_text_block(lines: Vec<Line>) -> Block {
@@ -1714,24 +2056,43 @@ fn make_text_block(lines: Vec<Line>) -> Block {
     }
 }
 
+/// Emits a visible block and, when present, a separate trailing whitespace-only
+/// run that is horizontally disjoint from the last visible line. Financial-table
+/// PDFs sometimes paint such a padding column all the way to the page bottom;
+/// keeping it in the visible block inflates the bbox by hundreds of points.
+/// Whitespace continuing at the same line start stays in the paragraph, matching
+/// MuPDF. Splitting (rather than deleting) preserves rawdict content and the
+/// line-containment invariant.
+fn push_text_blocks(mut lines: Vec<Line>, out: &mut Vec<Block>) {
+    if let Some(last_visible) = lines.iter().rposition(line_has_visible_text) {
+        if last_visible + 1 < lines.len() {
+            let visible_bbox = lines[last_visible].bbox.normalize();
+            let trailing_bbox = lines[last_visible + 1..]
+                .iter()
+                .fold(Rect::default(), |bbox, line| bbox.union(&line.bbox))
+                .normalize();
+            let horizontal_overlap =
+                visible_bbox.x1.min(trailing_bbox.x1) > visible_bbox.x0.max(trailing_bbox.x0);
+            if !horizontal_overlap {
+                let trailing_whitespace = lines.split_off(last_visible + 1);
+                out.push(make_text_block(lines));
+                out.push(make_text_block(trailing_whitespace));
+                return;
+            }
+        }
+    }
+    out.push(make_text_block(lines));
+}
+
 // === reading order ========================================================
 
-/// Orders blocks in **document / content order** and assigns sequential numbers
-/// (PRD §8.6.2).
+/// Assigns sequential numbers to blocks already emitted in document / region
+/// reading order (PRD §8.6.2).
 ///
-/// MuPDF/PyMuPDF emit structured-text blocks in the order its content device
-/// encountered them (content order), *not* a geometric top-to-bottom sort — a
-/// pure geometric reordering of a page's blocks diverges sharply from fitz's
-/// default `get_text` sequence. Since our interpreter already walks the content
-/// stream in paint order, ordering blocks by their content-order `seq` (smallest
-/// source-glyph index) reproduces fitz's block sequence closely. Column grouping
-/// (in [`group_blocks_columned`]) guarantees a block's lines come from one
-/// column, so `seq` ordering keeps each column contiguous instead of
-/// interleaving columns line-by-line. The sort is **stable**, so image blocks
-/// (`seq == usize::MAX`) sort to the end while equal-`seq` blocks keep their
-/// relative position.
+/// [`group_blocks_columned`] performs the content-sequence sort while retaining
+/// side-by-side columns as atomic groups. Image blocks are appended afterwards,
+/// matching the prior `seq == usize::MAX` behavior.
 fn order_blocks(blocks: &mut [Block]) {
-    blocks.sort_by_key(|b| b.seq);
     for (i, b) in blocks.iter_mut().enumerate() {
         b.number = i;
     }
@@ -1916,6 +2277,309 @@ mod tests {
         Rect::new(0.0, 0.0, 612.0, 792.0)
     }
 
+    /// COMPAT-LINE-GAP-001: independent runs split at exactly 0.8× the
+    /// device-space size, not at a threshold derived from raw `Tf 1`.
+    #[test]
+    fn compat_line_gap_001_device_boundary() {
+        let make_page = |gap: f64| {
+            let scale = 10.0;
+            let width = 6.0;
+            let left = scaled_cell("A", 100.0, 700.0, width, scale);
+            let right = scaled_cell("B", 100.0 + width + gap, 700.0, width, scale);
+            textpage_from_glyphs(&[left, right], &[], letter(), 0)
+        };
+
+        let below = make_page(7.999);
+        assert_eq!(
+            below
+                .blocks
+                .iter()
+                .map(|block| block.lines.len())
+                .sum::<usize>(),
+            1
+        );
+
+        let boundary = make_page(8.0);
+        assert_eq!(
+            boundary
+                .blocks
+                .iter()
+                .map(|block| block.lines.len())
+                .sum::<usize>(),
+            2
+        );
+        assert_eq!(
+            boundary
+                .blocks
+                .iter()
+                .filter(|block| block.kind == BlockKind::Text)
+                .count(),
+            1,
+            "same-baseline runs must remain in one block"
+        );
+    }
+
+    /// COMPAT-LINE-SCALE-001: a huge raw `Tf` counter-scaled down by the CTM
+    /// must not make separate physical baselines look like one line.
+    #[test]
+    fn compat_line_scale_001_large_tf_uses_device_geometry() {
+        let mut glyphs = Vec::new();
+        word(&mut glyphs, "First", 72.0, 700.0, 10.0);
+        word(&mut glyphs, "Second", 72.0, 680.0, 10.0);
+        for glyph in &mut glyphs {
+            glyph.size = 327.68;
+        }
+
+        let tp = textpage_from_glyphs(&glyphs, &[], letter(), 0);
+        let line_count = tp
+            .blocks
+            .iter()
+            .filter(|block| block.kind == BlockKind::Text)
+            .map(|block| block.lines.len())
+            .sum::<usize>();
+        assert_eq!(line_count, 2);
+        assert_eq!(block_texts(&tp).len(), 2);
+    }
+
+    /// COMPAT-LINE-SCALE-002: an oblique glyph bbox is already an axis-aligned
+    /// envelope. Re-projecting it onto the run normal must not inflate a 10pt
+    /// cell to 15pt and merge two distinct 45-degree baselines six points apart.
+    #[test]
+    fn compat_line_scale_002_oblique_envelope_does_not_inflate_size() {
+        let diagonal = std::f64::consts::FRAC_1_SQRT_2;
+        let extent = 15.0 * diagonal;
+        let mut first = g("A", 100.0, 700.0, 5.0, 10.0);
+        first.advance_dir = (diagonal, diagonal);
+        first.bbox = Rect::new(100.0, 700.0, 100.0 + extent, 700.0 + extent);
+
+        let offset = 6.0 * diagonal;
+        let mut second = g("B", 100.0 + offset, 700.0 - offset, 5.0, 10.0);
+        second.advance_dir = (diagonal, diagonal);
+        second.bbox = Rect::new(
+            100.0 + offset,
+            700.0 - offset,
+            100.0 + offset + extent,
+            700.0 - offset + extent,
+        );
+
+        let tp = textpage_from_glyphs(&[first, second], &[], letter(), 0);
+        let line_count = tp
+            .blocks
+            .iter()
+            .filter(|block| block.kind == BlockKind::Text)
+            .map(|block| block.lines.len())
+            .sum::<usize>();
+        assert_eq!(line_count, 2);
+    }
+
+    /// COMPAT-BLOCK-001: lines separated by roughly 1.6 line heights form
+    /// distinct structured-text blocks, matching MuPDF's block granularity.
+    /// The previous 1.3× *bbox-gap* threshold merged an entire densely-spaced
+    /// report page into one page-sized block.
+    #[test]
+    fn compat_block_001_paragraph_gap_splits_blocks() {
+        let mut glyphs = Vec::new();
+        word(&mut glyphs, "First", 72.0, 700.0, 10.0);
+        word(&mut glyphs, "Second", 72.0, 684.0, 10.0);
+
+        let tp = textpage_from_glyphs(&glyphs, &[], letter(), 0);
+        let texts = block_texts(&tp);
+        assert_eq!(texts.len(), 2, "expected line-level blocks; got {texts:?}");
+        assert!(texts[0].contains("First"));
+        assert!(texts[1].contains("Second"));
+    }
+
+    /// COMPAT-BLOCK-002: ordinary close leading remains one paragraph block.
+    #[test]
+    fn compat_block_002_close_lines_stay_together() {
+        let mut glyphs = Vec::new();
+        word(&mut glyphs, "First", 72.0, 700.0, 10.0);
+        word(&mut glyphs, "Second", 72.0, 687.0, 10.0);
+
+        let tp = textpage_from_glyphs(&glyphs, &[], letter(), 0);
+        let texts = block_texts(&tp);
+        assert_eq!(
+            texts.len(),
+            1,
+            "close paragraph split unexpectedly: {texts:?}"
+        );
+        assert!(texts[0].contains("First") && texts[0].contains("Second"));
+    }
+
+    /// COMPAT-BLOCK-003: horizontally separated fragments on one visual row
+    /// (the common table-cell shape) stay in one block even though the line
+    /// splitter represents them as two lines.
+    #[test]
+    fn compat_block_003_same_row_cells_stay_together() {
+        let mut glyphs = Vec::new();
+        word(&mut glyphs, "Label", 72.0, 700.0, 10.0);
+        word(&mut glyphs, "Value", 420.0, 700.0, 10.0);
+
+        let tp = textpage_from_glyphs(&glyphs, &[], letter(), 0);
+        let texts = block_texts(&tp);
+        assert_eq!(
+            texts.len(),
+            1,
+            "same-row cells split unexpectedly: {texts:?}"
+        );
+        assert!(texts[0].contains("Label") && texts[0].contains("Value"));
+    }
+
+    /// COMPAT-BLOCK-004: the 1.5× boundary is inclusive. This guards the exact
+    /// compatibility edge instead of merely testing values well to either side.
+    #[test]
+    fn compat_block_004_baseline_boundary_is_strict() {
+        let mut at_boundary = Vec::new();
+        word(&mut at_boundary, "First", 72.0, 700.0, 10.0);
+        word(&mut at_boundary, "Second", 72.0, 685.0, 10.0);
+        assert_eq!(
+            block_texts(&textpage_from_glyphs(&at_boundary, &[], letter(), 0)).len(),
+            1
+        );
+
+        let mut above_boundary = Vec::new();
+        word(&mut above_boundary, "First", 72.0, 700.0, 10.0);
+        word(&mut above_boundary, "Second", 72.0, 684.99, 10.0);
+        assert_eq!(
+            block_texts(&textpage_from_glyphs(&above_boundary, &[], letter(), 0)).len(),
+            2
+        );
+    }
+
+    /// COMPAT-BLOCK-005: a right-indented line in the middle baseline band starts
+    /// a paragraph, while an indented continuation after a list bullet does not.
+    #[test]
+    fn compat_block_005_indent_and_bullet_continuation() {
+        let mut indented = Vec::new();
+        word(&mut indented, "First", 72.0, 700.0, 10.0);
+        word(&mut indented, "Second", 92.0, 688.0, 10.0);
+        assert_eq!(
+            block_texts(&textpage_from_glyphs(&indented, &[], letter(), 0)).len(),
+            2
+        );
+
+        let mut bullet = Vec::new();
+        word(&mut bullet, "• item", 72.0, 700.0, 10.0);
+        word(&mut bullet, "continuation", 92.0, 688.0, 10.0);
+        assert_eq!(
+            block_texts(&textpage_from_glyphs(&bullet, &[], letter(), 0)).len(),
+            1
+        );
+    }
+
+    /// COMPAT-BLOCK-006: when nominal font size is unscaled, character geometry
+    /// still supplies the device-space size used by the baseline threshold.
+    #[test]
+    fn compat_block_006_recovers_effective_size_from_geometry() {
+        let mut glyphs = Vec::new();
+        word(&mut glyphs, "First", 72.0, 700.0, 10.0);
+        word(&mut glyphs, "Second", 72.0, 687.0, 10.0);
+        for glyph in &mut glyphs {
+            glyph.size = 1.0;
+        }
+
+        let texts = block_texts(&textpage_from_glyphs(&glyphs, &[], letter(), 0));
+        assert_eq!(texts.len(), 1, "geometry scale was ignored: {texts:?}");
+    }
+
+    /// COMPAT-BLOCK-009: whitespace at the same line start remains in the text
+    /// block, while a disjoint trailing padding column remains extractable in a
+    /// separate block and cannot inflate the visible block's bbox.
+    #[test]
+    fn compat_block_009_trailing_whitespace_is_separate() {
+        let mut aligned = Vec::new();
+        word(&mut aligned, "Visible", 72.0, 700.0, 10.0);
+        aligned.push(g(" ", 72.0, 687.0, 3.0, 10.0));
+        aligned.push(g(" ", 72.0, 674.0, 3.0, 10.0));
+        let aligned_page = textpage_from_glyphs(&aligned, &[], letter(), 0);
+        assert_eq!(
+            aligned_page
+                .blocks
+                .iter()
+                .filter(|block| block.kind == BlockKind::Text)
+                .count(),
+            1
+        );
+
+        let mut disjoint = Vec::new();
+        word(&mut disjoint, "Visible", 72.0, 700.0, 10.0);
+        disjoint.push(g(" ", 120.0, 687.0, 3.0, 10.0));
+        disjoint.push(g(" ", 120.0, 674.0, 3.0, 10.0));
+
+        let tp = textpage_from_glyphs(&disjoint, &[], letter(), 0);
+        let text_blocks: Vec<&Block> = tp
+            .blocks
+            .iter()
+            .filter(|block| block.kind == BlockKind::Text)
+            .collect();
+        assert_eq!(text_blocks.len(), 2);
+        assert!(line_has_visible_text(&text_blocks[0].lines[0]));
+        assert!(text_blocks[1]
+            .lines
+            .iter()
+            .all(|line| !line_has_visible_text(line)));
+        assert!(text_blocks[0].bbox.y1 < text_blocks[1].bbox.y0);
+    }
+
+    /// COMPAT-BLOCK-008: a dense financial table is grouped row-wise before
+    /// paragraph splitting. A vertical XY-cut would isolate its three columns
+    /// and turn a borderline 1.53× row step into one block per cell.
+    #[test]
+    fn compat_block_008_dense_table_preserves_rows() {
+        let mut glyphs = Vec::new();
+        for row in 0..5 {
+            let baseline = 700.0 - row as f64 * 15.3;
+            word(&mut glyphs, &format!("L{row}"), 72.0, baseline, 10.0);
+            word(&mut glyphs, &format!("M{row}"), 300.0, baseline - 0.6, 10.0);
+            word(&mut glyphs, &format!("R{row}"), 450.0, baseline - 0.6, 10.0);
+        }
+
+        let texts = block_texts(&textpage_from_glyphs(&glyphs, &[], letter(), 0));
+        assert_eq!(texts.len(), 1, "dense table fragmented: {texts:?}");
+        assert!(texts[0].contains("L0") && texts[0].contains("R4"));
+    }
+
+    /// COMPAT-BLOCK-010: three-cell rows seed table detection, while ordinary
+    /// two-cell subtotal / continuation rows count toward table coverage. The
+    /// two-cell rows alone must never be enough to classify two-column prose.
+    #[test]
+    fn compat_block_010_two_cell_rows_support_seeded_table() {
+        let mut glyphs = Vec::new();
+        for row in 0..8 {
+            let baseline = 700.0 - row as f64 * 15.3;
+            word(&mut glyphs, &format!("L{row}"), 72.0, baseline, 10.0);
+            word(&mut glyphs, &format!("R{row}"), 450.0, baseline - 0.6, 10.0);
+            if row < 3 {
+                word(&mut glyphs, &format!("M{row}"), 300.0, baseline - 0.6, 10.0);
+            }
+        }
+
+        let tp = textpage_from_glyphs(&glyphs, &[], letter(), 0);
+        let seeded_lines: Vec<Line> = tp
+            .blocks
+            .iter()
+            .flat_map(|block| block.lines.iter().cloned())
+            .collect();
+        assert!(is_table_dominant(&seeded_lines));
+        let texts = block_texts(&tp);
+        assert_eq!(texts.len(), 1, "seeded table fragmented: {texts:?}");
+        assert!(texts[0].contains("L0") && texts[0].contains("R7"));
+
+        let mut two_column_prose = Vec::new();
+        for row in 0..8 {
+            let baseline = 700.0 - row as f64 * 15.3;
+            word(&mut two_column_prose, "Left", 72.0, baseline, 10.0);
+            word(&mut two_column_prose, "Right", 450.0, baseline, 10.0);
+        }
+        let prose = textpage_from_glyphs(&two_column_prose, &[], letter(), 0);
+        let prose_lines: Vec<Line> = prose
+            .blocks
+            .iter()
+            .flat_map(|block| block.lines.iter().cloned())
+            .collect();
+        assert!(!is_table_dominant(&prose_lines));
+    }
+
     /// LAYOUT-COLUMN-REGRESSION-001: a two-column body must read column-major
     /// (all of the left column top→bottom, then the right column), NOT row-major
     /// (left-line-1, right-line-1, left-line-2, …). The left column lives in
@@ -1942,6 +2606,11 @@ mod tests {
 
         let tp = textpage_from_glyphs(&glyphs, &[], letter(), 0);
         let texts = block_texts(&tp);
+        assert_eq!(
+            texts.len(),
+            left_words.len() + right_words.len(),
+            "1.5× block granularity was lost inside columns: {texts:?}"
+        );
 
         // Every left word must appear before every right word in the block order.
         let last_left = left_words

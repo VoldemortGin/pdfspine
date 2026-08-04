@@ -312,7 +312,14 @@ impl Document {
             if !self.store.is_encrypted() {
                 return true;
             }
-            self.store.authenticate(password).is_ok()
+            if self.store.authenticate(password).is_err() {
+                return false;
+            }
+            // Authentication clears the store's pre-auth object arena. Rebuild
+            // our separate page cache as well: an encrypted `/Pages` node may
+            // have forced the open-time walk to fall back to xref order.
+            self.refresh_pages();
+            true
         }
         #[cfg(not(feature = "encryption"))]
         {

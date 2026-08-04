@@ -789,6 +789,7 @@ Spec source: PRD §7 (M1 rows), §8.6.1 (rotation), §9.2 (`Page` shape), §9.4
 | `DOC-CRYPT-001` | encrypted doc: `is_encrypted`/`needs_pass` true; `permissions` | PRD §8.4 | green |
 | `DOC-CRYPT-002` | `authenticate("")` → `needs_pass` false; pages load | PRD §8.4 | green |
 | `DOC-CRYPT-003` | wrong password → `authenticate` false, no panic | PRD §8.4 | green |
+| `DOC-CRYPT-004` | successful auth refreshes page order after encrypted ObjStm fallback | compatibility findings P0 | green |
 
 ### Python wheel (`pdfspine` / `fitz`) — `PYDOC-*` / `PYFITZ-*`
 
@@ -976,6 +977,7 @@ font fixtures only (we control every byte; no PyMuPDF files). Tests live in
 | `INTERP-FORM-003` | recursion depth cap halts deep nesting (no overflow) | PRD §8.6.2 | green |
 | `INTERP-FORM-004` | self-referential form cycle guarded (no infinite loop) | PRD §8.6.2 | green |
 | `INTERP-FORM-005` | Image XObject `Do` records presence, emits no glyph | PRD §8.6.2 | green |
+| `INTERP-FORM-006` | Form starts with default text state; pre-`Tf` spaces cannot borrow the caller's font | PyMuPDF 1.28 compatibility | green |
 
 ### Inline images (`interp.rs`) — `INTERP-INLINE-*`
 
@@ -1057,6 +1059,29 @@ self-built PDFs (reuse `tests/common`). No PyMuPDF files.
 | `LAYOUT-ORDER-001` | single column blocks ordered top-to-bottom | PRD §8.6.2 | green |
 | `LAYOUT-ORDER-002` | two-column page → XY-cut yields column-by-column order | PRD §8.6.2 | green |
 | `LAYOUT-ORDER-003` | block numbers monotonic in reading order | PRD §8.6.2 | green |
+
+### PyMuPDF block compatibility — `COMPAT-BLOCK-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `COMPAT-BLOCK-001` | baseline step above 1.5× effective size starts a block | compatibility findings P1 | green |
+| `COMPAT-BLOCK-002` | ordinary close leading stays in one block | compatibility findings P1 | green |
+| `COMPAT-BLOCK-003` | same-row table fragments stay in one block | compatibility findings P1 | green |
+| `COMPAT-BLOCK-004` | 1.5× baseline boundary is inclusive | compatibility findings P1 | green |
+| `COMPAT-BLOCK-005` | paragraph indentation and bullet continuation | compatibility findings P1 | green |
+| `COMPAT-BLOCK-006` | effective size is recovered from transformed glyph geometry | compatibility findings P1 | green |
+| `COMPAT-BLOCK-007` | bundled typeset fixtures match PyMuPDF text-block counts | compatibility findings P1 | green |
+| `COMPAT-BLOCK-008` | dense table rows stay together instead of fragmenting by column | compatibility findings P1 | green |
+| `COMPAT-BLOCK-009` | disjoint trailing padding-space columns do not inflate a visible block bbox | compatibility findings P1 | green |
+| `COMPAT-BLOCK-010` | three-cell seed rows let two-cell table rows support table coverage | compatibility findings P1 | green |
+| `COMPAT-LINE-GAP-001` | independent same-baseline runs split at 0.8× device size | compatibility findings P1 | green |
+| `COMPAT-LINE-SCALE-001` | large raw `Tf` plus shrinking CTM uses device-space baseline tolerance | compatibility findings P1 | green |
+| `COMPAT-LINE-SCALE-002` | oblique AABB envelopes do not inflate device-space baseline tolerance | compatibility findings P1 | green |
+| `COMPAT-CLIP-SPACE-001` | rectangular clips drop boundary padding spaces, preserve visible text, and restore on `Q` | compatibility findings P1 | green |
+| `COMPAT-CLIP-SPACE-002` | Form text respects inherited parent clip and implicit `/BBox` clip | compatibility findings P1 | green |
+| `COMPAT-CLIP-SPACE-003` | skewed `re` text clips use the transformed envelope/scissor | compatibility findings P1 | green |
+| `COMPAT-CLIP-SPACE-004` | mirrored / RTL cells and the calibrated visible-ink edge threshold match PyMuPDF 1.28 | compatibility findings P1 | green |
+| `COMPAT-CLIP-SPACE-005` | decimal scissor edges use MuPDF's float precision for empty-glyph clipping | compatibility findings P1 | green |
 
 ### Word segmentation (`words.rs`) — `WORDS-*`
 
@@ -1275,6 +1300,7 @@ methods, and the **M2 accuracy exit gate**. Self-generated fixtures only
 | `PYTEXT-007` | html/xhtml/xml return `str` | PRD §9.4 | green |
 | `PYTEXT-008` | `get_textpage()` handle reused via `textpage=` | PRD §9.4 | green |
 | `PYTEXT-009` | `sort=True` orders blocks by (y, x) | PRD §9.4 | green |
+| `PYTEXT-010` | `sort=True` orders plain-text lines by (y, x), including lines sharing one block; `sort=False` stays unchanged | compatibility findings P2 | green |
 | `PYSEARCH-001` | `search_for` returns Rect overlapping the known location | PRD §9.4 | green |
 | `PYSEARCH-002` | `quads=True` returns `Quad`s | PRD §9.4 | green |
 | `PYSEARCH-003` | `hit_max` caps results | PRD §9.4 | green |

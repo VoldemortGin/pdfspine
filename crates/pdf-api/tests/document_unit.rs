@@ -291,6 +291,7 @@ fn doc_xref_002_key_stream() {
 #[cfg(feature = "encryption")]
 mod crypto {
     use super::*;
+    use pdf_core::object::StreamObj;
     use pdf_crypto::handler::CryptMethod;
     use pdf_crypto::testsupport::{build_r234, Fixture};
     use pdf_crypto::EncryptConfig;
@@ -342,6 +343,117 @@ mod crypto {
         )
     }
 
+    /// A two-page encrypted document whose `/Pages` node lives in an encrypted
+    /// object stream. While locked, page-tree traversal cannot decode object 2
+    /// and falls back to xref order (`3, 4`); the real tree order is (`4, 3`).
+    fn encrypted_objstm_page_tree_doc(fx: &Fixture) -> Vec<u8> {
+        let catalog = Object::Dictionary(dict(&[
+            ("Type", name_obj("Catalog")),
+            ("Pages", rref(2, 0)),
+        ]));
+        let pages = Object::Dictionary(dict(&[
+            ("Type", name_obj("Pages")),
+            ("Count", Object::Integer(2)),
+            ("Kids", Object::Array(vec![rref(4, 0), rref(3, 0)])),
+        ]));
+        let page3 = Object::Dictionary(dict(&[
+            ("Type", name_obj("Page")),
+            ("Parent", rref(2, 0)),
+            ("MediaBox", int_array(&[0, 0, 100, 100])),
+        ]));
+        let page4 = Object::Dictionary(dict(&[
+            ("Type", name_obj("Page")),
+            ("Parent", rref(2, 0)),
+            ("MediaBox", int_array(&[0, 0, 200, 200])),
+        ]));
+
+        // Object 2 is the sole member of object stream 8. Encrypt the encoded
+        // stream body exactly as a PDF security handler does; member objects are
+        // not encrypted individually.
+        let member = write_object(&pages);
+        let header = b"2 0 ";
+        let mut decoded_objstm = Vec::with_capacity(header.len() + member.len());
+        decoded_objstm.extend_from_slice(header);
+        decoded_objstm.extend_from_slice(&member);
+        let encoded_objstm = pdf_core::filters::flate::encode(&decoded_objstm);
+        let encrypted_objstm = fx.encrypt_stream(8, 0, &encoded_objstm, None);
+        let objstm = Object::Stream(StreamObj::new_encoded(
+            dict(&[
+                ("Type", name_obj("ObjStm")),
+                ("N", Object::Integer(1)),
+                ("First", Object::Integer(header.len() as i64)),
+                ("Filter", name_obj("FlateDecode")),
+                ("Length", Object::Integer(encrypted_objstm.len() as i64)),
+            ]),
+            encrypted_objstm,
+        ));
+
+        let mut out = b"%PDF-1.7\n%\xE2\xE3\xCF\xD3\n".to_vec();
+        let mut push_object = |num: u32, object: &Object| {
+            let offset = out.len();
+            out.extend_from_slice(&write_indirect(ObjRef::new(num, 0), object));
+            offset
+        };
+        let off1 = push_object(1, &catalog);
+        let off3 = push_object(3, &page3);
+        let off4 = push_object(4, &page4);
+        let off8 = push_object(8, &objstm);
+        drop(push_object);
+
+        // Xref stream 9 records object 2 as compressed in object stream 8.
+        // The stream itself is exempt from document encryption.
+        let off9 = out.len();
+        let records = [
+            (0, 0, 65_535),
+            (1, off1 as u64, 0),
+            (2, 8, 0),
+            (1, off3 as u64, 0),
+            (1, off4 as u64, 0),
+            (0, 0, 0),
+            (0, 0, 0),
+            (0, 0, 0),
+            (1, off8 as u64, 0),
+            (1, off9 as u64, 0),
+        ];
+        let widths = [1usize, 4, 2];
+        let mut packed = Vec::with_capacity(records.len() * widths.iter().sum::<usize>());
+        for (field1, field2, field3) in records {
+            for (value, width) in [
+                (field1, widths[0]),
+                (field2, widths[1]),
+                (field3, widths[2]),
+            ] {
+                let bytes = value.to_be_bytes();
+                packed.extend_from_slice(&bytes[8 - width..]);
+            }
+        }
+        let encoded_xref = pdf_core::filters::flate::encode(&packed);
+        let xref = Object::Stream(StreamObj::new_encoded(
+            dict(&[
+                ("Type", name_obj("XRef")),
+                ("Size", Object::Integer(records.len() as i64)),
+                ("W", int_array(&[1, 4, 2])),
+                ("Root", rref(1, 0)),
+                ("Encrypt", encrypt_dict_r234(&fx.config)),
+                (
+                    "ID",
+                    Object::Array(vec![
+                        Object::String(PdfString::hex(fx.config.id0.clone())),
+                        Object::String(PdfString::hex(fx.config.id0.clone())),
+                    ]),
+                ),
+                ("Filter", name_obj("FlateDecode")),
+                ("Length", Object::Integer(encoded_xref.len() as i64)),
+            ]),
+            encoded_xref,
+        ));
+        out.extend_from_slice(&write_indirect(ObjRef::new(9, 0), &xref));
+        out.extend_from_slice(b"startxref\n");
+        out.extend_from_slice(format!("{off9}\n").as_bytes());
+        out.extend_from_slice(b"%%EOF\n");
+        out
+    }
+
     fn fixture() -> Fixture {
         build_r234(
             3,
@@ -390,5 +502,31 @@ mod crypto {
         let doc = Document::open_bytes(encrypted_doc(&fx)).unwrap();
         assert!(!doc.authenticate(b"wrong-password"));
         assert!(doc.needs_pass());
+    }
+
+    #[test]
+    fn doc_crypt_004_authenticate_refreshes_objstm_page_order() {
+        // DOC-CRYPT-004: locked page discovery uses xref order because the real
+        // page tree is encrypted. A failed auth preserves that cache; successful
+        // auth must rebuild it from the now-decryptable tree.
+        let fx = build_r234(
+            3,
+            16,
+            b"id-bytes-0001234",
+            -44,
+            true,
+            b"user",
+            b"owner",
+            CryptMethod::Rc4,
+            CryptMethod::Rc4,
+        );
+        let doc = Document::open_bytes(encrypted_objstm_page_tree_doc(&fx)).unwrap();
+        assert_eq!((doc.page_xref(0), doc.page_xref(1)), (3, 4));
+
+        assert!(!doc.authenticate(b"wrong-password"));
+        assert_eq!((doc.page_xref(0), doc.page_xref(1)), (3, 4));
+
+        assert!(doc.authenticate(b"user"));
+        assert_eq!((doc.page_xref(0), doc.page_xref(1)), (4, 3));
     }
 }

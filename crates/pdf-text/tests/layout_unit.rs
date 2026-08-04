@@ -337,24 +337,43 @@ fn layout_order_001_single_column_top_to_bottom() {
 
 #[test]
 fn layout_order_002_two_column_column_by_column() {
-    // Left column (x≈80): L1 top, L2 bottom. Right column (x≈400): R1, R2.
-    // XY-cut must read the whole left column before the right one: L1,L2,R1,R2.
-    let gs = vec![
-        glyph("1", 80.0, 700.0, 12.0),  // L1
-        glyph("2", 80.0, 500.0, 12.0),  // L2
-        glyph("3", 400.0, 700.0, 12.0), // R1
-        glyph("4", 400.0, 500.0, 12.0), // R2
-    ];
+    // Use substantial prose-like lines rather than four isolated table cells:
+    // same-baseline cells intentionally stay in one block for PyMuPDF block
+    // compatibility and are not enough evidence of a column. Paint row-major
+    // so this also proves that the two column regions remain atomic.
+    let mut gs = Vec::new();
+    for (text, x, y) in [
+        ("L1-left-column", 80.0, 700.0),
+        ("R1-right-column", 400.0, 700.0),
+        ("L2-left-column", 80.0, 660.0),
+        ("R2-right-column", 400.0, 660.0),
+    ] {
+        for (index, ch) in text.chars().enumerate() {
+            gs.push(glyph(&ch.to_string(), x + index as f64 * 6.0, y, 12.0));
+        }
+    }
     let tp = textpage_from_glyphs(&gs, &[], letter(), 0);
-    let order: Vec<char> = tp
+    let order: Vec<String> = tp
         .blocks
         .iter()
         .filter(|b| b.kind == BlockKind::Text)
-        .filter_map(|b| b.lines.first())
-        .filter_map(|l| l.spans.first())
-        .filter_map(|s| s.text.chars().next())
+        .map(|b| {
+            b.lines
+                .iter()
+                .flat_map(|line| line.spans.iter())
+                .map(|span| span.text.as_str())
+                .collect()
+        })
         .collect();
-    assert_eq!(order, vec!['1', '2', '3', '4']);
+    assert_eq!(
+        order,
+        vec![
+            "L1-left-column",
+            "L2-left-column",
+            "R1-right-column",
+            "R2-right-column",
+        ]
+    );
 }
 
 #[test]
