@@ -1093,6 +1093,9 @@ self-built PDFs (reuse `tests/common`). No PyMuPDF files.
 | `WORDS-004` | per-word bbox is the union of its char bboxes | PRD §10.7 | green |
 | `WORDS-005` | `(block_no, line_no, word_no)` monotonic, word_no resets | PRD §10.7 | green |
 | `WORDS-006` | NBSP (`0xA0`) treated as a separator | PRD §8.6.2 | green |
+| `WORDS-007` | e2e `3 Tc` tracked word: text "extraction" unbroken → words `["extraction"]` (no second spatial split) | PRD §8.6.2 | green |
+| `WORDS-008` | e2e positive `/Descent` + `Tf 1`/`Tm` scale + `0.15 Tc`: words split only at the literal space | PRD §8.6.2 | green |
+| `WORDS-009` | e2e `[(extr) -300 (action)] TJ`: words == `to_text` split on whitespace (boundaries always agree) | PRD §8.6.2, §10.7 | green |
 
 ### Span flags (`layout.rs`) — `LAYOUT-FLAGS-*`
 

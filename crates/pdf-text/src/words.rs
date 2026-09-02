@@ -1,24 +1,29 @@
 //! Word segmentation (M2c, PRD §8.6.2, §10.7).
 //!
-//! Splits each [`Line`] of a [`TextPage`] into [`Word`]s on (a) literal
-//! whitespace characters and (b) spatial gaps wider than a size-relative
-//! threshold — the latter catches `TJ`-kerned words rendered without any space
-//! character. Produces the `(bbox, text, block_no, line_no, word_no)` tuples
-//! that drive `get_text("words")` in M2d.
+//! Splits each [`Line`] of a [`TextPage`] into [`Word`]s on whitespace
+//! characters **only**. Word breaks that the PDF renders as a bare spatial gap
+//! (`TJ`-kerned words with no space glyph) are already materialised by
+//! [`crate::layout`], which synthesizes one space char at the shared
+//! [`WORD_GAP_FRAC`] threshold and suppresses it inside letter-spaced (tracked)
+//! runs. Segmenting on whitespace alone therefore keeps `get_text("words")`
+//! boundaries identical to the text/dict/blocks output — a second, mask-less
+//! spatial split here would re-shatter tracked headings that layout kept whole.
+//! Produces the `(bbox, text, block_no, line_no, word_no)` tuples that drive
+//! `get_text("words")` in M2d.
 
 use pdf_core::geom::Rect;
 
 use crate::model::{Char, Line, TextPage, Word};
 
 /// Spatial-gap threshold as a fraction of font size. A gap between the right
-/// edge of one char and the left edge of the next that exceeds `size *
-/// WORD_GAP_FRAC` starts a new word even without a literal space (PRD §8.6.2;
+/// edge of one glyph and the left edge of the next that exceeds `size *
+/// WORD_GAP_FRAC` is a word break even without a literal space (PRD §8.6.2;
 /// PyMuPDF uses ≈ 0.2–0.3× space width — we key off the font size, which is a
 /// stable proxy across fonts).
 ///
-/// Shared with [`crate::layout`], whose line assembly synthesizes an inter-word
-/// space at the very same threshold — so text/dict/blocks word boundaries agree
-/// with `get_text("words")`.
+/// Consumed by [`crate::layout`], whose line assembly synthesizes the inter-word
+/// space at this threshold; this module then splits on that space like any
+/// other, so text/dict/blocks word boundaries agree with `get_text("words")`.
 pub(crate) const WORD_GAP_FRAC: f64 = 0.2;
 
 /// A stable device-space font-size estimate from a line's glyph-cell heights —
@@ -57,50 +62,24 @@ pub fn words(tp: &TextPage) -> Vec<Word> {
     out
 }
 
-/// Segments one line into words, appending to `out`.
+/// Segments one line into words on whitespace chars, appending to `out`.
+///
+/// Whitespace (literal space glyphs and the spaces [`crate::layout`] synthesized
+/// from spatial gaps) is the *only* word boundary: no geometric re-splitting
+/// happens here, so `words` can never disagree with the line text.
 fn segment_line(line: &Line, block_no: usize, line_no: usize, out: &mut Vec<Word>) {
     let mut word_no = 0usize;
     let mut cur: Vec<&Char> = Vec::new();
-    let mut prev_right: Option<f64> = None;
-
-    // The gap threshold is keyed off a device-space size measure (the median
-    // glyph-cell height) so it is invariant to whether the scale lives in `Tf`
-    // or the CTM — see [`effective_size_from_heights`]. The fallback to the
-    // first span's raw operand size only fires for degenerate lines with no
-    // positive cell height, where the two spaces coincide anyway.
-    let eff_size = {
-        let h = effective_size_from_heights(
-            line.spans
-                .iter()
-                .flat_map(|s| s.chars.iter())
-                .map(|ch| ch.bbox.height()),
-        );
-        if h > 0.0 {
-            h
-        } else {
-            line.spans.first().map_or(0.0, |s| s.size.abs())
-        }
-    };
-    let thresh = eff_size * WORD_GAP_FRAC;
 
     // Iterate the line's chars in advance order (spans are already ordered).
     for span in &line.spans {
         for ch in &span.chars {
-            // A literal whitespace char terminates the current word and is not
-            // itself part of any word.
+            // A whitespace char terminates the current word and is not itself
+            // part of any word.
             if is_word_separator(ch.c) {
                 flush(&mut cur, block_no, line_no, &mut word_no, out);
-                prev_right = None;
                 continue;
             }
-            // A spatial gap larger than the threshold also splits.
-            if let Some(pr) = prev_right {
-                let gap = ch.bbox.x0 - pr;
-                if gap > thresh {
-                    flush(&mut cur, block_no, line_no, &mut word_no, out);
-                }
-            }
-            prev_right = Some(ch.bbox.x1);
             cur.push(ch);
         }
     }
