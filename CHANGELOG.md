@@ -11,6 +11,135 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-09-02
+
+### Added
+
+- **Optional TATR (Table Transformer) vision table backend.**
+  `page.find_tables(strategy="vision", backend="tatr", vision_options=...)`
+  detects table regions and structure with Microsoft Table Transformer
+  (pinned detection + v1.1-all structure checkpoints). The models only
+  predict regions and structure; cell text always comes from pdfspine's
+  native word coordinates (built-in OCR only when the page has no text
+  layer). `Table` gains `confidence`, `source`, `text_source` and `metadata`
+  properties. Ships in the new `[tatr]` extra (Pillow / torch / transformers,
+  CPython 3.12–3.14 with OS/arch markers) — `[all]` now includes it; a bare
+  install stays ML-free and `import pdfspine` never loads torch. The vendored
+  MIT structure post-processing (microsoft/table-transformer @ 16d124f) is
+  recorded in `THIRD-PARTY-NOTICES.md`. `conformance/gt/tables_diff.py` gains
+  `--strategy vision` with detector P/R/F1 and GriTS (`TATR-001..009`).
+- **Glyph-width fallback chain for simple fonts without `/Widths`** (`pdf-fonts`
+  mapper, built once at font load): an embedded `/FontFile2` / `/FontFile3`
+  program's `hmtx` / charstring advances → Core-14 AFM (now also covering
+  WinAnsi 0x80–0x9F high punctuation, StandardEncoding quote glyphs, `fi` /
+  `fl`, floating accents) → a `/Flags`-chosen standard substitute
+  (FixedPitch → Courier, Serif → Times, else Helvetica; Bold / Italic from
+  ForceBold / StemV / ItalicAngle / name) → `/MissingWidth`. Previously any
+  non-Core-14 font without `/Widths` got zero-width cells, so per-glyph or
+  per-word positioning read as word gaps or line breaks
+  (`e x t r a c t i o n`, `Company’ s`). Truncated `/Widths` are deliberately
+  not repaired (PyMuPDF parity). `WIDTHS-005..011`, `WORDS-019..022`.
+
+### Fixed
+
+- **Words and text now segment from the same source.** `get_text("words")`
+  ran a second, purely spatial split with no letter-spacing awareness, so
+  tracked headings (`0.15 Tc`, `3 Tc`) came back as one-letter words while
+  `text` / `dict` / `blocks` kept them whole — 893 words-only over-splits in
+  the 300-PDF differential. Word boundaries are now by construction identical
+  to `to_text` split on whitespace (`WORDS-007..009`).
+- **FontDescriptor `/Ascent` / `/Descent` sign normalised and degenerate
+  cells rejected** (aligned with MuPDF): real corpora write `/Descent 250`,
+  which halved the glyph cell, halved the word-gap threshold and synthesised
+  spaces inside mildly kerned words; `rawdict` also reported a positive
+  descender. A cell shorter than 0.5 × size falls through to `/FontBBox` and
+  then the (800, −200) defaults (`TRM-005..009`, `WORDS-010`).
+- **Word-gap threshold keyed on device-space font size instead of cell
+  height** (`0.15 × size`, matching MuPDF's `SPACE_DIST`; was `0.2 ×` cell
+  height, which collapsed to 0.1 × size for legal short cells like
+  `/Ascent 500 /Descent 0`) (`WORDS-011..013`).
+- **Letter-spacing mask only suppresses word gaps inside genuinely tracked
+  runs.** Dot leaders (`. . . .`) and repeated punctuation no longer set the
+  line's median gap, so TOC lines keep their real word gaps
+  (`Originandscopeofrightofdeduction` → words); tracking at or above the
+  word-gap threshold (EUR-Lex body text `0.15 Tc`) keeps kern-loosened pairs
+  inside the word (`transpor t` → `transport`) (`WORDS-014..018`).
+- **Never break a line between touching glyphs at a column gutter.** A gutter
+  cut now requires real along-axis whitespace, so a one-string title painted
+  across a table's columns is no longer shredded one character per line
+  (`LIM\nITE\nD`, `Sche\ndule C`, `Mortalit\ny`); genuine two-column bodies
+  still split column-major (`LAYOUT-E2E-003..005`).
+- **Type3 `/FontMatrix` applied to glyph widths and vertical metrics** (ISO
+  32000-1 §9.6.5). pdfTeX bitmap fonts (`FontMatrix [0.01204 …]`) had every
+  cell 12× too narrow, turning `text extraction` into a line break or
+  letter-by-letter words; a descriptor-less Type3 now derives its cell from
+  its own `/FontBBox` (`WIDTHS-012..015`, `TRM-010/011`, `WORDS-023..025`).
+- **Phantom whitespace glyphs dropped.** Word-generated letterheads paint
+  empty paragraphs as `( ) Tj` on their own baselines; when such a space
+  joined a neighbouring line and landed inside a word (`United Stat es`,
+  `Washington ,`) it is now discarded unless it was painted in sequence with
+  the line — real spaces, kerned-back footnote markers (`( 1 )`) and
+  `-0.8 Tc` / `-1.5 Tw` spaces are untouched (`WORDS-026..028`).
+- **Encrypted documents: authenticate before building the page list.** The
+  page tree was computed eagerly before the empty-password auto-auth, so
+  `/Pages` inside an object stream failed to decrypt, the reader silently fell
+  back to an object-number scan and `doc[0]` returned the wrong physical page
+  (page count still matched). Verified on 446 real-world reports: 94 shifted
+  documents → 0, one 0-page document restored to its 14 pages
+  (`DOC-CRYPT-004`).
+- **PyMuPDF text-extraction parity pass** (b6c027a): `get_text("blocks")`
+  segments blocks by baseline step (> 1.5 × effective size starts a block;
+  dense table rows stay together) instead of returning page-sized blocks;
+  Form XObjects start with the default text state and honour the inherited
+  clip; rectangular clips drop boundary padding spaces; transformed-text
+  baseline tolerance is measured in device space; `get_text("text",
+  sort=True)` now really orders lines by (y, x) (`COMPAT-BLOCK-001..010`,
+  `COMPAT-LINE-*`, `COMPAT-CLIP-SPACE-001..005`, `INTERP-FORM-006`,
+  `PYTEXT-010`).
+- `DOC-CRYPT-001/003` and `CONTENT-BLOCKS-002` re-pinned to the PyMuPDF
+  semantics above; clippy / ruff-format drift from b6c027a resolved.
+
+Corpus differential (300 PDFs / 1885 pages, PyMuPDF 1.27.2 oracle): word
+over-splits relative to PyMuPDF fell from 1800 to 334 (pure-alpha 1187 → 83)
+and under-splits from 1452 to 394; the remaining under-splits are dominated
+by cases where PyMuPDF itself breaks a tracked word (`transpor t`) and
+pdfspine deliberately keeps it whole. On the 30-document real-corpus
+conformance report (`conformance/REPORT.md`), full-document Levenshtein
+similarity vs PyMuPDF rose from mean 0.919 / median 0.938 to mean 0.961 /
+median 0.993.
+
+### Changed
+
+- **Empty-user-password documents are authenticated on open** (PyMuPDF
+  behaviour): `is_encrypted` stays `True`, but `needs_pass` is now `False`
+  right after `open()` and `authenticate("")` is no longer required before
+  reading pages.
+- **Word-gap threshold is `0.15 × device font size`** (was `0.2 ×` cell
+  height). Downstream code that tuned around the old, more conservative
+  threshold may see additional (correct) word breaks on widely kerned runs.
+- **`get_text("words")` is now whitespace-only segmentation** of the laid-out
+  line; a run that `text` joins as one word is never split by `words`.
+- **Tracked runs keep kern-loosened pairs together** even where PyMuPDF splits
+  them (`transport` vs PyMuPDF `transpor t`): whole words win over strict
+  oracle parity for this one case.
+- `get_text("blocks")` granularity now follows PyMuPDF's line/paragraph
+  blocks (see Fixed); consumers that relied on the old page-sized blocks
+  will see many more, smaller blocks.
+- Fonts without `/Widths` now measure by substitute or embedded metrics
+  instead of `/MissingWidth` (default 0): `rawdict` / `words` bboxes for such
+  fonts widen from zero-width cells to real advances.
+
+### Security
+
+- **tract bumped to 0.21.17 (`Cargo.lock` only) for RUSTSEC-2026-0217** —
+  integer overflow in `tract-nnef`'s NNEF tensor parser (out-of-bounds read
+  on model load), reachable through `tract-onnx` ← `ocrspine` ← `pdf-ocr`.
+- **`deny.toml` ignores RUSTSEC-2026-0009** (`time` 0.3.41 stack-exhaustion
+  DoS): the tract 0.21.16+ bump pins `time < 0.3.42` as a *build-only*
+  dependency of `tract-linalg` (liquid templates in its build script); it
+  never enters the runtime artifact. The ignore is to be removed once ocrspine
+  moves to tract 0.22+.
+
 ## [0.5.0] — 2026-07-30
 
 ### Changed
@@ -324,7 +453,8 @@ published wheel's version is set from the `v0.1.0` git tag at build time.
   2858 ms → 819 ms). `rayon` is a feature-gated (`paddle-ocr`) optional dep and
   is not in the lean base wheel.
 
-[Unreleased]: https://github.com/VoldemortGin/pdfspine/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/VoldemortGin/pdfspine/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/VoldemortGin/pdfspine/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/VoldemortGin/pdfspine/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/VoldemortGin/pdfspine/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/VoldemortGin/pdfspine/compare/v0.3.0...v0.4.0
