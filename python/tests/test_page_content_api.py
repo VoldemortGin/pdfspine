@@ -182,7 +182,7 @@ def test_contentblocks_002_text_block_fields():
     """CONTENT-BLOCKS-002: TextBlock carries the block text — span texts
     concatenated per line, lines joined with newlines."""
     page = _text_page(
-        b"BT /F1 12 Tf 72 700 Td (Hello world) Tj 0 -20 Td (Second line) Tj ET"
+        b"BT /F1 12 Tf 72 700 Td (Hello world) Tj 0 -14 Td (Second line) Tj ET"
     )
     blocks = page.content_blocks()
     assert len(blocks) == 1
