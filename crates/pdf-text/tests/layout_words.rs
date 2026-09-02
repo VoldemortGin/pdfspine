@@ -222,3 +222,24 @@ fn words_009_word_boundaries_always_match_text() {
     assert_eq!(from_text, vec!["extr", "action"]);
     assert_eq!(word_texts(&tp), from_text);
 }
+
+#[test]
+fn words_010_positive_descent_keeps_word_gap_threshold() {
+    // eurlex pattern: `/Descent +250` once halved the glyph cell (0.5×size), so
+    // the word-gap threshold (cell-height median × 0.2) fell to 1.2pt at 12pt
+    // and a -120 kern (1.44pt) inside "extraction" was read as a word gap.
+    // With the sign normalised the fixture must read exactly like its
+    // well-formed (750, -250) twin: one word, no synthesized space.
+    for descent in [250, -250] {
+        let tp = textpage_e2e(
+            winansi_type1_with_metrics("Helvetica", 32, &HELV, 750, descent),
+            b"BT /F1 12 Tf 72 700 Td [(extr) -120 (action)] TJ ET",
+        );
+        assert_eq!(
+            to_text(&tp, 0).trim_end(),
+            "extraction",
+            "Descent {descent}"
+        );
+        assert_eq!(word_texts(&tp), vec!["extraction"], "Descent {descent}");
+    }
+}

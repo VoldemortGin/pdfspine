@@ -965,6 +965,11 @@ font fixtures only (we control every byte; no PyMuPDF files). Tests live in
 | `TRM-002` | bbox height from `/Ascent`/`/Descent` scaled by size | PRD §8.6.2 | green |
 | `TRM-003` | font-size scaling scales bbox + advance linearly | ISO §9.4.4 | green |
 | `TRM-004` | translation `Tm` offsets origin/bbox | PRD §8.6.1 | green |
+| `TRM-005` | positive `/Descent 250` normalised to −250 (MuPDF sign fix): cell + `descender` identical to a well-formed (750, −250) descriptor | PRD §8.6.2 | green |
+| `TRM-006` | negative `/Ascent −750` normalised to +750: cell identical to (750, −250) | PRD §8.6.2 | green |
+| `TRM-007` | degenerate metrics (300, −100; cell < 0.5×size) rejected → defaults (800, −200) | PRD §8.6.2 | green |
+| `TRM-008` | `/Ascent 0 /Descent 0` → `/FontBBox` `(ury, lly)` supplies the cell | PRD §8.6.2 | green |
+| `TRM-009` | `/FontBBox` fallback normalised too: positive `lly` flipped; degenerate box (ury − lly < 500) → defaults | PRD §8.6.2 | green |
 | `COORD-ROT-90-TRM` | 90°-rotated `Tm` → correct axis-aligned bbox envelope | PRD §8.6.1 | green |
 | `COORD-ROT-180-TRM` | 180°-rotated `Tm` → correct envelope + origin | PRD §8.6.1 | green |
 
@@ -1096,6 +1101,7 @@ self-built PDFs (reuse `tests/common`). No PyMuPDF files.
 | `WORDS-007` | e2e `3 Tc` tracked word: text "extraction" unbroken → words `["extraction"]` (no second spatial split) | PRD §8.6.2 | green |
 | `WORDS-008` | e2e positive `/Descent` + `Tf 1`/`Tm` scale + `0.15 Tc`: words split only at the literal space | PRD §8.6.2 | green |
 | `WORDS-009` | e2e `[(extr) -300 (action)] TJ`: words == `to_text` split on whitespace (boundaries always agree) | PRD §8.6.2, §10.7 | green |
+| `WORDS-010` | e2e `/Descent +250` vs `−250` with `[(extr) -120 (action)] TJ` @12pt: sign-normalised cell keeps the word-gap threshold → text `"extraction"`, words `["extraction"]` for both | PRD §8.6.2 | green |
 
 ### Span flags (`layout.rs`) — `LAYOUT-FLAGS-*`
 

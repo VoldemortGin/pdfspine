@@ -412,6 +412,109 @@ fn trm_002_bbox_height_from_metrics() {
     approx(g.bbox.y0.max(g.bbox.y1), 115.0, 1e-9);
 }
 
+// === TRM-005..009: /FontDescriptor vertical-metric normalisation ==========
+
+/// Width-500 WinAnsi Type1 whose `/FontDescriptor` holds exactly `entries`
+/// (plus `/Type`/`/FontName`/`/Flags`), for the vertical-metric fallback paths.
+fn font_with_descriptor(entries: Vec<(&'static str, Object)>) -> Object {
+    let widths: Vec<i64> = (0..95).map(|_| 500).collect();
+    let mut pairs = vec![
+        ("Type", name_obj("FontDescriptor")),
+        ("FontName", name_obj("Helvetica")),
+        ("Flags", Object::Integer(32)),
+    ];
+    pairs.extend(entries);
+    let descriptor = Object::Dictionary(dict(pairs));
+    Object::Dictionary(dict([
+        ("Type", name_obj("Font")),
+        ("Subtype", name_obj("Type1")),
+        ("BaseFont", name_obj("Helvetica")),
+        ("Encoding", name_obj("WinAnsiEncoding")),
+        ("FirstChar", Object::Integer(32)),
+        ("LastChar", Object::Integer(126)),
+        (
+            "Widths",
+            Object::Array(widths.into_iter().map(Object::Integer).collect()),
+        ),
+        ("FontDescriptor", descriptor),
+    ]))
+}
+
+/// Runs `(A) Tj` at size 20 on baseline y=100 and returns
+/// `(bbox bottom, bbox top, ascender, descender)` of the glyph.
+fn cell_at_20(font: Object) -> (f64, f64, f64, f64) {
+    let res = run_with_font(font, b"BT /F1 20 Tf 1 0 0 1 0 100 Tm (A) Tj ET");
+    let g = &res.glyphs[0];
+    (
+        g.bbox.y0.min(g.bbox.y1),
+        g.bbox.y0.max(g.bbox.y1),
+        g.ascender,
+        g.descender,
+    )
+}
+
+fn assert_cell(cell: (f64, f64, f64, f64), bottom: f64, top: f64, asc: f64, desc: f64) {
+    approx(cell.0, bottom, 1e-9);
+    approx(cell.1, top, 1e-9);
+    approx(cell.2, asc, 1e-12);
+    approx(cell.3, desc, 1e-12);
+}
+
+#[test]
+fn trm_005_positive_descent_normalised_to_negative() {
+    // eurlex pattern: `/Descent 250` written positive. MuPDF (pdf-font.c) flips
+    // it to -250; the cell must be identical to a well-formed (750, -250)
+    // descriptor: y ∈ [95, 115] at size 20, descender -0.25 (full 1.0×size cell).
+    let widths: Vec<i64> = (0..95).map(|_| 500).collect();
+    let bad = winansi_type1_with_metrics("Helvetica", 32, &widths, 750, 250);
+    let good = winansi_type1_with_metrics("Helvetica", 32, &widths, 750, -250);
+    let cell = cell_at_20(bad);
+    assert_cell(cell, 95.0, 115.0, 0.75, -0.25);
+    assert_eq!(cell, cell_at_20(good));
+}
+
+#[test]
+fn trm_006_negative_ascent_normalised_to_positive() {
+    // `/Ascent -750` (sign flipped) → |Ascent| = 750, same cell as (750, -250).
+    let widths: Vec<i64> = (0..95).map(|_| 500).collect();
+    let bad = winansi_type1_with_metrics("Helvetica", 32, &widths, -750, -250);
+    let good = winansi_type1_with_metrics("Helvetica", 32, &widths, 750, -250);
+    let cell = cell_at_20(bad);
+    assert_cell(cell, 95.0, 115.0, 0.75, -0.25);
+    assert_eq!(cell, cell_at_20(good));
+}
+
+#[test]
+fn trm_007_degenerate_cell_falls_back_to_defaults() {
+    // Ascent 300 / Descent -100 → cell height 0.4×size (< 0.5): unusable, so
+    // the Latin defaults (800, -200) apply: y ∈ [96, 116] at size 20.
+    let widths: Vec<i64> = (0..95).map(|_| 500).collect();
+    let font = winansi_type1_with_metrics("Helvetica", 32, &widths, 300, -100);
+    assert_cell(cell_at_20(font), 96.0, 116.0, 0.8, -0.2);
+}
+
+#[test]
+fn trm_008_zero_metrics_fall_back_to_fontbbox() {
+    // `/Ascent 0 /Descent 0` → `/FontBBox [llx lly urx ury]` supplies
+    // (ury, lly) = (931, -225): y ∈ [95.5, 118.62] at size 20.
+    let font = font_with_descriptor(vec![
+        ("Ascent", Object::Integer(0)),
+        ("Descent", Object::Integer(0)),
+        ("FontBBox", int_array([-166, -225, 1000, 931])),
+    ]);
+    assert_cell(cell_at_20(font), 95.5, 118.62, 0.931, -0.225);
+}
+
+#[test]
+fn trm_009_fontbbox_fallback_is_normalised_too() {
+    // The FontBBox path gets the same treatment: a positive `lly` is flipped …
+    let flipped = font_with_descriptor(vec![("FontBBox", int_array([-166, 225, 1000, 931]))]);
+    assert_cell(cell_at_20(flipped), 95.5, 118.62, 0.931, -0.225);
+    // … and a degenerate box (ury − lly = 400 < 500) yields the defaults.
+    let tiny = font_with_descriptor(vec![("FontBBox", int_array([-166, -100, 1000, 300]))]);
+    assert_cell(cell_at_20(tiny), 96.0, 116.0, 0.8, -0.2);
+}
+
 // === TRM-003: font-size scaling scales bbox + advance linearly ============
 
 #[test]

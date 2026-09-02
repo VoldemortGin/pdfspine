@@ -47,6 +47,22 @@ const MAX_FORM_DEPTH: u32 = 16;
 const DEFAULT_ASCENT: f64 = 800.0;
 const DEFAULT_DESCENT: f64 = -200.0;
 
+/// 字符格最小合理高度（`ascent − descent`，1000 单位字形空间）。低于此值
+/// （格高 < 0.5×字号）的描述符度量视为畸形，不采用（对齐 MuPDF 的退化度量
+/// 兜底）。
+const MIN_CELL_HEIGHT: f64 = 500.0;
+
+/// 归一化 `/FontDescriptor` 的一对纵向度量（对齐 MuPDF `pdf-font.c`）：
+/// `Ascent` 取绝对值、`Descent` 取负绝对值（真实语料里两者符号常写反，
+/// 如 eurlex 的 `/Descent 250`），再拒绝格高不合理小的组合（含两者皆 0）。
+/// 畸形时返回 `None`，由调用方继续下一级回退。
+fn normalize_vmetrics(ascent: f64, descent: f64) -> Option<(f64, f64)> {
+    let asc = ascent.abs();
+    // `Descent 0` 保持 +0.0（`-0.0_f64.abs()` 会得到 -0.0，序列化时会露出负号）。
+    let desc = if descent == 0.0 { 0.0 } else { -descent.abs() };
+    (asc - desc >= MIN_CELL_HEIGHT).then_some((asc, desc))
+}
+
 /// Per-font cached data: the mapper plus glyph-cell vertical metrics.
 struct CachedFont {
     mapper: FontMapper,
@@ -965,14 +981,18 @@ impl<'a> ContentInterpreter<'a> {
     /// space) from the `/FontDescriptor` (`/Ascent`/`/Descent`, else
     /// `/FontBBox` top/bottom), falling back to Latin-text defaults. For a
     /// Type0 font the descriptor lives on the descendant CIDFont.
+    ///
+    /// 两级来源都经 [`normalize_vmetrics`] 做符号归一与合理性检查：符号写反
+    /// 的度量被翻正，格高不合理小（含两者皆 0）的一级跳到下一级，最终回退
+    /// 到默认值。
     fn font_vmetrics(&self, font_dict: &Dict) -> (f64, f64) {
         let desc = self.font_descriptor(font_dict);
         if let Some(d) = desc.as_ref() {
             let asc = d.get(&Name::new("Ascent")).and_then(Object::as_f64);
             let dsc = d.get(&Name::new("Descent")).and_then(Object::as_f64);
             if let (Some(a), Some(de)) = (asc, dsc) {
-                if a != 0.0 || de != 0.0 {
-                    return (a, de);
+                if let Some(metrics) = normalize_vmetrics(a, de) {
+                    return metrics;
                 }
             }
             // Fall back to FontBBox [llx lly urx ury] → (ury, lly).
@@ -984,8 +1004,8 @@ impl<'a> ContentInterpreter<'a> {
                 let lly = bbox[1].as_f64();
                 let ury = bbox[3].as_f64();
                 if let (Some(lly), Some(ury)) = (lly, ury) {
-                    if ury != 0.0 || lly != 0.0 {
-                        return (ury, lly);
+                    if let Some(metrics) = normalize_vmetrics(ury, lly) {
+                        return metrics;
                     }
                 }
             }
