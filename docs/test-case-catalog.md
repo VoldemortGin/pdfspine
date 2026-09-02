@@ -1143,6 +1143,9 @@ self-built PDFs (reuse `tests/common`). No PyMuPDF files.
 |---|---|---|---|
 | `LAYOUT-E2E-001` | 2-line/2-word PDF → exact block/line/span/word + text | PRD §8.6 | green |
 | `LAYOUT-E2E-002` | `build_textpage` from a real page → device-space structure | PRD §8.6 | green |
+| `LAYOUT-E2E-003` | one-string title with touching cells crossing a table gutter stays one line (SLB pattern) | PRD §8.6.2 | green |
+| `LAYOUT-E2E-004` | `Tj` whose space glyph sits inside a gutter band stays one line (IRS form pattern) | PRD §8.6.2 | green |
+| `LAYOUT-E2E-005` | genuine two-column body (real gutter gap) still splits per column, column-major | PRD §8.6 | green |
 
 ## M2d — `get_text` serializers + TEXTFLAGS (`pdf-text`)
 

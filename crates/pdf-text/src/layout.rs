@@ -912,7 +912,12 @@ fn detect_page_gutters(runs: &[Vec<usize>], dev: &[DevGlyph]) -> Vec<f64> {
 /// taken wherever the run crosses a detected page column `gutter` (the principled
 /// cut), or — as a fallback when no gutter applies — wherever the along-axis gap
 /// between consecutive glyph edges reaches the independent-run threshold.
-/// Normal inter-word spaces never trigger either rule.
+/// Normal inter-word spaces never trigger either rule, and two glyph cells that
+/// touch or overlap along the reading axis (a gap below the word-gap threshold)
+/// are never separated by either rule — a gutter is whitespace left by the
+/// *other* lines, so a run whose own cells fill the band (a one-string title
+/// across a table's columns, a form heading whose space glyph sits in the band)
+/// stays one line, as PyMuPDF reads it.
 ///
 /// A large-type heading/title legitimately spans the body's column gutters (e.g.
 /// a centered title over a multi-column page); when this cluster's glyphs are
@@ -946,17 +951,25 @@ fn split_on_gutter(
         let x0 = g.bbox.normalize().x0;
         if let Some(pe) = prev_end {
             let px = prev_x0.unwrap_or(x0);
+            let gap = start - pe;
+            let gap_size = prev_size.unwrap_or(effective_size).max(effective_size);
+            // 相邻两个字符格沿轴相接 / 重叠（间隙连词间阈值都不到）时，它们属于
+            // 同一个词，更不可能分属两行：即便这一对 glyph 横跨了检测到的竖带，也
+            // 绝不在此断行。竖带只是*其它*行留下的空白；本行自己的 glyph 填满了
+            // 它（一个 Tj 画的整页宽标题跨过表格各列、表单节名的空格 glyph 正落在
+            // 带内），PyMuPDF 同样把这种行读成一整行。
+            let touching = gap <= gap_size * WORD_GAP_FRAC;
             // Cut where a detected gutter separates this glyph from the previous
             // one: the previous glyph starts left of the gutter and this glyph
-            // starts at/right of it.
-            let crosses_gutter = gutters.iter().any(|&gx| px < gx - 0.5 && x0 >= gx - 0.5);
+            // starts at/right of it — and there is real along-axis whitespace
+            // between the two.
+            let crosses_gutter =
+                !touching && gutters.iter().any(|&gx| px < gx - 0.5 && x0 >= gx - 0.5);
             // Fallback: two independently painted runs with a device-space gap
             // at the compatibility boundary form distinct lines. Use the true
             // projected glyph edges — origin + AABB diagonal overestimates the
             // prior extent and hides this split on CTM-scaled PDFs.
-            let gap_size = prev_size.unwrap_or(effective_size).max(effective_size);
-            let independent_run_gap =
-                start - pe >= gap_size * LINE_RUN_GAP_FRAC - LINE_RUN_GAP_EPSILON;
+            let independent_run_gap = gap >= gap_size * LINE_RUN_GAP_FRAC - LINE_RUN_GAP_EPSILON;
             if crosses_gutter || independent_run_gap {
                 runs.push(std::mem::take(&mut cur));
             }
