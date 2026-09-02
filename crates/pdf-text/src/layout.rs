@@ -56,6 +56,14 @@ const LINE_RUN_GAP_EPSILON: f64 = 1e-6;
 /// the threshold.
 const WORD_GAP_FRAC: f64 = 0.15;
 
+/// Widest letter-to-letter gap, as a fraction of the device-space font size,
+/// that [`letter_spacing_skip_mask`] still reads as tracking. A letter-spaced
+/// heading keeps its letters closer than a word space (≈0.25–0.33 em in text
+/// faces — Helvetica's is 0.278); a uniform gap beyond this is a row of
+/// single-letter words (map labels, spaced-out initials) and every gap in it
+/// stays a word break, as PyMuPDF reads it.
+const LETTER_SPACING_MAX_FRAC: f64 = 0.3;
+
 /// Baseline movement, in effective font-size units, below which text remains in
 /// the current paragraph regardless of horizontal movement.
 const BLOCK_BASELINE_NEAR: f64 = 0.8;
@@ -1166,12 +1174,26 @@ fn is_rtl_char(c: char) -> bool {
 /// painted as `A b s c h n i t t` with no literal space glyph, just a uniform
 /// per-letter gap wider than the word-gap threshold. `build_line` would synthesize a
 /// space at each gap, shattering the word into single-char tokens and tanking text
-/// accuracy (PyMuPDF collapses them). A run qualifies only when ≥4 consecutive
-/// **single-char** ink glyphs sit at uniform tracking gaps (so initials "J R R" or
-/// "x = y" are never touched). A gap clearly wider than the tracking gap — a real
-/// word break, e.g. before the number in "Abschnitt 2" — is left unmarked, so that
-/// word boundary survives.
-fn letter_spacing_skip_mask(glyphs: &[&DevGlyph]) -> Vec<bool> {
+/// accuracy. A run qualifies only when ≥4 consecutive **single-char** ink glyphs
+/// sit at uniform tracking gaps (so initials "J R R" or "x = y" are never
+/// touched). The tracking gap is measured between **alphanumeric** neighbours
+/// only, must clear the word-gap threshold (otherwise the plain threshold already
+/// keeps the letters together and only the odd kerning-loosened pair splits, as
+/// PyMuPDF reads it) and must stay below [`LETTER_SPACING_MAX_FRAC`] of the font
+/// size: a dot leader `. . . .` or a rule `- - -` is repeated punctuation, not
+/// tracking, and must not lend its uniform gap to the letters around it — on a
+/// positioned TOC line the leader's dots outnumber the letters, so a line-wide
+/// median once read every real word gap as tracking
+/// ("Originandscopeofrightofdeduction"); and a uniform gap wider than a word
+/// space (map labels `O R E G O N`) is a row of single-letter words, exactly as
+/// PyMuPDF reads it. A gap clearly wider than
+/// the tracking gap — beyond 1.8× the run's median *and* beyond the median plus
+/// the word-gap threshold, e.g. before the number in "Abschnitt 2" — is a real
+/// word break and is left unmarked, so bimodal lines split on their wide gaps.
+///
+/// `size` is the line's device-space font size and `gap_thresh` the word-gap
+/// threshold derived from it (both from `build_line`).
+fn letter_spacing_skip_mask(glyphs: &[&DevGlyph], size: f64, gap_thresh: f64) -> Vec<bool> {
     let n = glyphs.len();
     let mut mask = vec![false; n];
     let is_space = |g: &DevGlyph| !g.text.is_empty() && g.text.chars().all(is_synth_ws);
@@ -1180,8 +1202,17 @@ fn letter_spacing_skip_mask(glyphs: &[&DevGlyph]) -> Vec<bool> {
     if ink.len() < 4 {
         return mask;
     }
-    let single = |i: usize| glyphs[i].text.chars().count() == 1;
+    let single_char = |i: usize| {
+        let mut chars = glyphs[i].text.chars();
+        match (chars.next(), chars.next()) {
+            (Some(c), None) => Some(c),
+            _ => None,
+        }
+    };
+    let single = |i: usize| single_char(i).is_some();
+    let letter = |i: usize| single_char(i).is_some_and(char::is_alphanumeric);
     let gap = |k: usize| glyphs[ink[k]].along_span().0 - glyphs[ink[k - 1]].along_span().1;
+    let max_track = size * LETTER_SPACING_MAX_FRAC;
     // Maximal runs of consecutive single-char ink glyphs.
     let mut a = 0;
     while a < ink.len() {
@@ -1194,18 +1225,31 @@ fn letter_spacing_skip_mask(glyphs: &[&DevGlyph]) -> Vec<bool> {
             b += 1;
         }
         if b - a >= 4 {
-            // Tracking gap = median of the run's inter-letter gaps; suppress the
-            // space before any letter whose gap is not clearly wider (a word break).
-            let mut gaps: Vec<f64> = (a + 1..b).map(gap).collect();
-            gaps.sort_by(f64::total_cmp);
-            let med = gaps[gaps.len() / 2].max(0.01);
-            for k in a + 1..b {
-                if gap(k) <= med * 1.8 {
-                    mask[ink[k]] = true;
+            // Tracking gap = median of the run's letter-to-letter gaps (punctuation
+            // contributes none). Only a gap that clears the word-gap threshold
+            // (by a 10% margin — tracking set exactly at the threshold sits on a
+            // float coin flip where the plain threshold already keeps the letters
+            // together) yet stays narrower than a word space is tracking; then
+            // suppress the space before any glyph whose gap is not clearly wider
+            // (a word break).
+            let mut gaps: Vec<f64> = (a + 1..b)
+                .filter(|&k| letter(ink[k - 1]) && letter(ink[k]))
+                .map(gap)
+                .collect();
+            if gaps.len() >= 3 {
+                gaps.sort_by(f64::total_cmp);
+                let med = gaps[gaps.len() / 2].max(0.01);
+                if med > gap_thresh * 1.1 && med <= max_track {
+                    let wide = (med * 1.8).min(med + gap_thresh);
+                    for k in a + 1..b {
+                        if gap(k) <= wide {
+                            mask[ink[k]] = true;
+                        }
+                    }
                 }
             }
         }
-        a = b.max(a + 1);
+        a = b;
     }
     mask
 }
@@ -1257,7 +1301,7 @@ fn build_line(glyphs: &[&DevGlyph], seq: usize) -> Line {
     // Per-glyph mask: suppress the synthesized word space before a glyph that sits
     // mid letter-spaced (tracked) run, so emphasised headings like "A b s c h n i t t"
     // collapse to "Abschnitt" instead of shattering into single-char tokens.
-    let suppress_space_before = letter_spacing_skip_mask(glyphs);
+    let suppress_space_before = letter_spacing_skip_mask(glyphs, eff_size, gap_thresh);
 
     for (gi, g) in glyphs.iter().enumerate() {
         let mut gflags = g.flags;

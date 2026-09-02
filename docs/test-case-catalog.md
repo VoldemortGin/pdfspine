@@ -1105,6 +1105,10 @@ self-built PDFs (reuse `tests/common`). No PyMuPDF files.
 | `WORDS-011` | e2e short-but-legal cell `/Ascent 500 /Descent 0` with `[(extr) -120 (action)] TJ` @12pt: threshold keyed on device font size (not cell height) → text `"extraction"`, words `["extraction"]` | PRD §8.6.2 | green |
 | `WORDS-012` | e2e threshold invariants @12pt: `(text extraction) Tj` and `[(extr) -300 (action)] TJ` split into two words; `[(extr) -30 (action)] TJ` and `[(e) 250 (xtraction)] TJ` stay one word (text and words agree) | PRD §8.6.2 | green |
 | `WORDS-013` | e2e `/F1 1 Tf` + `12 0 0 12 … Tm` segments identically to `12 Tf` for `-300` (split) and `-120` (whole) kerns — threshold lives in device space | PRD §8.6.2 | green |
+| `WORDS-014` | e2e positioned TOC line (per-glyph `Td` and per-word `TJ` forms) + `-190` dot leader + page number: the leader's uniform gap is not letter-spacing → `Origin and scope of right of deduction.` splits into words, each further dot its own word, `35` on its own line (PyMuPDF) | PRD §8.6.2 | green |
+| `WORDS-015` | e2e govdocs `Tf 1`/`Tm 8` label with `-332.7` `TJ` word gaps + `0.2219 Tc` dot leader + figures → `["Under","5","years", "."×31, "88", "6.1"]` (dots never mask the label's word gaps) | PRD §8.6.2 | green |
+| `WORDS-016` | e2e genuine tracking `2.5 Tc [(Abschnitt) -400 (2)] TJ` @12pt: uniform 0.21×size letter gaps collapse, the clearly wider gap before `2` stays a word break → `["Abschnitt","2"]` | PRD §8.6.2 | green |
+| `WORDS-017` | e2e `3 Tc (text extraction) Tj` @12pt: tracked letters collapse on both sides of the literal space → `["text","extraction"]` | PRD §8.6.2 | green |
 
 ### Span flags (`layout.rs`) — `LAYOUT-FLAGS-*`
 

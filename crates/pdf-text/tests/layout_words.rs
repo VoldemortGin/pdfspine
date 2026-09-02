@@ -319,3 +319,127 @@ fn words_013_threshold_is_device_space_tf1_tm_scale() {
         assert_eq!(to_text(&a, 0), to_text(&b, 0), "{src}");
     }
 }
+
+// === letter-spacing mask vs. genuine word gaps ==============================
+
+/// Helvetica advance for a WinAnsi code (1000-unit glyph space).
+fn helv_w(c: u8) -> i64 {
+    HELV[(c - 32) as usize]
+}
+
+/// Every glyph its own `Tj`, positioned with a relative `Td` of exactly its
+/// advance (letter gap 0); words separated by a `space_frac × size` advance.
+fn per_glyph_words(words: &[&str], size: f64, space_frac: f64) -> String {
+    let mut s = String::new();
+    for (i, w) in words.iter().enumerate() {
+        if i > 0 {
+            s.push_str(&format!("{:.4} 0 Td ", space_frac * size));
+        }
+        for c in w.bytes() {
+            let adv = helv_w(c) as f64 * size / 1000.0;
+            s.push_str(&format!("({}) Tj {adv:.4} 0 Td ", c as char));
+        }
+    }
+    s
+}
+
+/// A `TJ` dot leader: `n` dots, each pulled `kern` (1/1000 em) apart.
+fn dot_leader(n: usize, kern: i64) -> String {
+    (0..n)
+        .map(|i| {
+            if i == 0 {
+                "(.)".to_string()
+            } else {
+                format!(" {} (.)", -kern)
+            }
+        })
+        .collect()
+}
+
+#[test]
+fn words_014_positioned_toc_line_with_dot_leader_keeps_word_gaps() {
+    // eurlex / govdocs TOC pattern: every word (or every glyph) positioned by
+    // `Td`/`TJ` with no space glyph — letter gap 0, word gap ≈ one space width
+    // (0.278×size) — followed by a long `-190` dot leader (dot gap 0.19×size)
+    // and the page number. The dots are ≥4 single-char glyphs at a uniform
+    // gap, so a mask keyed on the *median* gap of the whole line read the
+    // leader as letter-spacing and swallowed every real word gap:
+    // "Originandscopeofrightofdeduction". PyMuPDF: the words split, the first
+    // dot stays glued to "deduction" (gap 0), the remaining dots are separate
+    // words, and the far-right page number starts a new line.
+    let toc = ["Origin", "and", "scope", "of", "right", "of", "deduction"];
+    let per_glyph = format!(
+        "BT /F1 8.5 Tf 72 700 Td {} [{} -1500 (35)] TJ ET",
+        per_glyph_words(&toc, 8.5, 0.278),
+        dot_leader(40, 190)
+    );
+    let per_word_tj = format!(
+        "BT /F1 1 Tf 8.5 0 0 8.5 72 700 Tm [(Or) 12 (igin) -337 (and) -337 (scope) -337 (of) -337 (r) 10 (ight) -337 (of) -337 (deduction)] TJ [{} -1500 (35)] TJ ET",
+        dot_leader(40, 190)
+    );
+    for content in [per_glyph.as_bytes(), per_word_tj.as_bytes()] {
+        let tp = textpage_e2e(winansi_type1("Helvetica", 32, &HELV), content);
+        let src = String::from_utf8_lossy(content);
+        let text = to_text(&tp, 0);
+        let first_line = text.lines().next().unwrap_or("");
+        assert!(
+            first_line.starts_with("Origin and scope of right of deduction. . . ."),
+            "{src}\n{text:?}"
+        );
+        let ws = word_texts(&tp);
+        assert_eq!(
+            &ws[..7],
+            &["Origin", "and", "scope", "of", "right", "of", "deduction."],
+            "{src}"
+        );
+        assert_eq!(ws.last().map(String::as_str), Some("35"), "{src}");
+        assert_eq!(ws.len(), 7 + 39 + 1, "{src}: {ws:?}");
+        assert!(ws[7..46].iter().all(|w| w == "."), "{src}: {ws:?}");
+    }
+}
+
+#[test]
+fn words_015_tc_dot_leader_is_not_letter_spacing() {
+    // govdocs1-00000 pattern: `Tf 1` + `Tm` scale 8, `TJ` word gaps of -332.7
+    // (2.66pt, no space glyph), then a `0.2219 Tc` dot leader (dot gap 1.78pt
+    // = 0.22×size) and right-aligned figures. The leader's uniform gap must
+    // not qualify as letter-spacing: the label splits into words and each dot
+    // is its own word (PyMuPDF); the figures start new lines (gap ≫ size).
+    let tp = textpage_e2e(
+        winansi_type1("Helvetica", 32, &HELV),
+        b"BT /F1 1 Tf 8 0 0 8 38.9 700 Tm [(Under) -332.7 (5) -332.7 (years)] TJ 6.8494 0 TD 0.2219 Tc [(...............................) -5034.5 (8) 221.9 (8) -2888 (6) 221.9 (.) 221.9 (1)] TJ ET",
+    );
+    let mut expected: Vec<&str> = vec!["Under", "5", "years"];
+    expected.extend(std::iter::repeat_n(".", 31));
+    expected.extend(["88", "6.1"]);
+    assert_eq!(word_texts(&tp), expected);
+    let text = to_text(&tp, 0);
+    assert!(text.starts_with("Under 5 years . . . ."), "{text:?}");
+}
+
+#[test]
+fn words_016_tracked_heading_keeps_word_gap_before_number() {
+    // Genuine letter-spacing: `2.5 Tc` at 12pt tracks every letter of
+    // "Abschnitt" 2.5pt apart (0.21×size, uniform, narrower than a space);
+    // the `-400` kern before "2" opens a clearly wider gap (7.3pt). The mask
+    // collapses the tracked run and leaves the real word gap alone. (Product
+    // choice: PyMuPDF has no tracking detection and shatters the heading.)
+    let tp = textpage_e2e(
+        winansi_type1("Helvetica", 32, &HELV),
+        b"BT /F1 12 Tf 72 700 Td 2.5 Tc [(Abschnitt) -400 (2)] TJ ET",
+    );
+    assert_eq!(to_text(&tp, 0).trim_end(), "Abschnitt 2");
+    assert_eq!(word_texts(&tp), vec!["Abschnitt", "2"]);
+}
+
+#[test]
+fn words_017_tc_tracking_with_literal_space_stays_two_words() {
+    // `3 Tc` tracking (0.25×size) around a literal space: the space glyph
+    // breaks the tracked run, so both words collapse and the boundary holds.
+    let tp = textpage_e2e(
+        winansi_type1("Helvetica", 32, &HELV),
+        b"BT /F1 12 Tf 72 700 Td 3 Tc (text extraction) Tj ET",
+    );
+    assert_eq!(to_text(&tp, 0).trim_end(), "text extraction");
+    assert_eq!(word_texts(&tp), vec!["text", "extraction"]);
+}
