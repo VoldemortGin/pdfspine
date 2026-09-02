@@ -790,7 +790,7 @@ add(
     "Page",
     IMPLEMENTED,
     "M7",
-    "table detection: lines/lines_strict/text strategies (M7)",
+    "table detection: compatible lines/lines_strict/text strategies (M7), plus pdfspine vision/tatr extension",
 )
 add_many("Page", IMPLEMENTED, "M2", ["get_image_rects", "get_xobjects"])
 add_many(
