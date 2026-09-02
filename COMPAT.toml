@@ -2271,7 +2271,7 @@ name = "Page.find_tables"
 group = "Page"
 disposition = "implemented"
 milestone = "M7"
-note = "table detection: lines/lines_strict/text strategies (M7)"
+note = "table detection: compatible lines/lines_strict/text strategies (M7), plus pdfspine vision/tatr extension"
 
 [[symbol]]
 name = "Page.get_image_rects"

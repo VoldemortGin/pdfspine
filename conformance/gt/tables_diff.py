@@ -8,9 +8,11 @@ objectively, how closely pdfspine's table detection and structure agree with fit
 How it works
 ------------
 fitz (AGPL) must NEVER be imported into our interpreter, and a Rust panic/abort in
-pdfspine must not take down the run. So every ``find_tables`` call happens in an
-ISOLATED SUBPROCESS under a wall-clock timeout (mirroring ``oracle_extract.py`` /
-``pdfspine_worker.py`` / ``run_validation.py``):
+pdfspine must not take down the run. So every ``find_tables`` call happens in a
+SUBPROCESS under a wall-clock timeout (mirroring ``oracle_extract.py`` /
+``pdfspine_worker.py`` / ``run_validation.py``). Native strategies use one
+isolated process per page; the vision benchmark uses one persistent JSONL process
+so the two TATR checkpoints load only once:
 
 - ``--worker pdfspine`` runs inside the project venv (with our built wheel).
 - ``--worker fitz``  runs inside ``.venv-oracle`` (PyMuPDF).
@@ -22,7 +24,7 @@ Each worker reads ``<pdf> <page_index>`` and prints a JSON list of tables, each:
 The parent (the default mode) drives both workers per page and compares:
 
   (a) table-COUNT agreement   — |#pdfspine - #fitz| == 0 ?
-  (b) GRID-SHAPE agreement    — for tables matched by bbox IoU > 0.5, does
+  (b) GRID-SHAPE agreement    — for tables matched by bbox IoU >= 0.5, does
                                  (rows, cols) match exactly?
   (c) CELL-TEXT agreement     — token F1 (via gt/score.py) of the two tables'
                                  flattened cell text, pdfspine-vs-fitz.
@@ -53,8 +55,10 @@ import argparse
 import contextlib
 import json
 import os
+import queue
 import subprocess
 import sys
+import threading
 from html.parser import HTMLParser
 from pathlib import Path
 
@@ -136,6 +140,31 @@ def _table_record(tbl) -> dict:
             rec["row_count"] = len(ext)
         if rec["col_count"] is None:
             rec["col_count"] = max((len(r or []) for r in ext), default=0)
+    # Prefer a direct, lossless cell representation. pdfspine exposes spans for
+    # both native and TATR tables; HTML remains only a compatibility fallback for
+    # fitz and historical result files.
+    rec["cells"] = []
+    if ext is not None:
+        try:
+            for row, column, row_span, column_span, bbox in tbl.spans:
+                text = ""
+                if row < len(ext) and column < len(ext[row] or []):
+                    text = str(ext[row][column] or "")
+                rec["cells"].append({
+                    "row_nums": list(range(int(row), int(row) + int(row_span))),
+                    "column_nums": list(
+                        range(int(column), int(column) + int(column_span))
+                    ),
+                    "bbox": _as_bbox(bbox),
+                    "cell_text": text,
+                })
+        except Exception:  # noqa: BLE001
+            rec["cells"] = []
+    for attr in ("confidence", "source", "text_source", "metadata"):
+        try:
+            rec[attr] = getattr(tbl, attr)
+        except Exception:  # noqa: BLE001
+            pass
     # Cell-structure HTML (with colspan/rowspan) for the gold-GT / GriTS mode. Both
     # pdfspine and fitz Tables expose ``to_html()``; it is the cleanest source of
     # per-cell row/col spans + text. Captured opportunistically; absent on error.
@@ -146,7 +175,41 @@ def _table_record(tbl) -> dict:
     return rec
 
 
-def _worker_pdfspine(pdf: str, page_index: int, strategy: str = "lines") -> list[dict]:
+def _vision_runtime_metadata(strategy: str) -> dict:
+    """Return process-level TATR metadata even when no table was detected.
+
+    Table metadata alone is insufficient for benchmark reproducibility: a page
+    with zero detections has no ``Table`` object from which to read it.  The
+    vision runtime is already cached by ``find_tables``, so this lookup does not
+    reload either checkpoint.
+    """
+    if strategy.casefold() not in {"vision", "tatr"}:
+        return {}
+
+    from pdfspine import _tatr
+
+    options = _tatr.TatrOptions()
+    runtime = _tatr._get_runtime(options)
+    metadata = dict(getattr(runtime, "metadata", {}))
+    metadata.update({
+        "strategy": strategy,
+        "dpi": options.dpi,
+        "detection_threshold": options.detection_threshold,
+        "structure_threshold": options.structure_threshold,
+        "crop_padding": options.crop_padding,
+        "local_files_only": options.local_files_only,
+        "ocr_if_no_text": options.ocr_if_no_text,
+        "native_line_guidance": options.native_line_guidance,
+        "adaptive_crop": options.adaptive_crop,
+    })
+    return metadata
+
+
+def _worker_pdfspine(
+    pdf: str,
+    page_index: int,
+    strategy: str = "lines",
+) -> tuple[list[dict], dict]:
     import pdfspine
 
     doc = pdfspine.open(pdf)
@@ -154,7 +217,19 @@ def _worker_pdfspine(pdf: str, page_index: int, strategy: str = "lines") -> list
         page = doc.load_page(page_index)
         finder = page.find_tables(strategy=strategy)
         tables = list(getattr(finder, "tables", finder))
-        return [_table_record(t) for t in tables]
+        records = [_table_record(t) for t in tables]
+        metadata = _vision_runtime_metadata(strategy)
+        if not metadata:
+            metadata = next(
+                (
+                    dict(record["metadata"])
+                    for record in records
+                    if isinstance(record.get("metadata"), dict)
+                    and record["metadata"]
+                ),
+                {},
+            )
+        return records, metadata
     finally:
         try:
             doc.close()
@@ -187,14 +262,21 @@ def _run_worker(mode: str, pdf: str, page_index: int, strategy: str = "lines") -
     for the duration of extraction so ALL such chatter (Python- AND C-level) lands
     on stderr, then write the JSON result to the saved real stdout.
     """
-    out: dict = {"ok": False, "tables": [], "error": None}
+    out: dict = {
+        "ok": False,
+        "tables": [],
+        "backend_metadata": {},
+        "error": None,
+    }
     real_stdout_fd = os.dup(1)
     try:
         os.dup2(2, 1)  # fd 1 -> stderr while the engine runs
         sys.stdout = sys.stderr
         try:
             if mode == "pdfspine":
-                out["tables"] = _worker_pdfspine(pdf, page_index, strategy)
+                out["tables"], out["backend_metadata"] = _worker_pdfspine(
+                    pdf, page_index, strategy
+                )
             elif mode == "fitz":
                 out["tables"] = _worker_fitz(pdf, page_index)
             else:
@@ -210,13 +292,189 @@ def _run_worker(mode: str, pdf: str, page_index: int, strategy: str = "lines") -
     return 0
 
 
+def _write_all(fd: int, data: bytes) -> None:
+    """Write all bytes to ``fd``; ``os.write`` may legally short-write."""
+    remaining = memoryview(data)
+    while remaining:
+        written = os.write(fd, remaining)
+        if written <= 0:
+            raise BrokenPipeError("table worker protocol write returned zero bytes")
+        remaining = remaining[written:]
+
+
 def _emit_json(fd: int, obj: dict) -> None:
     """Write JSON to the saved real stdout fd, bypassing any redirection."""
     data = (json.dumps(obj) + "\n").encode("utf-8")
     with contextlib.suppress(Exception):
-        os.write(fd, data)
+        _write_all(fd, data)
     with contextlib.suppress(Exception):
         os.close(fd)
+
+
+def _write_json_line(fd: int, obj: dict) -> None:
+    """Write one JSONL message without closing a persistent worker's fd."""
+    _write_all(fd, (json.dumps(obj) + "\n").encode("utf-8"))
+
+
+def _run_jsonl_worker(strategy: str) -> int:
+    """Persistent pdfspine worker; TATR models are loaded at most once."""
+    real_stdout_fd = os.dup(1)
+    os.dup2(2, 1)
+    sys.stdout = sys.stderr
+    _write_json_line(real_stdout_fd, {
+        "schema": "pdfspine.table-worker.v1",
+        "type": "ready",
+        "backend": {"name": "pdfspine", "strategy": strategy},
+    })
+    try:
+        for raw in sys.stdin:
+            request: dict = {}
+            try:
+                request = json.loads(raw)
+                if request.get("type") == "close":
+                    break
+                request_id = request.get("request_id")
+                tables, backend_metadata = _worker_pdfspine(
+                    str(request["pdf"]),
+                    int(request.get("page_index", 0)),
+                    str(request.get("strategy") or strategy),
+                )
+                response = {
+                    "schema": "pdfspine.table-worker.v1",
+                    "type": "result",
+                    "request_id": request_id,
+                    "ok": True,
+                    "tables": tables,
+                    "backend_metadata": backend_metadata,
+                    "error": None,
+                }
+            except Exception as exc:  # noqa: BLE001
+                response = {
+                    "schema": "pdfspine.table-worker.v1",
+                    "type": "result",
+                    "request_id": request.get("request_id"),
+                    "ok": False,
+                    "tables": [],
+                    "backend_metadata": {},
+                    "error": f"{type(exc).__name__}: {exc}",
+                }
+            _write_json_line(real_stdout_fd, response)
+    finally:
+        with contextlib.suppress(Exception):
+            os.close(real_stdout_fd)
+    return 0
+
+
+class PersistentPdfspineWorker:
+    """JSONL client used by vision benchmarks to amortize model startup."""
+
+    def __init__(
+        self,
+        python: str,
+        strategy: str,
+        timeout: float,
+        startup_timeout: float,
+    ) -> None:
+        self.strategy = strategy
+        self.timeout = timeout
+        self.startup_timeout = startup_timeout
+        self._first_request = True
+        self._sequence = 0
+        self._lines: queue.Queue[str | None] = queue.Queue()
+        self._process = subprocess.Popen(
+            [python, "-u", str(THIS), "--worker-jsonl", "--strategy", strategy],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            text=True,
+        )
+        assert self._process.stdout is not None
+
+        def read_stdout() -> None:
+            for line in self._process.stdout:
+                self._lines.put(line)
+            self._lines.put(None)
+
+        self._reader = threading.Thread(target=read_stdout, daemon=True)
+        self._reader.start()
+        try:
+            ready = self._read_line(30.0)
+            if ready.get("type") != "ready":
+                raise RuntimeError(
+                    f"persistent table worker did not become ready: {ready}"
+                )
+        except Exception:
+            self.close()
+            raise
+
+    def _read_line(self, timeout: float) -> dict:
+        try:
+            line = self._lines.get(timeout=timeout)
+        except queue.Empty as exc:
+            raise TimeoutError(f"table worker timed out after {timeout}s") from exc
+        if line is None:
+            raise RuntimeError(
+                f"table worker exited with code {self._process.poll()}"
+            )
+        return json.loads(line)
+
+    def call(self, pdf: Path, page_index: int) -> dict:
+        self._sequence += 1
+        request_id = f"{pdf.name}:{page_index}:{self._sequence}"
+        request = {
+            "schema": "pdfspine.table-worker.v1",
+            "type": "extract",
+            "request_id": request_id,
+            "pdf": str(pdf),
+            "page_index": int(page_index),
+            "strategy": self.strategy,
+        }
+        try:
+            if self._process.stdin is None:
+                raise RuntimeError("table worker stdin is closed")
+            self._process.stdin.write(json.dumps(request) + "\n")
+            self._process.stdin.flush()
+            wait = self.startup_timeout if self._first_request else self.timeout
+            response = self._read_line(wait)
+            self._first_request = False
+            if response.get("request_id") != request_id:
+                raise RuntimeError("table worker response request_id mismatch")
+            return response
+        except Exception as exc:  # noqa: BLE001
+            self.close()
+            return {
+                "ok": False,
+                "tables": [],
+                "backend_metadata": {},
+                "error": f"{type(exc).__name__}: {exc}",
+            }
+
+    def close(self) -> None:
+        process = getattr(self, "_process", None)
+        if process is None:
+            return
+        if process.poll() is None:
+            try:
+                if process.stdin is not None:
+                    process.stdin.write(json.dumps({"type": "close"}) + "\n")
+                    process.stdin.flush()
+                process.wait(timeout=5)
+            except Exception:  # noqa: BLE001
+                with contextlib.suppress(Exception):
+                    process.terminate()
+                with contextlib.suppress(Exception):
+                    process.wait(timeout=2)
+                if process.poll() is None:
+                    with contextlib.suppress(Exception):
+                        process.kill()
+                    with contextlib.suppress(Exception):
+                        process.wait(timeout=2)
+        for stream in (process.stdin, process.stdout):
+            if stream is not None:
+                with contextlib.suppress(Exception):
+                    stream.close()
+        reader = getattr(self, "_reader", None)
+        if reader is not None:
+            reader.join(timeout=2)
 
 
 # ===========================================================================
@@ -236,19 +494,38 @@ def call_worker(py: str, mode: str, pdf: Path, page_index: int, timeout: float,
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired:
-        return {"ok": False, "tables": [], "error": f"timeout after {timeout}s"}
+        return {
+            "ok": False,
+            "tables": [],
+            "backend_metadata": {},
+            "error": f"timeout after {timeout}s",
+        }
     except Exception as exc:  # noqa: BLE001
-        return {"ok": False, "tables": [], "error": f"spawn: {type(exc).__name__}: {exc}"}
+        return {
+            "ok": False,
+            "tables": [],
+            "backend_metadata": {},
+            "error": f"spawn: {type(exc).__name__}: {exc}",
+        }
     if proc.returncode != 0:
         # SIGABRT etc. surface as a negative returncode; capture stderr tail.
         tail = (proc.stderr or "").strip().splitlines()[-1:] or [""]
-        return {"ok": False, "tables": [],
-                "error": f"exit {proc.returncode}: {tail[0][:200]}"}
+        return {
+            "ok": False,
+            "tables": [],
+            "backend_metadata": {},
+            "error": f"exit {proc.returncode}: {tail[0][:200]}",
+        }
     try:
         return json.loads(proc.stdout)
     except json.JSONDecodeError:
         tail = (proc.stdout or "").strip()[-200:]
-        return {"ok": False, "tables": [], "error": f"bad json: {tail!r}"}
+        return {
+            "ok": False,
+            "tables": [],
+            "backend_metadata": {},
+            "error": f"bad json: {tail!r}",
+        }
 
 
 def iou(a: list[float], b: list[float]) -> float:
@@ -277,7 +554,7 @@ def match_tables(ox: list[dict], fz: list[dict], iou_thr: float = 0.5) -> list[t
     for i, o in enumerate(ox):
         for j, f in enumerate(fz):
             v = iou(o.get("bbox") or [], f.get("bbox") or [])
-            if v > iou_thr:
+            if v >= iou_thr:
                 cands.append((v, i, j))
     cands.sort(reverse=True)
     used_o: set[int] = set()
@@ -414,7 +691,7 @@ def process_doc(pdf: Path, doc_id: str, pdfspine_py: str, fitz_py: str,
 # Pipeline per page:
 #   1. parse gold tables from the FinTabNet.c annotation -> GriTS cells,
 #   2. run pdfspine in an isolated worker -> predicted tables (+ to_html()),
-#   3. parse each predicted table's HTML -> GriTS cells,
+#   3. consume direct predicted cells (HTML only for legacy fallback),
 #   4. match predicted<->gold tables by bbox IoU, score each pair with GriTS_Top
 #      (topology) and GriTS_Con (content); unmatched gold tables score 0.
 # ===========================================================================
@@ -507,9 +784,26 @@ def _pred_cells_from_html(html: str | None) -> list[dict]:
     return [c for c in p.cells if "cell_text" in c]
 
 
+def _pred_cells_from_record(record: dict) -> list[dict]:
+    """Prefer a predictor's direct cells; fall back to historical HTML."""
+    direct: list[dict] = []
+    for cell in record.get("cells") or []:
+        rows = [int(v) for v in cell.get("row_nums") or []]
+        columns = [int(v) for v in cell.get("column_nums") or []]
+        if not rows or not columns:
+            continue
+        direct.append({
+            "row_nums": rows,
+            "column_nums": columns,
+            "cell_text": " ".join(str(cell.get("cell_text") or "").split()),
+        })
+    return direct if direct else _pred_cells_from_html(record.get("html"))
+
+
 def process_doc_gold(pdf: Path, doc_id: str, gold_tables: list[dict],
                      page_index: int, pdfspine_py: str, timeout: float,
-                     strategy: str = "lines") -> dict:
+                     strategy: str = "lines", predictor=None,
+                     match_iou: float = 0.5) -> dict:
     """Score one page's pdfspine tables vs the page's gold tables with GriTS.
 
     ``gold_tables`` is the list of FinTabNet.c annotation tables for this page
@@ -525,41 +819,85 @@ def process_doc_gold(pdf: Path, doc_id: str, gold_tables: list[dict],
         if cells:
             golds.append({"cells": cells, "bbox": bbox})
 
-    # Predicted side (isolated pdfspine worker; reuse the robust call_worker).
-    ox_res = call_worker(pdfspine_py, "pdfspine", pdf, page_index, timeout, strategy)
-    preds: list[dict] = []
-    if ox_res.get("ok"):
-        for rec in ox_res.get("tables", []):
-            cells = _pred_cells_from_html(rec.get("html"))
-            preds.append({"cells": cells, "bbox": rec.get("bbox") or [0, 0, 0, 0]})
+    # Native strategies retain per-page isolation. Vision uses a persistent
+    # worker supplied by run_gold so two large models are loaded only once.
+    ox_res = (
+        predictor(pdf, page_index)
+        if predictor is not None
+        else call_worker(pdfspine_py, "pdfspine", pdf, page_index, timeout, strategy)
+    )
+    raw_metadata = ox_res.get("backend_metadata")
+    backend_metadata = dict(raw_metadata) if isinstance(raw_metadata, dict) else {}
+    if not ox_res.get("ok"):
+        # An execution failure is not a model miss.  Keep every metric undefined
+        # so callers cannot accidentally aggregate infrastructure failure as a
+        # zero-quality prediction.
+        return {
+            "id": doc_id,
+            "pdf": str(pdf),
+            "status": "invalid",
+            "ox_ok": False,
+            "ox_error": ox_res.get("error") or "pdfspine worker failed",
+            "n_gold": len(golds),
+            "n_pred": 0,
+            "n_matched": 0,
+            "n_detection_matched": 0,
+            "detection_precision": None,
+            "detection_recall": None,
+            "detection_f1": None,
+            "match_iou": match_iou,
+            "backend_metadata": backend_metadata,
+            "tables": [],
+            "grits_top_sum": None,
+            "grits_con_sum": None,
+        }
 
-    # Match predicted<->gold by table-bbox IoU (greedy, highest first).
-    cands: list[tuple[float, int, int]] = []
-    for gi, g in enumerate(golds):
-        for pi, p in enumerate(preds):
-            v = iou(g["bbox"], p["bbox"])
-            if v > 0.0:
-                cands.append((v, gi, pi))
-    cands.sort(reverse=True)
-    used_g: set[int] = set()
-    used_p: set[int] = set()
-    pairs: list[tuple[int, int, float]] = []
-    for v, gi, pi in cands:
-        if gi in used_g or pi in used_p:
-            continue
-        used_g.add(gi)
-        used_p.add(pi)
-        pairs.append((gi, pi, v))
+    preds: list[dict] = []
+    for rec in ox_res.get("tables", []):
+        record_metadata = rec.get("metadata")
+        if not backend_metadata and isinstance(record_metadata, dict):
+            backend_metadata = dict(record_metadata)
+        cells = _pred_cells_from_record(rec)
+        table_bbox = rec.get("bbox") or [0, 0, 0, 0]
+        detection_bbox = (
+            record_metadata.get("detection_bbox")
+            if isinstance(record_metadata, dict)
+            else None
+        )
+        try:
+            detection_bbox = _as_bbox(detection_bbox or table_bbox)
+        except (AttributeError, TypeError, ValueError):
+            detection_bbox = table_bbox
+        preds.append({
+            "cells": cells,
+            "bbox": table_bbox,
+            "detection_bbox": detection_bbox,
+        })
+
+    # Keep detector localization and final extraction geometry as two explicit
+    # contracts. TATR's optional native-line guidance may enlarge only the
+    # recognition crop; it must not receive credit in detector P/R/F1. Native
+    # strategies have no raw detector box and therefore fall back to Table.bbox.
+    detection_preds = [{"bbox": p["detection_bbox"]} for p in preds]
+    detection_pairs = match_tables(golds, detection_preds, iou_thr=match_iou)
+    structure_pairs = match_tables(golds, preds, iou_thr=match_iou)
+    detection_by_gold = {gold_i: (pred_i, score) for gold_i, pred_i, score in detection_pairs}
 
     table_recs: list[dict] = []
     for gi, g in enumerate(golds):
-        match = next((pr for pr in pairs if pr[0] == gi), None)
+        detection_match = detection_by_gold.get(gi)
+        detection_fields = {
+            "detection_matched": detection_match is not None,
+            "detection_iou": round(detection_match[1], 3) if detection_match else 0.0,
+        }
+        match = next((pr for pr in structure_pairs if pr[0] == gi), None)
         if match is None:
             # Gold table the predictor missed entirely -> GriTS 0 (full penalty).
             table_recs.append({
                 "matched": False, "iou": 0.0,
                 "grits_top": 0.0, "grits_con": 0.0,
                 "gold_shape": _shape(g["cells"]), "pred_shape": [0, 0],
+                **detection_fields,
             })
             continue
         _, pi, v = match
@@ -568,23 +906,100 @@ def process_doc_gold(pdf: Path, doc_id: str, gold_tables: list[dict],
         gt_con, _, _ = grits_con(g["cells"], p["cells"])
         table_recs.append({
             "matched": True, "iou": round(v, 3),
-            "grits_top": round(gt_top, 4), "grits_con": round(gt_con, 4),
+            # Keep full precision for aggregate statistics; round only in reports.
+            "grits_top": gt_top, "grits_con": gt_con,
             "gold_shape": _shape(g["cells"]), "pred_shape": _shape(p["cells"]),
+            **detection_fields,
         })
 
     n_gold = len(golds)
     n_matched = sum(1 for r in table_recs if r["matched"])
+    n_detection_matched = len(detection_pairs)
+    precision = n_detection_matched / len(preds) if preds else 0.0
+    recall = n_detection_matched / n_gold if n_gold else 0.0
+    detection_f1 = (
+        2 * precision * recall / (precision + recall)
+        if precision + recall
+        else 0.0
+    )
     return {
         "id": doc_id,
         "pdf": str(pdf),
+        "status": "valid",
         "ox_ok": bool(ox_res.get("ok")),
         "ox_error": ox_res.get("error"),
         "n_gold": n_gold,
         "n_pred": len(preds),
         "n_matched": n_matched,
+        "n_detection_matched": n_detection_matched,
+        "detection_precision": precision,
+        "detection_recall": recall,
+        "detection_f1": detection_f1,
+        "match_iou": match_iou,
+        "backend_metadata": backend_metadata,
         "tables": table_recs,
         "grits_top_sum": sum(r["grits_top"] for r in table_recs),
         "grits_con_sum": sum(r["grits_con"] for r in table_recs),
+    }
+
+
+def _gold_metric_summary(docs: list[dict]) -> dict:
+    """Aggregate valid gold pages into detection and two GriTS views.
+
+    ``end_to_end`` assigns zero to missed gold tables. ``matched_only`` measures
+    structure only on tables whose final ``Table.bbox`` matched the gold bbox.
+    Detector P/R/F1 uses the raw model ``metadata.detection_bbox`` when present,
+    falling back to ``Table.bbox`` for backends without separate detector output.
+    Neither view is silently computed from failed worker pages.
+    """
+    valid = [d for d in docs if d.get("status", "valid") == "valid" and d.get("ox_ok")]
+    total_gold = sum(d["n_gold"] for d in valid)
+    total_pred = sum(d["n_pred"] for d in valid)
+    total_matched = sum(d["n_matched"] for d in valid)
+    total_detection_matched = sum(
+        d.get("n_detection_matched", d["n_matched"]) for d in valid
+    )
+    all_tables = [table for doc in valid for table in doc["tables"]]
+    matched_tables = [table for table in all_tables if table["matched"]]
+
+    precision = total_detection_matched / total_pred if total_pred else 0.0
+    recall = total_detection_matched / total_gold if total_gold else 0.0
+    detection_f1 = (
+        2 * precision * recall / (precision + recall)
+        if precision + recall
+        else 0.0
+    )
+
+    end_top = [float(table["grits_top"]) for table in all_tables]
+    end_con = [float(table["grits_con"]) for table in all_tables]
+    matched_top = [float(table["grits_top"]) for table in matched_tables]
+    matched_con = [float(table["grits_con"]) for table in matched_tables]
+    return {
+        "n_gold": total_gold,
+        "n_pred": total_pred,
+        "n_matched": total_matched,
+        "n_detection_matched": total_detection_matched,
+        "detection_precision": precision,
+        "detection_recall": recall,
+        "detection_f1": detection_f1,
+        "end_to_end": {
+            "n_tables": total_gold,
+            "grits_top_mean": sum(end_top) / total_gold if total_gold else 0.0,
+            "grits_top_median": _median(end_top),
+            "grits_con_mean": sum(end_con) / total_gold if total_gold else 0.0,
+            "grits_con_median": _median(end_con),
+        },
+        "matched_only": {
+            "n_tables": total_matched,
+            "grits_top_mean": (
+                sum(matched_top) / total_matched if total_matched else None
+            ),
+            "grits_top_median": _median(matched_top) if matched_top else None,
+            "grits_con_mean": (
+                sum(matched_con) / total_matched if total_matched else None
+            ),
+            "grits_con_median": _median(matched_con) if matched_con else None,
+        },
     }
 
 
@@ -633,7 +1048,8 @@ def load_gold_manifest(path: Path) -> list[dict]:
 
 
 def run_gold(manifest_path: Path, pdfspine_py: str, timeout: float,
-             report_path: Path, json_path: Path, strategy: str = "lines") -> int:
+             report_path: Path, json_path: Path, strategy: str = "lines",
+             startup_timeout: float = 600.0, match_iou: float = 0.5) -> int:
     """Drive the gold-GT GriTS run over a FinTabNet.c manifest; write report+json.
 
     If no source PDFs are present (the common BLOCKED case in restricted
@@ -647,39 +1063,120 @@ def run_gold(manifest_path: Path, pdfspine_py: str, timeout: float,
     scored = [p for p in pages if p["pdf"] and p["pdf"].exists()]
     print(f"Gold pages: {len(pages)} (PDF present: {len(scored)})", flush=True)
 
+    wants_persistent = strategy.casefold() in {"vision", "tatr"} and bool(scored)
+    persistent = None
     docs: list[dict] = []
-    for k, pg in enumerate(scored, 1):
-        d = process_doc_gold(pg["pdf"], pg["document_id"], pg["gold_tables"],
-                             pg["page_index"], pdfspine_py, timeout, strategy)
-        docs.append(d)
-        mt = d["n_matched"]
-        gt = d["n_gold"]
-        top = (d["grits_top_sum"] / gt) if gt else 0.0
-        con = (d["grits_con_sum"] / gt) if gt else 0.0
-        print(f"[{k}/{len(scored)}] {pg['document_id']}: gold={gt} pred={d['n_pred']} "
-              f"matched={mt} GriTS_Top={top:.3f} GriTS_Con={con:.3f}", flush=True)
+    run_error: str | None = None
+    try:
+        if wants_persistent:
+            persistent = PersistentPdfspineWorker(
+                pdfspine_py, strategy, timeout, startup_timeout
+            )
+        for k, pg in enumerate(scored, 1):
+            d = process_doc_gold(
+                pg["pdf"], pg["document_id"], pg["gold_tables"],
+                pg["page_index"], pdfspine_py, timeout, strategy,
+                predictor=persistent.call if persistent is not None else None,
+                match_iou=match_iou,
+            )
+            docs.append(d)
+            if not d["ox_ok"]:
+                run_error = (
+                    f"{pg['document_id']} page {pg['page_index']}: "
+                    f"{d['ox_error']}"
+                )
+                print(
+                    f"[{k}/{len(scored)}] INVALID — {run_error}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                break
+            mt = d["n_matched"]
+            det_mt = d["n_detection_matched"]
+            gt = d["n_gold"]
+            top = (d["grits_top_sum"] / gt) if gt else 0.0
+            con = (d["grits_con_sum"] / gt) if gt else 0.0
+            print(
+                f"[{k}/{len(scored)}] {pg['document_id']}: gold={gt} "
+                f"pred={d['n_pred']} det-matched={det_mt} "
+                f"structure-matched={mt} Det-F1={d['detection_f1']:.3f} "
+                f"GriTS_Top={top:.3f} GriTS_Con={con:.3f}",
+                flush=True,
+            )
+    except Exception as exc:  # noqa: BLE001
+        run_error = f"{type(exc).__name__}: {exc}"
+        print(f"INVALID gold run: {run_error}", file=sys.stderr, flush=True)
+    finally:
+        if persistent is not None:
+            try:
+                persistent.close()
+            except Exception as exc:  # noqa: BLE001
+                if run_error is None:
+                    run_error = f"worker shutdown failed: {type(exc).__name__}: {exc}"
+
+    status = "invalid" if run_error else ("blocked" if not scored else "valid")
+    summary = _gold_metric_summary(docs) if status == "valid" else None
+    backend_metadata = next(
+        (d["backend_metadata"] for d in docs if d.get("backend_metadata")),
+        {},
+    )
 
     payload = {
+        "status": status,
+        "error": run_error,
         "mode": "gold-fintabnet",
         "manifest": str(manifest_path),
         "metric": "GriTS (grits.py)",
         "pdfspine_python": pdfspine_py,
         "find_tables_strategy": strategy,
+        "worker": "persistent-jsonl" if wants_persistent else "per-page",
+        "match_iou": match_iou,
+        "bbox_contract": {
+            "detection_metrics": (
+                "Table.metadata.detection_bbox when present; otherwise Table.bbox"
+            ),
+            "grits_pairing": "final Table.bbox",
+        },
+        "detection_precision": (
+            summary["detection_precision"] if summary is not None else None
+        ),
+        "detection_recall": (
+            summary["detection_recall"] if summary is not None else None
+        ),
+        "detection_f1": summary["detection_f1"] if summary is not None else None,
+        "grits_end_to_end": summary["end_to_end"] if summary is not None else None,
+        "grits_matched_only": (
+            summary["matched_only"] if summary is not None else None
+        ),
+        "backend_metadata": backend_metadata,
         "n_pages_total": len(pages),
         "n_pages_with_pdf": len(scored),
+        "n_pages_attempted": len(docs),
+        "n_pages_succeeded": sum(1 for d in docs if d.get("ox_ok")),
         "docs": docs,
     }
     json_path.parent.mkdir(parents=True, exist_ok=True)
     json_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
-    report = build_gold_report(manifest_path, pages, scored, docs, strategy)
+    report = build_gold_report(
+        manifest_path,
+        pages,
+        scored,
+        docs,
+        strategy,
+        match_iou,
+        status=status,
+        run_error=run_error,
+    )
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(report, encoding="utf-8")
     print(f"\nWrote {json_path}\nWrote {report_path}", flush=True)
-    return 0
+    return 3 if status == "invalid" else 0
 
 
 def build_gold_report(manifest_path: Path, pages: list[dict], scored: list[dict],
-                      docs: list[dict], strategy: str = "lines") -> str:
+                      docs: list[dict], strategy: str = "lines",
+                      match_iou: float = 0.5, *, status: str | None = None,
+                      run_error: str | None = None) -> str:
     """Render the committed gold-GT report (absolute GriTS or a clean blocked one)."""
     man = json.loads(manifest_path.read_text(encoding="utf-8"))
     n_total = len(pages)
@@ -688,26 +1185,46 @@ def build_gold_report(manifest_path: Path, pages: list[dict], scored: list[dict]
     anno_lic = man.get("annotations_license", "CDLA-Permissive-2.0")
     pdf_lic = man.get("pdf_license", "CDLA-Permissive-1.0")
     pdf_status = man.get("pdf_status_counts", {})
+    if status is None:
+        if any(not doc.get("ox_ok") for doc in docs):
+            status = "invalid"
+        elif n_pdf == 0:
+            status = "blocked"
+        else:
+            status = "valid"
 
     L: list[str] = []
     L.append("# Table cell-structure GOLD GT — pdfspine `find_tables` vs FinTabNet.c (GriTS)\n")
-    L.append(f"Harness: `{THIS}` (`--gold --strategy {strategy}`; find_tables "
-             f"`strategy=\"{strategy}\"`)  ")
+    L.append(
+        f"Harness: `{THIS}` (`--gold --strategy {strategy}`; find_tables "
+        f"`strategy=\"{strategy}\"`; bbox match IoU ≥ {match_iou})  "
+    )
     L.append("Metric: **GriTS** (Grid Table Similarity, Smock et al. arXiv:2303.00716 / 2203.12555) "
              "— `conformance/gt/grits.py`.  ")
     L.append(f"Dataset: **FinTabNet.c** — annotations `{anno_lic}`, source PDFs `{pdf_lic}`.  ")
     L.append(f"Provenance: annotations from `{man.get('annotations_source')}`; "
              f"source PDFs from `{man.get('pdf_source')}`.\n")
+    L.append(f"Run status: **{status.upper()}**.\n")
+    backend_metadata = next(
+        (d["backend_metadata"] for d in docs if d.get("backend_metadata")),
+        {},
+    )
+    if backend_metadata:
+        L.append("Backend metadata: `" + json.dumps(
+            backend_metadata, sort_keys=True, ensure_ascii=False
+        ) + "`.\n")
 
     L.append("## Why GriTS\n")
     L.append("GriTS scores cell **topology** (row/col spans) and cell **content** in one "
              "F-score framework with per-cell partial credit, is transpose- and "
              "position-invariant (the two properties an ideal TSR metric should have), and "
-             "is the canonical metric for FinTabNet.c — so the number is directly comparable "
-             "to published Table-Transformer results. We compute **GriTS_Top** (topology) and "
+             "is the canonical metric for FinTabNet.c. We compute **GriTS_Top** (topology) and "
              "**GriTS_Con** (content) via the factored 2D-MSS heuristic, a faithful stdlib port "
              "of Microsoft's reference `grits.py` (numpy→lists, `fitz.Rect` IoU→plain "
-             "arithmetic; no AGPL `fitz` is imported).\n")
+             "arithmetic; no AGPL `fitz` is imported). The metric implementation is shared, "
+             "but this harness runs **full-page table detection first**. Microsoft's published "
+             "TATR ~0.98 structure score evaluates TSR on gold cropped-table images with table "
+             "words and is therefore **not directly comparable** to the end-to-end score below.\n")
 
     L.append("## Sample / provenance / license\n")
     L.append(f"- Sample requested: **{man.get('sample_requested')}** pages; fetched "
@@ -720,42 +1237,79 @@ def build_gold_report(manifest_path: Path, pages: list[dict], scored: list[dict]
              "(`conformance/gt/corpus-*/`); the committed deliverables are the fetcher, the "
              "metric, the harness mode, and this report.\n")
 
+    if status == "invalid":
+        L.append("## Status: INVALID — worker/model execution failed\n")
+        L.append(f"- Error: `{run_error or 'pdfspine worker failed'}`")
+        L.append(f"- Pages completed successfully: **{sum(1 for d in docs if d.get('ox_ok'))}**; "
+                 f"attempted: **{len(docs)}** / {n_pdf} PDFs present.")
+        L.append("- **No aggregate detection or GriTS score is reported.** An execution "
+                 "failure is not a model miss and must never be converted to zero. Re-run after "
+                 "fixing the model cache, optional dependencies, device, or timeout.\n")
+        return "\n".join(L)
+
     if n_pdf == 0:
         L.extend(_gold_blocked_section(man, pages))
         return "\n".join(L)
 
-    # --- Absolute scores (PDFs were available) ---
-    valid = docs
-    tot_gold = sum(d["n_gold"] for d in valid)
-    tot_pred = sum(d["n_pred"] for d in valid)
-    tot_match = sum(d["n_matched"] for d in valid)
-    top_sum = sum(d["grits_top_sum"] for d in valid)
-    con_sum = sum(d["grits_con_sum"] for d in valid)
-    mean_top = (top_sum / tot_gold) if tot_gold else 0.0
-    mean_con = (con_sum / tot_gold) if tot_gold else 0.0
-    # Per-table medians (over gold tables, missed = 0).
-    tops = [t["grits_top"] for d in valid for t in d["tables"]]
-    cons = [t["grits_con"] for d in valid for t in d["tables"]]
-    med_top = _median(tops)
-    med_con = _median(cons)
+    summary = _gold_metric_summary(docs)
+    end_to_end = summary["end_to_end"]
+    matched_only = summary["matched_only"]
+    valid = [d for d in docs if d.get("ox_ok")]
 
-    L.append(f"## Absolute cell-structure score (pdfspine `strategy=\"{strategy}\"` vs gold)\n")
-    L.append(f"- Gold tables scored: **{tot_gold}** (across {len(valid)} pages); pdfspine "
-             f"detected **{tot_pred}**, matched **{tot_match}** by bbox IoU.")
-    L.append(f"- **GriTS_Top (topology): mean {mean_top:.3f}, median {med_top:.3f}**")
-    L.append(f"- **GriTS_Con (content):  mean {mean_con:.3f}, median {med_con:.3f}**")
-    L.append("  (missed gold tables count as 0; this is recall-weighted over all gold "
-             "tables, the standard FinTabNet.c convention.)\n")
+    L.append(f"## End-to-end extraction score (`strategy=\"{strategy}\"` vs gold)\n")
+    L.append(
+        f"- Gold tables scored: **{summary['n_gold']}** (across {len(valid)} pages); "
+        f"pdfspine predicted **{summary['n_pred']}**, raw detector boxes matched "
+        f"**{summary['n_detection_matched']}**, and final table boxes matched "
+        f"**{summary['n_matched']}** by IoU ≥ {match_iou}."
+    )
+    L.append(
+        f"- **Detection precision {summary['detection_precision']:.3f}, recall "
+        f"{summary['detection_recall']:.3f}, F1 {summary['detection_f1']:.3f}**. "
+        "These metrics use `Table.metadata.detection_bbox` when the backend "
+        "provides it, before native-line crop guidance; other backends fall back "
+        "to `Table.bbox`. Extra predictions reduce precision."
+    )
+    L.append(f"- **Recall-weighted GriTS_Top: mean "
+             f"{end_to_end['grits_top_mean']:.3f}, median "
+             f"{end_to_end['grits_top_median']:.3f}**")
+    L.append(f"- **Recall-weighted GriTS_Con: mean "
+             f"{end_to_end['grits_con_mean']:.3f}, median "
+             f"{end_to_end['grits_con_median']:.3f}**")
+    L.append("  Missed gold tables count as 0 by this harness's deliberate end-to-end "
+             "policy. This is useful for tracking extraction quality, but it is not the "
+             "published gold-crop TSR protocol.\n")
+
+    L.append("## Matched-only structure score\n")
+    if matched_only["n_tables"]:
+        L.append(
+            f"- Tables: **{matched_only['n_tables']}** (final `Table.bbox` "
+            "IoU-matched only)."
+        )
+        L.append(f"- **GriTS_Top: mean {matched_only['grits_top_mean']:.3f}, median "
+                 f"{matched_only['grits_top_median']:.3f}**")
+        L.append(f"- **GriTS_Con: mean {matched_only['grits_con_mean']:.3f}, median "
+                 f"{matched_only['grits_con_median']:.3f}**")
+    else:
+        L.append("- No table met the bbox match threshold; matched-only GriTS is undefined.")
+    L.append("- This removes the missed-detection penalty, but detector-produced crops and "
+             "pdfspine word extraction can still differ from Microsoft's evaluation inputs. "
+             "A true apples-to-apples comparison with the published ~0.98 requires a pending "
+             "**gold-crop TSR-only mode** that bypasses table detection and uses the benchmark's "
+             "table crops/words.\n")
 
     L.append("## Per-document\n")
-    L.append("| doc | gold | pred | matched | GriTS_Top | GriTS_Con |")
-    L.append("|-----|-----:|-----:|--------:|----------:|----------:|")
+    L.append("| doc | gold | pred | det-match | final-match | GriTS_Top | GriTS_Con |")
+    L.append("|-----|-----:|-----:|----------:|------------:|----------:|----------:|")
     for d in sorted(valid, key=lambda x: (x["grits_con_sum"] / x["n_gold"]) if x["n_gold"] else 0):
         g = d["n_gold"]
         top = (d["grits_top_sum"] / g) if g else 0.0
         con = (d["grits_con_sum"] / g) if g else 0.0
-        L.append(f"| {d['id']} | {g} | {d['n_pred']} | {d['n_matched']} | "
-                 f"{top:.3f} | {con:.3f} |")
+        L.append(
+            f"| {d['id']} | {g} | {d['n_pred']} | "
+            f"{d['n_detection_matched']} | {d['n_matched']} | "
+            f"{top:.3f} | {con:.3f} |"
+        )
     L.append("")
     return "\n".join(L)
 
@@ -795,13 +1349,13 @@ def _gold_blocked_section(man: dict, pages: list[dict]) -> list[str]:
              "mismatch, LCS).")
     L.append("- Gold parser validated on real FinTabNet.c annotations: structure-eligible "
              "tables parse to GriTS cells with spans; self-GriTS = 1.0 on all of them.")
-    L.append("- The pdfspine prediction path (`Table.to_html()` → GriTS cells) is "
-             "implemented and unit-checked against pdfspine's actual HTML output.")
+    L.append("- The pdfspine prediction path (direct `Table.spans` + `extract()` → "
+             "GriTS cells, with HTML fallback) is implemented and unit-checked.")
     L.append("- The **full scoring pipeline is verified end-to-end** on a real pdfspine "
              "detection (CDC fixture, a 3×4 table): scoring its own output as gold gives "
              "GriTS_Top = 1.000 / GriTS_Con = 1.000 (matched IoU 1.0); a gold with one "
              "column removed drops to GriTS_Top ≈ 0.52 / GriTS_Con ≈ 0.67 — i.e. worker → "
-             "HTML-parse → match → GriTS works and is sensitive to structural error.\n")
+             "direct cells → match → GriTS works and is sensitive to structural error.\n")
     L.append("This is the optional P3-5 task; per the PRD a clean blocked report (data "
              "unobtainable in-environment) is an acceptable deliverable. The harness will "
              "produce the absolute number unchanged the moment the PDFs are reachable.\n")
@@ -906,7 +1460,7 @@ def build_report(docs: list[dict], pdfspine_py: str, fitz_py: str,
     L.append(f"Harness: `{THIS}`  ")
     L.append(f"pdfspine python: `{pdfspine_py}`  ")
     L.append(f"fitz python:  `{fitz_py}` (PyMuPDF {fitz_version or '?'})  ")
-    L.append("Match rule: bbox IoU > 0.5; grid-shape = exact (rows,cols); "
+    L.append("Match rule: bbox IoU >= 0.5; grid-shape = exact (rows,cols); "
              "cell-text = token-F1 (`gt/score.py`) of flattened cells, pdfspine-vs-fitz.\n")
 
     L.append("## Aggregate (pdfspine vs fitz)\n")
@@ -917,7 +1471,7 @@ def build_report(docs: list[dict], pdfspine_py: str, fitz_py: str,
              f"- Tables detected: pdfspine **{tot_ox}**, fitz **{tot_fz}**")
     L.append(f"- **Table-count agreement** (per-page #pdfspine==#fitz): "
              f"**{count_agree_rate*100:.1f}%** ({count_agree_pages}/{tot_pages} pages)")
-    L.append(f"- Tables matched by IoU>0.5: **{tot_matched}** "
+    L.append(f"- Tables matched by IoU>=0.5: **{tot_matched}** "
              f"(= {match_recall_ox*100:.0f}% of pdfspine, {match_recall_fz*100:.0f}% of fitz tables)")
     L.append(f"- **Grid-shape match** on matched pairs (exact rows×cols): "
              f"**{shape_match_rate*100:.1f}%** ({shape_matches}/{tot_matched})")
@@ -1024,6 +1578,7 @@ def main(argv: list[str] | None = None) -> int:
     # Hidden worker mode (re-invoked as a subprocess).
     ap.add_argument("--worker", choices=["pdfspine", "fitz"], default=None,
                     help=argparse.SUPPRESS)
+    ap.add_argument("--worker-jsonl", action="store_true", help=argparse.SUPPRESS)
     ap.add_argument("--pdf", default=None, help=argparse.SUPPRESS)
     ap.add_argument("--page", type=int, default=0, help=argparse.SUPPRESS)
     # Parent CLI.
@@ -1036,10 +1591,14 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--fitz-python", default=DEFAULT_FITZ_PY)
     ap.add_argument("--timeout", type=float, default=90.0,
                     help="per-(page,engine) wall-clock timeout (s)")
+    ap.add_argument("--startup-timeout", type=float, default=600.0,
+                    help="first persistent vision request timeout, including model load (s)")
+    ap.add_argument("--match-iou", type=float, default=0.5,
+                    help="minimum bbox IoU for gold table matching (default: 0.5)")
     ap.add_argument("--strategy", default="lines",
                     help="find_tables strategy for the pdfspine worker in --gold mode "
                          "('lines' = default & historical behavior, 'text' = text-based "
-                         "detection for borderless tables); non-'lines' runs write to "
+                         "detection for borderless tables, 'vision' = TATR); non-'lines' runs write to "
                          "strategy-suffixed default report/json paths")
     # GOLD-GT mode: score pdfspine vs FinTabNet.c human gold with GriTS (absolute).
     ap.add_argument("--gold", type=Path, default=None,
@@ -1050,8 +1609,14 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--report", type=Path, default=GT_DIR / "GT-REPORT-tables.md")
     ap.add_argument("--json", type=Path, default=GT_DIR / "gt-tables.json")
     args = ap.parse_args(argv)
+    if not 0.0 <= args.match_iou <= 1.0:
+        ap.error("--match-iou must be between 0 and 1")
+    if args.timeout <= 0 or args.startup_timeout <= 0:
+        ap.error("--timeout and --startup-timeout must be positive")
 
     # Worker dispatch (isolated subprocess).
+    if args.worker_jsonl:
+        return _run_jsonl_worker(args.strategy)
     if args.worker:
         if not args.pdf:
             sys.stdout.write(json.dumps({"ok": False, "tables": [], "error": "no --pdf"}))
@@ -1069,8 +1634,10 @@ def main(argv: list[str] | None = None) -> int:
                   else GT_DIR / f"GT-REPORT-tables-gold{sfx}.md")
         jsonp = (args.json if args.json != GT_DIR / "gt-tables.json"
                  else GT_DIR / f"gt-tables-gold{sfx}.json")
-        return run_gold(args.gold, args.pdfspine_python, args.timeout, report, jsonp,
-                        args.strategy)
+        return run_gold(
+            args.gold, args.pdfspine_python, args.timeout, report, jsonp,
+            args.strategy, args.startup_timeout, args.match_iou,
+        )
 
     # Parent.
     from score import score_all  # local, pure stdlib

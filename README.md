@@ -56,7 +56,7 @@ pdfspine is a **drop-in-shaped, permissively-licensed (Apache-2.0)** alternative
 |---|---|
 | **Read** | open (file/bytes), **malformed-PDF repair**, encrypted PDFs (RC4 / AES-128 / AES-256, R2–R6) |
 | **Text** | `get_text` (`text/words/blocks/dict/rawdict/json/html/xhtml/xml`), `search_for`, `TextPage`, fonts/images inventory |
-| **Tables** | `find_tables` with merged-cell detection → `extract()` / `to_markdown()` / **`to_html()`** |
+| **Tables** | `find_tables` with merged-cell detection → `extract()` / `to_markdown()` / **`to_html()`**; optional Microsoft TATR vision backend for borderless tables |
 | **Edit & save** | full + **byte-exact incremental** save, garbage collection, page insert/delete/copy/move/select, **`insert_pdf`** merge, metadata/XMP, TOC, links, encryption write |
 | **Annotate** | all common annotation types with `/AP` appearance streams; AcroForm read / fill / flatten + `Widget`; **destructive redaction** (verified content removal) |
 | **Render** | `get_pixmap` (vector + text + image + shadings via a tiny-skia rasterizer), `Pixmap` (buffer-protocol/numpy), `DisplayList`, **`get_svg_image`** |
@@ -98,6 +98,9 @@ page.get_pixmap(dpi=150).save("page1.png")   # render to image
 tables = page.find_tables()
 for t in tables.tables:
     print(t.to_markdown())                    # or t.to_html() for merged cells
+
+# Optional: pip install "pdfspine[tatr]", then prefetch the pinned checkpoints.
+vision_tables = page.find_tables(strategy="vision", backend="tatr")
 
 doc.save("output.pdf", garbage=4, deflate=True)
 doc.save_html("output.html")                 # complete UTF-8 HTML5 document

@@ -13,7 +13,7 @@ import builtins
 import html
 import math
 import os
-from typing import Iterator
+from typing import Iterator, Mapping
 
 from . import _core
 from ._compat_deferred import DEFERRED as _DEFERRED_SYMBOLS
@@ -1469,14 +1469,15 @@ class TextPage:
 class Table:
     """One detected table on a page (PyMuPDF ``fitz.table.Table``).
 
-    Wraps a Rust ``_core.Table``, returning geometry as :class:`Rect` value
-    types. ``extract()`` returns the cell-text grid (PyMuPDF-compatible);
-    ``to_markdown()`` / ``to_html()`` render the table.
+    Wraps either a Rust ``_core.Table`` (native strategies) or the validated
+    Python TATR structure record (vision strategy), returning geometry as
+    :class:`Rect` value types. ``extract()`` returns the cell-text grid
+    (PyMuPDF-compatible); ``to_markdown()`` / ``to_html()`` render the table.
     """
 
     __slots__ = ("_table",)
 
-    def __init__(self, core_table: "_core.Table") -> None:
+    def __init__(self, core_table) -> None:
         self._table = core_table
 
     @property
@@ -1526,6 +1527,27 @@ class Table:
             (r, c, rs, cs, _rect(rect)) for (r, c, rs, cs, rect) in self._table.spans
         ]
 
+    @property
+    def confidence(self) -> float | None:
+        """Model confidence for vision tables; ``None`` for native strategies."""
+        value = getattr(self._table, "confidence", None)
+        return None if value is None else float(value)
+
+    @property
+    def source(self) -> str:
+        """The producing backend: ``"native"`` or ``"tatr"``."""
+        return str(getattr(self._table, "source", "native"))
+
+    @property
+    def text_source(self) -> str:
+        """Cell-text source (native PDF text, OCR, or ``"none"``)."""
+        return str(getattr(self._table, "text_source", "pdfspine-native"))
+
+    @property
+    def metadata(self) -> dict:
+        """Reproducibility metadata for an external table backend."""
+        return dict(getattr(self._table, "metadata", {}))
+
     def extract(self) -> list[list]:
         """The cell-text grid (row-major); ``None`` for an empty /
         continuation slot (PyMuPDF ``Table.extract``)."""
@@ -1556,7 +1578,7 @@ class TableFinder:
 
     __slots__ = ("_finder",)
 
-    def __init__(self, core_finder: "_core.TableFinder") -> None:
+    def __init__(self, core_finder) -> None:
         self._finder = core_finder
 
     @property
@@ -2214,6 +2236,8 @@ class Page:
         self,
         *,
         strategy: str = "lines",
+        backend: str | None = None,
+        vision_options: Mapping[str, object] | None = None,
         line_max_thickness: float = 3.0,
         snap_tolerance: float = 3.0,
         min_line_length: float = 3.0,
@@ -2222,11 +2246,38 @@ class Page:
     ) -> "TableFinder":
         """Detects the tables on this page (PyMuPDF ``page.find_tables``).
 
-        ``strategy`` is ``"lines"`` (default), ``"lines_strict"`` or ``"text"``.
+        ``strategy`` is ``"lines"`` (default), ``"lines_strict"``, ``"text"``
+        or pdfspine's opt-in ``"vision"`` extension. Vision currently uses
+        Microsoft Table Transformer (``backend="tatr"``), with model options in
+        ``vision_options``. The optional runtime is installed with
+        ``pip install 'pdfspine[tatr]'``; checkpoints are pinned and loaded from
+        the local Hugging Face cache by default.
+
         PyMuPDF's ``vertical_strategy``/``horizontal_strategy`` kwargs are
         accepted: a single non-default value selects that strategy. Returns a
         :class:`TableFinder` (iterable; ``.tables`` is the list).
         """
+        normalized_strategy = str(strategy).casefold()
+        normalized_backend = None if backend is None else str(backend).casefold()
+        vision_requested = (
+            normalized_strategy in {"vision", "tatr"} or normalized_backend is not None
+        )
+        if vision_requested:
+            if normalized_backend not in {None, "tatr"}:
+                raise PdfUnsupportedError(
+                    f"unsupported vision table backend {backend!r}; expected 'tatr'"
+                )
+            from ._tatr import find_tables as _find_vision_tables
+
+            return TableFinder(
+                _find_vision_tables(
+                    self,
+                    clip=clip,
+                    options=vision_options,
+                )
+            )
+        if vision_options is not None:
+            raise TypeError("vision_options requires strategy='vision' or backend='tatr'")
         # PyMuPDF passes vertical_strategy / horizontal_strategy; honor either.
         vs = _ignored.get("vertical_strategy")
         hs = _ignored.get("horizontal_strategy")

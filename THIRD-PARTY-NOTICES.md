@@ -5,8 +5,9 @@ pdfspine 的二进制 / wheel 分发物包含以下第三方开源组件。各�
 Unicode-3.0 / BlueOak），无 copyleft（GPL / AGPL / LGPL / MPL）组件。** 本文件满足这些
 许可证的归因（attribution）义务，须随 pdfspine 二进制 / wheel 一并分发。
 
-第三方组件总数：**191**（覆盖含 OCR 的完整 wheel，含 `pdf-typeset` 共享排版引擎的
-cargo 图新增组件 fontdb / fontconfig-parser / roxmltree / slotmap / core_maths）。
+第三方 Cargo 组件总数：**191**（覆盖含 OCR 的完整 wheel，含 `pdf-typeset` 共享排版引擎的
+cargo 图新增组件 fontdb / fontconfig-parser / roxmltree / slotmap / core_maths）；另含下列
+1 个 MIT 许可的 vendored Python 后处理源文件。
 
 > 本文件由仓库脚本从 `cargo license` 元数据生成。多许可 `OR` 表达式表示该组件
 > 可在所列任一许可证下使用；相关许可证全文见文末。Apache-2.0 全文见随附 LICENSE。
@@ -208,6 +209,16 @@ cargo 图新增组件 fontdb / fontconfig-parser / roxmltree / slotmap / core_ma
 | zerocopy-derive | 0.8.52 | Apache-2.0 OR BSD-2-Clause OR MIT | Joshua Liebow-Feeser <joshlf@google.com>, Jack Wrenn <jswren | https://github.com/google/zerocopy |
 | zune-core | 0.5.1 | Apache-2.0 OR MIT OR Zlib |  | https://github.com/etemesi254/zune-image |
 | zune-jpeg | 0.5.15 | Apache-2.0 OR MIT OR Zlib | caleb <etemesicaleb@gmail.com> | https://github.com/etemesi254/zune-image/tree/dev/crates/zune-jpeg |
+
+## Vendored Python source
+
+`python/pdfspine/_tatr_postprocess.py` is adapted from Microsoft Table
+Transformer's `src/postprocess.py`, copyright (C) 2021 Microsoft Corporation,
+under the MIT License. The adaptations replace PyMuPDF's `fitz.Rect` with
+pdfspine's compatible `Rect` and make two standalone error paths explicit; the
+table canonicalization algorithm is otherwise unchanged. Upstream commit:
+`16d124f616109746b7785f03085100f1f6247575`. Repository:
+<https://github.com/microsoft/table-transformer>.
 
 ---
 

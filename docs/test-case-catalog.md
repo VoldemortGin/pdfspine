@@ -2388,6 +2388,37 @@ Tests live in `crates/pdf-text/tests/tables_{lines,text,html,none}.rs`.
 | `TABLES-NONE-003` | a single stroke is not a grid | PRD §7 | green |
 | `TABLES-PROP-001` | arbitrary content never panics | PRD §8.1 | green |
 
+### TATR vision tables — `TATR-*`
+
+Offline tests live in `python/tests/test_tatr_tables.py` and
+`python/tests/test_tatr_harness.py`; they do not install Torch, download
+checkpoints, or access the network. Microsoft post-processing is exercised with
+deterministic model-output fixtures.
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `TATR-001` | canonical rows/columns/header/supercell post-processing; merged header + exact numeric strings | pdfspine vision extension | green |
+| `TATR-002` | detector/structure revisions pinned; local-cache-only default; Microsoft's 10px crop padding; native-line guidance enabled by default | TATR v1.1 + pdfspine evidence-fusion contract | green |
+| `TATR-003` | DPI, thresholds, padding, and unknown model options are validated | pdfspine vision extension | green |
+| `TATR-004` | missing optional runtime raises `PdfUnsupportedError` with `pdfspine[tatr]` install hint | PRD §8.1 | green |
+| `TATR-005` | `strategy="vision", backend="tatr"` returns public `TableFinder` / `Table` wrappers | PRD §9.5 extension | green |
+| `TATR-006` | native `lines` path never imports or invokes TATR | compatibility contract | green |
+| `TATR-007` | unknown backend and misplaced `vision_options` are rejected | API contract | green |
+| `TATR-008` | rotated-table crop coordinates invert back to page points | coordinate-basis contract | green |
+| `TATR-009` | direct GriTS cells preserve every grid slot, including merged/empty topology | FinTabNet.c metric contract | green |
+| `TATR-010` | benchmark prefers direct cells over HTML, matches at IoU ≥ 0.5, and penalizes extra predictions in detection precision/F1 | FinTabNet.c metric contract | green |
+| `TATR-011` | persistent JSONL benchmark worker serves multiple pages without restarting the process | benchmark runtime contract | green |
+| `TATR-012` | opt-in, offline smoke with both real pinned models: synthetic ruled table → exact 2×3 native-text grid | TATR end-to-end contract | green (env-gated) |
+| `TATR-013` | one cached runtime loops over multiple detector crops, returns two independently structured tables, and filters by page-space clip | TATR end-to-end contract | green |
+| `TATR-014` | model cache key ignores DPI/threshold/page options, so changing extraction tuning never reloads both checkpoints | TATR runtime contract | green |
+| `TATR-015` | four concurrent first calls are serialized and construct one shared model runtime | TATR runtime contract | green |
+| `TATR-016` | worker/model failure is `invalid`, carries no numeric GriTS/detection score, stops the corpus on the first failure, and exits non-zero | benchmark validity contract | green |
+| `TATR-017` | zero detections still preserve process-level model revisions/device metadata | benchmark reproducibility contract | green |
+| `TATR-018` | aggregate output separates recall-weighted end-to-end GriTS from matched-only structure GriTS; detector P/R/F1 uses raw `detection_bbox`, while GriTS pairing uses final `Table.bbox` | benchmark metric contract | green |
+| `TATR-019` | persistent JSONL protocol retries legal short writes instead of truncating large table payloads | benchmark runtime contract | green |
+| `TATR-020` | optional-dependency markers encode Python 3.12–3.14 plus the supported Linux/macOS/Windows CPU matrix without restricting the base wheel; musl is documented separately | packaging support contract | green |
+| `TATR-021` | matching native vector-line geometry or model edge evidence may enlarge only the structure-recognition crop; metadata preserves detector/crop provenance, and both guidance controls are independently disableable | pdfspine evidence-fusion contract | green |
+
 ### M7 — optional content (`pdf_core::ocg` / `pdf_edit::ocg`) — `OCG-READ-*` / `OCG-ADD-*` / `OCG-TOGGLE-*` / `OCG-BIND-*`
 
 Tests live in `crates/pdf-core/tests/ocg_unit.rs` (read) and

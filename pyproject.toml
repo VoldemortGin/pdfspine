@@ -58,16 +58,27 @@ docs = [
     "mkdocstrings[python]>=0.26",
     "ruff>=0.6",  # mkdocstrings auto-uses it to wrap long signatures
 ]
+tatr = [
+    "Pillow>=11,<13; python_version < '3.15' and ((sys_platform == 'linux' and (platform_machine == 'x86_64' or platform_machine == 'aarch64')) or (sys_platform == 'darwin' and platform_machine == 'arm64') or (sys_platform == 'win32' and (platform_machine == 'AMD64' or platform_machine == 'x86_64')))",
+    "torch>=2.6,<3; python_version < '3.15' and ((sys_platform == 'linux' and (platform_machine == 'x86_64' or platform_machine == 'aarch64')) or (sys_platform == 'darwin' and platform_machine == 'arm64') or (sys_platform == 'win32' and (platform_machine == 'AMD64' or platform_machine == 'x86_64')))",
+    "transformers>=5,<6; python_version < '3.15' and ((sys_platform == 'linux' and (platform_machine == 'x86_64' or platform_machine == 'aarch64')) or (sys_platform == 'darwin' and platform_machine == 'arm64') or (sys_platform == 'win32' and (platform_machine == 'AMD64' or platform_machine == 'x86_64')))",
+]
 # OCR is FULLY built in. There is ONE published `pdfspine` wheel and it CONTAINS
 # the pure-Rust PaddleOCR engine (compiled in via the maturin `ocr` feature
 # below). The ~28 MB PP-OCRv5 ONNX models come from the shared `ocrspine-models`
 # data package, declared as a base `dependencies` entry above — so a bare
 # `pip install pdfspine` is full-OCR-capable, offline, with no extra needed.
 #
-# These `[ocr]` / `[all]` extras are therefore EMPTY — kept only for backward
-# compatibility so `pip install pdfspine[ocr]` keeps resolving (the models now
-# arrive via the base dependency; the legacy `pdfspine-ocr-models` package is no
-# longer pulled).
+# The `[ocr]` extra is therefore empty and kept for backward compatibility.
+# `[tatr]` is deliberately separate because Torch plus two ~115 MB checkpoints
+# would make the base installation much heavier. `[all]` includes the TATR
+# runtime dependencies, but model weights remain in an explicitly populated
+# local Hugging Face cache / `PDFSPINE_TATR_MODELS` directory.
+# The tested wheel matrix is CPython 3.12-3.14 on glibc Linux x86_64/aarch64,
+# Apple-silicon macOS, and Windows x86_64. Mark all three runtime dependencies
+# consistently so unsupported OS/CPU/interpreter combinations do not make the
+# otherwise portable base package unsatisfiable. PEP 508 cannot distinguish
+# glibc from musl; that Linux limitation is handled at runtime and documented.
 #
 # Runtime model resolution order (see `python/pdfspine/document.py`
 # `_ensure_ocr_models_env`, which exports both `PDFSPINE_OCR_MODELS` and the
@@ -78,7 +89,11 @@ docs = [
 #   4. else the in-crate `ocrspine/models` dev fallback (source checkout);
 #   5. else a clear `PdfUnsupportedError`.
 ocr = []  # models arrive via the base `ocrspine-models` dependency; back-compat no-op.
-all = []  # same: all runtime features are in the base wheel + base dependency.
+all = [
+    "Pillow>=11,<13; python_version < '3.15' and ((sys_platform == 'linux' and (platform_machine == 'x86_64' or platform_machine == 'aarch64')) or (sys_platform == 'darwin' and platform_machine == 'arm64') or (sys_platform == 'win32' and (platform_machine == 'AMD64' or platform_machine == 'x86_64')))",
+    "torch>=2.6,<3; python_version < '3.15' and ((sys_platform == 'linux' and (platform_machine == 'x86_64' or platform_machine == 'aarch64')) or (sys_platform == 'darwin' and platform_machine == 'arm64') or (sys_platform == 'win32' and (platform_machine == 'AMD64' or platform_machine == 'x86_64')))",
+    "transformers>=5,<6; python_version < '3.15' and ((sys_platform == 'linux' and (platform_machine == 'x86_64' or platform_machine == 'aarch64')) or (sys_platform == 'darwin' and platform_machine == 'arm64') or (sys_platform == 'win32' and (platform_machine == 'AMD64' or platform_machine == 'x86_64')))",
+]
 
 [project.scripts]
 pdfspine = "pdfspine.cli:main"

@@ -173,6 +173,18 @@ for t in tf.tables:
 ```
 （在 `fixtures/corpus/irs-fw9.pdf` 第 1 页实跑：找到 4 个表，首表 4x2。）
 
+无边框或复杂视觉表格可启用可选 TATR 后端：
+
+```python
+# 先安装 pdfspine[tatr]，并按 tables 文档预取两个固定 revision 的模型。
+tf = page.find_tables(strategy="vision", backend="tatr")
+for table in tf:
+    print(table.confidence, table.source, table.extract())
+```
+
+模型负责表格检测与行列/合并单元格结构，文字仍取自 PDF 原生坐标，因此不会
+让生成模型重写金额；扫描页没有文字层时才回退到 pdfspine 内置 OCR。
+
 ## 7. 注释 + 破坏性 redaction
 
 ```python

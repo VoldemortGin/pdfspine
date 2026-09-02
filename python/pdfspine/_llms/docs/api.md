@@ -308,9 +308,14 @@ page.get_svg_image(matrix=None, *, text_as_path=False, **_) -> str   # 别名 ge
 
 ### 表格
 ```python
-page.find_tables(*, strategy="lines", line_max_thickness=..., snap_tolerance=...,
+page.find_tables(*, strategy="lines", backend=None, vision_options=None,
+                 line_max_thickness=..., snap_tolerance=...,
                  min_line_length=..., clip=None, **_) -> TableFinder   # 别名 findTables
 ```
+原生策略为 `lines` / `lines_strict` / `text`。pdfspine 扩展
+`strategy="vision", backend="tatr"` 直接运行 Microsoft Table Transformer；需先
+`pip install "pdfspine[tatr]"` 并预取固定 revision 的模型。TATR 只预测结构，
+单元格文字由 pdfspine 原生 word bbox 回填；无文字层时才使用内置 OCR。
 
 ### 链接
 ```python

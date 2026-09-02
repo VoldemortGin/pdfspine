@@ -119,8 +119,8 @@ for table in finder:                      # also: finder.tables, finder[i]
 
 ### Strategy
 
-`find_tables` accepts a `strategy` of `"lines"` (default), `"lines_strict"`, or
-`"text"`, plus tuning knobs:
+`find_tables` accepts native strategies `"lines"` (default), `"lines_strict"`,
+and `"text"`, plus the optional TATR vision strategy:
 
 ```python
 finder = page.find_tables(
@@ -129,7 +129,13 @@ finder = page.find_tables(
     snap_tolerance=3.0,
     min_line_length=3.0,
 )
+
+# Borderless / complex tables (requires pip install "pdfspine[tatr]"):
+finder = page.find_tables(strategy="vision", backend="tatr")
 ```
+
+TATR predicts regions and structure; cell strings come from pdfspine's native
+word coordinates, with built-in OCR used only when the page has no text layer.
 
 PyMuPDF's `vertical_strategy` / `horizontal_strategy` keyword arguments are also
 accepted (a single non-default value selects that strategy).
@@ -146,6 +152,10 @@ accepted (a single non-default value selects that strategy).
 | `Table.cols` | `list[float]` | Snapped vertical grid-line x positions. |
 | `Table.cells` | `list[list[Rect | None]]` | Per-slot cell rects (row-major). |
 | `Table.spans` | `list[tuple]` | `(row, col, row_span, col_span, Rect)` per merged cell. |
+| `Table.confidence` | `float \| None` | Vision-model confidence; `None` for native strategies. |
+| `Table.source` | `str` | Producing backend (`native` or `tatr`). |
+| `Table.text_source` | `str` | `pdfspine-native`, `pdfspine-ocr`, or `none`. |
+| `Table.metadata` | `dict` | Pinned model revisions, device, and preprocessing metadata. |
 | `Table.extract()` | `list[list]` | Cell-text grid (`None` for empty/continuation). |
 | `Table.to_markdown()` | `str` | Markdown rendering. |
 | `Table.to_html()` | `str` | HTML rendering. |
