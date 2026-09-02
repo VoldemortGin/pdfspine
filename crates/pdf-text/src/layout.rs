@@ -1177,10 +1177,10 @@ fn is_rtl_char(c: char) -> bool {
 /// accuracy. A run qualifies only when ≥4 consecutive **single-char** ink glyphs
 /// sit at uniform tracking gaps (so initials "J R R" or "x = y" are never
 /// touched). The tracking gap is measured between **alphanumeric** neighbours
-/// only, must clear the word-gap threshold (otherwise the plain threshold already
-/// keeps the letters together and only the odd kerning-loosened pair splits, as
-/// PyMuPDF reads it) and must stay below [`LETTER_SPACING_MAX_FRAC`] of the font
-/// size: a dot leader `. . . .` or a rule `- - -` is repeated punctuation, not
+/// only and must stay below [`LETTER_SPACING_MAX_FRAC`] of the font size (no
+/// lower bound: text tracked right at the word-gap threshold keeps a
+/// kern-loosened pair together — whole words, not PyMuPDF's "transpor t"): a
+/// dot leader `. . . .` or a rule `- - -` is repeated punctuation, not
 /// tracking, and must not lend its uniform gap to the letters around it — on a
 /// positioned TOC line the leader's dots outnumber the letters, so a line-wide
 /// median once read every real word gap as tracking
@@ -1226,12 +1226,11 @@ fn letter_spacing_skip_mask(glyphs: &[&DevGlyph], size: f64, gap_thresh: f64) ->
         }
         if b - a >= 4 {
             // Tracking gap = median of the run's letter-to-letter gaps (punctuation
-            // contributes none). Only a gap that clears the word-gap threshold
-            // (by a 10% margin — tracking set exactly at the threshold sits on a
-            // float coin flip where the plain threshold already keeps the letters
-            // together) yet stays narrower than a word space is tracking; then
-            // suppress the space before any glyph whose gap is not clearly wider
-            // (a word break).
+            // contributes none). Only a gap narrower than a word space is tracking;
+            // then suppress the space before any glyph whose gap is not clearly
+            // wider (a word break). No lower bound: tracking set right at the
+            // word-gap threshold (eurlex body text, `0.15 Tc`) must still hold a
+            // kern-loosened pair together — "transport", not "transpor t".
             let mut gaps: Vec<f64> = (a + 1..b)
                 .filter(|&k| letter(ink[k - 1]) && letter(ink[k]))
                 .map(gap)
@@ -1239,7 +1238,7 @@ fn letter_spacing_skip_mask(glyphs: &[&DevGlyph], size: f64, gap_thresh: f64) ->
             if gaps.len() >= 3 {
                 gaps.sort_by(f64::total_cmp);
                 let med = gaps[gaps.len() / 2].max(0.01);
-                if med > gap_thresh * 1.1 && med <= max_track {
+                if med <= max_track {
                     let wide = (med * 1.8).min(med + gap_thresh);
                     for k in a + 1..b {
                         if gap(k) <= wide {

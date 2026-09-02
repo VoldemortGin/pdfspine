@@ -443,3 +443,18 @@ fn words_017_tc_tracking_with_literal_space_stays_two_words() {
     assert_eq!(to_text(&tp, 0).trim_end(), "text extraction");
     assert_eq!(word_texts(&tp), vec!["text", "extraction"]);
 }
+
+#[test]
+fn words_018_tracking_at_threshold_keeps_kern_loosened_pair_whole() {
+    // eurlex body text: `0.15 Tc` at `Tf 1`/`Tm 9.59` tracks every letter by
+    // exactly the word-gap threshold, and a `-30` kern loosens one pair inside
+    // "transport" a little further (0.18×size). The run is uniformly tracked,
+    // so that pair is still tracking, not a word break — the word stays whole
+    // (PyMuPDF reads "transpor t"; the goal is whole words, not oracle parity).
+    let tp = textpage_e2e(
+        winansi_type1_with_metrics("Helvetica", 32, &HELV, 750, -250),
+        b"BT /F1 1 Tf 9.59 0 0 9.59 72 700 Tm 0.15 Tc [(transpor) -30 (t)] TJ ET",
+    );
+    assert_eq!(to_text(&tp, 0).trim_end(), "transport");
+    assert_eq!(word_texts(&tp), vec!["transport"]);
+}

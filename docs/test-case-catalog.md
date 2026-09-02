@@ -1109,6 +1109,7 @@ self-built PDFs (reuse `tests/common`). No PyMuPDF files.
 | `WORDS-015` | e2e govdocs `Tf 1`/`Tm 8` label with `-332.7` `TJ` word gaps + `0.2219 Tc` dot leader + figures → `["Under","5","years", "."×31, "88", "6.1"]` (dots never mask the label's word gaps) | PRD §8.6.2 | green |
 | `WORDS-016` | e2e genuine tracking `2.5 Tc [(Abschnitt) -400 (2)] TJ` @12pt: uniform 0.21×size letter gaps collapse, the clearly wider gap before `2` stays a word break → `["Abschnitt","2"]` | PRD §8.6.2 | green |
 | `WORDS-017` | e2e `3 Tc (text extraction) Tj` @12pt: tracked letters collapse on both sides of the literal space → `["text","extraction"]` | PRD §8.6.2 | green |
+| `WORDS-018` | e2e eurlex body text `0.15 Tc` at `Tf 1`/`Tm 9.59` (tracking = word-gap threshold) with `[(transpor) -30 (t)] TJ`: the kern-loosened pair stays inside the tracked run → text `"transport"`, words `["transport"]` (PyMuPDF reads `transpor t`; whole words win over oracle parity) | PRD §8.6.2 | green |
 
 ### Span flags (`layout.rs`) — `LAYOUT-FLAGS-*`
 
