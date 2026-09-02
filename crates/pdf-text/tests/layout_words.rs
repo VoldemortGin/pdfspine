@@ -243,3 +243,79 @@ fn words_010_positive_descent_keeps_word_gap_threshold() {
         assert_eq!(word_texts(&tp), vec!["extraction"], "Descent {descent}");
     }
 }
+
+#[test]
+fn words_011_short_cell_descriptor_keeps_kerned_word_whole() {
+    // A well-formed but short glyph cell (`/Ascent 500 /Descent 0`, cell =
+    // 0.5×size) is legal and must not shrink the word-gap threshold: keyed on
+    // the cell height it collapsed to 0.1×size, so a -120 kern (1.44pt at
+    // 12pt) inside "extraction" read as a word gap ("extr action"; PyMuPDF
+    // keys on the device font size and reads "extraction").
+    let tp = textpage_e2e(
+        winansi_type1_with_metrics("Helvetica", 32, &HELV, 500, 0),
+        b"BT /F1 12 Tf 72 700 Td [(extr) -120 (action)] TJ ET",
+    );
+    assert_eq!(to_text(&tp, 0).trim_end(), "extraction");
+    assert_eq!(word_texts(&tp), vec!["extraction"]);
+}
+
+#[test]
+fn words_012_word_gap_threshold_invariants() {
+    // Re-keying the threshold on the device font size must not move the
+    // boundaries of the plain cases: a literal space and a real `TJ` word gap
+    // (-300 → 3.6pt) still split; ordinary kerning (-30) and a positive
+    // adjustment that pulls the glyphs together (+250) never do.
+    let cases: [(&[u8], &[&str]); 4] = [
+        (
+            b"BT /F1 12 Tf 72 700 Td (text extraction) Tj ET",
+            &["text", "extraction"],
+        ),
+        (
+            b"BT /F1 12 Tf 72 700 Td [(extr) -300 (action)] TJ ET",
+            &["extr", "action"],
+        ),
+        (
+            b"BT /F1 12 Tf 72 700 Td [(extr) -30 (action)] TJ ET",
+            &["extraction"],
+        ),
+        (
+            b"BT /F1 12 Tf 72 700 Td [(e) 250 (xtraction)] TJ ET",
+            &["extraction"],
+        ),
+    ];
+    for (content, expected) in cases {
+        let tp = textpage_e2e(winansi_type1("Helvetica", 32, &HELV), content);
+        let text = to_text(&tp, 0);
+        let from_text: Vec<&str> = text.split_whitespace().collect();
+        let src = String::from_utf8_lossy(content);
+        assert_eq!(from_text, expected, "{src}");
+        assert_eq!(word_texts(&tp), expected, "{src}");
+    }
+}
+
+#[test]
+fn words_013_threshold_is_device_space_tf1_tm_scale() {
+    // The threshold is keyed on the *device* font size: `/F1 1 Tf` with the
+    // 12pt scale baked into `Tm` must segment exactly like the plain `12 Tf`
+    // form — a -300 kern splits, a -120 kern does not, in both spellings.
+    let pairs: [(&[u8], &[u8], &[&str]); 2] = [
+        (
+            b"BT /F1 12 Tf 72 700 Td [(extr) -300 (action)] TJ ET",
+            b"BT /F1 1 Tf 12 0 0 12 72 700 Tm [(extr) -300 (action)] TJ ET",
+            &["extr", "action"],
+        ),
+        (
+            b"BT /F1 12 Tf 72 700 Td [(extr) -120 (action)] TJ ET",
+            b"BT /F1 1 Tf 12 0 0 12 72 700 Tm [(extr) -120 (action)] TJ ET",
+            &["extraction"],
+        ),
+    ];
+    for (plain, scaled, expected) in pairs {
+        let a = textpage_e2e(winansi_type1("Helvetica", 32, &HELV), plain);
+        let b = textpage_e2e(winansi_type1("Helvetica", 32, &HELV), scaled);
+        let src = String::from_utf8_lossy(scaled);
+        assert_eq!(word_texts(&a), expected, "{src}");
+        assert_eq!(word_texts(&b), expected, "{src}");
+        assert_eq!(to_text(&a, 0), to_text(&b, 0), "{src}");
+    }
+}

@@ -1102,6 +1102,9 @@ self-built PDFs (reuse `tests/common`). No PyMuPDF files.
 | `WORDS-008` | e2e positive `/Descent` + `Tf 1`/`Tm` scale + `0.15 Tc`: words split only at the literal space | PRD §8.6.2 | green |
 | `WORDS-009` | e2e `[(extr) -300 (action)] TJ`: words == `to_text` split on whitespace (boundaries always agree) | PRD §8.6.2, §10.7 | green |
 | `WORDS-010` | e2e `/Descent +250` vs `−250` with `[(extr) -120 (action)] TJ` @12pt: sign-normalised cell keeps the word-gap threshold → text `"extraction"`, words `["extraction"]` for both | PRD §8.6.2 | green |
+| `WORDS-011` | e2e short-but-legal cell `/Ascent 500 /Descent 0` with `[(extr) -120 (action)] TJ` @12pt: threshold keyed on device font size (not cell height) → text `"extraction"`, words `["extraction"]` | PRD §8.6.2 | green |
+| `WORDS-012` | e2e threshold invariants @12pt: `(text extraction) Tj` and `[(extr) -300 (action)] TJ` split into two words; `[(extr) -30 (action)] TJ` and `[(e) 250 (xtraction)] TJ` stay one word (text and words agree) | PRD §8.6.2 | green |
+| `WORDS-013` | e2e `/F1 1 Tf` + `12 0 0 12 … Tm` segments identically to `12 Tf` for `-300` (split) and `-120` (whole) kerns — threshold lives in device space | PRD §8.6.2 | green |
 
 ### Span flags (`layout.rs`) — `LAYOUT-FLAGS-*`
 

@@ -46,6 +46,16 @@ const FRAGMENT_MAX_WIDTH_FRAC: f64 = 3.0;
 const LINE_RUN_GAP_FRAC: f64 = 0.8;
 const LINE_RUN_GAP_EPSILON: f64 = 1e-6;
 
+/// Word-gap threshold as a fraction of the *device-space font size*. A gap
+/// between the trailing edge of one glyph and the leading edge of the next that
+/// exceeds `size * WORD_GAP_FRAC` is a word break even without a literal space
+/// (PRD §8.6.2); `build_line` synthesizes the space there and `words.rs` then
+/// splits on it like any other whitespace. Mirrors MuPDF's `SPACE_DIST`
+/// (`spacing = gap / size > 0.15`); the size is the per-line median glyph
+/// estimate, never the raw cell height, so short descriptor cells cannot shrink
+/// the threshold.
+const WORD_GAP_FRAC: f64 = 0.15;
+
 /// Baseline movement, in effective font-size units, below which text remains in
 /// the current paragraph regardless of horizontal movement.
 const BLOCK_BASELINE_NEAR: f64 = 0.8;
@@ -1209,23 +1219,31 @@ fn build_line(glyphs: &[&DevGlyph], seq: usize) -> Line {
     crosses.sort_by(f64::total_cmp);
     let baseline = crosses.get(crosses.len() / 2).copied().unwrap_or(0.0);
 
-    // A stable per-line device-space size for the word-gap threshold: the median
-    // glyph-cell height (device space), invariant to whether the text scale
-    // lives in the `Tf` operand or the CTM. The raw operand `g.size` is in *text*
-    // space, so comparing `g.size * WORD_GAP_FRAC` against device-space gaps
-    // collapses the threshold on PMC/LaTeX PDFs that emit `Tf 1` and bake the
-    // scale into the matrix — shattering words and URLs. Mirrors `words.rs` so
-    // synthesized inter-word spaces agree with `get_text("words")`. Falls back to
-    // the raw size only for degenerate lines with no positive cell height.
+    // A stable per-line *device-space font size* for the word-gap threshold: the
+    // median of the per-glyph size estimates (cell height ÷ (ascent − descent),
+    // see `dev_glyph_effective_size`), invariant to whether the text scale lives
+    // in the `Tf` operand or the CTM. The raw operand `g.size` is in *text*
+    // space, so comparing it against device-space gaps collapses the threshold
+    // on PMC/LaTeX PDFs that emit `Tf 1` and bake the scale into the matrix —
+    // shattering words and URLs. Keying on the *font size* rather than the raw
+    // cell height (MuPDF: `spacing = gap / size`) keeps the threshold stable
+    // across descriptors: a legal but short cell (`/Ascent 500 /Descent 0`)
+    // otherwise halved it and turned ordinary kerning into word gaps. Falls back
+    // to the raw size only for degenerate lines with no finite estimate.
     let eff_size = {
-        let h = crate::words::effective_size_from_heights(glyphs.iter().map(|g| g.bbox.height()));
-        if h > 0.0 {
-            h
-        } else {
+        let mut sizes: Vec<f64> = glyphs
+            .iter()
+            .map(|g| dev_glyph_effective_size(g))
+            .filter(|s| s.is_finite() && *s > 0.0)
+            .collect();
+        if sizes.is_empty() {
             glyphs.first().map_or(0.0, |g| g.size.abs())
+        } else {
+            sizes.sort_by(f64::total_cmp);
+            sizes[sizes.len() / 2]
         }
     };
-    let gap_thresh = eff_size * crate::words::WORD_GAP_FRAC;
+    let gap_thresh = eff_size * WORD_GAP_FRAC;
 
     let mut spans: Vec<Span> = Vec::new();
     let mut line_bbox = Rect::default();
