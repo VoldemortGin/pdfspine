@@ -1783,14 +1783,13 @@ fn cut_column_subtree(
     }
 }
 
+/// 列切割结果：(切割处的间隙宽度, 左侧行索引, 右侧行索引, 跨列行索引)。
+type ColumnCut = (f64, Vec<usize>, Vec<usize>, Vec<usize>);
+
 /// Finds and validates one vertical column cut. The returned width is used to
 /// choose between competing X/Y cuts; both sides must be substantial so line
 /// numbers and other marginal strips do not become columns.
-fn find_column_cut(
-    lines: &[Line],
-    idxs: &[usize],
-    typ_h: f64,
-) -> Option<(f64, Vec<usize>, Vec<usize>, Vec<usize>)> {
+fn find_column_cut(lines: &[Line], idxs: &[usize], typ_h: f64) -> Option<ColumnCut> {
     let region_w = region_width(lines, idxs);
     // A real inter-column gutter is comfortably wider than a word space but on
     // letter-size layouts can be only ≈4% of the region width. Combine a

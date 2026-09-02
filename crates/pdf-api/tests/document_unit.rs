@@ -389,16 +389,19 @@ mod crypto {
         ));
 
         let mut out = b"%PDF-1.7\n%\xE2\xE3\xCF\xD3\n".to_vec();
-        let mut push_object = |num: u32, object: &Object| {
-            let offset = out.len();
-            out.extend_from_slice(&write_indirect(ObjRef::new(num, 0), object));
-            offset
+        let (off1, off3, off4, off8) = {
+            let mut push_object = |num: u32, object: &Object| {
+                let offset = out.len();
+                out.extend_from_slice(&write_indirect(ObjRef::new(num, 0), object));
+                offset
+            };
+            (
+                push_object(1, &catalog),
+                push_object(3, &page3),
+                push_object(4, &page4),
+                push_object(8, &objstm),
+            )
         };
-        let off1 = push_object(1, &catalog);
-        let off3 = push_object(3, &page3);
-        let off4 = push_object(4, &page4);
-        let off8 = push_object(8, &objstm);
-        drop(push_object);
 
         // Xref stream 9 records object 2 as compressed in object stream 8.
         // The stream itself is exempt from document encryption.
