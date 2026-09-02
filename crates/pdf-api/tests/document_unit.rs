@@ -471,16 +471,36 @@ mod crypto {
         )
     }
 
+    /// 非空用户口令的 fixture：open 时自动试空口令会失败，文档保持锁定。
+    fn user_fixture() -> Fixture {
+        build_r234(
+            3,
+            16,
+            b"id-bytes-0001234",
+            -44,
+            true,
+            b"user",
+            b"owner",
+            CryptMethod::Rc4,
+            CryptMethod::Rc4,
+        )
+    }
+
     #[test]
     fn doc_crypt_001_encrypted_facts() {
         // DOC-CRYPT-001
-        let fx = fixture();
+        let fx = user_fixture();
         let doc = Document::open_bytes(encrypted_doc(&fx)).unwrap();
         assert!(doc.is_encrypted());
         assert!(doc.needs_pass());
         assert_eq!(doc.permissions(), -44);
         let md = doc.metadata();
         assert!(md.encryption.starts_with("Standard"));
+
+        // 空用户口令的文档在 open 时即自动认证（对齐 PyMuPDF）：仍标记为加密，但不再需要口令。
+        let open_doc = Document::open_bytes(encrypted_doc(&fixture())).unwrap();
+        assert!(open_doc.is_encrypted());
+        assert!(!open_doc.needs_pass());
     }
 
     #[test]
@@ -501,7 +521,7 @@ mod crypto {
     #[test]
     fn doc_crypt_003_wrong_password() {
         // DOC-CRYPT-003
-        let fx = fixture();
+        let fx = user_fixture();
         let doc = Document::open_bytes(encrypted_doc(&fx)).unwrap();
         assert!(!doc.authenticate(b"wrong-password"));
         assert!(doc.needs_pass());

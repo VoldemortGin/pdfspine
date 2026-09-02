@@ -786,9 +786,9 @@ Spec source: PRD §7 (M1 rows), §8.6.1 (rotation), §9.2 (`Page` shape), §9.4
 
 | ID | feature | spec ref | status |
 |---|---|---|---|
-| `DOC-CRYPT-001` | encrypted doc: `is_encrypted`/`needs_pass` true; `permissions` | PRD §8.4 | green |
+| `DOC-CRYPT-001` | user-password doc: `is_encrypted`/`needs_pass` true; `permissions`; empty-password doc auto-authenticates on open (`is_encrypted` true, `needs_pass` false, PyMuPDF semantics) | PRD §8.4 | green |
 | `DOC-CRYPT-002` | `authenticate("")` → `needs_pass` false; pages load | PRD §8.4 | green |
-| `DOC-CRYPT-003` | wrong password → `authenticate` false, no panic | PRD §8.4 | green |
+| `DOC-CRYPT-003` | user-password doc, wrong password → `authenticate` false, still `needs_pass`, no panic | PRD §8.4 | green |
 | `DOC-CRYPT-004` | successful auth refreshes page order after encrypted ObjStm fallback | compatibility findings P0 | green |
 
 ### Python wheel (`pdfspine` / `fitz`) — `PYDOC-*` / `PYFITZ-*`
