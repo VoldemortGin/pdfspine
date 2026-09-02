@@ -453,7 +453,9 @@ def test_pytext_010_sort_orders_plain_text_by_y_then_x():
     page = _page(_raw_content_pdf(content, _helvetica_font()))
 
     blocks = page.get_text("blocks", sort=False)
-    assert any("Right block" in block[4] and "Left block" in block[4] for block in blocks)
+    assert any(
+        "Right block" in block[4] and "Left block" in block[4] for block in blocks
+    )
 
     unsorted = page.get_text("text", sort=False)
     sorted_text = page.get_text("text", sort=True)
