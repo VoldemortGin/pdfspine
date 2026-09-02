@@ -1010,7 +1010,37 @@ impl<'a> ContentInterpreter<'a> {
                 }
             }
         }
+        // Type3（通常没有描述符）：字体字典自身的 `/FontBBox` 在 `/FontMatrix`
+        // 字形空间里（ISO 32000-1 §9.6.5），把 `(0, ury)` / `(0, lly)` 经矩阵
+        // 映射到文本空间取 y 分量、×1000 回到 1000 单位，再走同一套归一化。
+        if let Some(metrics) = self.type3_bbox_vmetrics(font_dict) {
+            return metrics;
+        }
         (DEFAULT_ASCENT, DEFAULT_DESCENT)
+    }
+
+    /// Type3 字体 `/FontBBox` × `/FontMatrix` 给出的 (ascent, descent)（1000
+    /// 单位）；非 Type3、缺失或畸形的 bbox、格高不合理时为 `None`。
+    fn type3_bbox_vmetrics(&self, font_dict: &Dict) -> Option<(f64, f64)> {
+        let is_type3 = font_dict
+            .get(&Name::new("Subtype"))
+            .and_then(Object::as_name)
+            .and_then(Name::as_str)
+            == Some("Type3");
+        if !is_type3 {
+            return None;
+        }
+        let bbox = self
+            .doc
+            .resolve_dict_key(font_dict, &Name::new("FontBBox"))
+            .ok()
+            .flatten()?;
+        let bbox = bbox.as_array().filter(|a| a.len() == 4)?;
+        let lly = bbox[1].as_f64()?;
+        let ury = bbox[3].as_f64()?;
+        // `(0, y)` 经线性部分 `[a b c d]` 得 `(c·y, d·y)`，取 y 分量。
+        let m = pdf_fonts::type3_font_matrix(font_dict, self.doc);
+        normalize_vmetrics(m[3] * ury * 1000.0, m[3] * lly * 1000.0)
     }
 
     /// Resolves the `/FontDescriptor`, following the descendant CIDFont for a

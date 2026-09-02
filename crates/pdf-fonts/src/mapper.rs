@@ -126,16 +126,20 @@ impl FontMapper {
         apply_differences(font, doc, &mut names);
 
         // 3. Widths: `/Widths` + `/FirstChar` + descriptor `/MissingWidth`.
+        // Type3 的宽度写在字体自己的 `/FontMatrix` 字形空间里（ISO 32000-1
+        // §9.6.5），建表时先映射回 1000 单位文本空间，`width()` 的约定不变。
+        let is_type3 = name_str(font, "Subtype").as_deref() == Some("Type3");
+        let type3_matrix = is_type3.then(|| type3_font_matrix(font, doc));
         let has_widths = has_widths_array(font, doc);
         let descriptor = font_descriptor(font, doc);
-        let simple_widths = build_simple_widths(font, doc, descriptor.as_ref());
+        let simple_widths =
+            build_simple_widths(font, doc, descriptor.as_ref(), type3_matrix.as_ref());
 
         // 3b. No `/Widths` (MuPDF `pdf_load_simple_font` parity): the advances
         // come from the font program — the embedded one when `ttf-parser` can
         // read it, else the standard font the name / descriptor `/Flags`
         // select (PRD §6.5 #2). `/Widths` stays authoritative, and a Type3 font
         // lives in its own `/FontMatrix` glyph space (no 1000/em substitute).
-        let is_type3 = name_str(font, "Subtype").as_deref() == Some("Type3");
         let (program_widths, core14) = if has_widths || is_type3 {
             (None, None)
         } else {
@@ -552,10 +556,14 @@ fn has_widths_array(font: &Dict, doc: &DocumentStore) -> bool {
 
 /// Builds the simple-font width table from `/Widths` + `/FirstChar` and the
 /// descriptor `/MissingWidth`.
+///
+/// `type3_matrix`（仅 Type3 传入）：`/Widths` 与 `/MissingWidth` 都是字形空间
+/// 数值，逐项经 [`type3_advance`] 映射到 1000 单位文本空间后再入表。
 fn build_simple_widths(
     font: &Dict,
     doc: &DocumentStore,
     descriptor: Option<&Dict>,
+    type3_matrix: Option<&[f64; 6]>,
 ) -> SimpleWidths {
     let first_char = font
         .get(&Name::new("FirstChar"))
@@ -564,7 +572,10 @@ fn build_simple_widths(
         .map(|v| v as u32)
         .unwrap_or(0);
 
-    let missing = descriptor_missing_width(descriptor);
+    let mut missing = descriptor_missing_width(descriptor);
+    if let Some(m) = type3_matrix {
+        missing = type3_advance(m, missing);
+    }
 
     let widths_obj = doc
         .resolve_dict_key(font, &Name::new("Widths"))
@@ -573,7 +584,7 @@ fn build_simple_widths(
     match widths_obj.as_deref().and_then(Object::as_array) {
         Some(arr) => {
             // Resolve any indirect references inside the array.
-            let resolved: Vec<Object> = arr
+            let mut resolved: Vec<Object> = arr
                 .iter()
                 .map(|o| match o {
                     Object::Reference(r) => doc
@@ -583,12 +594,66 @@ fn build_simple_widths(
                     other => other.clone(),
                 })
                 .collect();
+            if let Some(m) = type3_matrix {
+                for o in &mut resolved {
+                    if let Some(w) = o.as_f64() {
+                        *o = Object::Real(type3_advance(m, w));
+                    }
+                }
+            }
             SimpleWidths::new(first_char, &resolved, missing)
         }
         // No `/Widths`: a MissingWidth-only table. For a base-14 font the
         // Core-14 AFM advances are layered on top in `width()` (see `core14`).
         None => SimpleWidths::new(first_char, &[], missing),
     }
+}
+
+/// The standard Type3 `/FontMatrix` (a 1000-unit glyph space), used whenever
+/// the font's own entry is absent or malformed.
+const DEFAULT_TYPE3_MATRIX: [f64; 6] = [0.001, 0.0, 0.0, 0.001, 0.0, 0.0];
+
+/// Reads a Type3 font's `/FontMatrix` (glyph space → text space, ISO 32000-1
+/// §9.6.5) as `[a b c d e f]`. Tolerant: a missing / indirect-unresolvable
+/// entry, a non-array, a wrong-length array or a non-numeric / non-finite
+/// element all yield the standard `[0.001 0 0 0.001 0 0]`.
+///
+/// Shared by the width table (this crate) and the text interpreter's
+/// vertical-metrics fallback (`pdf-text`), so both read the matrix the same way.
+#[must_use]
+pub fn type3_font_matrix(font: &Dict, doc: &DocumentStore) -> [f64; 6] {
+    let Some(obj) = doc
+        .resolve_dict_key(font, &Name::new("FontMatrix"))
+        .ok()
+        .flatten()
+    else {
+        return DEFAULT_TYPE3_MATRIX;
+    };
+    let Some(arr) = obj.as_array() else {
+        return DEFAULT_TYPE3_MATRIX;
+    };
+    if arr.len() != 6 {
+        return DEFAULT_TYPE3_MATRIX;
+    }
+    let mut m = [0.0; 6];
+    for (slot, o) in m.iter_mut().zip(arr) {
+        match o.as_f64() {
+            Some(v) if v.is_finite() => *slot = v,
+            _ => return DEFAULT_TYPE3_MATRIX,
+        }
+    }
+    m
+}
+
+/// Maps a Type3 glyph-space horizontal advance `w` into 1000-unit text space:
+/// the vector `(w, 0)` through the matrix's linear part `[a b c d]` is
+/// `(a·w + c·0, b·w + d·0) = (a·w, b·w)`; the advance is its x component
+/// (the `c` skew never contributes), ×1000 for the `width()` contract
+/// (ISO 32000-1 §9.6.5 / §9.4.4). A mirrored matrix (`a < 0`) gives a
+/// negative value, which [`SimpleWidths`]' sanitizer collapses to 0 —
+/// deliberately left to the existing clamp rather than taking `|a|`.
+fn type3_advance(m: &[f64; 6], w: f64) -> f64 {
+    m[0] * w * 1000.0
 }
 
 /// Resolves the font's `/FontDescriptor` dict (following a reference), if any.

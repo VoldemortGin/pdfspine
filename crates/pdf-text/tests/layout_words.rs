@@ -13,7 +13,9 @@ use pdf_text::serialize::to_text;
 use pdf_text::{build_textpage, textpage_from_glyphs, words, PositionedGlyph, TextPage};
 use smol_str::SmolStr;
 
-use common::{dict, name_obj, winansi_type1, winansi_type1_with_metrics, PageDoc};
+use common::{
+    dict, name_obj, raw_stream, rref, winansi_type1, winansi_type1_with_metrics, PageDoc,
+};
 
 fn letter() -> Rect {
     Rect::new(0.0, 0.0, 612.0, 792.0)
@@ -588,4 +590,124 @@ fn words_022_std14_nowidths_quoteright_per_word_td() {
     assert_eq!(to_text(&tp, 0).trim_end(), "Company\u{2019}s report");
     assert_eq!(word_texts(&tp), vec!["Company\u{2019}s", "report"]);
     assert_eq!(line_count(&tp), 1);
+}
+
+// === Type3 fonts: `/Widths` live in the `/FontMatrix` glyph space ==========
+
+/// A pdfTeX-like Type3 font (no descriptor): `FontMatrix 0.01204`, `/Widths`
+/// for `a..z` are the Helvetica advances ÷ 12.04 (i.e. in that glyph space),
+/// real glyph names via `/Differences`, every CharProc the same `40 0 d0`
+/// stream. Returns the builder (the stream is an indirect object) + the font.
+fn type3_helv() -> (PageDoc, Object) {
+    let mut d = PageDoc::new();
+    let proc_num = d.add(raw_stream([], b"40 0 d0"));
+    let mut charprocs = dict([]);
+    let mut diffs = vec![Object::Integer(97)];
+    let mut widths = Vec::new();
+    for c in b'a'..=b'z' {
+        let gname = (c as char).to_string();
+        charprocs.insert(pdf_core::Name::new(&gname), rref(proc_num, 0));
+        diffs.push(name_obj(&gname));
+        widths.push(Object::Real(helv_w(c) as f64 / 12.04));
+    }
+    let font = Object::Dictionary(dict([
+        ("Type", name_obj("Font")),
+        ("Subtype", name_obj("Type3")),
+        (
+            "FontBBox",
+            Object::Array(vec![
+                Object::Integer(0),
+                Object::Integer(-20),
+                Object::Integer(80),
+                Object::Integer(70),
+            ]),
+        ),
+        (
+            "FontMatrix",
+            Object::Array(vec![
+                Object::Real(0.01204),
+                Object::Integer(0),
+                Object::Integer(0),
+                Object::Real(0.01204),
+                Object::Integer(0),
+                Object::Integer(0),
+            ]),
+        ),
+        ("CharProcs", Object::Dictionary(charprocs)),
+        (
+            "Encoding",
+            Object::Dictionary(dict([
+                ("Type", name_obj("Encoding")),
+                ("Differences", Object::Array(diffs)),
+            ])),
+        ),
+        ("FirstChar", Object::Integer(97)),
+        ("LastChar", Object::Integer(122)),
+        ("Widths", Object::Array(widths)),
+        ("Resources", Object::Dictionary(dict([]))),
+    ]));
+    (d, font)
+}
+
+fn textpage_type3(content: &[u8]) -> TextPage {
+    let (d, font) = type3_helv();
+    let (doc, _page) = d.font("F1", font).content(content).open();
+    let page = Page::new(Arc::new(doc), 0, ObjRef::new(3, 0));
+    build_textpage(page.document(), &page, &Limits::unbounded_decode())
+}
+
+/// Device width of the first char cell showing `c`.
+fn first_cell_width(tp: &TextPage, c: char) -> f64 {
+    tp.blocks
+        .iter()
+        .flat_map(|b| b.lines.iter())
+        .flat_map(|l| l.spans.iter())
+        .flat_map(|s| s.chars.iter())
+        .find(|ch| ch.c == c)
+        .map(|ch| ch.bbox.x1 - ch.bbox.x0)
+        .unwrap_or_else(|| panic!("no char {c:?} on the page"))
+}
+
+#[test]
+fn words_023_type3_fontmatrix_kerned_tj_keeps_word_whole() {
+    // `[(extr) -30 (action)] TJ` @12pt: with `/Widths` read as 1000-unit
+    // values the cells were 12× too narrow, every glyph sat in a gap and the
+    // word shattered. Through the FontMatrix 'e' is 556/1000×12 ≈ 6.67 wide
+    // and the −30 kern stays a kern (PyMuPDF: "extraction").
+    let tp = textpage_type3(b"BT /F1 12 Tf 72 700 Td [(extr) -30 (action)] TJ ET");
+    assert_eq!(to_text(&tp, 0).trim_end(), "extraction");
+    assert_eq!(word_texts(&tp), vec!["extraction"]);
+    assert_eq!(line_count(&tp), 1);
+    let e = first_cell_width(&tp, 'e');
+    assert!(
+        (e - 6.672).abs() < 0.05,
+        "'e' cell width {e}, expected ≈ 6.67"
+    );
+}
+
+#[test]
+fn words_024_type3_fontmatrix_per_word_td_one_line() {
+    // `(text) Tj 26.7 0 Td (extraction) Tj`: `text` advances 19.3pt, so the
+    // `Td` opens one ~7pt word gap. Narrow cells turned that into a line
+    // break; now it is exactly one word gap on one line (PyMuPDF).
+    let tp = textpage_type3(b"BT /F1 12 Tf 72 700 Td (text) Tj 26.7 0 Td (extraction) Tj ET");
+    assert_eq!(to_text(&tp, 0).trim_end(), "text extraction");
+    assert_eq!(word_texts(&tp), vec!["text", "extraction"]);
+    assert_eq!(line_count(&tp), 1);
+    assert_all_cells_positive(&tp);
+}
+
+#[test]
+fn words_025_type3_fontmatrix_per_glyph_td_keeps_word_whole() {
+    // Each letter its own `Tj` + a `Td` of its Helvetica advance: the mapped
+    // cells touch, so the letters form one word (PyMuPDF: "extraction").
+    let content = format!(
+        "BT /F1 12 Tf 72 700 Td {} ET",
+        per_glyph_words(&["extraction"], 12.0, 0.278)
+    );
+    let tp = textpage_type3(content.as_bytes());
+    assert_eq!(to_text(&tp, 0).trim_end(), "extraction");
+    assert_eq!(word_texts(&tp), vec!["extraction"]);
+    assert_eq!(line_count(&tp), 1);
+    assert_all_cells_positive(&tp);
 }

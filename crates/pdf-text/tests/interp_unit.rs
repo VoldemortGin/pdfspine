@@ -515,6 +515,79 @@ fn trm_009_fontbbox_fallback_is_normalised_too() {
     assert_cell(cell_at_20(tiny), 96.0, 116.0, 0.8, -0.2);
 }
 
+/// A descriptor-less Type3 font (the pdfTeX bitmap-font shape): one glyph
+/// `A` at code 65, `/Widths` in the font's own glyph space, plus the given
+/// `/FontBBox` / `/FontMatrix` entries (`None` → key absent).
+fn type3_font(bbox: Option<Object>, matrix: Option<Object>) -> Object {
+    let mut pairs = vec![
+        ("Type", name_obj("Font")),
+        ("Subtype", name_obj("Type3")),
+        (
+            "CharProcs",
+            Object::Dictionary(dict([("A", raw_stream([], b"40 0 d0"))])),
+        ),
+        (
+            "Encoding",
+            Object::Dictionary(dict([
+                ("Type", name_obj("Encoding")),
+                (
+                    "Differences",
+                    Object::Array(vec![Object::Integer(65), name_obj("A")]),
+                ),
+            ])),
+        ),
+        ("FirstChar", Object::Integer(65)),
+        ("LastChar", Object::Integer(65)),
+        ("Widths", Object::Array(vec![Object::Real(55.4)])),
+        ("Resources", Object::Dictionary(dict([]))),
+    ];
+    if let Some(b) = bbox {
+        pairs.push(("FontBBox", b));
+    }
+    if let Some(m) = matrix {
+        pairs.push(("FontMatrix", m));
+    }
+    Object::Dictionary(dict(pairs))
+}
+
+fn reals(vals: &[f64]) -> Object {
+    Object::Array(vals.iter().copied().map(Object::Real).collect())
+}
+
+#[test]
+fn trm_010_type3_fontbbox_through_fontmatrix() {
+    // No descriptor: the Type3's own `/FontBBox [0 -20 80 70]` is in glyph
+    // space and maps through `FontMatrix 0.01204` (ISO 32000-1 §9.6.5) →
+    // ascender 70×0.01204 = 0.8428, descender −20×0.01204 = −0.2408; at size
+    // 20 the cell spans y ∈ [100 − 4.816, 100 + 16.856].
+    let font = type3_font(
+        Some(int_array([0, -20, 80, 70])),
+        Some(reals(&[0.01204, 0.0, 0.0, 0.01204, 0.0, 0.0])),
+    );
+    let cell = cell_at_20(font);
+    approx(cell.0, 95.184, 1e-9);
+    approx(cell.1, 116.856, 1e-9);
+    approx(cell.2, 0.8428, 1e-12);
+    approx(cell.3, -0.2408, 1e-12);
+}
+
+#[test]
+fn trm_011_type3_default_matrix_and_missing_bbox() {
+    // No `/FontMatrix` → the standard 0.001 matrix: `[0 -250 1000 750]` gives
+    // the usual (0.75, −0.25) cell …
+    let std = type3_font(Some(int_array([0, -250, 1000, 750])), None);
+    assert_cell(cell_at_20(std), 95.0, 115.0, 0.75, -0.25);
+    // … a degenerate box (20×0.01204×1000 = 241 < 500) and a missing box both
+    // fall back to the Latin defaults.
+    let tiny = type3_font(
+        Some(int_array([0, -5, 80, 15])),
+        Some(reals(&[0.01204, 0.0, 0.0, 0.01204, 0.0, 0.0])),
+    );
+    assert_cell(cell_at_20(tiny), 96.0, 116.0, 0.8, -0.2);
+    let none = type3_font(None, Some(reals(&[0.01204, 0.0, 0.0, 0.01204, 0.0, 0.0])));
+    assert_cell(cell_at_20(none), 96.0, 116.0, 0.8, -0.2);
+}
+
 // === TRM-003: font-size scaling scales bbox + advance linearly ============
 
 #[test]

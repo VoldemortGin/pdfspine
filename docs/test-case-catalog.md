@@ -893,6 +893,10 @@ font dict + `&DocumentStore`; it answers `iter_codes`, `to_unicode(code)` and
 | `WIDTHS-009` | embedded program outranks the Core-14 name (`Helvetica` + Liberation Serif → Times metrics); unparseable program falls back to the name | PRD §8.5 | green |
 | `WIDTHS-010` | truncated `/Widths` is not repaired: out-of-range codes stay on `/MissingWidth` (0 / declared value), no substitute | ISO §9.2.4 | green |
 | `WIDTHS-011` | Type3 without `/Widths` gets no 1000/em substitute (advance stays 0) | PRD §8.5 | green |
+| `WIDTHS-012` | Type3 `FontMatrix [0.01204 0 0 0.01204 0 0]` (pdfTeX): `/Widths` 46.18 / 41.53 in glyph space → `width()` ≈ 556 / 500 in 1000-unit text space; code outside `/Widths` stays 0 | ISO §9.6.5 | green |
+| `WIDTHS-013` | Type3 standard matrix leaves `/Widths` unchanged; absent / 5-element / non-numeric `/FontMatrix` reads as `[0.001 0 0 0.001 0 0]` | ISO §9.6.5 | green |
+| `WIDTHS-014` | Type3 skewed matrix `[0.01 0 0.002 0.01 0 0]`: advance `(w,0)` only feels `a` → `w·a·1000` (50 → 500, 20 → 200) | ISO §9.6.5 | green |
+| `WIDTHS-015` | Type3 with a descriptor: `/MissingWidth 41.53` mapped through the same matrix → ≈ 500 for codes outside `/Widths` | ISO §9.6.5 | green |
 | `WIDTHS-CORE14-GAP` | unembedded std-14, no `/Widths` → MissingWidth fallback (AFM gap) | PRD §8.5.2 | green |
 
 ### Type0 / CID fonts (`mapper.rs` + `widths.rs`) — `CID-*`
@@ -977,6 +981,8 @@ font fixtures only (we control every byte; no PyMuPDF files). Tests live in
 | `TRM-007` | degenerate metrics (300, −100; cell < 0.5×size) rejected → defaults (800, −200) | PRD §8.6.2 | green |
 | `TRM-008` | `/Ascent 0 /Descent 0` → `/FontBBox` `(ury, lly)` supplies the cell | PRD §8.6.2 | green |
 | `TRM-009` | `/FontBBox` fallback normalised too: positive `lly` flipped; degenerate box (ury − lly < 500) → defaults | PRD §8.6.2 | green |
+| `TRM-010` | descriptor-less Type3: its own `/FontBBox [0 -20 80 70]` through `FontMatrix 0.01204` → ascender 0.8428 / descender −0.2408, cell y ∈ [95.184, 116.856] at size 20 | ISO §9.6.5 | green |
+| `TRM-011` | Type3 without `/FontMatrix` → standard 0.001 (`[0 -250 1000 750]` → 0.75 / −0.25); degenerate mapped box (241 < 500) or missing `/FontBBox` → defaults (800, −200) | ISO §9.6.5 | green |
 | `COORD-ROT-90-TRM` | 90°-rotated `Tm` → correct axis-aligned bbox envelope | PRD §8.6.1 | green |
 | `COORD-ROT-180-TRM` | 180°-rotated `Tm` → correct envelope + origin | PRD §8.6.1 | green |
 
@@ -1121,6 +1127,9 @@ self-built PDFs (reuse `tests/common`). No PyMuPDF files.
 | `WORDS-020` | e2e same font, `(text) Tj 26.7 0 Td (extraction) Tj`: one word gap, one line → `["text","extraction"]` (was a line break with zero-width cells) | PRD §8.6.2 | green |
 | `WORDS-021` | e2e Times-Roman without `/Widths`, `(Company\222s report \223quoted\224 \226 dash) Tj`: WinAnsi quoteright / double quotes / endash advance by AFM → `["Company’s","report","“quoted”","–","dash"]`, quote cells width > 0 | PRD §8.6.2 | green |
 | `WORDS-022` | e2e fintabnet AIZ pattern `(Company\222s) Tj 60 0 Td (report) Tj` on Times-Roman without `/Widths` → `["Company’s","report"]`, one line | PRD §8.6.2 | green |
+| `WORDS-023` | e2e pdfTeX-like Type3 (`FontMatrix 0.01204`, `/Widths` = Helvetica ÷ 12.04, no descriptor) `[(extr) -30 (action)] TJ` @12pt → `"extraction"`, one word, one line, `'e'` cell width ≈ 6.67 (556×12/1000; was 12× too narrow) | ISO §9.6.5 | green |
+| `WORDS-024` | e2e same Type3, `(text) Tj 26.7 0 Td (extraction) Tj` → `["text","extraction"]`, **one line** (narrow cells made the `Td` a line break), every cell width > 0 | ISO §9.6.5 | green |
+| `WORDS-025` | e2e same Type3, each letter its own `Tj` + `Td` of its Helvetica advance → `"extraction"` one word, one line (PyMuPDF) | ISO §9.6.5 | green |
 
 ### Span flags (`layout.rs`) — `LAYOUT-FLAGS-*`
 

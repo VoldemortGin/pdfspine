@@ -55,6 +55,6 @@ pub use liberation::{
     liberation_face, liberation_fallback, symbol_faces, symbolic_fallback, zapf_faces,
     LiberationFamily,
 };
-pub use mapper::{CodeIter, FontKind, FontMapper};
+pub use mapper::{type3_font_matrix, CodeIter, FontKind, FontMapper};
 pub use predefined::{BundledCjk, PredefinedKind};
 pub use std_widths::{standard_font_widths, string_advance, StandardWidths};
