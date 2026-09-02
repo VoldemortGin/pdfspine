@@ -278,7 +278,9 @@ def test_tatr_008b_render_uses_zero_based_rotated_cropbox_displaylist(monkeypatc
             return FakeImage((self.size[1], self.size[0]))
 
     fake_pil = ModuleType("PIL")
-    fake_pil.Image = SimpleNamespace(frombytes=lambda _mode, size, _samples: FakeImage(size))
+    fake_pil.Image = SimpleNamespace(
+        frombytes=lambda _mode, size, _samples: FakeImage(size)
+    )
     monkeypatch.setitem(sys.modules, "PIL", fake_pil)
 
     rendered = _tatr._render_page(
@@ -312,34 +314,42 @@ def _tables_diff_module():
 
 def test_tatr_010_benchmark_prefers_direct_cells_and_penalizes_false_positive(tmp_path):
     harness = _tables_diff_module()
-    gold = [{
-        "pdf_table_bbox": [0, 0, 100, 100],
-        "cells": [{
-            "row_nums": [0],
-            "column_nums": [0],
-            "json_text_content": "A",
-        }],
-    }]
+    gold = [
+        {
+            "pdf_table_bbox": [0, 0, 100, 100],
+            "cells": [
+                {
+                    "row_nums": [0],
+                    "column_nums": [0],
+                    "json_text_content": "A",
+                }
+            ],
+        }
+    ]
     predictions = {
         "ok": True,
         "error": None,
         "tables": [
             {
                 "bbox": [0, 0, 100, 100],
-                "cells": [{
-                    "row_nums": [0],
-                    "column_nums": [0],
-                    "cell_text": "A",
-                }],
+                "cells": [
+                    {
+                        "row_nums": [0],
+                        "column_nums": [0],
+                        "cell_text": "A",
+                    }
+                ],
                 "html": "<table><tr><td>WRONG</td></tr></table>",
             },
             {
                 "bbox": [120, 120, 180, 180],
-                "cells": [{
-                    "row_nums": [0],
-                    "column_nums": [0],
-                    "cell_text": "extra",
-                }],
+                "cells": [
+                    {
+                        "row_nums": [0],
+                        "column_nums": [0],
+                        "cell_text": "extra",
+                    }
+                ],
             },
         ],
     }
@@ -420,7 +430,9 @@ def test_tatr_012_real_pinned_models_offline_smoke():
 
 def _m7_fixture_module():
     fixture_path = Path(__file__).with_name("test_m7.py")
-    spec = importlib.util.spec_from_file_location("_pdfspine_m7_tatr_fixture", fixture_path)
+    spec = importlib.util.spec_from_file_location(
+        "_pdfspine_m7_tatr_fixture", fixture_path
+    )
     assert spec is not None and spec.loader is not None
     fixture = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(fixture)
@@ -586,9 +598,7 @@ def test_tatr_014_runtime_cache_ignores_page_and_threshold_options(monkeypatch):
     monkeypatch.setattr(_tatr, "_TransformersRuntime", FakeRuntime)
     _tatr.clear_model_cache()
     try:
-        first = _tatr._get_runtime(
-            _tatr.TatrOptions(dpi=96, detection_threshold=0.4)
-        )
+        first = _tatr._get_runtime(_tatr.TatrOptions(dpi=96, detection_threshold=0.4))
         second = _tatr._get_runtime(
             _tatr.TatrOptions(
                 dpi=200,
@@ -615,7 +625,9 @@ def test_tatr_015_concurrent_first_calls_load_models_once(monkeypatch):
     try:
         options = _tatr.TatrOptions()
         with ThreadPoolExecutor(max_workers=4) as executor:
-            runtimes = list(executor.map(lambda _index: _tatr._get_runtime(options), range(4)))
+            runtimes = list(
+                executor.map(lambda _index: _tatr._get_runtime(options), range(4))
+            )
         assert len({id(runtime) for runtime in runtimes}) == 1
         assert len(created) == 1
     finally:
@@ -625,7 +637,10 @@ def test_tatr_015_concurrent_first_calls_load_models_once(monkeypatch):
 def test_tatr_016_prebuilt_runtime_platform_boundaries():
     assert (
         _tatr._runtime_platform_error(
-            python_version=(3, 15), platform_name="linux", machine="x86_64", libc_name="glibc"
+            python_version=(3, 15),
+            platform_name="linux",
+            machine="x86_64",
+            libc_name="glibc",
         )
         is not None
     )
@@ -637,7 +652,10 @@ def test_tatr_016_prebuilt_runtime_platform_boundaries():
     )
     assert (
         _tatr._runtime_platform_error(
-            python_version=(3, 12), platform_name="linux", machine="x86_64", libc_name="musl"
+            python_version=(3, 12),
+            platform_name="linux",
+            machine="x86_64",
+            libc_name="musl",
         )
         is not None
     )
@@ -671,9 +689,7 @@ def test_tatr_adaptive_limits_never_shrink_an_overlapping_detection():
     assert expanded["bbox"][2] >= current["bbox"][2]
 
 
-def test_tatr_017_local_model_sources_do_not_claim_hub_revisions(
-    monkeypatch, tmp_path
-):
+def test_tatr_017_local_model_sources_do_not_claim_hub_revisions(monkeypatch, tmp_path):
     detection = tmp_path / "detection"
     structure = tmp_path / "structure"
     detection.mkdir()

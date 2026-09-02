@@ -23,11 +23,13 @@ def _harness():
 def _gold_table(text: str = "A") -> dict:
     return {
         "pdf_table_bbox": [0, 0, 100, 100],
-        "cells": [{
-            "row_nums": [0],
-            "column_nums": [0],
-            "json_text_content": text,
-        }],
+        "cells": [
+            {
+                "row_nums": [0],
+                "column_nums": [0],
+                "json_text_content": text,
+            }
+        ],
     }
 
 
@@ -61,11 +63,13 @@ def test_run_gold_stops_at_first_failure_and_writes_invalid_report(
     harness = _harness()
     manifest = tmp_path / "manifest.json"
     manifest.write_text(
-        json.dumps({
-            "annotations_license": "CDLA-Permissive-2.0",
-            "pdf_license": "CDLA-Permissive-1.0",
-            "sample_requested": 2,
-        }),
+        json.dumps(
+            {
+                "annotations_license": "CDLA-Permissive-2.0",
+                "pdf_license": "CDLA-Permissive-1.0",
+                "sample_requested": 2,
+            }
+        ),
         encoding="utf-8",
     )
     pdfs = [tmp_path / "one.pdf", tmp_path / "two.pdf"]
@@ -146,17 +150,19 @@ def test_zero_detection_keeps_worker_level_runtime_metadata(tmp_path):
 
 def test_metric_summary_separates_end_to_end_and_matched_only():
     harness = _harness()
-    docs = [{
-        "status": "valid",
-        "ox_ok": True,
-        "n_gold": 2,
-        "n_pred": 1,
-        "n_matched": 1,
-        "tables": [
-            {"matched": True, "grits_top": 0.8, "grits_con": 0.6},
-            {"matched": False, "grits_top": 0.0, "grits_con": 0.0},
-        ],
-    }]
+    docs = [
+        {
+            "status": "valid",
+            "ox_ok": True,
+            "n_gold": 2,
+            "n_pred": 1,
+            "n_matched": 1,
+            "tables": [
+                {"matched": True, "grits_top": 0.8, "grits_con": 0.6},
+                {"matched": False, "grits_top": 0.0, "grits_con": 0.0},
+            ],
+        }
+    ]
 
     summary = harness._gold_metric_summary(docs)
     assert summary["end_to_end"]["grits_top_mean"] == pytest.approx(0.4)
@@ -178,15 +184,19 @@ def test_detection_metrics_use_raw_bbox_but_grits_uses_final_bbox(tmp_path):
             "ok": True,
             "backend_metadata": {"backend": "tatr"},
             "error": None,
-            "tables": [{
-                "bbox": [0, 0, 100, 100],
-                "metadata": {"detection_bbox": [0, 0, 40, 100]},
-                "cells": [{
-                    "row_nums": [0],
-                    "column_nums": [0],
-                    "cell_text": "A",
-                }],
-            }],
+            "tables": [
+                {
+                    "bbox": [0, 0, 100, 100],
+                    "metadata": {"detection_bbox": [0, 0, 40, 100]},
+                    "cells": [
+                        {
+                            "row_nums": [0],
+                            "column_nums": [0],
+                            "cell_text": "A",
+                        }
+                    ],
+                }
+            ],
         },
     )
 

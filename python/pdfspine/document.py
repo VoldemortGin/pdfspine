@@ -2277,7 +2277,9 @@ class Page:
                 )
             )
         if vision_options is not None:
-            raise TypeError("vision_options requires strategy='vision' or backend='tatr'")
+            raise TypeError(
+                "vision_options requires strategy='vision' or backend='tatr'"
+            )
         # PyMuPDF passes vertical_strategy / horizontal_strategy; honor either.
         vs = _ignored.get("vertical_strategy")
         hs = _ignored.get("horizontal_strategy")

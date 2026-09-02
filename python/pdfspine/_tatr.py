@@ -180,7 +180,9 @@ def _model_sources(options: TatrOptions) -> tuple[str, str]:
     return detection, structure
 
 
-def _model_kwargs(source: str, revision: str | None, local_only: bool) -> dict[str, Any]:
+def _model_kwargs(
+    source: str, revision: str | None, local_only: bool
+) -> dict[str, Any]:
     kwargs: dict[str, Any] = {
         "local_files_only": local_only,
         "trust_remote_code": False,
@@ -215,7 +217,9 @@ def _runtime_platform_error(
     if os_name.startswith("linux"):
         if arch not in {"x86_64", "amd64", "arm64", "aarch64"}:
             return "prebuilt PyTorch wheels on Linux require x86-64 or ARM64"
-        libc = (libc_name if libc_name is not None else platform.libc_ver()[0]).casefold()
+        libc = (
+            libc_name if libc_name is not None else platform.libc_ver()[0]
+        ).casefold()
         if libc and libc != "glibc":
             return "prebuilt PyTorch wheels require a glibc-based Linux distribution"
     return None
@@ -272,7 +276,9 @@ class _TransformersRuntime:
                 options.local_files_only,
             )
         except Exception as exc:  # Transformers uses OSError for cache misses.
-            mode = "local cache only" if options.local_files_only else "download allowed"
+            mode = (
+                "local cache only" if options.local_files_only else "download allowed"
+            )
             raise PdfUnsupportedError(
                 "Could not load the pinned TATR checkpoints "
                 f"({mode}; {type(exc).__name__}: {exc}). Pre-fetch the two models "
@@ -326,7 +332,9 @@ class _TransformersRuntime:
         if config_dict.get("dilation") is None:
             config_dict["dilation"] = False
         config = config_class.from_dict(config_dict)
-        return auto_model.from_pretrained(source, config=config, **kwargs).to(self.device)
+        return auto_model.from_pretrained(source, config=config, **kwargs).to(
+            self.device
+        )
 
     def _resolve_device(self, requested: str) -> str:
         torch = self._torch
@@ -334,7 +342,9 @@ class _TransformersRuntime:
         if device == "auto":
             return "cuda" if torch.cuda.is_available() else "cpu"
         if device.startswith("cuda") and not torch.cuda.is_available():
-            raise PdfUnsupportedError("TATR device='cuda' was requested but CUDA is unavailable")
+            raise PdfUnsupportedError(
+                "TATR device='cuda' was requested but CUDA is unavailable"
+            )
         if (
             device.startswith("cuda:")
             and int(device.partition(":")[2]) >= torch.cuda.device_count()
@@ -349,7 +359,9 @@ class _TransformersRuntime:
                 and torch.backends.mps.is_available()
             )
             if not available:
-                raise PdfUnsupportedError("TATR device='mps' was requested but MPS is unavailable")
+                raise PdfUnsupportedError(
+                    "TATR device='mps' was requested but MPS is unavailable"
+                )
         return device
 
     def _tensor(self, image: Any, max_size: int) -> Any:
@@ -482,9 +494,7 @@ def _get_runtime(options: TatrOptions) -> _TransformersRuntime:
     )
 
 
-def _native_words(
-    page: Any, options: TatrOptions
-) -> tuple[list[tuple[Any, ...]], str]:
+def _native_words(page: Any, options: TatrOptions) -> tuple[list[tuple[Any, ...]], str]:
     words = list(page.get_text("words", sort=True))
     if words or not options.ocr_if_no_text:
         return words, "pdfspine-native"
@@ -784,17 +794,15 @@ def _page_box_to_image(
     )
 
 
-def _native_line_anchors(page: Any, clip: Any) -> list[tuple[float, float, float, float]]:
+def _native_line_anchors(
+    page: Any, clip: Any
+) -> list[tuple[float, float, float, float]]:
     if page is None or not hasattr(page, "find_tables"):
         return []
     try:
         finder = page.find_tables(strategy="lines", clip=clip)
         tables = list(getattr(finder, "tables", finder))
-        return [
-            bbox
-            for table in tables
-            if _area(bbox := _box4(table.bbox)) > 1.0
-        ]
+        return [bbox for table in tables if _area(bbox := _box4(table.bbox)) > 1.0]
     except Exception:
         # Vector guidance is optional; TATR remains usable on scans and on PDFs
         # whose drawing operators the native line detector cannot interpret.
@@ -823,7 +831,9 @@ def _guided_detection(
         containment = _iob(detection_page_bbox, anchor)
         if containment < 0.75:
             continue
-        score = containment + _intersection_area(detection_page_bbox, anchor) / anchor_area
+        score = (
+            containment + _intersection_area(detection_page_bbox, anchor) / anchor_area
+        )
         if best is None or score > best[0]:
             best = (score, index)
     if best is None:
@@ -933,7 +943,9 @@ def _expand_detection(
     return result
 
 
-def _grid_boundaries(boxes: list[tuple[float, float, float, float]], axis: int) -> list[float]:
+def _grid_boundaries(
+    boxes: list[tuple[float, float, float, float]], axis: int
+) -> list[float]:
     if not boxes:
         return []
     boxes = sorted(boxes, key=lambda box: box[axis])
@@ -983,7 +995,9 @@ class _TatrTableRecord:
         ]
         self._covered: set[tuple[int, int]] = set()
         self._by_origin: dict[tuple[int, int], dict[str, Any]] = {}
-        self.spans: list[tuple[int, int, int, int, tuple[float, float, float, float]]] = []
+        self.spans: list[
+            tuple[int, int, int, int, tuple[float, float, float, float]]
+        ] = []
         accepted: list[dict[str, Any]] = []
         for cell in candidates:
             rows = sorted(set(int(v) for v in cell["row_nums"]))
@@ -1007,9 +1021,7 @@ class _TatrTableRecord:
             self.cells[origin[0]][origin[1]] = rect
             text = str(cell.get("cell_text") or "")
             self._text[origin[0]][origin[1]] = text or None
-            self.spans.append(
-                (origin[0], origin[1], len(rows), len(columns), rect)
-            )
+            self.spans.append((origin[0], origin[1], len(rows), len(columns), rect))
         self._records = accepted
         if row_boxes and column_boxes:
             self.bbox = (
@@ -1064,11 +1076,15 @@ class _TatrTableRecord:
             return text.replace("\n", " ").replace("|", r"\|").strip()
 
         lines = [
-            "| " + " | ".join(value(0, column) for column in range(self.col_count)) + " |",
+            "| "
+            + " | ".join(value(0, column) for column in range(self.col_count))
+            + " |",
             "| " + " | ".join("---" for _ in range(self.col_count)) + " |",
         ]
         lines.extend(
-            "| " + " | ".join(value(row, column) for column in range(self.col_count)) + " |"
+            "| "
+            + " | ".join(value(row, column) for column in range(self.col_count))
+            + " |"
             for row in range(1, self.row_count)
         )
         return "\n".join(lines) + "\n"
@@ -1195,17 +1211,11 @@ def _table_from_structure(
         grid_bbox = _grid_cell_bbox(cell, grid_rows, grid_columns)
         converted["bbox"] = _crop_box_to_page(grid_bbox, crop, rendered)
         page_cells.append(converted)
-    row_boxes = [
-        _crop_box_to_page(row["bbox"], crop, rendered)
-        for row in grid_rows
-    ]
+    row_boxes = [_crop_box_to_page(row["bbox"], crop, rendered) for row in grid_rows]
     column_boxes = [
-        _crop_box_to_page(column["bbox"], crop, rendered)
-        for column in grid_columns
+        _crop_box_to_page(column["bbox"], crop, rendered) for column in grid_columns
     ]
-    model_confidence = min(
-        float(detection_score), float(table.get("score", 0.0))
-    )
+    model_confidence = min(float(detection_score), float(table.get("score", 0.0)))
     if selected_tokens:
         model_confidence = (model_confidence + float(token_confidence)) / 2.0
     table_metadata = dict(runtime_metadata)
@@ -1249,9 +1259,7 @@ def find_tables(
     detections = runtime.detect(rendered.image, config.detection_threshold)
     tables: list[_TatrTableRecord] = []
     metadata = getattr(runtime, "metadata", {"backend": "tatr"})
-    anchors = (
-        _native_line_anchors(page, clip) if config.native_line_guidance else []
-    )
+    anchors = _native_line_anchors(page, clip) if config.native_line_guidance else []
     used_anchors: set[int] = set()
     for detection in detections:
         if detection.get("label") not in {"table", "table rotated"}:
@@ -1262,13 +1270,9 @@ def find_tables(
         recognition_detection = guided_detection
         expansions = 1 if line_guided else 0
         adaptive_expansions = 0
-        limits = _detection_expansion_limits(
-            detection, detections, rendered.image.size
-        )
+        limits = _detection_expansion_limits(detection, detections, rendered.image.size)
         while True:
-            crop = _make_crop(
-                rendered, recognition_detection, config.crop_padding
-            )
+            crop = _make_crop(rendered, recognition_detection, config.crop_padding)
             if crop is None:
                 break
             objects = runtime.recognize(crop.image, config.structure_threshold)
