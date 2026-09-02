@@ -711,3 +711,128 @@ fn words_025_type3_fontmatrix_per_glyph_td_keeps_word_whole() {
     assert_eq!(line_count(&tp), 1);
     assert_all_cells_positive(&tp);
 }
+
+// === whitespace glyphs from another run overlapping ink ======================
+
+/// Two independent text objects (Helvetica 12pt) on one page.
+fn textpage_two_runs(a: &str, b: &str) -> TextPage {
+    let content = format!("BT /F1 12 Tf {a} ET BT /F1 12 Tf {b} ET");
+    textpage_e2e(winansi_type1("Helvetica", 32, &HELV), content.as_bytes())
+}
+
+fn char_count(tp: &TextPage) -> usize {
+    tp.blocks
+        .iter()
+        .flat_map(|b| b.lines.iter())
+        .flat_map(|l| l.spans.iter())
+        .map(|s| s.chars.len())
+        .sum()
+}
+
+#[test]
+fn words_026_overlapping_phantom_space_from_other_run_is_dropped() {
+    // GAO letterhead pattern: Word emits an empty paragraph `( ) Tj` whose
+    // baseline clusters with the heading and whose space cell lands *inside*
+    // the heading's ink. "United States Government" at 12pt Helvetica puts
+    // "Stat|es" at x = 131.4; a space run at x = 129 (cell [129, 132.3])
+    // overlaps both `t` and `e`, and the advance sort used to insert it there
+    // ("United Stat es"). PyMuPDF: "United States Government".
+    let heading = "72 700 Td (United States Government) Tj";
+    let tp = textpage_two_runs(heading, "129 700 Td ( ) Tj");
+    assert_eq!(to_text(&tp, 0).trim_end(), "United States Government");
+    assert_eq!(word_texts(&tp), vec!["United", "States", "Government"]);
+    // The phantom is gone from the char array too (rawdict consistency).
+    assert_eq!(char_count(&tp), "United States Government".len());
+
+    // Two phantom spaces `(  ) Tj`: the second lands inside `e` ("Stat e s").
+    let tp = textpage_two_runs(heading, "129 700 Td (  ) Tj");
+    assert_eq!(to_text(&tp, 0).trim_end(), "United States Government");
+    assert_eq!(word_texts(&tp), vec!["United", "States", "Government"]);
+
+    // A phantom straddling the end of "States" (`s` ends at 144.0) and the real
+    // word space [144.0, 147.4]: no double space, still three words.
+    let tp = textpage_two_runs(heading, "142 700 Td ( ) Tj");
+    assert_eq!(to_text(&tp, 0).trim_end(), "United States Government");
+    assert_eq!(word_texts(&tp), vec!["United", "States", "Government"]);
+    assert_eq!(char_count(&tp), "United States Government".len());
+
+    // The real GAO geometry: 10pt, the empty paragraph 2.1pt *below* the
+    // heading baseline (still within the line tolerance), its cell inside `s`.
+    let tp = textpage_e2e(
+        winansi_type1("Helvetica", 32, &HELV),
+        b"BT /F1 10 Tf 56.16 690.3 Td (United States Government Accountability Office) Tj ET \
+          BT /F1 10 Tf 111.6 688.2 Td ( ) Tj ET",
+    );
+    assert_eq!(
+        to_text(&tp, 0).trim_end(),
+        "United States Government Accountability Office"
+    );
+    assert_eq!(
+        word_texts(&tp),
+        vec!["United", "States", "Government", "Accountability", "Office"]
+    );
+}
+
+#[test]
+fn words_027_real_spaces_touching_their_neighbours_are_kept() {
+    // Invariant: a literal space whose cell merely *touches* (or is kerned /
+    // tracked slightly under) its neighbours is a real word gap.
+    let helv = || winansi_type1("Helvetica", 32, &HELV);
+    // Single show string, gap exactly 0 on both sides.
+    let tp = textpage_e2e(helv(), b"BT /F1 12 Tf 72 700 Td (United States) Tj ET");
+    assert_eq!(to_text(&tp, 0).trim_end(), "United States");
+    assert_eq!(word_texts(&tp), vec!["United", "States"]);
+
+    // Three runs on one baseline, the space run placed exactly at the end of
+    // "United" (106.02) and "States" exactly after it (109.356): one space.
+    let tp = textpage_e2e(
+        helv(),
+        b"BT /F1 12 Tf 72 700 Td (United) Tj ET \
+          BT /F1 12 Tf 106.02 700 Td ( ) Tj ET \
+          BT /F1 12 Tf 109.356 700 Td (States) Tj ET",
+    );
+    assert_eq!(to_text(&tp, 0).trim_end(), "United States");
+    assert_eq!(word_texts(&tp), vec!["United", "States"]);
+    assert_eq!(char_count(&tp), "United States".len());
+
+    // Tight tracking (`-0.8 Tc` at 10pt = −0.08 em: every cell overlaps the
+    // previous one) and negative word spacing (`-1.5 Tw`): PyMuPDF keeps the
+    // literal space in both, so must we.
+    let tp = textpage_e2e(
+        helv(),
+        b"BT /F1 10 Tf 72 700 Td -0.8 Tc (United States) Tj ET",
+    );
+    assert_eq!(to_text(&tp, 0).trim_end(), "United States");
+    assert_eq!(word_texts(&tp), vec!["United", "States"]);
+    let tp = textpage_e2e(
+        helv(),
+        b"BT /F1 10 Tf 72 700 Td -1.5 Tw (United States) Tj ET",
+    );
+    assert_eq!(to_text(&tp, 0).trim_end(), "United States");
+    assert_eq!(word_texts(&tp), vec!["United", "States"]);
+
+    // EUR-Lex footnote marker: `(` then, at the superscript size, a space with
+    // a kern *back* over its full width and the digit painted on top of it; the
+    // same again before `)`. Both spaces are completely covered by ink, but
+    // they are painted in sequence with their neighbours, so they are real —
+    // PyMuPDF reads "( 1 )" as three words and so did we before this rule.
+    let tp = textpage_e2e(
+        helv(),
+        b"BT /F1 9.5 Tf 72 700 Td (\\() Tj /F1 6.2 Tf [( ) 278 (1)] TJ /F1 9.5 Tf [( ) 278 (\\))] TJ ET",
+    );
+    assert_eq!(to_text(&tp, 0).trim_end(), "( 1 )");
+    assert_eq!(word_texts(&tp), vec!["(", "1", ")"]);
+}
+
+#[test]
+fn words_028_overprinted_ink_glyphs_are_unchanged() {
+    // Fake bold: `(Bold) Tj` painted twice, 0.3pt apart. Only *whitespace*
+    // glyphs are subject to the overlap rule; ink-on-ink overlap keeps the
+    // pre-existing advance-sorted merge (PyMuPDF reads it as two lines,
+    // "Bold\nBold" — a separate, known divergence).
+    let tp = textpage_two_runs("72 700 Td (Bold) Tj", "72.3 700 Td (Bold) Tj");
+    assert_eq!(to_text(&tp, 0).trim_end(), "BBoolldd");
+    assert_eq!(word_texts(&tp), vec!["BBoolldd"]);
+    assert_eq!(char_count(&tp), 8);
+    assert_eq!(line_count(&tp), 1);
+}

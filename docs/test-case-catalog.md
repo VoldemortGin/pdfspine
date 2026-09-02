@@ -1130,6 +1130,9 @@ self-built PDFs (reuse `tests/common`). No PyMuPDF files.
 | `WORDS-023` | e2e pdfTeX-like Type3 (`FontMatrix 0.01204`, `/Widths` = Helvetica ÷ 12.04, no descriptor) `[(extr) -30 (action)] TJ` @12pt → `"extraction"`, one word, one line, `'e'` cell width ≈ 6.67 (556×12/1000; was 12× too narrow) | ISO §9.6.5 | green |
 | `WORDS-024` | e2e same Type3, `(text) Tj 26.7 0 Td (extraction) Tj` → `["text","extraction"]`, **one line** (narrow cells made the `Td` a line break), every cell width > 0 | ISO §9.6.5 | green |
 | `WORDS-025` | e2e same Type3, each letter its own `Tj` + `Td` of its Helvetica advance → `"extraction"` one word, one line (PyMuPDF) | ISO §9.6.5 | green |
+| `WORDS-026` | e2e GAO letterhead: `(United States Government) Tj` @12pt + a second text object `( ) Tj` at x=129 (cell inside "Stat\|es"), `(  ) Tj`, one at x=142 straddling `s` and the real word space, and the 10pt original with the space run 2.1pt below the baseline → text `"United States Government"` (was `"United Stat es"` / double space), 3 words, phantom absent from `chars` (PyMuPDF) | PRD §8.6.2 | green |
+| `WORDS-027` | invariant: real spaces touching their neighbours stay — `(United States) Tj`; three runs `(United)` / `( )` / `(States)` placed edge-to-edge → `"United States"`, one space; `-0.8 Tc` (−0.08 em) and `-1.5 Tw` still two words; EUR-Lex footnote idiom `(\() Tj /F1 6.2 Tf [( ) 278 (1)] TJ …` (space fully covered by the kerned-back digit, but painted in sequence) → `"( 1 )"`, `["(","1",")"]` (PyMuPDF keeps the literal space) | PRD §8.6.2 | green |
+| `WORDS-028` | ink-on-ink overlap unchanged: `(Bold) Tj` painted twice 0.3pt apart → `"BBoolldd"`, 8 chars, one line (pre-fix behaviour recorded; PyMuPDF reads `"Bold\nBold"`) | PRD §8.6.2 | green |
 
 ### Span flags (`layout.rs`) — `LAYOUT-FLAGS-*`
 

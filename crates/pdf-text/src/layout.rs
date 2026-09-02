@@ -64,6 +64,16 @@ const WORD_GAP_FRAC: f64 = 0.15;
 /// stays a word break, as PyMuPDF reads it.
 const LETTER_SPACING_MAX_FRAC: f64 = 0.3;
 
+/// A literal whitespace glyph is a *phantom* — painted by another run over this
+/// line's ink — when less than this fraction of its own cell width is left
+/// visible between the neighbouring glyph cells. Word emits an empty paragraph
+/// `( ) Tj` on the GAO letterhead whose baseline clusters with the heading and
+/// whose cell lands inside "States"; the advance sort would file it between
+/// `t` and `e` ("United Stat es"). A real space is never buried like this: a
+/// kerned pair (`space Y` −90/1000) or tight tracking (−0.08 em) still leaves
+/// well over half the cell visible, and PyMuPDF keeps those spaces.
+const PHANTOM_SPACE_VISIBLE_FRAC: f64 = 0.2;
+
 /// Baseline movement, in effective font-size units, below which text remains in
 /// the current paragraph regardless of horizontal movement.
 const BLOCK_BASELINE_NEAR: f64 = 0.8;
@@ -574,6 +584,10 @@ fn group_lines(dev: &[DevGlyph]) -> Vec<Line> {
     reattach_fragment_runs(&mut final_runs, dev);
     let mut lines = Vec::with_capacity(final_runs.len());
     for mut run in final_runs {
+        // 另一条 run 画在本行墨迹之上的空白 glyph 不进入本行：不进 spans/chars、
+        // 不产生词界、也不参与字号 / 字距掩码的统计。在 RTL 重排之前做，此时
+        // run 仍按前进方向升序。
+        drop_phantom_whitespace(&mut run, dev);
         if is_rtl_run(&run, dev) {
             reorder_rtl_line(&mut run, dev);
         }
@@ -1264,6 +1278,67 @@ fn letter_spacing_skip_mask(glyphs: &[&DevGlyph], size: f64, gap_thresh: f64) ->
         a = b;
     }
     mask
+}
+
+/// Removes the phantom whitespace glyphs from an advance-sorted line run (see
+/// [`PHANTOM_SPACE_VISIBLE_FRAC`]). `run` holds paint-order indices into `dev`.
+/// Each whitespace cell is measured against the trailing edge of the previous
+/// *kept* glyph and the leading edge of the next glyph; the part of the cell
+/// covered by neither is the gap a reader sees. A whitespace glyph painted in
+/// sequence with this line — the glyph painted right before or after it is on
+/// this line and its cell touches or overlaps the whitespace cell (within one
+/// cell width) — belongs to the line's own show string and is always kept,
+/// however buried: EUR-Lex sets its footnote markers as `(` + space + a kern
+/// *back* + `1`, and fintabnet cells write `4` + space + a kern back + `%`, so
+/// the space is fully covered by the next glyph, and PyMuPDF still reads
+/// `( 1 )` / `7.94 %`. Ink glyphs are never dropped, and a zero-width
+/// whitespace cell (nothing to overlap) is kept as before.
+fn drop_phantom_whitespace(run: &mut Vec<usize>, dev: &[DevGlyph]) {
+    if run.len() < 2 {
+        return;
+    }
+    let is_ws = |g: &DevGlyph| !g.text.is_empty() && g.text.chars().all(is_synth_ws);
+    // 本行成员的绘制序下标（升序），用于判断某个 glyph 是否属于本行。
+    let mut members = run.clone();
+    members.sort_unstable();
+    let mut kept: Vec<usize> = Vec::with_capacity(run.len());
+    // 上一个保留下来的 glyph（绘制序下标）。
+    let mut prev: Option<usize> = None;
+    for (k, &i) in run.iter().enumerate() {
+        let g = &dev[i];
+        let (lead, end) = g.along_span();
+        let width = end - lead;
+        if is_ws(g) && width > 0.0 {
+            let next = run.get(k + 1).copied();
+            // 绘制顺序上紧挨着它的 glyph（i±1）若是本行的墨迹、且字符格与它相接 /
+            // 重叠（一个空格宽以内），它就是本行自己 show 串里的真实空格（哪怕被负
+            // 字距回退的下一个字盖住），绝不丢。沿轴相邻不等于绘制相邻：origin 相同
+            // 时排序会把盖住它的字排到前面，所以看绘制邻居而不是沿轴邻居。邻居本身
+            // 是空白则不算数——空段落 `(  ) Tj` 里的两个空格互为邻居。
+            let in_sequence = |j: usize| {
+                members.binary_search(&j).is_ok() && !is_ws(&dev[j]) && {
+                    let (jl, je) = dev[j].along_span();
+                    jl <= end + width && je >= lead - width
+                }
+            };
+            let painted_with_line = (i > 0 && in_sequence(i - 1)) || in_sequence(i + 1);
+            if !painted_with_line {
+                // 可见部分 = 空白格扣掉前一个保留 glyph 与后一个 glyph 覆盖的区间。
+                // 后一个 glyph 不论是否空白都算：幻影空格骑在真实词空格上时，
+                // 二者只留一个，不会输出双空格。
+                let lo = prev.map_or(lead, |p| dev[p].along_span().1.max(lead));
+                let hi = next.map_or(end, |n| dev[n].along_span().0.min(end));
+                if hi - lo < width * PHANTOM_SPACE_VISIBLE_FRAC {
+                    continue;
+                }
+            }
+        }
+        kept.push(i);
+        prev = Some(i);
+    }
+    if !kept.is_empty() {
+        *run = kept;
+    }
 }
 
 fn build_line(glyphs: &[&DevGlyph], seq: usize) -> Line {
