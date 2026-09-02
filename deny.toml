@@ -43,8 +43,13 @@ yanked = "deny"
 # - RUSTSEC-2024-0436: transitive `paste` proc macro.
 # - RUSTSEC-2026-0192: `ttf-parser`; no safe upgrade exists and replacing it
 #   requires a deliberate font-engine migration to skrifa.
+# - RUSTSEC-2026-0009: `time` 0.3.41 stack-exhaustion DoS. `time` is only a
+#   build-dependency of `tract-linalg` (liquid templates in its build script);
+#   it never enters the runtime artifact. tract-linalg 0.21.x pins
+#   `time < 0.3.42`, so there is no upgrade path until ocrspine moves to
+#   tract 0.22+ — remove this entry then.
 # Keep the exceptions precise; every actual vulnerability remains denied.
-ignore = ["RUSTSEC-2024-0436", "RUSTSEC-2026-0192"]
+ignore = ["RUSTSEC-2024-0436", "RUSTSEC-2026-0192", "RUSTSEC-2026-0009"]
 
 [sources]
 unknown-registry = "deny"
