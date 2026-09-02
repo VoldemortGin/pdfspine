@@ -38,6 +38,14 @@ pub struct StandardWidths {
     /// (U+00A0..=U+00FF), resolved via the WinAnsi glyph names. Empty for the
     /// monospaced Courier family (every glyph is `default`).
     latin1: &'static [(&'static str, u16)],
+    /// Sparse `(glyph_name, width)` overlay for the glyphs *outside* the
+    /// Latin-1 block that the WinAnsi high range (`0x80..=0x9F`: curly quotes,
+    /// dashes, bullet, ellipsis, dagger, permille, trademark, Euro, `Scaron`,
+    /// `OE`, …), StandardEncoding (`quoteright`/`quoteleft` at 0x27/0x60, the
+    /// `fi`/`fl` ligatures, `fraction`, `dotlessi`) and MacRoman (the floating
+    /// accents) name. Empty for the monospaced Courier family and the two
+    /// pictographic fonts.
+    punct: &'static [(&'static str, u16)],
     /// Whether every glyph advances by `default` (the monospaced Courier
     /// family). When set, [`StandardWidths::glyph_advance`] returns `default`
     /// for *any* glyph the font carries, regardless of WinAnsi indexing.
@@ -92,6 +100,11 @@ impl StandardWidths {
         }
         // Latin-1 overlay: keyed directly by glyph name.
         if let Some(&(_, w)) = self.latin1.iter().find(|&&(n, _)| n == glyph_name) {
+            return Some(f64::from(w));
+        }
+        // High punctuation / ligature / accent overlay (WinAnsi 0x80–0x9F,
+        // StandardEncoding, MacRoman names): keyed directly by glyph name.
+        if let Some(&(_, w)) = self.punct.iter().find(|&&(n, _)| n == glyph_name) {
             return Some(f64::from(w));
         }
         // Monospaced family: any *real* glyph (one with a defined Unicode
@@ -238,54 +251,63 @@ static HELVETICA: StandardWidths = StandardWidths {
     ascii: &HELVETICA_ASCII,
     default: 278,
     latin1: HELVETICA_LATIN1,
+    punct: HELVETICA_PUNCT,
     monospace: false,
 };
 static HELVETICA_BOLD: StandardWidths = StandardWidths {
     ascii: &HELVETICA_BOLD_ASCII,
     default: 278,
     latin1: HELVETICA_BOLD_LATIN1,
+    punct: HELVETICA_BOLD_PUNCT,
     monospace: false,
 };
 static HELVETICA_OBLIQUE: StandardWidths = StandardWidths {
     ascii: &HELVETICA_ASCII,
     default: 278,
     latin1: HELVETICA_LATIN1,
+    punct: HELVETICA_PUNCT,
     monospace: false,
 };
 static HELVETICA_BOLDOBLIQUE: StandardWidths = StandardWidths {
     ascii: &HELVETICA_BOLD_ASCII,
     default: 278,
     latin1: HELVETICA_BOLD_LATIN1,
+    punct: HELVETICA_BOLD_PUNCT,
     monospace: false,
 };
 static TIMES_ROMAN: StandardWidths = StandardWidths {
     ascii: &TIMES_ROMAN_ASCII,
     default: 250,
     latin1: TIMES_ROMAN_LATIN1,
+    punct: TIMES_ROMAN_PUNCT,
     monospace: false,
 };
 static TIMES_BOLD: StandardWidths = StandardWidths {
     ascii: &TIMES_BOLD_ASCII,
     default: 250,
     latin1: TIMES_BOLD_LATIN1,
+    punct: TIMES_BOLD_PUNCT,
     monospace: false,
 };
 static TIMES_ITALIC: StandardWidths = StandardWidths {
     ascii: &TIMES_ITALIC_ASCII,
     default: 250,
     latin1: TIMES_ITALIC_LATIN1,
+    punct: TIMES_ITALIC_PUNCT,
     monospace: false,
 };
 static TIMES_BOLDITALIC: StandardWidths = StandardWidths {
     ascii: &TIMES_BOLDITALIC_ASCII,
     default: 250,
     latin1: TIMES_BOLDITALIC_LATIN1,
+    punct: TIMES_BOLDITALIC_PUNCT,
     monospace: false,
 };
 static COURIER: StandardWidths = StandardWidths {
     ascii: &COURIER_ASCII,
     default: 600,
     latin1: &[],
+    punct: &[],
     monospace: true,
 };
 
@@ -301,12 +323,14 @@ static SYMBOL: StandardWidths = StandardWidths {
     ascii: &SYMBOL_ASCII,
     default: 600,
     latin1: &[],
+    punct: &[],
     monospace: false,
 };
 static ZAPF_DINGBATS: StandardWidths = StandardWidths {
     ascii: &ZAPF_ASCII,
     default: 788,
     latin1: &[],
+    punct: &[],
     monospace: false,
 };
 
@@ -902,4 +926,254 @@ static TIMES_BOLDITALIC_LATIN1: &[(&str, u16)] = &[
     ("yacute", 444),
     ("thorn", 500),
     ("ydieresis", 444),
+];
+
+// --- High punctuation / ligature / accent overlays by glyph name -----------
+//
+// Standard AFM `WX` for the glyphs the WinAnsi high range (0x80..=0x9F: curly
+// quotes, dashes, bullet, ellipsis, dagger, permille, trademark, Euro, Scaron /
+// OE / Zcaron / Ydieresis …), StandardEncoding (`quoteright` / `quoteleft` at
+// 0x27 / 0x60, the `fi` / `fl` ligatures, `fraction`, `dotlessi`) and MacRoman
+// (the floating accents) name — none of which the WinAnsi-indexed ASCII arrays
+// or the Latin-1 overlays above reach. Keyed by AGL glyph name, one table per
+// text face (the Oblique faces share their upright metrics, as in the AFMs).
+
+static HELVETICA_PUNCT: &[(&str, u16)] = &[
+    ("quoteright", 222),
+    ("quoteleft", 222),
+    ("quotedblleft", 333),
+    ("quotedblright", 333),
+    ("quotesinglbase", 222),
+    ("quotedblbase", 333),
+    ("endash", 556),
+    ("emdash", 1000),
+    ("bullet", 350),
+    ("ellipsis", 1000),
+    ("dagger", 556),
+    ("daggerdbl", 556),
+    ("perthousand", 1000),
+    ("guilsinglleft", 333),
+    ("guilsinglright", 333),
+    ("trademark", 1000),
+    ("Euro", 556),
+    ("florin", 556),
+    ("fraction", 167),
+    ("fi", 500),
+    ("fl", 500),
+    ("dotlessi", 278),
+    ("Scaron", 667),
+    ("scaron", 500),
+    ("Zcaron", 611),
+    ("zcaron", 500),
+    ("OE", 1000),
+    ("oe", 944),
+    ("Ydieresis", 667),
+    ("circumflex", 333),
+    ("tilde", 333),
+    ("breve", 333),
+    ("dotaccent", 333),
+    ("ring", 333),
+    ("ogonek", 333),
+    ("caron", 333),
+    ("hungarumlaut", 333),
+];
+
+static HELVETICA_BOLD_PUNCT: &[(&str, u16)] = &[
+    ("quoteright", 278),
+    ("quoteleft", 278),
+    ("quotedblleft", 500),
+    ("quotedblright", 500),
+    ("quotesinglbase", 278),
+    ("quotedblbase", 500),
+    ("endash", 556),
+    ("emdash", 1000),
+    ("bullet", 350),
+    ("ellipsis", 1000),
+    ("dagger", 556),
+    ("daggerdbl", 556),
+    ("perthousand", 1000),
+    ("guilsinglleft", 333),
+    ("guilsinglright", 333),
+    ("trademark", 1000),
+    ("Euro", 556),
+    ("florin", 556),
+    ("fraction", 167),
+    ("fi", 611),
+    ("fl", 611),
+    ("dotlessi", 278),
+    ("Scaron", 667),
+    ("scaron", 556),
+    ("Zcaron", 611),
+    ("zcaron", 500),
+    ("OE", 1000),
+    ("oe", 944),
+    ("Ydieresis", 667),
+    ("circumflex", 333),
+    ("tilde", 333),
+    ("breve", 333),
+    ("dotaccent", 333),
+    ("ring", 333),
+    ("ogonek", 333),
+    ("caron", 333),
+    ("hungarumlaut", 333),
+];
+
+static TIMES_ROMAN_PUNCT: &[(&str, u16)] = &[
+    ("quoteright", 333),
+    ("quoteleft", 333),
+    ("quotedblleft", 444),
+    ("quotedblright", 444),
+    ("quotesinglbase", 333),
+    ("quotedblbase", 444),
+    ("endash", 500),
+    ("emdash", 1000),
+    ("bullet", 350),
+    ("ellipsis", 1000),
+    ("dagger", 500),
+    ("daggerdbl", 500),
+    ("perthousand", 1000),
+    ("guilsinglleft", 333),
+    ("guilsinglright", 333),
+    ("trademark", 980),
+    ("Euro", 500),
+    ("florin", 500),
+    ("fraction", 167),
+    ("fi", 556),
+    ("fl", 556),
+    ("dotlessi", 278),
+    ("Scaron", 556),
+    ("scaron", 389),
+    ("Zcaron", 611),
+    ("zcaron", 444),
+    ("OE", 889),
+    ("oe", 722),
+    ("Ydieresis", 722),
+    ("circumflex", 333),
+    ("tilde", 333),
+    ("breve", 333),
+    ("dotaccent", 333),
+    ("ring", 333),
+    ("ogonek", 333),
+    ("caron", 333),
+    ("hungarumlaut", 333),
+];
+
+static TIMES_BOLD_PUNCT: &[(&str, u16)] = &[
+    ("quoteright", 333),
+    ("quoteleft", 333),
+    ("quotedblleft", 500),
+    ("quotedblright", 500),
+    ("quotesinglbase", 333),
+    ("quotedblbase", 500),
+    ("endash", 500),
+    ("emdash", 1000),
+    ("bullet", 350),
+    ("ellipsis", 1000),
+    ("dagger", 500),
+    ("daggerdbl", 500),
+    ("perthousand", 1000),
+    ("guilsinglleft", 333),
+    ("guilsinglright", 333),
+    ("trademark", 1000),
+    ("Euro", 500),
+    ("florin", 500),
+    ("fraction", 167),
+    ("fi", 556),
+    ("fl", 556),
+    ("dotlessi", 278),
+    ("Scaron", 556),
+    ("scaron", 389),
+    ("Zcaron", 667),
+    ("zcaron", 444),
+    ("OE", 1000),
+    ("oe", 722),
+    ("Ydieresis", 722),
+    ("circumflex", 333),
+    ("tilde", 333),
+    ("breve", 333),
+    ("dotaccent", 333),
+    ("ring", 333),
+    ("ogonek", 333),
+    ("caron", 333),
+    ("hungarumlaut", 333),
+];
+
+static TIMES_ITALIC_PUNCT: &[(&str, u16)] = &[
+    ("quoteright", 333),
+    ("quoteleft", 333),
+    ("quotedblleft", 556),
+    ("quotedblright", 556),
+    ("quotesinglbase", 333),
+    ("quotedblbase", 556),
+    ("endash", 500),
+    ("emdash", 889),
+    ("bullet", 350),
+    ("ellipsis", 889),
+    ("dagger", 500),
+    ("daggerdbl", 500),
+    ("perthousand", 1000),
+    ("guilsinglleft", 333),
+    ("guilsinglright", 333),
+    ("trademark", 980),
+    ("Euro", 500),
+    ("florin", 500),
+    ("fraction", 167),
+    ("fi", 500),
+    ("fl", 500),
+    ("dotlessi", 278),
+    ("Scaron", 500),
+    ("scaron", 389),
+    ("Zcaron", 556),
+    ("zcaron", 389),
+    ("OE", 944),
+    ("oe", 667),
+    ("Ydieresis", 556),
+    ("circumflex", 333),
+    ("tilde", 333),
+    ("breve", 333),
+    ("dotaccent", 333),
+    ("ring", 333),
+    ("ogonek", 333),
+    ("caron", 333),
+    ("hungarumlaut", 333),
+];
+
+static TIMES_BOLDITALIC_PUNCT: &[(&str, u16)] = &[
+    ("quoteright", 333),
+    ("quoteleft", 333),
+    ("quotedblleft", 500),
+    ("quotedblright", 500),
+    ("quotesinglbase", 333),
+    ("quotedblbase", 500),
+    ("endash", 500),
+    ("emdash", 1000),
+    ("bullet", 350),
+    ("ellipsis", 1000),
+    ("dagger", 500),
+    ("daggerdbl", 500),
+    ("perthousand", 1000),
+    ("guilsinglleft", 333),
+    ("guilsinglright", 333),
+    ("trademark", 1000),
+    ("Euro", 500),
+    ("florin", 500),
+    ("fraction", 167),
+    ("fi", 556),
+    ("fl", 556),
+    ("dotlessi", 278),
+    ("Scaron", 556),
+    ("scaron", 389),
+    ("Zcaron", 611),
+    ("zcaron", 389),
+    ("OE", 944),
+    ("oe", 722),
+    ("Ydieresis", 611),
+    ("circumflex", 333),
+    ("tilde", 333),
+    ("breve", 333),
+    ("dotaccent", 333),
+    ("ring", 333),
+    ("ogonek", 333),
+    ("caron", 333),
+    ("hungarumlaut", 333),
 ];

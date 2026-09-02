@@ -13,7 +13,7 @@ use pdf_text::serialize::to_text;
 use pdf_text::{build_textpage, textpage_from_glyphs, words, PositionedGlyph, TextPage};
 use smol_str::SmolStr;
 
-use common::{winansi_type1, winansi_type1_with_metrics, PageDoc};
+use common::{dict, name_obj, winansi_type1, winansi_type1_with_metrics, PageDoc};
 
 fn letter() -> Rect {
     Rect::new(0.0, 0.0, 612.0, 792.0)
@@ -457,4 +457,135 @@ fn words_018_tracking_at_threshold_keeps_kern_loosened_pair_whole() {
     );
     assert_eq!(to_text(&tp, 0).trim_end(), "transport");
     assert_eq!(word_texts(&tp), vec!["transport"]);
+}
+
+// === missing /Widths: the advance fallback chain feeds the layout ===========
+
+/// A non-embedded, non-standard TrueType font (`ABCDEF+Calibri`) with **no**
+/// `/Widths` and a non-serif descriptor (Flags 32, no `/MissingWidth`): the
+/// mapper falls back to the Helvetica substitute metrics, as MuPDF does.
+fn calibri_nowidths() -> Object {
+    let descriptor = Object::Dictionary(dict([
+        ("Type", name_obj("FontDescriptor")),
+        ("FontName", name_obj("ABCDEF+Calibri")),
+        ("Flags", Object::Integer(32)),
+        ("ItalicAngle", Object::Integer(0)),
+        ("Ascent", Object::Integer(750)),
+        ("Descent", Object::Integer(-250)),
+        ("StemV", Object::Integer(88)),
+    ]));
+    Object::Dictionary(dict([
+        ("Type", name_obj("Font")),
+        ("Subtype", name_obj("TrueType")),
+        ("BaseFont", name_obj("ABCDEF+Calibri")),
+        ("Encoding", name_obj("WinAnsiEncoding")),
+        ("FontDescriptor", descriptor),
+    ]))
+}
+
+/// A Core-14 Times-Roman WinAnsi font without `/Widths` (the fintabnet /
+/// govdocs pattern where `\222` quoteright once advanced 0).
+fn times_nowidths() -> Object {
+    Object::Dictionary(dict([
+        ("Type", name_obj("Font")),
+        ("Subtype", name_obj("Type1")),
+        ("BaseFont", name_obj("Times-Roman")),
+        ("Encoding", name_obj("WinAnsiEncoding")),
+    ]))
+}
+
+fn line_count(tp: &TextPage) -> usize {
+    tp.blocks.iter().map(|b| b.lines.len()).sum()
+}
+
+/// Every non-blank char cell on the page has a positive device width (a
+/// synthesized word-gap space is a zero-width marker, so blanks are skipped).
+fn assert_all_cells_positive(tp: &TextPage) {
+    for line in tp.blocks.iter().flat_map(|b| b.lines.iter()) {
+        for c in line.spans.iter().flat_map(|s| s.chars.iter()) {
+            if c.c.is_whitespace() {
+                continue;
+            }
+            assert!(
+                c.bbox.x1 - c.bbox.x0 > 0.0,
+                "char {:?} has a zero-width cell",
+                c.c
+            );
+        }
+    }
+}
+
+#[test]
+fn words_019_nowidths_truetype_per_glyph_td_keeps_word_whole() {
+    // Each letter its own `Tj` positioned by a `Td` of its Helvetica advance;
+    // the font has no `/Widths`, so every cell once had width 0 and every `Td`
+    // read as a word gap ("e x t r a c t i o n"). With the substitute metrics
+    // the cells touch and the word stays whole (PyMuPDF: "extraction").
+    for word in ["extraction", "minimum"] {
+        let content = format!(
+            "BT /F1 12 Tf 72 700 Td {} ET",
+            per_glyph_words(&[word], 12.0, 0.278)
+        );
+        let tp = textpage_e2e(calibri_nowidths(), content.as_bytes());
+        assert_eq!(to_text(&tp, 0).trim_end(), word);
+        assert_eq!(word_texts(&tp), vec![word]);
+        assert_eq!(line_count(&tp), 1, "{word}");
+        assert_all_cells_positive(&tp);
+    }
+}
+
+#[test]
+fn words_020_nowidths_truetype_per_word_td_splits_words_once() {
+    // Two words each their own `Tj`, the second positioned by a `Td` that lands
+    // it one space past the first (`text` = 22.7pt at 12pt + a 4pt gap): with
+    // zero-width cells the gap was a line break; now it is exactly one word gap.
+    let tp = textpage_e2e(
+        calibri_nowidths(),
+        b"BT /F1 12 Tf 72 700 Td (text) Tj 26.7 0 Td (extraction) Tj ET",
+    );
+    assert_eq!(to_text(&tp, 0).trim_end(), "text extraction");
+    assert_eq!(word_texts(&tp), vec!["text", "extraction"]);
+    assert_eq!(line_count(&tp), 1);
+    assert_all_cells_positive(&tp);
+}
+
+#[test]
+fn words_021_std14_nowidths_winansi_quotes_advance() {
+    // Times-Roman without `/Widths`: WinAnsi 0x92 (quoteright), 0x93/0x94
+    // (double quotes) and 0x96 (endash) have no ASCII AFM entry and once
+    // advanced 0, so the next glyph overprinted the quote and the word split
+    // ("Company’ s"). The high-punctuation AFM row restores the advance.
+    let tp = textpage_e2e(
+        times_nowidths(),
+        b"BT /F1 12 Tf 72 700 Td (Company\\222s report \\223quoted\\224 \\226 dash) Tj ET",
+    );
+    assert_eq!(
+        to_text(&tp, 0).trim_end(),
+        "Company\u{2019}s report \u{201C}quoted\u{201D} \u{2013} dash"
+    );
+    assert_eq!(
+        word_texts(&tp),
+        vec![
+            "Company\u{2019}s",
+            "report",
+            "\u{201C}quoted\u{201D}",
+            "\u{2013}",
+            "dash"
+        ]
+    );
+    assert_all_cells_positive(&tp);
+}
+
+#[test]
+fn words_022_std14_nowidths_quoteright_per_word_td() {
+    // The fintabnet AIZ pattern: `(Company\222s) Tj` then a `Td` to the next
+    // word. A zero-width quoteright made `s` overlap the quote and the word
+    // read as "Company’ s"; with the AFM advance it is one word.
+    let tp = textpage_e2e(
+        times_nowidths(),
+        b"BT /F1 12 Tf 72 700 Td (Company\\222s) Tj 60 0 Td (report) Tj ET",
+    );
+    assert_eq!(to_text(&tp, 0).trim_end(), "Company\u{2019}s report");
+    assert_eq!(word_texts(&tp), vec!["Company\u{2019}s", "report"]);
+    assert_eq!(line_count(&tp), 1);
 }

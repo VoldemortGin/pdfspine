@@ -886,6 +886,13 @@ font dict + `&DocumentStore`; it answers `iter_codes`, `to_unicode(code)` and
 | `WIDTHS-002` | code outside `/Widths` range → `/MissingWidth` | ISO §9.2.4 | green |
 | `WIDTHS-003` | absent `/MissingWidth` → 0 | ISO §9.2.4 | green |
 | `WIDTHS-004` | NaN / negative / absurd width clamped to 0 | PRD §8.5 | green |
+| `WIDTHS-005` | no `/Widths`, Core-14 WinAnsi high punctuation (0x80–0x9F): Times quoteright 333 / endash 500 / ellipsis 1000 / quotedblleft 444; Helvetica quotedbl 333, bullet 350, emdash 1000, Euro 556; Helvetica-Bold quoteright 278 | PRD §8.5.2 | green |
+| `WIDTHS-006` | no `/Widths`, StandardEncoding 0x27/0x60 → quoteright/quoteleft (Helvetica 222, Times 333) and 0xAE/0xAF `fi`/`fl` carry AFM advances | PRD §8.5.2 | green |
+| `WIDTHS-007` | no `/Widths`, non-embedded non-standard name → descriptor `/Flags` pick the standard substitute (32 → Helvetica, 34 → Times, 33 → Courier; ForceBold / StemV ≥ 120 → Bold; ItalicAngle ≠ 0 → Italic; no descriptor → Helvetica) | PRD §8.5 | green |
+| `WIDTHS-008` | no `/Widths`, embedded `/FontFile2` (Liberation Sans) → `hmtx` advances ×1000/upem for non-symbolic (WinAnsi → Unicode cmap) and symbolic (Flags 4, code → (3,0)/(1,0) cmap) fonts | PRD §8.5 | green |
+| `WIDTHS-009` | embedded program outranks the Core-14 name (`Helvetica` + Liberation Serif → Times metrics); unparseable program falls back to the name | PRD §8.5 | green |
+| `WIDTHS-010` | truncated `/Widths` is not repaired: out-of-range codes stay on `/MissingWidth` (0 / declared value), no substitute | ISO §9.2.4 | green |
+| `WIDTHS-011` | Type3 without `/Widths` gets no 1000/em substitute (advance stays 0) | PRD §8.5 | green |
 | `WIDTHS-CORE14-GAP` | unembedded std-14, no `/Widths` → MissingWidth fallback (AFM gap) | PRD §8.5.2 | green |
 
 ### Type0 / CID fonts (`mapper.rs` + `widths.rs`) — `CID-*`
@@ -1110,6 +1117,10 @@ self-built PDFs (reuse `tests/common`). No PyMuPDF files.
 | `WORDS-016` | e2e genuine tracking `2.5 Tc [(Abschnitt) -400 (2)] TJ` @12pt: uniform 0.21×size letter gaps collapse, the clearly wider gap before `2` stays a word break → `["Abschnitt","2"]` | PRD §8.6.2 | green |
 | `WORDS-017` | e2e `3 Tc (text extraction) Tj` @12pt: tracked letters collapse on both sides of the literal space → `["text","extraction"]` | PRD §8.6.2 | green |
 | `WORDS-018` | e2e eurlex body text `0.15 Tc` at `Tf 1`/`Tm 9.59` (tracking = word-gap threshold) with `[(transpor) -30 (t)] TJ`: the kern-loosened pair stays inside the tracked run → text `"transport"`, words `["transport"]` (PyMuPDF reads `transpor t`; whole words win over oracle parity) | PRD §8.6.2 | green |
+| `WORDS-019` | e2e non-embedded `ABCDEF+Calibri` without `/Widths` (Flags 32, no MissingWidth), each letter its own `Tj` + `Td` of its Helvetica advance: substitute metrics give touching cells → `"extraction"` / `"minimum"` one word, one line, every cell width > 0 | PRD §8.6.2 | green |
+| `WORDS-020` | e2e same font, `(text) Tj 26.7 0 Td (extraction) Tj`: one word gap, one line → `["text","extraction"]` (was a line break with zero-width cells) | PRD §8.6.2 | green |
+| `WORDS-021` | e2e Times-Roman without `/Widths`, `(Company\222s report \223quoted\224 \226 dash) Tj`: WinAnsi quoteright / double quotes / endash advance by AFM → `["Company’s","report","“quoted”","–","dash"]`, quote cells width > 0 | PRD §8.6.2 | green |
+| `WORDS-022` | e2e fintabnet AIZ pattern `(Company\222s) Tj 60 0 Td (report) Tj` on Times-Roman without `/Widths` → `["Company’s","report"]`, one line | PRD §8.6.2 | green |
 
 ### Span flags (`layout.rs`) — `LAYOUT-FLAGS-*`
 

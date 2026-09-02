@@ -15,6 +15,7 @@
 
 use pdf_core::{Dict, DocumentStore, Name, Object};
 use smol_str::SmolStr;
+use ttf_parser::{Face, GlyphId, PlatformId};
 
 use crate::cmap::{CMap, CodespaceRange};
 use crate::encodings::BaseEncoding;
@@ -58,11 +59,18 @@ pub struct FontMapper {
     /// Per-code glyph name (encoding + `/Differences`), for the simple path.
     glyph_names: Option<Box<[Option<SmolStr>; 256]>>,
     simple_widths: SimpleWidths,
-    /// The normalized Core-14 font key (e.g. `"Helvetica"`), set **only** for a
-    /// simple base-14 font that has **no** `/Widths` array. When present,
-    /// `width(code)` resolves the glyph's standard AFM advance via the glyph
-    /// name. `None` whenever a `/Widths` array is authoritative or the font is
-    /// not one of the 14 standard fonts.
+    /// Per-code advances read from an **embedded** `/FontFile2` / `/FontFile3`
+    /// program (1000-unit text space), set **only** for a simple font with
+    /// **no** `/Widths` array whose program `ttf-parser` could read. `None`
+    /// entries are codes the program has no glyph for (→ `/MissingWidth`).
+    program_widths: Option<Box<[Option<f64>; 256]>>,
+    /// The Core-14 font key (e.g. `"Helvetica"`) whose AFM advances stand in,
+    /// set **only** for a simple font that has **no** `/Widths` array and no
+    /// readable embedded program: the normalized base-14 name when it is one
+    /// of the 14 standard fonts, else the `/Flags`-selected standard substitute
+    /// (MuPDF's substitute-font choice). When present, `width(code)` resolves
+    /// the glyph's standard AFM advance via the glyph name. `None` whenever a
+    /// `/Widths` array is authoritative or the font is Type3.
     core14: Option<&'static str>,
 
     // --- Type0 state ---
@@ -119,14 +127,31 @@ impl FontMapper {
 
         // 3. Widths: `/Widths` + `/FirstChar` + descriptor `/MissingWidth`.
         let has_widths = has_widths_array(font, doc);
-        let simple_widths = build_simple_widths(font, doc);
+        let descriptor = font_descriptor(font, doc);
+        let simple_widths = build_simple_widths(font, doc, descriptor.as_ref());
 
-        // 3b. Core-14 fallback: a standard font *without* a `/Widths` array gets
-        // its built-in AFM advances (PRD §6.5 #2). `/Widths` stays authoritative.
-        let core14 = if has_widths {
-            None
+        // 3b. No `/Widths` (MuPDF `pdf_load_simple_font` parity): the advances
+        // come from the font program — the embedded one when `ttf-parser` can
+        // read it, else the standard font the name / descriptor `/Flags`
+        // select (PRD §6.5 #2). `/Widths` stays authoritative, and a Type3 font
+        // lives in its own `/FontMatrix` glyph space (no 1000/em substitute).
+        let is_type3 = name_str(font, "Subtype").as_deref() == Some("Type3");
+        let (program_widths, core14) = if has_widths || is_type3 {
+            (None, None)
         } else {
-            widths::normalize_standard_font(&base_font)
+            let program_widths = descriptor.as_ref().and_then(|d| {
+                embedded_program_widths(d, doc, &names, font.get(&Name::new("Encoding")).is_some())
+            });
+            let core14 = if program_widths.is_some() {
+                None
+            } else {
+                Some(
+                    widths::normalize_standard_font(&base_font).unwrap_or_else(|| {
+                        substitute_standard_font(&base_font, descriptor.as_ref())
+                    }),
+                )
+            };
+            (program_widths, core14)
         };
 
         // 4. `/ToUnicode` (overrides on lookup).
@@ -137,6 +162,7 @@ impl FontMapper {
             to_unicode,
             glyph_names: Some(Box::new(names)),
             simple_widths,
+            program_widths,
             core14,
             cid_encoding: None,
             cid_widths: CidWidths::default(),
@@ -180,6 +206,7 @@ impl FontMapper {
             to_unicode,
             glyph_names: None,
             simple_widths: SimpleWidths::default(),
+            program_widths: None,
             core14: None,
             cid_encoding: Some(cid_encoding),
             cid_widths,
@@ -258,10 +285,17 @@ impl FontMapper {
     pub fn width(&self, code: u32) -> f64 {
         match self.kind {
             FontKind::Simple => {
-                // Core-14 AFM advances apply only when no `/Widths` array is
-                // present (otherwise `/Widths` is authoritative). Resolve the
-                // code's glyph name, then its standard advance; fall back to the
-                // `/MissingWidth`/notdef table when either is unavailable.
+                // No `/Widths`: the embedded program's own advance first.
+                if let Some(pw) = &self.program_widths {
+                    if let Some(&Some(w)) = usize::try_from(code).ok().and_then(|c| pw.get(c)) {
+                        return w;
+                    }
+                }
+                // Core-14 / substitute AFM advances apply only when no `/Widths`
+                // array is present (otherwise `/Widths` is authoritative).
+                // Resolve the code's glyph name, then its standard advance; fall
+                // back to the `/MissingWidth`/notdef table when either is
+                // unavailable.
                 if let Some(std_name) = self.core14 {
                     if let Some(name) = self
                         .glyph_names
@@ -518,7 +552,11 @@ fn has_widths_array(font: &Dict, doc: &DocumentStore) -> bool {
 
 /// Builds the simple-font width table from `/Widths` + `/FirstChar` and the
 /// descriptor `/MissingWidth`.
-fn build_simple_widths(font: &Dict, doc: &DocumentStore) -> SimpleWidths {
+fn build_simple_widths(
+    font: &Dict,
+    doc: &DocumentStore,
+    descriptor: Option<&Dict>,
+) -> SimpleWidths {
     let first_char = font
         .get(&Name::new("FirstChar"))
         .and_then(Object::as_i64)
@@ -526,7 +564,7 @@ fn build_simple_widths(font: &Dict, doc: &DocumentStore) -> SimpleWidths {
         .map(|v| v as u32)
         .unwrap_or(0);
 
-    let missing = descriptor_missing_width(font, doc);
+    let missing = descriptor_missing_width(descriptor);
 
     let widths_obj = doc
         .resolve_dict_key(font, &Name::new("Widths"))
@@ -553,20 +591,201 @@ fn build_simple_widths(font: &Dict, doc: &DocumentStore) -> SimpleWidths {
     }
 }
 
-/// Reads `/MissingWidth` from the font's `/FontDescriptor` (0 when absent).
-fn descriptor_missing_width(font: &Dict, doc: &DocumentStore) -> f64 {
-    let Some(desc) = doc
+/// Resolves the font's `/FontDescriptor` dict (following a reference), if any.
+fn font_descriptor(font: &Dict, doc: &DocumentStore) -> Option<Dict> {
+    let desc = doc
         .resolve_dict_key(font, &Name::new("FontDescriptor"))
         .ok()
-        .flatten()
-    else {
-        return 0.0;
-    };
-    let Some(d) = desc.as_dict() else { return 0.0 };
+        .flatten()?;
+    desc.as_dict().cloned()
+}
+
+/// Reads `/MissingWidth` from the resolved `/FontDescriptor` (0 when absent).
+fn descriptor_missing_width(descriptor: Option<&Dict>) -> f64 {
+    let Some(d) = descriptor else { return 0.0 };
     d.get(&Name::new("MissingWidth"))
         .and_then(Object::as_f64)
         .map(widths::sanitize)
         .unwrap_or(0.0)
+}
+
+/// Descriptor `/Flags` bits (ISO 32000-1 Table 121, 1-based bit numbers).
+const FLAG_FIXED_PITCH: u32 = 1 << 0; // bit 1
+const FLAG_SERIF: u32 = 1 << 1; // bit 2
+const FLAG_SYMBOLIC: u32 = 1 << 2; // bit 3
+const FLAG_ITALIC: u32 = 1 << 6; // bit 7
+const FLAG_FORCE_BOLD: u32 = 1 << 18; // bit 19
+
+/// The descriptor `/Flags` as a bit set (0 when absent / malformed).
+fn descriptor_flags(descriptor: Option<&Dict>) -> u32 {
+    descriptor
+        .and_then(|d| d.get(&Name::new("Flags")))
+        .and_then(Object::as_i64)
+        .and_then(|v| u32::try_from(v).ok())
+        .unwrap_or(0)
+}
+
+/// The standard font whose AFM advances stand in for a **non-embedded,
+/// non-standard** simple font without `/Widths` — MuPDF's substitute-font
+/// choice: the descriptor `/Flags` pick the family (FixedPitch → Courier,
+/// Serif → Times, else Helvetica); ForceBold / `/StemV ≥ 120` / a `Bold` name
+/// pick bold; the Italic flag / a non-zero `/ItalicAngle` / an `Italic` or
+/// `Oblique` name pick italic. No descriptor at all → Helvetica.
+fn substitute_standard_font(base_font: &str, descriptor: Option<&Dict>) -> &'static str {
+    let flags = descriptor_flags(descriptor);
+    let number = |key: &str| {
+        descriptor
+            .and_then(|d| d.get(&Name::new(key)))
+            .and_then(Object::as_f64)
+            .filter(|v| v.is_finite())
+            .unwrap_or(0.0)
+    };
+    let lower = base_font.to_ascii_lowercase();
+
+    let bold = flags & FLAG_FORCE_BOLD != 0 || number("StemV") >= 120.0 || lower.contains("bold");
+    let italic = flags & FLAG_ITALIC != 0
+        || number("ItalicAngle") != 0.0
+        || lower.contains("italic")
+        || lower.contains("oblique");
+
+    if flags & FLAG_FIXED_PITCH != 0 {
+        match (bold, italic) {
+            (true, true) => "Courier-BoldOblique",
+            (true, false) => "Courier-Bold",
+            (false, true) => "Courier-Oblique",
+            (false, false) => "Courier",
+        }
+    } else if flags & FLAG_SERIF != 0 {
+        match (bold, italic) {
+            (true, true) => "Times-BoldItalic",
+            (true, false) => "Times-Bold",
+            (false, true) => "Times-Italic",
+            (false, false) => "Times-Roman",
+        }
+    } else {
+        match (bold, italic) {
+            (true, true) => "Helvetica-BoldOblique",
+            (true, false) => "Helvetica-Bold",
+            (false, true) => "Helvetica-Oblique",
+            (false, false) => "Helvetica",
+        }
+    }
+}
+
+/// The decoded bytes of the descriptor's embedded `/FontFile2` (TrueType) or
+/// `/FontFile3` (OpenType / bare CFF) program. A bare Type1 `/FontFile` is not
+/// `ttf-parser`-readable and is skipped (its advances come from the substitute).
+fn load_embedded_program(descriptor: &Dict, doc: &DocumentStore) -> Option<Vec<u8>> {
+    for key in ["FontFile2", "FontFile3"] {
+        let Some(obj) = doc
+            .resolve_dict_key(descriptor, &Name::new(key))
+            .ok()
+            .flatten()
+        else {
+            continue;
+        };
+        let Some(stream) = obj.as_stream() else {
+            continue;
+        };
+        if let Ok(bytes) = doc.decode_stream(stream).and_then(|d| d.into_decoded()) {
+            return Some(bytes);
+        }
+    }
+    None
+}
+
+/// Per-code advances (1000-unit text space) read from the embedded program, or
+/// `None` when the descriptor embeds nothing `ttf-parser` can read. Each code
+/// resolves to a program glyph the way MuPDF's simple-font loader does (symbolic
+/// TrueType by code through the `(3,0)` / `(1,0)` cmaps, non-symbolic by the
+/// glyph name's Unicode, CFF by charset name / built-in encoding), then takes
+/// its `hmtx` / charstring advance scaled by `1000 / units_per_em`.
+fn embedded_program_widths(
+    descriptor: &Dict,
+    doc: &DocumentStore,
+    names: &[Option<SmolStr>; 256],
+    has_encoding: bool,
+) -> Option<Box<[Option<f64>; 256]>> {
+    let program = load_embedded_program(descriptor, doc)?;
+    let symbolic = descriptor_flags(Some(descriptor)) & FLAG_SYMBOLIC != 0;
+    let mut out: Box<[Option<f64>; 256]> = Box::new([None; 256]);
+    if let Ok(face) = Face::parse(&program, 0) {
+        let scale = 1000.0 / f64::from(face.units_per_em().max(1));
+        for (code, slot) in out.iter_mut().enumerate() {
+            let name = names[code].as_deref();
+            *slot = sfnt_gid(&face, code as u8, name, symbolic)
+                .and_then(|gid| face.glyph_hor_advance(gid))
+                .map(|adv| widths::sanitize(f64::from(adv) * scale));
+        }
+        return Some(out);
+    }
+    let cff = ttf_parser::cff::Table::parse(&program)?;
+    // A bare CFF carries its em size in the FontMatrix (`sx = 1/upem`).
+    let sx = f64::from(cff.matrix().sx.abs());
+    let scale = if sx.is_finite() && sx > f64::EPSILON {
+        1000.0 * sx
+    } else {
+        1.0
+    };
+    for (code, slot) in out.iter_mut().enumerate() {
+        let name = names[code].as_deref();
+        let by_name = || name.and_then(|n| cff.glyph_index_by_name(n));
+        let by_code = || cff.glyph_index(code as u8);
+        let gid = if has_encoding {
+            by_name().or_else(by_code)
+        } else {
+            by_code().or_else(by_name)
+        };
+        *slot = gid
+            .filter(|g| g.0 != 0)
+            .and_then(|g| cff.glyph_width(g))
+            .map(|adv| widths::sanitize(f64::from(adv) * scale));
+    }
+    Some(out)
+}
+
+/// Resolves a 1-byte `code` to a glyph of an sfnt program (TrueType `FontFile2`
+/// / OpenType `FontFile3`), ISO 32000-1 §9.6.6.4 / MuPDF order: a symbolic font
+/// goes by code through the `(3,0)` cmap (`code`, `0xF0xx`, `0xF1xx`, `0xF2xx`)
+/// then `(1,0)`, falling back to the glyph name; a non-symbolic font goes by
+/// the name's Unicode through the Unicode cmap (then `post`/CFF by name),
+/// falling back to the code path. A program with no `cmap` at all indexes by
+/// code. `.notdef` (gid 0) counts as unresolved.
+fn sfnt_gid(face: &Face<'_>, code: u8, name: Option<&str>, symbolic: bool) -> Option<GlyphId> {
+    let cmap = face.tables().cmap;
+    let lookup = |platform: PlatformId, encoding: u16, cp: u32| -> Option<GlyphId> {
+        cmap?
+            .subtables
+            .into_iter()
+            .find(|s| s.platform_id == platform && s.encoding_id == encoding)
+            .and_then(|s| s.glyph_index(cp))
+            .filter(|g| g.0 != 0)
+    };
+    let by_code = || {
+        let c = u32::from(code);
+        [c, 0xF000 | c, 0xF100 | c, 0xF200 | c]
+            .into_iter()
+            .find_map(|cp| lookup(PlatformId::Windows, 0, cp))
+            .or_else(|| lookup(PlatformId::Macintosh, 0, c))
+    };
+    let by_name = || {
+        let name = name?;
+        glyph_name_to_unicode(name)
+            .and_then(|s| s.chars().next())
+            .and_then(|ch| face.glyph_index(ch))
+            .filter(|g| g.0 != 0)
+            .or_else(|| face.glyph_index_by_name(name).filter(|g| g.0 != 0))
+    };
+    let gid = if symbolic {
+        by_code().or_else(by_name)
+    } else {
+        by_name().or_else(by_code)
+    };
+    gid.or_else(|| {
+        let no_cmap = cmap.is_none_or(|c| c.subtables.is_empty());
+        (no_cmap && code != 0 && u16::from(code) < face.number_of_glyphs())
+            .then_some(GlyphId(u16::from(code)))
+    })
 }
 
 /// Loads and parses a `/ToUnicode` CMap stream, if present.

@@ -154,8 +154,11 @@ fn widths_core14_009_differences_follow_glyph_name() {
     assert_eq!(m.width(0x80), 667.0); // 'A' advance via the remapped name
 }
 
-// WIDTHS-CORE14-010: robustness — a non-standard font name has no Core-14 path,
-// so width falls back to MissingWidth (here 480) and never panics.
+// WIDTHS-CORE14-010: robustness — a non-standard, non-embedded font name
+// without `/Widths` never panics: the descriptor (no `/Flags` → Helvetica)
+// selects the standard substitute whose AFM advance stands in (MuPDF loads a
+// substitute font and uses its metrics), so `/MissingWidth` (480) is reached
+// only for a glyph the substitute lacks.
 #[test]
 fn widths_core14_010_non_standard_falls_back() {
     let mut d = FontDoc::new();
@@ -171,7 +174,8 @@ fn widths_core14_010_non_standard_falls_back() {
     ])));
     let doc = d.open();
     let m = mapper_for(&doc, font);
-    assert_eq!(m.width(0x41), 480.0);
+    assert_eq!(m.width(0x41), 667.0); // Helvetica 'A' via the substitute
+    assert_eq!(m.width(0x00), 480.0); // no glyph name → MissingWidth
 }
 
 // WIDTHS-CORE14-011: a base-14 glyph with no AFM metric (e.g. a code with no

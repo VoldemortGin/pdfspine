@@ -125,5 +125,7 @@ fn empty_font_dict_yields_best_effort_mapper() {
         m.to_unicode(0x41).map(|s| s.to_string()).as_deref(),
         Some("A")
     );
-    assert_eq!(m.width(0x41), 0.0);
+    // No `/Widths`, no name, no descriptor → the Helvetica substitute's AFM
+    // advance (MuPDF loads a substitute font and uses its metrics), not 0.
+    assert_eq!(m.width(0x41), 667.0);
 }
