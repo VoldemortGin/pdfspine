@@ -364,9 +364,10 @@ fn words_014_positioned_toc_line_with_dot_leader_keeps_word_gaps() {
     // eurlex / govdocs TOC pattern: every word (or every glyph) positioned by
     // `Td`/`TJ` with no space glyph — letter gap 0, word gap ≈ one space width
     // (0.278×size) — followed by a long `-190` dot leader (dot gap 0.19×size)
-    // and the page number. The dots are ≥4 single-char glyphs at a uniform
-    // gap, so a mask keyed on the *median* gap of the whole line read the
-    // leader as letter-spacing and swallowed every real word gap:
+    // and the page number. `Tc` is 0 throughout, so every gap here is pure
+    // `TJ` kerning and nothing is deducted — the regression this pins is a
+    // line-wide *median* heuristic that once read the leader as letter-spacing
+    // and swallowed every real word gap:
     // "Originandscopeofrightofdeduction". PyMuPDF: the words split, the first
     // dot stays glued to "deduction" (gap 0), the remaining dots are separate
     // words, and the far-right page number starts a new line.
@@ -425,9 +426,9 @@ fn words_015_tc_dot_leader_is_not_letter_spacing() {
 fn words_016_tracked_heading_keeps_word_gap_before_number() {
     // Genuine letter-spacing: `2.5 Tc` at 12pt tracks every letter of
     // "Abschnitt" 2.5pt apart (0.21×size, uniform, narrower than a space);
-    // the `-400` kern before "2" opens a clearly wider gap (7.3pt). The mask
-    // collapses the tracked run and leaves the real word gap alone. (Product
-    // choice: PyMuPDF has no tracking detection and shatters the heading.)
+    // the `-400` kern before "2" opens a clearly wider gap (7.3pt). `Tc`
+    // explains the letter gaps down to nothing and leaves the kern's 4.8pt
+    // standing. (Product choice: PyMuPDF, blind to `Tc`, shatters the heading.)
     let tp = textpage_e2e(
         winansi_type1("Helvetica", 32, &HELV),
         b"BT /F1 12 Tf 72 700 Td 2.5 Tc [(Abschnitt) -400 (2)] TJ ET",
@@ -452,9 +453,9 @@ fn words_017_tc_tracking_with_literal_space_stays_two_words() {
 fn words_018_tracking_at_threshold_keeps_kern_loosened_pair_whole() {
     // eurlex body text: `0.15 Tc` at `Tf 1`/`Tm 9.59` tracks every letter by
     // exactly the word-gap threshold, and a `-30` kern loosens one pair inside
-    // "transport" a little further (0.18×size). The run is uniformly tracked,
-    // so that pair is still tracking, not a word break — the word stays whole
-    // (PyMuPDF reads "transpor t"; the goal is whole words, not oracle parity).
+    // "transport" a little further (0.18×size). Deducting the tracking leaves
+    // 0.03×size — not a word break — so the word stays whole (PyMuPDF reads
+    // "transpor t"; the goal is whole words, not oracle parity).
     let tp = textpage_e2e(
         winansi_type1_with_metrics("Helvetica", 32, &HELV, 750, -250),
         b"BT /F1 1 Tf 9.59 0 0 9.59 72 700 Tm 0.15 Tc [(transpor) -30 (t)] TJ ET",

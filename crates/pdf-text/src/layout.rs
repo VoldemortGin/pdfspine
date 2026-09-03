@@ -1244,91 +1244,6 @@ fn tracked_runs(glyphs: &[&DevGlyph], size: f64) -> Vec<bool> {
 /// Builds a [`Line`] from advance-ordered glyphs, splitting into spans where the
 /// style (font / size / color / flags) changes. `seq` is the line's content-order
 /// key (smallest source-glyph index).
-/// Detects **letter-spaced (tracked)** runs and returns a per-glyph mask: `mask[i]`
-/// marks ink glyph `i` whose preceding inter-word space must be **suppressed**. Some
-/// PDFs render an emphasised heading by tracking every letter apart — "Abschnitt"
-/// painted as `A b s c h n i t t` with no literal space glyph, just a uniform
-/// per-letter gap wider than the word-gap threshold. `build_line` would synthesize a
-/// space at each gap, shattering the word into single-char tokens and tanking text
-/// accuracy. A run qualifies only when ≥4 consecutive **single-char** ink glyphs
-/// sit at uniform tracking gaps (so initials "J R R" or "x = y" are never
-/// touched). The tracking gap is measured between **alphanumeric** neighbours
-/// only and must stay below [`LETTER_SPACING_MAX_FRAC`] of the font size (no
-/// lower bound: text tracked right at the word-gap threshold keeps a
-/// kern-loosened pair together — whole words, not PyMuPDF's "transpor t"): a
-/// dot leader `. . . .` or a rule `- - -` is repeated punctuation, not
-/// tracking, and must not lend its uniform gap to the letters around it — on a
-/// positioned TOC line the leader's dots outnumber the letters, so a line-wide
-/// median once read every real word gap as tracking
-/// ("Originandscopeofrightofdeduction"); and a uniform gap wider than a word
-/// space (map labels `O R E G O N`) is a row of single-letter words, exactly as
-/// PyMuPDF reads it. A gap clearly wider than
-/// the tracking gap — beyond 1.8× the run's median *and* beyond the median plus
-/// the word-gap threshold, e.g. before the number in "Abschnitt 2" — is a real
-/// word break and is left unmarked, so bimodal lines split on their wide gaps.
-///
-/// `size` is the line's device-space font size and `gap_thresh` the word-gap
-/// threshold derived from it (both from `build_line`).
-fn letter_spacing_skip_mask(glyphs: &[&DevGlyph], size: f64, gap_thresh: f64) -> Vec<bool> {
-    let n = glyphs.len();
-    let mut mask = vec![false; n];
-    let is_space = |g: &DevGlyph| !g.text.is_empty() && g.text.chars().all(is_synth_ws);
-    // Ink glyphs (drop literal spaces) in reading order.
-    let ink: Vec<usize> = (0..n).filter(|&i| !is_space(glyphs[i])).collect();
-    if ink.len() < 4 {
-        return mask;
-    }
-    let single_char = |i: usize| {
-        let mut chars = glyphs[i].text.chars();
-        match (chars.next(), chars.next()) {
-            (Some(c), None) => Some(c),
-            _ => None,
-        }
-    };
-    let single = |i: usize| single_char(i).is_some();
-    let letter = |i: usize| single_char(i).is_some_and(char::is_alphanumeric);
-    let gap = |k: usize| glyphs[ink[k]].along_span().0 - glyphs[ink[k - 1]].along_span().1;
-    let max_track = size * LETTER_SPACING_MAX_FRAC;
-    // Maximal runs of consecutive single-char ink glyphs.
-    let mut a = 0;
-    while a < ink.len() {
-        if !single(ink[a]) {
-            a += 1;
-            continue;
-        }
-        let mut b = a + 1;
-        while b < ink.len() && single(ink[b]) {
-            b += 1;
-        }
-        if b - a >= 4 {
-            // Tracking gap = median of the run's letter-to-letter gaps (punctuation
-            // contributes none). Only a gap narrower than a word space is tracking;
-            // then suppress the space before any glyph whose gap is not clearly
-            // wider (a word break). No lower bound: tracking set right at the
-            // word-gap threshold (eurlex body text, `0.15 Tc`) must still hold a
-            // kern-loosened pair together — "transport", not "transpor t".
-            let mut gaps: Vec<f64> = (a + 1..b)
-                .filter(|&k| letter(ink[k - 1]) && letter(ink[k]))
-                .map(gap)
-                .collect();
-            if gaps.len() >= 3 {
-                gaps.sort_by(f64::total_cmp);
-                let med = gaps[gaps.len() / 2].max(0.01);
-                if med <= max_track {
-                    let wide = (med * 1.8).min(med + gap_thresh);
-                    for k in a + 1..b {
-                        if gap(k) <= wide {
-                            mask[ink[k]] = true;
-                        }
-                    }
-                }
-            }
-        }
-        a = b;
-    }
-    mask
-}
-
 /// Removes the phantom whitespace glyphs from an advance-sorted line run (see
 /// [`PHANTOM_SPACE_VISIBLE_FRAC`]). `run` holds paint-order indices into `dev`.
 /// Each whitespace cell is measured against the trailing edge of the previous
@@ -1437,11 +1352,6 @@ fn build_line(glyphs: &[&DevGlyph], seq: usize) -> Line {
     // ...and the part of the seam that glyph's own `Tc`/`Tw` already explains.
     let mut prev_spacing = 0.0_f64;
 
-    // Per-glyph mask: suppress the synthesized word space before a glyph that sits
-    // mid letter-spaced (tracked) run, so emphasised headings like "A b s c h n i t t"
-    // collapse to "Abschnitt" instead of shattering into single-char tokens.
-    let suppress_space_before = letter_spacing_skip_mask(glyphs, eff_size, gap_thresh);
-
     // Which glyphs sit inside a tracked run (see [`tracked_runs`]).
     let tracked = tracked_runs(glyphs, eff_size);
 
@@ -1528,11 +1438,7 @@ fn build_line(glyphs: &[&DevGlyph], seq: usize) -> Line {
                 0.0
             };
             let gap = lead - pe - explained;
-            if gap > gap_thresh
-                && !suppress_space_before[gi]
-                && !is_synth_ws(pc)
-                && !is_synth_ws(fc)
-            {
+            if gap > gap_thresh && !is_synth_ws(pc) && !is_synth_ws(fc) {
                 target.text.push(' ');
                 target.chars.push(Char {
                     // A thin zero-width cell at the new word's origin keeps the

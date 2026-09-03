@@ -3,12 +3,12 @@
 //! Splits each [`Line`] of a [`TextPage`] into [`Word`]s on whitespace
 //! characters **only**. Word breaks that the PDF renders as a bare spatial gap
 //! (`TJ`-kerned words with no space glyph) are already materialised by
-//! [`crate::layout`], which synthesizes one space char at its word-gap
-//! threshold (a fraction of the device-space font size) and suppresses it
-//! inside letter-spaced (tracked) runs. Segmenting on whitespace alone
+//! [`crate::layout`], which synthesizes one space char wherever the gap a
+//! glyph's `Tc`/`Tw` does *not* explain exceeds its word-gap threshold (a
+//! fraction of the device-space font size). Segmenting on whitespace alone
 //! therefore keeps `get_text("words")` boundaries identical to the
-//! text/dict/blocks output — a second, mask-less spatial split here would
-//! re-shatter tracked headings that layout kept whole.
+//! text/dict/blocks output — a second spatial split here, blind to the text
+//! state, would re-shatter the tracked headings layout kept whole.
 //! Produces the `(bbox, text, block_no, line_no, word_no)` tuples that drive
 //! `get_text("words")` in M2d.
 
