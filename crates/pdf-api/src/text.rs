@@ -832,13 +832,15 @@ pub enum TextOutput {
     Json(String),
 }
 
-/// Builds the [`TextPage`] model for `page` once (PRD §9.4). `flags`/`clip` are
-/// accepted for API symmetry but applied at serialization / search time, not at
-/// build time, so the model is reusable across every output.
+/// Builds the [`TextPage`] model for `page` once (PRD §9.4). Most of `flags`
+/// (and all of `clip`) apply at serialization / search time, not at build time,
+/// so the model stays reusable across every output; `TEXT_INHIBIT_SPACES` is the
+/// exception, since suppressing the synthesized word spaces has to happen while
+/// the lines are built.
 #[must_use]
-pub fn textpage(page: &Page, _flags: u32, _clip: Option<Rect>) -> TextPage {
+pub fn textpage(page: &Page, flags: u32, _clip: Option<Rect>) -> TextPage {
     let doc = page.document();
-    pdf_text::build_textpage(doc, page, &Limits::default())
+    pdf_text::build_textpage_flagged(doc, page, &Limits::default(), flags)
 }
 
 /// Extracts text in the given PyMuPDF `opt` ("text", "html", "xhtml", "xml",
@@ -854,7 +856,7 @@ pub fn get_text(page: &Page, opt: &str, flags: Option<u32>, tp: Option<&TextPage
     let tp: &TextPage = match tp {
         Some(t) => t,
         None => {
-            owned = textpage(page, 0, None);
+            owned = textpage(page, flags.unwrap_or(0), None);
             &owned
         }
     };

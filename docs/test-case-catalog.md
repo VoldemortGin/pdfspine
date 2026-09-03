@@ -1140,6 +1140,7 @@ self-built PDFs (reuse `tests/common`). No PyMuPDF files.
 | `WORDS-030` | e2e the deducted `Tc` share is a device-space *vector*: the same heading under a 90°-rotated `Tm` still reads `"property"`, and `5 Tc` under `50 Tz` deducts the `Th`-scaled 2.5pt so `text`/`block` each stay whole and the `-600` word gap survives | PRD §8.6.2 | green |
 | `WORDS-031` | e2e the deduction is bounded: `6 Tc` (0.5 em) @12pt is a row of tokens → `["O","R","E","G","O","N"]`; `3 Tc` (0.25 em) is tracking → `["OREGON"]`; `3 Tc (***)` joins no letters → `["*","*","*"]` | PRD §8.6.2 | green |
 | `WORDS-032` | e2e `[(AB) -600 (CD)] TJ` @12pt: the synthesized space's char cell spans the seam it bridges — 7.2pt wide, flush against `B`'s trailing edge and `C`'s origin, as tall as `C` (was a zero-width marker) | PRD §8.6.2 | green |
+| `WORDS-033` | e2e `TEXT_INHIBIT_SPACES` (8): `[(AB) -600 (CD)] TJ` synthesizes no space → `["ABCD"]`, while a literal `(AB CD) Tj` still splits; without the flag the kerned pair splits | PRD §8.6.2 | green |
 
 ### Span flags (`layout.rs`) — `LAYOUT-FLAGS-*`
 
@@ -1351,6 +1352,7 @@ methods, and the **M2 accuracy exit gate**. Self-generated fixtures only
 | `PYTEXT-008` | `get_textpage()` handle reused via `textpage=` | PRD §9.4 | green |
 | `PYTEXT-009` | `sort=True` orders blocks by (y, x) | PRD §9.4 | green |
 | `PYTEXT-010` | `sort=True` orders plain-text lines by (y, x), including lines sharing one block; `sort=False` stays unchanged | compatibility findings P2 | green |
+| `PYTEXT-011` | `TEXT_INHIBIT_SPACES` reaches the layout: a `-600`-kerned `TJ` yields `ABCD` / `["ABCD"]` with the flag and `AB CD` without; a literal space glyph is kept either way | PRD §8.6.2 | green |
 | `PYSEARCH-001` | `search_for` returns Rect overlapping the known location | PRD §9.4 | green |
 | `PYSEARCH-002` | `quads=True` returns `Quad`s | PRD §9.4 | green |
 | `PYSEARCH-003` | `hit_max` caps results | PRD §9.4 | green |

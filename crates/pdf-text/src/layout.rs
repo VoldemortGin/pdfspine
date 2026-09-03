@@ -23,6 +23,7 @@ use crate::model::{
     flags, Block, BlockKind, Char, ImageBlock, ImageRef, InterpretResult, Line, PositionedGlyph,
     Span, TextPage, WritingDir,
 };
+use crate::serialize::textflags;
 
 /// Baseline-cluster tolerance as a fraction of font size. Two glyphs land on the
 /// same line when their baseline (along the cross-axis) differs by less than
@@ -128,7 +129,21 @@ const REGION_BAND_GAP_FRAC: f64 = 1.3;
 /// (`defaults::TEXT`), matching fitz: off-page print-control marks and bleed
 /// outside the visible/crop region do not appear in extracted text.
 #[must_use]
-pub fn build_textpage(doc: &DocumentStore, page: &Page, _limits: &Limits) -> TextPage {
+pub fn build_textpage(doc: &DocumentStore, page: &Page, limits: &Limits) -> TextPage {
+    build_textpage_flagged(doc, page, limits, 0)
+}
+
+/// Like [`build_textpage`], but honours the layout-affecting bits of a PyMuPDF
+/// `TEXT_*` flag set. Today that is `TEXT_INHIBIT_SPACES` (8) alone: with it
+/// set, a spatial gap never synthesizes a word space, so the extracted text
+/// carries only the whitespace the PDF actually paints.
+#[must_use]
+pub fn build_textpage_flagged(
+    doc: &DocumentStore,
+    page: &Page,
+    _limits: &Limits,
+    flags: u32,
+) -> TextPage {
     let Some(page_dict) = page.dict() else {
         return TextPage::default();
     };
@@ -151,6 +166,7 @@ pub fn build_textpage(doc: &DocumentStore, page: &Page, _limits: &Limits) -> Tex
         rotate,
         Some(cropbox),
         Some(&resolver),
+        flags,
     )
 }
 
@@ -168,6 +184,20 @@ pub fn textpage_from_glyphs(
     textpage_from_glyphs_clipped(glyphs, images, mediabox, rotate, None)
 }
 
+/// Like [`textpage_from_glyphs_clipped`], but honours the layout-affecting bits
+/// of a PyMuPDF `TEXT_*` flag set (see [`build_textpage_flagged`]).
+#[must_use]
+pub fn textpage_from_glyphs_flagged(
+    glyphs: &[PositionedGlyph],
+    images: &[ImageRef],
+    mediabox: Rect,
+    rotate: i32,
+    clip: Option<Rect>,
+    flags: u32,
+) -> TextPage {
+    textpage_core(glyphs, images, mediabox, rotate, clip, None, flags)
+}
+
 /// Like [`textpage_from_glyphs`], but drops glyphs whose origin falls outside
 /// `clip` (a rect in **PDF user space**, e.g. the page CropBox) when `clip` is
 /// `Some` — the `TEXT_MEDIABOX_CLIP` behavior. A small epsilon tolerates glyphs
@@ -180,7 +210,7 @@ pub fn textpage_from_glyphs_clipped(
     rotate: i32,
     clip: Option<Rect>,
 ) -> TextPage {
-    textpage_core(glyphs, images, mediabox, rotate, clip, None)
+    textpage_core(glyphs, images, mediabox, rotate, clip, None, 0)
 }
 
 /// The shared TextPage builder. `resolver`, when present, maps each glyph's
@@ -193,6 +223,7 @@ fn textpage_core(
     rotate: i32,
     clip: Option<Rect>,
     resolver: Option<&FontResolver>,
+    flags: u32,
 ) -> TextPage {
     let p = page_transform(page_box, rotate);
     let (width, height) = page_size(page_box, rotate);
@@ -230,7 +261,7 @@ fn textpage_core(
     }
 
     // 2/3. lines + spans.
-    let lines = group_lines(&dev);
+    let lines = group_lines(&dev, flags & textflags::INHIBIT_SPACES != 0);
 
     // 4. blocks — column-aware paragraph grouping: cut the lines into column
     //    regions first (so a paragraph block never straddles two columns), then
@@ -497,7 +528,7 @@ fn name_flags(name: &str) -> u32 {
 /// Clusters device glyphs into lines by cross-axis (baseline) proximity, then
 /// splits each baseline run on column gutters and into spans. Lines are returned
 /// in top-to-bottom order.
-fn group_lines(dev: &[DevGlyph]) -> Vec<Line> {
+fn group_lines(dev: &[DevGlyph], inhibit_spaces: bool) -> Vec<Line> {
     if dev.is_empty() {
         return Vec::new();
     }
@@ -622,7 +653,7 @@ fn group_lines(dev: &[DevGlyph]) -> Vec<Line> {
         // earliest-painted glyph of the line (document order).
         let seq = run.iter().copied().min().unwrap_or(0);
         let line_glyphs: Vec<&DevGlyph> = run.iter().map(|&i| &dev[i]).collect();
-        lines.push(build_line(&line_glyphs, seq));
+        lines.push(build_line(&line_glyphs, seq, inhibit_spaces));
     }
     lines
 }
@@ -1321,7 +1352,7 @@ fn drop_phantom_whitespace(run: &mut Vec<usize>, dev: &[DevGlyph]) {
     }
 }
 
-fn build_line(glyphs: &[&DevGlyph], seq: usize) -> Line {
+fn build_line(glyphs: &[&DevGlyph], seq: usize, inhibit_spaces: bool) -> Line {
     let wmode = glyphs.first().map_or(0, |g| g.wmode);
     let dir = glyphs.first().map_or((1.0, 0.0), |g| g.dir);
 
@@ -1457,7 +1488,7 @@ fn build_line(glyphs: &[&DevGlyph], seq: usize) -> Line {
                 0.0
             };
             let gap = lead - pe - explained;
-            if gap > gap_thresh && !is_synth_ws(pc) && !is_synth_ws(fc) {
+            if gap > gap_thresh && !inhibit_spaces && !is_synth_ws(pc) && !is_synth_ws(fc) {
                 target.text.push(' ');
                 target.chars.push(Char {
                     origin: g.origin,
