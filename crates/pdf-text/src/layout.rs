@@ -56,13 +56,22 @@ const LINE_RUN_GAP_EPSILON: f64 = 1e-6;
 /// the threshold.
 const WORD_GAP_FRAC: f64 = 0.15;
 
-/// Widest letter-to-letter gap, as a fraction of the device-space font size,
-/// that [`letter_spacing_skip_mask`] still reads as tracking. A letter-spaced
-/// heading keeps its letters closer than a word space (≈0.25–0.33 em in text
-/// faces — Helvetica's is 0.278); a uniform gap beyond this is a row of
-/// single-letter words (map labels, spaced-out initials) and every gap in it
-/// stays a word break, as PyMuPDF reads it.
+/// Widest per-glyph tracking, as a fraction of the device-space font size, that
+/// `build_line` will deduct from an inter-glyph gap. Real tracking keeps a
+/// word's letters closer together than a word space would (0.25-0.33 em in text
+/// faces; Helvetica's own space is 0.278 em). A `Tc` beyond this is not holding
+/// a word together at all - it is a row of separately-read tokens, map labels
+/// set as `O R E G O N` or spaced-out initials - and every gap in it stays a
+/// word break, exactly as PyMuPDF reads it.
 const LETTER_SPACING_MAX_FRAC: f64 = 0.3;
+
+/// Shortest run of glyphs carrying one `Tc` that `build_line` will read as
+/// tracking. Tracking is set for a word or a heading, so it spans a run;
+/// a `Tc` covering a glyph or two is an author's local adjustment. Distiller
+/// writes the inter-word space itself that way — a two-glyph `Tj` straddling
+/// the word boundary with `Tc` set to one space width — and deducting *that*
+/// would glue the two words together.
+const TRACKED_RUN_MIN: usize = 4;
 
 /// A literal whitespace glyph is a *phantom* — painted by another run over this
 /// line's ink — when less than this fraction of its own cell width is left
@@ -321,6 +330,11 @@ struct DevGlyph {
     wmode: u8,
     /// Writing-direction unit vector `(cos, sin)` in device space.
     dir: (f64, f64),
+    /// The part of this glyph's advance already explained by the text-state
+    /// spacing operands (`Tc`, plus `Tw` on a literal space), as a **device
+    /// space** displacement vector — `PositionedGlyph::spacing_advance` carried
+    /// through the page transform's linear part.
+    spacing: (f64, f64),
     /// Font ascender normalized to a unit font size (PyMuPDF span `ascender`).
     ascender: f64,
     /// Font descender normalized to a unit font size (PyMuPDF span `descender`).
@@ -370,6 +384,10 @@ impl DevGlyph {
                 dir_h
             }
         };
+        let spacing = {
+            let (sx, sy) = g.spacing_advance;
+            (p.a * sx + p.c * sy, p.b * sx + p.d * sy)
+        };
         DevGlyph {
             origin,
             bbox,
@@ -380,6 +398,7 @@ impl DevGlyph {
             flags,
             wmode,
             dir,
+            spacing,
             ascender: g.ascender,
             descender: g.descender,
         }
@@ -401,6 +420,14 @@ impl DevGlyph {
     /// (not just the origin) keeps the inter-glyph gap correct for any writing
     /// direction / page rotation, mirroring the device-x gap `words.rs` uses for
     /// horizontal text.
+    /// The `Tc`/`Tw` share of this glyph's advance, projected onto the reading
+    /// axis. This much of the seam that follows the glyph is *explained*: the
+    /// author tracked every glyph of the run apart by it, so it is not evidence
+    /// of a word boundary. Only what a `TJ` kern adds on top of it is.
+    fn spacing_along(&self) -> f64 {
+        self.dir.0 * self.spacing.0 + self.dir.1 * self.spacing.1
+    }
+
     fn along_span(&self) -> (f64, f64) {
         let b = self.bbox.normalize();
         let (dx, dy) = self.dir;
@@ -1192,6 +1219,28 @@ fn is_rtl_char(c: char) -> bool {
     )
 }
 
+/// Marks every glyph that belongs to a run of at least [`TRACKED_RUN_MIN`]
+/// consecutive glyphs carrying the same `Tc`/`Tw` share of their advance — the
+/// signature of tracking, as opposed to a one-off spacing adjustment. Reads the
+/// text-state value each glyph came with, not a statistic over measured gaps,
+/// so a dot leader or a neighbouring column cannot lend its spacing to a word.
+fn tracked_runs(glyphs: &[&DevGlyph], size: f64) -> Vec<bool> {
+    let eps = size.abs() * 1e-6;
+    let mut out = vec![false; glyphs.len()];
+    let mut start = 0;
+    for i in 1..=glyphs.len() {
+        let same = i < glyphs.len()
+            && (glyphs[i].spacing_along() - glyphs[start].spacing_along()).abs() <= eps;
+        if !same {
+            if i - start >= TRACKED_RUN_MIN {
+                out[start..i].fill(true);
+            }
+            start = i;
+        }
+    }
+    out
+}
+
 /// Builds a [`Line`] from advance-ordered glyphs, splitting into spans where the
 /// style (font / size / color / flags) changes. `seq` is the line's content-order
 /// key (smallest source-glyph index).
@@ -1375,6 +1424,7 @@ fn build_line(glyphs: &[&DevGlyph], seq: usize) -> Line {
         }
     };
     let gap_thresh = eff_size * WORD_GAP_FRAC;
+    let max_track = eff_size * LETTER_SPACING_MAX_FRAC;
 
     let mut spans: Vec<Span> = Vec::new();
     let mut line_bbox = Rect::default();
@@ -1384,11 +1434,16 @@ fn build_line(glyphs: &[&DevGlyph], seq: usize) -> Line {
     // that `serialize`/`words` rely on (mirrors [`crate::words`]).
     let mut prev_end: Option<f64> = None;
     let mut prev_char: Option<char> = None;
+    // ...and the part of the seam that glyph's own `Tc`/`Tw` already explains.
+    let mut prev_spacing = 0.0_f64;
 
     // Per-glyph mask: suppress the synthesized word space before a glyph that sits
     // mid letter-spaced (tracked) run, so emphasised headings like "A b s c h n i t t"
     // collapse to "Abschnitt" instead of shattering into single-char tokens.
     let suppress_space_before = letter_spacing_skip_mask(glyphs, eff_size, gap_thresh);
+
+    // Which glyphs sit inside a tracked run (see [`tracked_runs`]).
+    let tracked = tracked_runs(glyphs, eff_size);
 
     for (gi, g) in glyphs.iter().enumerate() {
         let mut gflags = g.flags;
@@ -1434,7 +1489,45 @@ fn build_line(glyphs: &[&DevGlyph], seq: usize) -> Line {
         let (lead, end) = g.along_span();
         let first_char = g.text.chars().next();
         if let (Some(pe), Some(pc), Some(fc)) = (prev_end, prev_char, first_char) {
-            let gap = lead - pe;
+            // Deduct the tracking the previous glyph's `Tc` (+ `Tw`) already
+            // accounts for: a uniformly tracked run opens the same seam after
+            // *every* glyph, so that part of the gap says nothing about word
+            // boundaries. What is left is the `TJ` kerning (or `Td`/`Tm` jump)
+            // the author added on top -- the only evidence of a word space when
+            // no space glyph is painted. With no spacing operands in force this
+            // is exactly the old cell-to-cell gap.
+            //
+            // Three bounds keep the deduction to tracking that is actually
+            // holding a word together.
+            //
+            // The seam must sit *inside a tracked run*: the same spacing in
+            // force on both sides, and part of a run of at least
+            // [`TRACKED_RUN_MIN`] glyphs. Tracking is uniform across a word or
+            // a heading by definition, so a `Tc` that changes at the seam, or
+            // that covers only a glyph or two, was never tracking it. PDFs that
+            // justify by setting a per-`Tj` `Tc` would otherwise have every
+            // word space eaten by whatever the preceding word carried.
+            //
+            // It must join two alphanumerics: a run of punctuation set at one
+            // `Tc` is a dot leader or a `* * *` rule, a row of separate tokens
+            // rather than a word.
+            //
+            // And it must be narrower than a word space
+            // ([`LETTER_SPACING_MAX_FRAC`]); negative `Tc` has nothing to
+            // explain away in the first place.
+            let same_run = tracked[gi]
+                && tracked[gi - 1]
+                && (prev_spacing - g.spacing_along()).abs() <= eff_size * 1e-6;
+            let explained = if same_run
+                && pc.is_alphanumeric()
+                && fc.is_alphanumeric()
+                && (0.0..=max_track).contains(&prev_spacing)
+            {
+                prev_spacing
+            } else {
+                0.0
+            };
+            let gap = lead - pe - explained;
             if gap > gap_thresh
                 && !suppress_space_before[gi]
                 && !is_synth_ws(pc)
@@ -1463,6 +1556,7 @@ fn build_line(glyphs: &[&DevGlyph], seq: usize) -> Line {
             prev_char = Some(c);
         }
         prev_end = Some(end);
+        prev_spacing = g.spacing_along();
         line_bbox = line_bbox.union(&g.bbox);
     }
 
@@ -2977,6 +3071,7 @@ mod tests {
             flags: 0,
             wmode: 0,
             dir: (1.0, 0.0),
+            spacing: (0.0, 0.0),
             ascender: 0.7,
             descender: -0.2,
         }

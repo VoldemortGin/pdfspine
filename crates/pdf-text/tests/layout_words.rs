@@ -405,9 +405,10 @@ fn words_014_positioned_toc_line_with_dot_leader_keeps_word_gaps() {
 fn words_015_tc_dot_leader_is_not_letter_spacing() {
     // govdocs1-00000 pattern: `Tf 1` + `Tm` scale 8, `TJ` word gaps of -332.7
     // (2.66pt, no space glyph), then a `0.2219 Tc` dot leader (dot gap 1.78pt
-    // = 0.22×size) and right-aligned figures. The leader's uniform gap must
-    // not qualify as letter-spacing: the label splits into words and each dot
-    // is its own word (PyMuPDF); the figures start new lines (gap ≫ size).
+    // = 0.22×size) and right-aligned figures. The leader's uniform gap is not
+    // tracking that holds a word together — it joins no letters at all — so it
+    // is never deducted: the label splits into words and each dot is its own
+    // word (PyMuPDF); the figures start new lines (gap ≫ size).
     let tp = textpage_e2e(
         winansi_type1("Helvetica", 32, &HELV),
         b"BT /F1 1 Tf 8 0 0 8 38.9 700 Tm [(Under) -332.7 (5) -332.7 (years)] TJ 6.8494 0 TD 0.2219 Tc [(...............................) -5034.5 (8) 221.9 (8) -2888 (6) 221.9 (.) 221.9 (1)] TJ ET",
@@ -460,6 +461,91 @@ fn words_018_tracking_at_threshold_keeps_kern_loosened_pair_whole() {
     );
     assert_eq!(to_text(&tp, 0).trim_end(), "transport");
     assert_eq!(word_texts(&tp), vec!["transport"]);
+}
+
+#[test]
+fn words_029_tc_heading_kern_is_not_a_word_break() {
+    // EUR-Lex sub-heading: `0.1499 Tc` at `Tf 1`/`Tm 9.59` sets every letter
+    // gap to 1.43750 against a 1.43850 threshold - one part in ten thousand
+    // below it - so the smallest kern tips a pair over and cuts the word in
+    // half. That is exactly how PyMuPDF reads these 33 pages (`proper ty`,
+    // `ser vices`, `Def inition`). Judging the *residual* gap (1.19875 of pure
+    // `TJ` kern, the tracking deducted) keeps the word whole...
+    let tp = textpage_e2e(
+        winansi_type1_with_metrics("Helvetica", 32, &HELV, 750, -250),
+        b"BT /F1 1 Tf 9.59 0 0 9.59 72 700 Tm 0.1499 Tc [(proper) -125 (ty)] TJ ET",
+    );
+    assert_eq!(to_text(&tp, 0).trim_end(), "property");
+    assert_eq!(word_texts(&tp), vec!["property"]);
+
+    // ...while a genuine word gap on the very same line - `-337`, the TOC's
+    // idiom, three times the threshold once the tracking is deducted - still
+    // splits.
+    let tp = textpage_e2e(
+        winansi_type1_with_metrics("Helvetica", 32, &HELV, 750, -250),
+        b"BT /F1 1 Tf 9.59 0 0 9.59 72 700 Tm 0.1499 Tc [(Origin) -337 (and) -337 (scope)] TJ ET",
+    );
+    assert_eq!(to_text(&tp, 0).trim_end(), "Origin and scope");
+    assert_eq!(word_texts(&tp), vec!["Origin", "and", "scope"]);
+}
+
+#[test]
+fn words_030_tracking_deduction_is_device_space_and_directional() {
+    // The deducted share is a vector carried through `Tm`/`CTM`, not a scalar.
+    //
+    // Rotated 90 degrees: the same `0.1499 Tc` heading painted up the page. The
+    // tracking now lies on device *y*; projecting it onto the line's own
+    // reading axis is what keeps `property` whole (an x-only reading would
+    // deduct nothing and cut it).
+    let tp = textpage_e2e(
+        winansi_type1_with_metrics("Helvetica", 32, &HELV, 750, -250),
+        b"BT /F1 1 Tf 0 9.59 -9.59 0 300 300 Tm 0.1499 Tc [(proper) -125 (ty)] TJ ET",
+    );
+    assert_eq!(word_texts(&tp), vec!["property"]);
+
+    // `50 Tz` halves both the advance and the `Tc` share: `5 Tc` opens 2.5pt
+    // per letter at 12pt - past the 1.8pt threshold on its own - and a `-600`
+    // kern opens 3.6pt more. Deducting the *scaled* 2.5 holds each word
+    // together and still leaves the kern standing. Read `Tc` unscaled and 5.0
+    // is past the tracking bound, so nothing is deducted and `text` shatters.
+    let tp = textpage_e2e(
+        winansi_type1("Helvetica", 32, &HELV),
+        b"BT /F1 12 Tf 50 Tz 5 Tc 72 700 Td [(text) -600 (block)] TJ ET",
+    );
+    assert_eq!(to_text(&tp, 0).trim_end(), "text block");
+    assert_eq!(word_texts(&tp), vec!["text", "block"]);
+}
+
+#[test]
+fn words_031_tracking_deduction_is_bounded() {
+    // Two bounds keep the deduction to tracking that is holding a word
+    // together. A `Tc` wider than a word space is a row of separately-read
+    // tokens - a map label set as `O R E G O N` (0.5 em) - and stays split,
+    // as PyMuPDF reads it...
+    let tp = textpage_e2e(
+        winansi_type1("Helvetica", 32, &HELV),
+        b"BT /F1 12 Tf 6 Tc 72 700 Td (OREGON) Tj ET",
+    );
+    assert_eq!(
+        word_texts(&tp),
+        vec!["O", "R", "E", "G", "O", "N"],
+        "0.5 em tracking is a row of tokens"
+    );
+    // ...while 0.25 em, narrower than Helvetica's own space, is tracking and
+    // collapses (the WORDS-007 product choice, now per glyph).
+    let tp = textpage_e2e(
+        winansi_type1("Helvetica", 32, &HELV),
+        b"BT /F1 12 Tf 3 Tc 72 700 Td (OREGON) Tj ET",
+    );
+    assert_eq!(word_texts(&tp), vec!["OREGON"]);
+
+    // And a run of punctuation at the same `Tc` joins no letters, so nothing
+    // is deducted there: a `* * *` rule stays three tokens.
+    let tp = textpage_e2e(
+        winansi_type1("Helvetica", 32, &HELV),
+        b"BT /F1 12 Tf 3 Tc 72 700 Td (***) Tj ET",
+    );
+    assert_eq!(word_texts(&tp), vec!["*", "*", "*"]);
 }
 
 // === missing /Widths: the advance fallback chain feeds the layout ===========
