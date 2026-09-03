@@ -11,6 +11,44 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
+## [0.6.1] — 2026-09-03
+
+### Fixed
+
+- **Words split apart inside a tracked run.** The word-gap test now measures
+  the part of the gap that `Tc` (and, on a space glyph, `Tw`) does *not*
+  explain, instead of the raw distance between glyph cells. On a line laid out
+  with letter-spacing, the tracking is already accounted for, so only the extra
+  displacement from a `TJ` kern or an explicit move can open a word boundary.
+  Every glyph carries the `Tc`/`Tw` share of its own advance as a user-space
+  vector through `Tm · CTM`, so the correction stays exact under rotation,
+  skew, `Tz` and vertical writing. On the 33 `0.1499 Tc` pages of the EUR-Lex
+  32006L0112 corpus this keeps 61 words whole that PyMuPDF 1.27.2 breaks
+  (`property`, `services`, `Definition`, `systems`, `Simplification`,
+  `arrangements`, `transport`, …) with no regression in the other direction.
+- **A synthesized word space now carries the cell it stands for** — the rect
+  spanning the gap between the two glyphs — rather than a zero-width rect at
+  the following glyph's origin. `get_text("rawdict")` and `get_text("words")`
+  consumers that measure spaces see the same geometry as PyMuPDF.
+
+### Changed
+
+- **The line-level letter-spacing heuristic is gone.** Word gaps are now
+  decided per glyph pair from the text state, with no statistics gathered over
+  the line. The old mask inferred "this line is tracked" from the median
+  measured gap, which misfired on pages that merely use large `TJ` kerns and
+  no `Tc` at all — table-of-contents pages came back as
+  `Originandscopeofrightofdeduction`. Against PyMuPDF over 300 documents /
+  1885 pages, over-splits are unchanged at 334 while under-splits drop from
+  394 to 332 (176 → 160 alphabetic).
+
+### Added
+
+- **`TEXT_INHIBIT_SPACES` is implemented.** The flag was exported but had no
+  consumer; `get_text(..., flags=pdfspine.TEXT_INHIBIT_SPACES)` now suppresses
+  synthesized word spaces and returns only whitespace that the content stream
+  actually paints.
+
 ## [0.6.0] — 2026-09-02
 
 ### Added
@@ -453,7 +491,8 @@ published wheel's version is set from the `v0.1.0` git tag at build time.
   2858 ms → 819 ms). `rayon` is a feature-gated (`paddle-ocr`) optional dep and
   is not in the lean base wheel.
 
-[Unreleased]: https://github.com/VoldemortGin/pdfspine/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/VoldemortGin/pdfspine/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/VoldemortGin/pdfspine/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/VoldemortGin/pdfspine/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/VoldemortGin/pdfspine/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/VoldemortGin/pdfspine/compare/v0.4.0...v0.4.1
