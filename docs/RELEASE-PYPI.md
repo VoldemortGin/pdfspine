@@ -75,7 +75,9 @@ the corresponding changelog entry and synchronized current-state docs.
 ## D. Build wheels (CI matrix) — READY
 
 The release workflow is in place: **`.github/workflows/release.yml`** builds the
-full abi3 matrix + sdist and publishes via Trusted Publishing.
+full abi3 matrix + sdist and publishes with the `PYPI_API_TOKEN` repository
+secret. (Trusted Publishing is wired up in the workflow but **not** registered on
+PyPI — see §F.1.)
 
 Matrix produced (one abi3 wheel each): linux `x86_64` (manylinux auto) + `aarch64`
 (manylinux 2_28), macOS `x86_64` (macos-13) + `aarch64` (macos-14), Windows `x64`,
@@ -181,6 +183,32 @@ workflow in the ocrspine repository.
 
 Then publishing is automatic on tag push (§G) — `pypa/gh-action-pypi-publish`
 uploads via OIDC and attaches PEP 740 build attestations. No tokens stored.
+
+> **Status (2026-09-03): steps 1–2 above were never done.** The GitHub
+> environments exist, but no trusted publisher is registered on PyPI, so the
+> `publish` job failed with
+> `invalid-publisher: valid token, but no corresponding publisher` on both
+> **v0.5.0** and **v0.6.0**; both releases were finished by downloading the CI
+> artifacts and uploading them by hand:
+>
+> ```bash
+> RUN_ID=$(gh run list --workflow=release.yml --limit 1 --json databaseId -q '.[0].databaseId')
+> gh run download "$RUN_ID" --dir dist-<version>
+> find dist-<version> -type f \( -name '*.whl' -o -name '*.tar.gz' \) -print0 \
+>   | NO_PROXY='*' xargs -0 twine upload --skip-existing
+> ```
+>
+> `NO_PROXY='*'` is required on the maintainer's machine: the local HTTP proxy
+> stalls multi-MB uploads to `upload.pypi.org`.
+>
+> As of **v0.6.0** the workflow authenticates with the `PYPI_API_TOKEN`
+> repository secret instead, so tag pushes publish on their own again. To go
+> back to the keyless OIDC path, register the publisher (Owner `VoldemortGin`,
+> Repo `pdfspine`, Workflow `release.yml`, Environment `pypi`) at
+> <https://pypi.org/manage/project/pdfspine/settings/publishing/> — use **"Add a
+> trusted publisher"** on the existing project, *not* "pending publisher" — then
+> drop the `password:` line from the `Publish to PyPI` step. The job keeps its
+> `id-token: write` permission either way.
 
 ### F.2 crates.io — NOT published (Python-first, matches the spine family)
 

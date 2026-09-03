@@ -24,6 +24,13 @@
 # the OCR smoke gate — exactly like the ubuntu-latest/aarch64 cross leg (see the
 # `wheels` matrix note).
 #
+# CURRENT AUTH: the PyPI upload uses the `PYPI_API_TOKEN` repository secret, NOT
+#   OIDC — the trusted publisher below was never registered on PyPI, so the
+#   `publish` job failed with `invalid-publisher` on both v0.5.0 and v0.6.0 and
+#   the artifacts had to be uploaded by hand with twine. The `id-token: write`
+#   permission stays on the job, so switching back to Trusted Publishing is just
+#   deleting the `password:` line once the publisher exists on PyPI.
+#
 # USER-GATED PREREQUISITE (one-time, in the PyPI web UI — see docs/RELEASE-PYPI.md):
 #   PyPI -> account -> Publishing -> "Add a pending publisher" (Owner =
 #   VoldemortGin, Repo = pdfspine, Workflow = release.yml, Environment = pypi):
@@ -190,6 +197,12 @@ jobs:
         if: github.event_name == 'push' || github.event.inputs.publish_target == 'pypi'
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
+          # API token 认证。Trusted Publishing / OIDC 在 PyPI 侧从未注册过
+          # publisher(见文件头的 USER-GATED PREREQUISITE),v0.5.0 与 v0.6.0
+          # 的 publish job 都因 `invalid-publisher` 失败,产物靠本地 twine 补传。
+          # 在 PyPI 项目设置里加上 trusted publisher 之后,删掉下面两行即可
+          # 回到无密钥的 OIDC 路径(job 的 `id-token: write` 权限一直保留着)。
+          password: ${{ secrets.PYPI_API_TOKEN }}
           # 跳过已存在的文件:本地手动发过 0.0.1 的 macOS-arm64 wheel + sdist,
           # 让 tag 重跑只补传缺的平台 wheel,不因重复文件而整批失败。
           skip-existing: true
