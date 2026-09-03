@@ -1241,6 +1241,22 @@ fn tracked_runs(glyphs: &[&DevGlyph], size: f64) -> Vec<bool> {
     out
 }
 
+/// The cell of a synthesized inter-word space: the seam it stands for, running
+/// from the previous glyph's pen position (`prev_pen_x` — its cell's trailing
+/// edge, which is where MuPDF leaves the pen) to this glyph's origin, and as
+/// tall as this glyph's cell. MuPDF hands its own synthetic space exactly that
+/// pair of points, so `rawdict` char cells line up with `get_text("rawdict")`
+/// instead of collapsing to a zero-width marker. A rotated or vertical line has
+/// no meaningful device-x seam, so it keeps the marker at the new word's origin.
+fn synth_space_bbox(prev_pen_x: Option<f64>, g: &DevGlyph) -> Rect {
+    let x = g.origin.x;
+    let (x0, x1) = match prev_pen_x {
+        Some(px) if g.dir.1.abs() <= 1e-6 => (px.min(x), px.max(x)),
+        _ => (x, x),
+    };
+    Rect::new(x0, g.bbox.y0, x1, g.bbox.y1)
+}
+
 /// Builds a [`Line`] from advance-ordered glyphs, splitting into spans where the
 /// style (font / size / color / flags) changes. `seq` is the line's content-order
 /// key (smallest source-glyph index).
@@ -1351,6 +1367,9 @@ fn build_line(glyphs: &[&DevGlyph], seq: usize) -> Line {
     let mut prev_char: Option<char> = None;
     // ...and the part of the seam that glyph's own `Tc`/`Tw` already explains.
     let mut prev_spacing = 0.0_f64;
+    // The previous glyph's pen position in device x, so a synthesized space can
+    // span the seam it stands for.
+    let mut prev_pen_x: Option<f64> = None;
 
     // Which glyphs sit inside a tracked run (see [`tracked_runs`]).
     let tracked = tracked_runs(glyphs, eff_size);
@@ -1441,10 +1460,8 @@ fn build_line(glyphs: &[&DevGlyph], seq: usize) -> Line {
             if gap > gap_thresh && !is_synth_ws(pc) && !is_synth_ws(fc) {
                 target.text.push(' ');
                 target.chars.push(Char {
-                    // A thin zero-width cell at the new word's origin keeps the
-                    // rawdict char array consistent without inflating any bbox.
                     origin: g.origin,
-                    bbox: Rect::new(g.origin.x, g.bbox.y0, g.origin.x, g.bbox.y1),
+                    bbox: synth_space_bbox(prev_pen_x, g),
                     c: ' ',
                 });
                 prev_char = Some(' ');
@@ -1463,6 +1480,7 @@ fn build_line(glyphs: &[&DevGlyph], seq: usize) -> Line {
         }
         prev_end = Some(end);
         prev_spacing = g.spacing_along();
+        prev_pen_x = Some(if g.dir.0 >= 0.0 { g.bbox.x1 } else { g.bbox.x0 });
         line_bbox = line_bbox.union(&g.bbox);
     }
 

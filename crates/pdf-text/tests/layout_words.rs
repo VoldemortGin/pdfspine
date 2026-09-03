@@ -181,6 +181,17 @@ fn textpage_e2e(font: Object, content: &[u8]) -> TextPage {
     build_textpage(page.document(), &page, &Limits::unbounded_decode())
 }
 
+/// Every char cell on the page, in reading order.
+fn chars(tp: &TextPage) -> Vec<(char, Rect)> {
+    tp.blocks
+        .iter()
+        .flat_map(|b| b.lines.iter())
+        .flat_map(|l| l.spans.iter())
+        .flat_map(|s| s.chars.iter())
+        .map(|c| (c.c, c.bbox))
+        .collect()
+}
+
 fn word_texts(tp: &TextPage) -> Vec<String> {
     words(tp).iter().map(|w| w.text.clone()).collect()
 }
@@ -547,6 +558,40 @@ fn words_031_tracking_deduction_is_bounded() {
         b"BT /F1 12 Tf 3 Tc 72 700 Td (***) Tj ET",
     );
     assert_eq!(word_texts(&tp), vec!["*", "*", "*"]);
+}
+
+#[test]
+fn words_032_synthesized_space_cell_spans_the_seam() {
+    // A synthesized word space stands for a real gap but carried a zero-width
+    // cell at the next word's origin, so `rawdict` reported a seam of nothing
+    // where MuPDF reports the seam it actually bridges (it hands its synthetic
+    // space the pen position it left off at and the new glyph's origin). Here
+    // the `-600` kern at 12pt opens 7.2pt between `B` and `C`.
+    let tp = textpage_e2e(
+        winansi_type1("Helvetica", 32, &HELV),
+        b"BT /F1 12 Tf 72 700 Td [(AB) -600 (CD)] TJ ET",
+    );
+    let cs = chars(&tp);
+    let texts: String = cs.iter().map(|(c, _)| *c).collect();
+    assert_eq!(texts, "AB CD");
+    let (_, b_cell) = cs[1];
+    let (_, space) = cs[2];
+    let (_, c_cell) = cs[3];
+    assert!(
+        (space.x1 - space.x0 - 7.2).abs() < 1e-6,
+        "space cell {space:?} should be 7.2 wide"
+    );
+    assert!(
+        (space.x0 - b_cell.x1).abs() < 1e-6,
+        "{space:?} vs {b_cell:?}"
+    );
+    assert!(
+        (space.x1 - c_cell.x0).abs() < 1e-6,
+        "{space:?} vs {c_cell:?}"
+    );
+    // The cell is as tall as the glyph it precedes, and no bbox grew.
+    assert!((space.y0 - c_cell.y0).abs() < 1e-6);
+    assert!((space.y1 - c_cell.y1).abs() < 1e-6);
 }
 
 // === missing /Widths: the advance fallback chain feeds the layout ===========

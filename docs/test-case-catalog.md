@@ -1139,6 +1139,7 @@ self-built PDFs (reuse `tests/common`). No PyMuPDF files.
 | `WORDS-029` | e2e EUR-Lex sub-heading `0.1499 Tc` at `Tf 1`/`Tm 9.59` (letter gap 1.43750 vs threshold 1.43850): `[(proper) -125 (ty)] TJ` → `"property"` (PyMuPDF reads `proper ty`), while `-337` word gaps on the same tracking still split into `["Origin","and","scope"]` | PRD §8.6.2 | green |
 | `WORDS-030` | e2e the deducted `Tc` share is a device-space *vector*: the same heading under a 90°-rotated `Tm` still reads `"property"`, and `5 Tc` under `50 Tz` deducts the `Th`-scaled 2.5pt so `text`/`block` each stay whole and the `-600` word gap survives | PRD §8.6.2 | green |
 | `WORDS-031` | e2e the deduction is bounded: `6 Tc` (0.5 em) @12pt is a row of tokens → `["O","R","E","G","O","N"]`; `3 Tc` (0.25 em) is tracking → `["OREGON"]`; `3 Tc (***)` joins no letters → `["*","*","*"]` | PRD §8.6.2 | green |
+| `WORDS-032` | e2e `[(AB) -600 (CD)] TJ` @12pt: the synthesized space's char cell spans the seam it bridges — 7.2pt wide, flush against `B`'s trailing edge and `C`'s origin, as tall as `C` (was a zero-width marker) | PRD §8.6.2 | green |
 
 ### Span flags (`layout.rs`) — `LAYOUT-FLAGS-*`
 
