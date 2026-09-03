@@ -56,6 +56,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import statistics
 import subprocess
 import sys
@@ -77,6 +78,19 @@ if str(GT_DIR) not in sys.path:
 METRICS = ("lev", "f1", "jaccard", "order")
 # The three extractors we score, in display order. "pdfspine" is ours.
 EXTRACTORS = ("pdfspine", "pymupdf", "pdfminer")
+
+# --- Corpus pairing sanity check (see pairing_verdict) ----------------------- #
+# A doc is quarantined when EVERY extractor that produced substantial text still
+# disagrees with the ground truth. Calibrated on the measured PMC subset: the
+# seven correctly-paired docs score max-jaccard 0.506..0.871, the five mis-paired
+# PLoS synopsis docs score 0.116..0.178, and nothing lands in between. 0.30 sits
+# in the geometric middle of that empty band — 1.69x above the worst mis-pairing
+# and 1.69x below the tightest genuine doc.
+PAIRING_MIN_JACCARD = 0.30
+# Below this many characters an extractor "failed to extract" rather than
+# "extracted something that disagrees"; such docs are a real extractor weakness
+# and MUST keep counting against us instead of being quarantined.
+PAIRING_MIN_CHARS = 500
 
 
 # --------------------------------------------------------------------------- #
@@ -148,6 +162,45 @@ def resolve_ground_truth(entry: dict, manifest_dir: Path) -> str:
         nxml_to_text = _import_nxml_to_text()
         return nxml_to_text(p.read_bytes())
     raise ValueError("manifest entry has neither 'gt_text' nor 'nxml'")
+
+
+def pairing_verdict(rec: dict) -> dict:
+    """Decide whether a record's PDF and ground truth are actually the same document.
+
+    Extractors do not invent text. So when all three of them independently return
+    plenty of text and *all three* still overlap the ground truth barely, the
+    corpus pairing is wrong — not the extractor. Such a doc carries no diagnostic
+    signal (its `order` score is computed over a handful of matched tokens and
+    trends to 1.0), so it is quarantined out of every aggregate and reported
+    separately instead of being silently averaged in.
+
+    Deliberately conservative: a doc where an extractor returned little or no text
+    is an extractor failure and stays in the aggregates (see PAIRING_MIN_CHARS).
+
+    Returns ``{"suspect": bool, "max_jaccard": float|None, "reason": str}``.
+    """
+    scores = rec.get("scores") or {}
+    chars = rec.get("extract_chars") or {}
+    jaccards = [
+        scores[ex]["jaccard"]
+        for ex in EXTRACTORS
+        if scores.get(ex)
+        and scores[ex].get("jaccard") is not None
+        and (chars.get(ex) or 0) >= PAIRING_MIN_CHARS
+    ]
+    if not jaccards:
+        return {"suspect": False, "max_jaccard": None, "reason": "no substantial extraction"}
+    best = max(jaccards)
+    if best >= PAIRING_MIN_JACCARD:
+        return {"suspect": False, "max_jaccard": best, "reason": "ok"}
+    return {
+        "suspect": True,
+        "max_jaccard": best,
+        "reason": (
+            f"every extractor overlaps the ground truth by jaccard <= {best:.3f} "
+            f"(< {PAIRING_MIN_JACCARD}) while extracting >= {PAIRING_MIN_CHARS} chars"
+        ),
+    }
 
 
 def normalize_scores(raw: dict | None) -> dict:
@@ -272,6 +325,13 @@ def process_entry(
         "pdf": pdf_raw,
         "gt_chars": None,
         "scores": {ex: None for ex in EXTRACTORS},
+        # Extracted-text *lengths* only — never the text itself (no PyMuPDF
+        # output is ever committed). Feeds the pairing sanity check.
+        "extract_chars": {ex: None for ex in EXTRACTORS},
+        # Fraction of ground-truth tokens present in each extractor's output.
+        # ~1.0 with a low jaccard means "the PDF is a superset of the truth",
+        # i.e. the manifest paired a whole section PDF with one article's XML.
+        "gt_coverage": {ex: None for ex in EXTRACTORS},
         "errors": {},
         "skipped": False,
     }
@@ -309,10 +369,15 @@ def process_entry(
             rec["errors"][name] = e
 
     # Score each available extractor vs ground truth.
+    gt_tokens = set(re.findall(r"\w+", (gt_text or "").lower()))
     for ex in EXTRACTORS:
         t = texts.get(ex)
         if t is None:
             continue
+        rec["extract_chars"][ex] = len(t)
+        if gt_tokens:
+            hyp_tokens = set(re.findall(r"\w+", t.lower()))
+            rec["gt_coverage"][ex] = round(len(gt_tokens & hyp_tokens) / len(gt_tokens), 4)
         try:
             # score_all(hyp, ref): the extractor output `t` is the hypothesis,
             # gt_text is the reference. (Symmetric metrics lev/f1/jaccard/order
@@ -429,9 +494,16 @@ def render_report(payload: dict) -> str:
     # Overall headline
     a("## 1. Headline — all docs")
     a("")
+    n_suspect = payload.get("n_pairing_suspect", 0)
     a(f"Corpus: **{payload['n_docs']}** documents "
       f"({payload['n_scored']} with at least one extractor scored, "
-      f"{payload['n_skipped']} skipped).")
+      f"{payload['n_skipped']} skipped"
+      + (f", {n_suspect} quarantined as corpus mis-pairings" if n_suspect else "")
+      + ").")
+    if n_suspect:
+        a("")
+        a(f"Aggregates below cover the **{payload['n_docs'] - n_suspect} correctly-paired** "
+          "documents only — see the corpus pairing warnings section.")
     a("")
     L.extend(_headline_table(payload["aggregate"]))
     a("")
@@ -443,7 +515,9 @@ def render_report(payload: dict) -> str:
         a("")
         for label in sorted(subsets):
             sub = subsets[label]
-            a(f"### {label} — {sub['n']} docs")
+            quarantined = sub.get("n_pairing_suspect", 0)
+            suffix = f" (+{quarantined} quarantined)" if quarantined else ""
+            a(f"### {label} — {sub['n']} docs{suffix}")
             a("")
             L.extend(_headline_table(sub["aggregate"]))
             a("")
@@ -485,6 +559,32 @@ def render_report(payload: dict) -> str:
             a("")
     sect += 1
 
+    # Corpus pairing warnings — never silently drop a quarantined doc.
+    suspects = payload.get("pairing_suspect") or []
+    if suspects:
+        a(f"## {sect}. Corpus pairing warnings (excluded from all aggregates)")
+        a("")
+        a("These documents' PDF and ground truth are not the same document: every "
+          f"extractor overlapped the truth by jaccard < {payload.get('pairing_min_jaccard')} "
+          "while extracting plenty of text. A `gt coverage` near 1.0 means the PDF is a "
+          "*superset* of the ground truth — typically a whole multi-article section PDF "
+          "paired with one article's XML. Their scores carry no diagnostic signal (the "
+          "`order` metric in particular trends to 1.0 over a handful of matched tokens), "
+          "so they are excluded from the headline, the per-subset tables and the "
+          "head-to-head above.")
+        a("")
+        a("| doc | subset | gt chars | extracted chars (o/f/p) | max jaccard | max gt coverage |")
+        a("|---|---|---|---|---|---|")
+        for s in suspects:
+            ec = s.get("extract_chars") or {}
+            chars = "/".join(
+                str(ec.get(ex)) if ec.get(ex) is not None else "—" for ex in EXTRACTORS
+            )
+            a(f"| `{s['id']}` | {s['subset']} | {s.get('gt_chars') if s.get('gt_chars') is not None else '—'} "
+              f"| {chars} | {_fmt(s.get('max_jaccard'))} | {_fmt(s.get('max_gt_coverage'))} |")
+        a("")
+        sect += 1
+
     # Per-document table
     a(f"## {sect}. Per-document scores")
     a("")
@@ -502,6 +602,8 @@ def render_report(payload: dict) -> str:
         notes = ""
         if r.get("skipped"):
             notes = "SKIPPED: " + "; ".join(f"{k}={v}" for k, v in (r.get("errors") or {}).items())
+        elif (r.get("pairing") or {}).get("suspect"):
+            notes = "QUARANTINED (corpus mis-pairing): " + r["pairing"]["reason"]
         elif r.get("errors"):
             notes = "; ".join(f"{k}: {v}" for k, v in r["errors"].items())
         notes = notes[:120]
@@ -529,13 +631,22 @@ def build_payload(records: list[dict], oracle_available: bool) -> dict:
     scored = [r for r in records if not r.get("skipped")]
     skipped = [r for r in records if r.get("skipped")]
 
+    # Quarantine mis-paired corpus entries: they stay in ``records`` (so the
+    # per-doc table and the warning section can show them) but are kept out of
+    # every aggregate and out of the head-to-head.
+    for r in records:
+        r["pairing"] = pairing_verdict(r)
+    suspect = [r for r in records if r["pairing"]["suspect"]]
+    clean = [r for r in records if not r["pairing"]["suspect"]]
+
     by_subset: dict[str, dict] = {}
     subsets = sorted({r["subset"] for r in records})
     for label in subsets:
-        subset_recs = [r for r in records if r["subset"] == label]
+        subset_clean = [r for r in clean if r["subset"] == label]
         by_subset[label] = {
-            "n": len(subset_recs),
-            "aggregate": aggregate(subset_recs),
+            "n": len(subset_clean),
+            "n_pairing_suspect": sum(1 for r in suspect if r["subset"] == label),
+            "aggregate": aggregate(subset_clean),
         }
 
     return {
@@ -544,9 +655,26 @@ def build_payload(records: list[dict], oracle_available: bool) -> dict:
         "n_docs": len(records),
         "n_scored": len(scored),
         "n_skipped": len(skipped),
-        "aggregate": aggregate(records),
+        "n_pairing_suspect": len(suspect),
+        "pairing_min_jaccard": PAIRING_MIN_JACCARD,
+        "pairing_suspect": [
+            {
+                "id": r["id"],
+                "subset": r["subset"],
+                "gt_chars": r.get("gt_chars"),
+                "max_jaccard": r["pairing"]["max_jaccard"],
+                "max_gt_coverage": max(
+                    (v for v in (r.get("gt_coverage") or {}).values() if v is not None),
+                    default=None,
+                ),
+                "extract_chars": r.get("extract_chars"),
+                "reason": r["pairing"]["reason"],
+            }
+            for r in suspect
+        ],
+        "aggregate": aggregate(clean),
         "by_subset": by_subset,
-        "head_to_head": head_to_head(records, metric="order"),
+        "head_to_head": head_to_head(clean, metric="order"),
         "records": records,
     }
 
@@ -708,9 +836,15 @@ def _selftest() -> int:
 
     gt1 = "the quick brown fox jumps over the lazy dog"
     gt2 = "left column text right column text continues here"
+    # Doc 3 reproduces the PMC synopsis mis-pairing: the ground truth is one short
+    # article but the PDF is the whole multi-article section, so EVERY extractor
+    # returns a big superset of the truth and all three score a low jaccard.
+    gt3 = "borneo elephants a high priority for conservation"
+    section3 = gt3 + " " + " ".join(f"unrelated{i}" for i in range(200))
 
     # Doc 1: pdfspine perfect, fitz slightly worse order, pdfminer worse.
     # Doc 2: pdfspine better order than fitz (multi-column win), pdfminer worst.
+    # Doc 3: corpus mis-pairing — must be excluded from every aggregate.
     fake = {
         "doc1": {
             "gt": gt1,
@@ -724,6 +858,12 @@ def _selftest() -> int:
             "pymupdf": "left right column column text text continues here",  # column-mixed
             "pdfminer": "right column text left column text continues here",  # swapped
         },
+        "doc3": {
+            "gt": gt3,
+            "pdfspine": section3,
+            "pymupdf": section3,
+            "pdfminer": section3,
+        },
     }
 
     records: list[dict] = []
@@ -734,6 +874,8 @@ def _selftest() -> int:
             "pdf": f"{doc_id}.pdf",
             "gt_chars": len(d["gt"]),
             "scores": {ex: None for ex in EXTRACTORS},
+            "extract_chars": {ex: len(d[ex]) for ex in EXTRACTORS},
+            "gt_coverage": {ex: 1.0 for ex in EXTRACTORS},
             "errors": {},
             "skipped": False,
         }
@@ -741,7 +883,28 @@ def _selftest() -> int:
             rec["scores"][ex] = normalize_scores(fake_score_all(d["gt"], d[ex]))
         records.append(rec)
 
+    # --- pairing sanity check (P0: corpus mis-pairing must not pollute metrics) ---
+    assert pairing_verdict(records[2])["suspect"] is True, records[2]
+    for r in records[:2]:
+        assert pairing_verdict(r)["suspect"] is False, r
+    # A short/garbage extractor output is an EXTRACTOR failure, not a corpus
+    # mis-pairing: it must stay in the aggregates rather than be silently dropped.
+    broken = {
+        "id": "broken",
+        "subset": "selftest",
+        "extract_chars": {ex: 40 for ex in EXTRACTORS},
+        "scores": {ex: normalize_scores({"lev": 0.0, "f1": 0.0, "jaccard": 0.0, "order": 0.0})
+                   for ex in EXTRACTORS},
+        "skipped": False,
+    }
+    assert pairing_verdict(broken)["suspect"] is False, broken
+
     payload = build_payload(records, oracle_available=False)
+
+    # doc3 is quarantined: reported, but out of every aggregate.
+    assert payload["n_pairing_suspect"] == 1, payload["n_pairing_suspect"]
+    assert [d["id"] for d in payload["pairing_suspect"]] == ["doc3"], payload["pairing_suspect"]
+    assert payload["n_docs"] == 3, payload["n_docs"]
 
     # --- assertions on aggregation ---
     agg = payload["aggregate"]
@@ -778,9 +941,10 @@ def _selftest() -> int:
     assert h["fitz_gt_pdfspine"] == 0, h
     assert len(h["wins"]) == 2 and not h["losses"], h
 
-    # --- by_subset present ---
+    # --- by_subset present (suspect docs excluded there too) ---
     assert "selftest" in payload["by_subset"], payload["by_subset"].keys()
     assert payload["by_subset"]["selftest"]["n"] == 2
+    assert payload["by_subset"]["selftest"]["n_pairing_suspect"] == 1
 
     # --- markdown renders + writes ---
     md = render_report(payload)
@@ -789,6 +953,9 @@ def _selftest() -> int:
     assert "**pdfspine**" in md
     assert "pymupdf" in md and "pdfminer" in md
     assert "doc1" in md and "doc2" in md
+    # The quarantined doc is loudly reported, never silently dropped.
+    assert "Corpus pairing warnings" in md
+    assert "doc3" in md
 
     with tempfile.TemporaryDirectory() as td:
         tdp = Path(td)

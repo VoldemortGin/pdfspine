@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import http.client
 import io
 import json
@@ -314,6 +315,7 @@ def fetch_commercial_sample(
     # 2. Download / extract each, caching to disk.
     manifest: list[dict] = []
     seen_pmcids: set[str] = set()
+    seen_pdfs: dict[str, str] = {}  # pdf sha256 -> first PMCID that claimed it
     for cand in candidates:
         if len(manifest) >= n:
             break
@@ -325,6 +327,10 @@ def fetch_commercial_sample(
         nxml_path = out_dir / f"{pmcid}.nxml"
 
         if pdf_path.exists() and nxml_path.exists() and pdf_path.stat().st_size > 0:
+            owner = _claim_pdf(seen_pdfs, pdf_path.read_bytes(), pmcid)
+            if owner is not None:
+                log(f"  SKIP   {pmcid} — shares its PDF with {owner} (section PDF, not an article)")
+                continue
             log(f"  CACHED {pmcid} ({cand['license']})")
             manifest.append(_entry(pmcid, pdf_path, nxml_path, cand["license"]))
             continue
@@ -339,6 +345,10 @@ def fetch_commercial_sample(
             log(f"  SKIP   {pmcid} — tarball missing pdf or nxml")
             continue
         pdf_bytes, nxml_bytes = extracted
+        owner = _claim_pdf(seen_pdfs, pdf_bytes, pmcid)
+        if owner is not None:
+            log(f"  SKIP   {pmcid} — shares its PDF with {owner} (section PDF, not an article)")
+            continue
         pdf_path.write_bytes(pdf_bytes)
         nxml_path.write_bytes(nxml_bytes)
         log(f"  OK     {pmcid} ({cand['license']}) pdf={len(pdf_bytes):,}B nxml={len(nxml_bytes):,}B "
@@ -348,6 +358,24 @@ def fetch_commercial_sample(
     _write_manifest(out_dir, manifest)
     log(f"\nFetched {len(manifest)} article(s) -> {out_dir / 'manifest.json'}")
     return manifest
+
+
+def _claim_pdf(seen: dict[str, str], pdf_bytes: bytes, pmcid: str) -> str | None:
+    """Register ``pmcid`` as the owner of this PDF; return the prior owner if taken.
+
+    Two OA articles must never share one PDF. Some journals (PLoS Biology vol. 1,
+    for instance) publish a whole multi-article "Research Digest" section as a
+    single PDF and attach it to *every* synopsis in that section; pairing such a
+    PDF with one article's ``.nxml`` yields ground truth that is a tiny fraction
+    of the PDF's text, which makes every accuracy metric meaningless. Keeping only
+    the first claimant drops those entries at the source.
+    """
+    digest = hashlib.sha256(pdf_bytes).hexdigest()
+    owner = seen.get(digest)
+    if owner is not None:
+        return owner
+    seen[digest] = pmcid
+    return None
 
 
 def _entry(pmcid: str, pdf: Path, nxml: Path, license_: str) -> dict:
@@ -399,6 +427,14 @@ def _self_test() -> int:
              "PMC193604/pbio.0000013.nxml"]
     assert _pick_main_pdf(names) == "PMC193604/pbio.0000013.pdf", "main-PDF heuristic wrong"
     assert _pick_main_pdf(["a/PMC42.pdf", "a/x.sup.pdf"]) == "a/PMC42.pdf", "PMCID-named PDF not preferred"
+
+    # shared-PDF rejection (offline): two articles must never claim one PDF ------
+    seen: dict[str, str] = {}
+    section = b"%PDF-1.4 whole research digest section"
+    assert _claim_pdf(seen, section, "PMC176547") is None, "first claimant must be accepted"
+    assert _claim_pdf(seen, section, "PMC193606") == "PMC176547", "shared PDF not rejected"
+    assert _claim_pdf(seen, b"%PDF-1.4 a real article", "PMC176545") is None, \
+        "a distinct PDF must still be accepted"
 
     # CSV column parsing on an in-memory sample (no network) --------------------
     sample_csv = (
