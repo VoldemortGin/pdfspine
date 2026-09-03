@@ -271,7 +271,8 @@ fn interp_021_type0_identity_v_vertical_writing() {
     let tounicode: &[u8] = b"/CIDInit /ProcSet findresource begin 12 dict begin begincmap \
         1 begincodespacerange <0000> <FFFF> endcodespacerange \
         2 beginbfchar <0001> <4E2D> <0002> <6587> endbfchar endcmap end end";
-    let (doc, page) = build_type0_vertical_doc(tounicode);
+    let (doc, page) =
+        build_type0_vertical_doc(tounicode, b"BT /F1 24 Tf 300 700 Td <00010002> Tj ET");
     let res = ContentInterpreter::new(&doc).run_page(&page);
     assert_eq!(res.glyphs.len(), 2);
     let (g0, g1) = (&res.glyphs[0], &res.glyphs[1]);
@@ -341,7 +342,10 @@ fn build_type0_doc(tounicode: &[u8]) -> (pdf_core::DocumentStore, pdf_core::Dict
 }
 
 /// Builds an Identity-V Type0 doc showing two stacked 2-byte codes at (300,700).
-fn build_type0_vertical_doc(tounicode: &[u8]) -> (pdf_core::DocumentStore, pdf_core::Dict) {
+fn build_type0_vertical_doc(
+    tounicode: &[u8],
+    content: &[u8],
+) -> (pdf_core::DocumentStore, pdf_core::Dict) {
     let mut pd = PageDoc::new();
     let tu_num = pd.add(raw_stream([], tounicode));
     let cidfont = Object::Dictionary(dict([
@@ -377,11 +381,69 @@ fn build_type0_vertical_doc(tounicode: &[u8]) -> (pdf_core::DocumentStore, pdf_c
         ("DescendantFonts", Object::Array(vec![rref(cid_num, 0)])),
         ("ToUnicode", rref(tu_num, 0)),
     ]));
-    let (doc, page) = pd
-        .font("F1", type0)
-        .content(b"BT /F1 24 Tf 300 700 Td <00010002> Tj ET")
-        .open();
+    let (doc, page) = pd.font("F1", type0).content(content).open();
     (doc, page)
+}
+
+// === INTERP-022/023/024: the `Tc`/`Tw` share of the advance ===============
+
+/// Asserts a glyph's `spacing_advance` vector.
+fn assert_spacing(g: &pdf_text::PositionedGlyph, x: f64, y: f64) {
+    approx(g.spacing_advance.0, x, 1e-9);
+    approx(g.spacing_advance.1, y, 1e-9);
+}
+
+#[test]
+fn interp_022_spacing_advance_is_tc_plus_tw_scaled_by_tz() {
+    // `3 Tc`, `20 Tw`, `50 Tz` (Th = 0.5): every glyph's spacing share is
+    // `Tc*Th = 1.5`; only the single-byte space adds `Tw`, giving `23*0.5`.
+    let content = b"BT /F1 10 Tf 3 Tc 20 Tw 50 Tz 0 0 Td (A B) Tj ET";
+    let res = run_with_font(font_w500(), content);
+    assert_eq!(glyph_text(&res), "A B");
+    assert_spacing(&res.glyphs[0], 1.5, 0.0);
+    assert_spacing(&res.glyphs[1], 11.5, 0.0);
+    assert_spacing(&res.glyphs[2], 1.5, 0.0);
+    // ...and it really is the pen displacement: 'A' advances (5 + 3)*0.5 = 4,
+    // the space (5 + 3 + 20)*0.5 = 14.
+    assert_origin(&res.glyphs[1], 4.0, 0.0, 1e-9);
+    assert_origin(&res.glyphs[2], 18.0, 0.0, 1e-9);
+}
+
+#[test]
+fn interp_023_spacing_advance_follows_tm_rotation_and_skew() {
+    // A 90-degree-rotated `Tm` scaled by 12 turns the text-space `2 Tc`
+    // displacement into `(0, 24)` in user space - it must ride `Tm*CTM`, not a
+    // scalar.
+    let rotated = b"BT /F1 1 Tf 0 12 -12 0 100 700 Tm 2 Tc (AB) Tj ET";
+    let res = run_with_font(font_w500(), rotated);
+    assert_spacing(&res.glyphs[0], 0.0, 24.0);
+    // Advance = (0.5 + 2)*12 = 30 along +y (the rotated text x-axis).
+    assert_origin(&res.glyphs[1], 100.0, 730.0, 1e-9);
+
+    // A sheared (fake-italic) `Tm` tilts the y-axis only, so the spacing share
+    // stays on the text x-axis: `2 Tc` -> `(24, 0)`.
+    let sheared = b"BT /F1 1 Tf 12 0 6 12 100 700 Tm 2 Tc (AB) Tj ET";
+    let res = run_with_font(font_w500(), sheared);
+    assert_spacing(&res.glyphs[0], 24.0, 0.0);
+    assert_origin(&res.glyphs[1], 130.0, 700.0, 1e-9);
+}
+
+#[test]
+fn interp_024_vertical_spacing_advance_is_on_the_text_y_axis() {
+    // Vertical writing: `ty = w1y*Tfs + Tc + Tw`, with no `Th`. `3 Tc` under a
+    // `50 Tz` therefore still displaces the pen by 3 along the text y-axis.
+    let tounicode: &[u8] = b"/CIDInit /ProcSet findresource begin 12 dict begin begincmap \
+        1 begincodespacerange <0000> <FFFF> endcodespacerange \
+        2 beginbfchar <0001> <4E2D> <0002> <6587> endbfchar endcmap end end";
+    let (doc, page) = build_type0_vertical_doc(
+        tounicode,
+        b"BT /F1 24 Tf 50 Tz 3 Tc 300 700 Td <00010002> Tj ET",
+    );
+    let res = ContentInterpreter::new(&doc).run_page(&page);
+    assert_eq!(res.glyphs.len(), 2);
+    assert_spacing(&res.glyphs[0], 0.0, 3.0);
+    // Advance ty = -1.0*24 + 3 = -21 -> the second glyph sits 21 below.
+    assert!((res.glyphs[1].origin.y - (700.0 - 21.0)).abs() < 1e-6);
 }
 
 // === TRM-001: Trm = params·Tm·CTM; origin = (0,0)·Trm =====================

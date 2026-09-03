@@ -919,6 +919,7 @@ mod tests {
             render_mode: mode,
             writing_dir: WritingDir::Horizontal,
             advance_dir: (1.0, 0.0),
+            spacing_advance: (0.0, 0.0),
             ascender: 0.8,
             descender: -0.2,
         }

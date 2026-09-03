@@ -59,6 +59,15 @@ pub struct PositionedGlyph {
     /// per-page vector) so rotated runs cluster along their own baseline instead of
     /// shattering into one char per line.
     pub advance_dir: (f64, f64),
+    /// The part of this glyph's advance that the **text-state spacing operands**
+    /// already explain — `Tc` (character spacing) plus `Tw` (word spacing, only
+    /// for a single-byte code 32) — as a displacement **vector in PDF user
+    /// space**. Horizontal writing contributes `(Tc + Tw)·Th` along the text
+    /// x-axis, vertical writing `Tc + Tw` along the text y-axis (`Th` does not
+    /// apply); both are carried through `Tm·CTM`, so rotation / skew / `Tz` /
+    /// matrix scaling stay exact. Layout deducts it from the inter-glyph gap so
+    /// uniform tracking never reads as a word break (PRD §8.6.2).
+    pub spacing_advance: (f64, f64),
     /// The font ascender normalized to a unit font size (`/Ascent ÷ 1000`),
     /// matching PyMuPDF's span `ascender` (PRD §8.6.2, §10.7).
     pub ascender: f64,

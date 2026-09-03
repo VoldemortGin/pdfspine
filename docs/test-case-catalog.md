@@ -967,6 +967,9 @@ font fixtures only (we control every byte; no PyMuPDF files). Tests live in
 | `INTERP-018` | fill color `g`/`rg`/`k` → packed sRGB on glyph | ISO §8.6.8 | green |
 | `INTERP-019` | multiple `/Contents` streams concatenated w/ separator | PRD §8.6.2 | green |
 | `INTERP-020` | Type0 Identity-H 2-byte show + `/W` advance | ISO §9.7.4 | green |
+| `INTERP-022` | `spacing_advance` = `(Tc + Tw)·Th` in user space (`Tw` only on single-byte 0x20; `50 Tz` halves it) | ISO §9.4.4 | green |
+| `INTERP-023` | `spacing_advance` rides `Tm·CTM`: a 90°-rotated `Tm` puts `2 Tc` on `(0, 24)`; a sheared `Tm` keeps it on the text x-axis | ISO §9.4.4 | green |
+| `INTERP-024` | vertical writing: `spacing_advance` is `Tc + Tw` on the text **y**-axis, unscaled by `Tz` | ISO §9.4.4 | green |
 
 ### Text rendering matrix + rotation envelope (`interp.rs`) — `TRM-*`
 

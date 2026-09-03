@@ -1486,6 +1486,18 @@ fn emit_glyph_into(
     let desc = cached.descent / 1000.0;
     let is_space = n_bytes == 1 && code == 0x20;
     let tw = if is_space { ts.word_spacing } else { 0.0 };
+    // The `Tc`(+`Tw`) share of this glyph's advance, as a **user-space vector**.
+    // The spacing operands displace the pen in *text* space (along x for
+    // horizontal writing, along y for vertical); `Tm·CTM` carries that
+    // displacement into user space, so rotation / skew / `Tz` / matrix scaling
+    // stay exact. Layout deducts it from the inter-glyph gap.
+    let text_to_user = Matrix::concat(tm, &gs.ctm);
+    let spacing_vector = |sx: f64, sy: f64| {
+        (
+            finite(sx * text_to_user.a + sy * text_to_user.c),
+            finite(sx * text_to_user.b + sy * text_to_user.d),
+        )
+    };
 
     if cached.wmode == 1 {
         // Vertical writing (PRD §8.6; ISO 32000-1 §9.4.4 / §9.7.4.3). The pen is
@@ -1497,6 +1509,8 @@ fn emit_glyph_into(
         let (vx, vy) = (vx / 1000.0, vy / 1000.0);
         let cell = Rect::new(-vx, desc - vy, w0 - vx, asc - vy);
         let bbox = cell.transform(&trm);
+        // Vertical advance `ty = w1y·Tfs + Tc + Tw`: no `Th`, along text y.
+        let spacing_advance = spacing_vector(0.0, ts.char_spacing + tw);
         let emitted = glyph_survives_clip(&unicode, bbox, &trm, gs.clip);
 
         if emitted {
@@ -1514,6 +1528,7 @@ fn emit_glyph_into(
                 render_mode: ts.render_mode,
                 writing_dir: WritingDir::Vertical,
                 advance_dir,
+                spacing_advance,
                 ascender: asc,
                 descender: desc,
             });
@@ -1532,6 +1547,9 @@ fn emit_glyph_into(
     // Transform the cell by Trm and take the axis-aligned envelope (correct
     // for rotated Tm).
     let bbox = cell.transform(&trm);
+    // Horizontal advance `tx = (w0·Tfs + Tc + Tw)·Th`: the spacing share carries
+    // `Th`, along text x.
+    let spacing_advance = spacing_vector((ts.char_spacing + tw) * ts.h_scale, 0.0);
     let emitted = glyph_survives_clip(&unicode, bbox, &trm, gs.clip);
 
     if emitted {
@@ -1549,6 +1567,7 @@ fn emit_glyph_into(
             render_mode: ts.render_mode,
             writing_dir: WritingDir::Horizontal,
             advance_dir,
+            spacing_advance,
             ascender: asc,
             descender: desc,
         });

@@ -35,6 +35,7 @@ fn glyph(c: char, ox: f64, oy: f64, size: f64) -> PositionedGlyph {
         render_mode: 0,
         writing_dir: WritingDir::Horizontal,
         advance_dir: (1.0, 0.0),
+        spacing_advance: (0.0, 0.0),
         ascender: 0.7,
         descender: -0.2,
     }
