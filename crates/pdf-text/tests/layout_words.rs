@@ -9,8 +9,11 @@ use pdf_core::object::ObjRef;
 use pdf_core::page::Page;
 use pdf_core::{Limits, Object};
 use pdf_text::model::WritingDir;
+use pdf_text::serialize::textflags;
 use pdf_text::serialize::to_text;
-use pdf_text::{build_textpage, textpage_from_glyphs, words, PositionedGlyph, TextPage};
+use pdf_text::{
+    build_textpage, build_textpage_flagged, textpage_from_glyphs, words, PositionedGlyph, TextPage,
+};
 use smol_str::SmolStr;
 
 use common::{
@@ -179,6 +182,13 @@ fn textpage_e2e(font: Object, content: &[u8]) -> TextPage {
     let (doc, _page) = PageDoc::new().font("F1", font).content(content).open();
     let page = Page::new(Arc::new(doc), 0, ObjRef::new(3, 0));
     build_textpage(page.document(), &page, &Limits::unbounded_decode())
+}
+
+/// Like [`textpage_e2e`], but with a PyMuPDF `TEXT_*` flag set in force.
+fn textpage_e2e_flagged(font: Object, content: &[u8], flags: u32) -> TextPage {
+    let (doc, _page) = PageDoc::new().font("F1", font).content(content).open();
+    let page = Page::new(Arc::new(doc), 0, ObjRef::new(3, 0));
+    build_textpage_flagged(page.document(), &page, &Limits::unbounded_decode(), flags)
 }
 
 /// Every char cell on the page, in reading order.
@@ -592,6 +602,36 @@ fn words_032_synthesized_space_cell_spans_the_seam() {
     // The cell is as tall as the glyph it precedes, and no bbox grew.
     assert!((space.y0 - c_cell.y0).abs() < 1e-6);
     assert!((space.y1 - c_cell.y1).abs() < 1e-6);
+}
+
+#[test]
+fn words_033_inhibit_spaces_suppresses_gap_synthesis() {
+    // `TEXT_INHIBIT_SPACES` (8) is MuPDF's "give me only the whitespace the
+    // page actually paints" -- the flag was defined here but nothing consumed
+    // it. The `-600` kern that reads as a word gap by default now synthesizes
+    // nothing, so the two words run together...
+    let kerned: &[u8] = b"BT /F1 12 Tf 72 700 Td [(AB) -600 (CD)] TJ ET";
+    let tp = textpage_e2e_flagged(
+        winansi_type1("Helvetica", 32, &HELV),
+        kerned,
+        textflags::INHIBIT_SPACES,
+    );
+    assert_eq!(to_text(&tp, 0).trim_end(), "ABCD");
+    assert_eq!(word_texts(&tp), vec!["ABCD"]);
+
+    // ...while a *literal* space glyph is untouched: the flag inhibits
+    // synthesis, it does not strip whitespace.
+    let literal: &[u8] = b"BT /F1 12 Tf 72 700 Td (AB CD) Tj ET";
+    let tp = textpage_e2e_flagged(
+        winansi_type1("Helvetica", 32, &HELV),
+        literal,
+        textflags::INHIBIT_SPACES,
+    );
+    assert_eq!(word_texts(&tp), vec!["AB", "CD"]);
+
+    // Without the flag the kerned pair splits, as WORDS-002 and friends show.
+    let tp = textpage_e2e(winansi_type1("Helvetica", 32, &HELV), kerned);
+    assert_eq!(word_texts(&tp), vec!["AB", "CD"]);
 }
 
 // === missing /Widths: the advance fallback chain feeds the layout ===========

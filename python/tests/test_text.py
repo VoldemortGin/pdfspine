@@ -472,6 +472,34 @@ def test_pytext_010_sort_orders_plain_text_by_y_then_x():
 # ==========================================================================
 
 
+def test_pytext_011_inhibit_spaces_keeps_only_painted_whitespace():
+    """``TEXT_INHIBIT_SPACES`` stops the layout synthesizing word spaces."""
+    kerned = _raw_content_pdf(
+        b"BT /F1 12 Tf 72 700 Td [(AB) -600 (CD)] TJ ET", _helvetica_font()
+    )
+    with pdfspine.open(stream=kerned, filetype="pdf") as doc:
+        page = doc[0]
+        # By default the 7.2pt kerned gap reads as a word break.
+        assert page.get_text("text").strip() == "AB CD"
+        assert [w[4] for w in page.get_text("words")] == ["AB", "CD"]
+        # With the flag nothing is synthesized -- only painted whitespace is
+        # left, and there is none.
+        flags = pdfspine.TEXT_INHIBIT_SPACES
+        assert page.get_text("text", flags=flags).strip() == "ABCD"
+        assert [w[4] for w in page.get_text("words", flags=flags)] == ["ABCD"]
+
+    # A literal space glyph is untouched: the flag inhibits synthesis, it does
+    # not strip whitespace.
+    literal = _raw_content_pdf(
+        b"BT /F1 12 Tf 72 700 Td (AB CD) Tj ET", _helvetica_font()
+    )
+    with pdfspine.open(stream=literal, filetype="pdf") as doc:
+        page = doc[0]
+        assert (
+            page.get_text("text", flags=pdfspine.TEXT_INHIBIT_SPACES).strip() == "AB CD"
+        )
+
+
 def test_pysearch_001_rect_overlaps_location():
     # PYSEARCH-001: search_for returns a Rect overlapping the known location.
     page = _page(text_pdf(["Hello World"]))

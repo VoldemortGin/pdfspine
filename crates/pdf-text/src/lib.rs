@@ -32,7 +32,8 @@ use pdf_core::{Dict, DocumentStore};
 
 pub use interp::ContentInterpreter;
 pub use layout::{
-    build_textpage, page_size, page_transform, textpage_from_glyphs, textpage_from_glyphs_clipped,
+    build_textpage, build_textpage_flagged, page_size, page_transform, textpage_from_glyphs,
+    textpage_from_glyphs_clipped, textpage_from_glyphs_flagged,
 };
 pub use model::{
     flags, Block, BlockKind, Char, DrawPath, ImageBlock, ImageRef, InterpretResult, Line,
