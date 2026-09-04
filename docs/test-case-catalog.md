@@ -2504,7 +2504,7 @@ Tests live in `crates/pdf-core/tests/ocg_unit.rs` (read) and
 | `OCG-BIND-DICT` | `set_oc` binds a dictionary object | PRD §7 | green |
 | `OCG-NOOP` | `set_layer` on a non-layered doc is a no-op | PRD §7 | green |
 
-### M7 — SVG export (`pdf_render::svg`) — `SVG-BASIC-*` / `SVG-EMPTY-*` / `SVG-ESCAPE-*` / `SVG-PROP-*`
+### M7 — SVG export (`pdf_render::svg`) — `SVG-BASIC-*` / `SVG-EMPTY-*` / `SVG-ESCAPE-*` / `SVG-PROP-*` / `SVGTRM-*`
 
 Tests live in `crates/pdf-render/tests/svg.rs`.
 
@@ -2522,6 +2522,10 @@ Tests live in `crates/pdf-render/tests/svg.rs`.
 | `SVG-ESCAPE-002` | text-fallback path escaped | PRD §7 | green |
 | `SVG-PROP-001` | arbitrary content → well-formed SVG | PRD §8.1 | green |
 | `SVG-PROP-002` | `/Rotate` swaps the viewport | PRD §7 | green |
+| `SVGTRM-001` | `2 cm` + `12 Tf` → glyph matrix `24,0,0,24,40,200` (not `12`) | PRD §7 | green |
+| `SVGTRM-002` | 90° `cm` rotation → glyph matrix `0,20,-20,0,100,70` | PRD §7 | green |
+| `SVGTRM-003` | `50 Tz` → glyph matrix `5,0,0,10,20,100` (x scale halved only) | PRD §7 | green |
+| `SVGTRM-004` | `<text>` fallback carries the rotation (`0,1,1,0,100,70`) | PRD §7 | green |
 
 ### M7 — `pdf-api` facade wiring — `TABLES-API-*` / `OCG-API-*` / `SVG-API-*`
 

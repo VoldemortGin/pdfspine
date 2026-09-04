@@ -571,3 +571,137 @@ fn svg_prop_002_rotate_swaps_viewport() {
         "rotate swaps the viewport, got:\n{svg}"
     );
 }
+
+// ============================================================================
+// SVGTRM-*: glyph transforms carry the true text rendering matrix
+// (`Trm = params · Tm · CTM`), not the scalar font size `Tfs`.
+// ============================================================================
+
+/// Every `transform="matrix(…)"` value in `svg`, in document order.
+fn transform_matrices(svg: &str) -> Vec<Vec<f64>> {
+    svg.match_indices("transform=\"matrix(")
+        .filter_map(|(i, pat)| {
+            let rest = &svg[i + pat.len()..];
+            let end = rest.find(')')?;
+            rest[..end]
+                .split(',')
+                .map(|v| v.trim().parse::<f64>().ok())
+                .collect::<Option<Vec<f64>>>()
+        })
+        .filter(|v| v.len() == 6)
+        .collect()
+}
+
+/// The glyph transform: the first matrix is the outer `<g>` page transform, the
+/// glyph's follows (these fixtures paint text only).
+fn glyph_matrix(svg: &str) -> Vec<f64> {
+    let all = transform_matrices(svg);
+    assert!(all.len() >= 2, "expected a glyph transform, got:\n{svg}");
+    all[1].clone()
+}
+
+// ============================================================================
+// SVGTRM-001: a `cm` scale multiplies into the glyph matrix (`2 cm` + `12 Tf`
+// → 24, not 12).
+// ============================================================================
+
+#[test]
+fn svgtrm_001_ctm_scale_multiplies_into_glyph_matrix() {
+    let content = b"q 2 0 0 2 0 0 cm BT /F1 12 Tf 20 100 Td (A) Tj ET Q";
+    let pdf = page_pdf_extra(
+        content,
+        "<< /Font << /F1 10 0 R >> >>",
+        0,
+        embedded_font_objs(),
+    );
+    let (doc, page) = open_page(pdf);
+    let svg = get_svg_image(&doc, &page, &SvgOptions::default()).expect("svg ok");
+    xml_well_formed(&svg).unwrap_or_else(|e| panic!("malformed: {e}\n{svg}"));
+    // Trm = [12,0,0,12,0,0] · [1,0,0,1,20,100] · [2,0,0,2,0,0] = [24,0,0,24,40,200].
+    assert_eq!(
+        glyph_matrix(&svg),
+        vec![24.0, 0.0, 0.0, 24.0, 40.0, 200.0],
+        "glyph matrix must carry Tfs·CTM = 24, got:\n{svg}"
+    );
+}
+
+// ============================================================================
+// SVGTRM-002: a 90° rotation lands in the glyph matrix's off-diagonal terms.
+// ============================================================================
+
+#[test]
+fn svgtrm_002_rotation_reaches_the_glyph_matrix() {
+    let content = b"q 0 1 -1 0 150 20 cm BT /F1 20 Tf 50 50 Td (A) Tj ET Q";
+    let pdf = page_pdf_extra(
+        content,
+        "<< /Font << /F1 10 0 R >> >>",
+        0,
+        embedded_font_objs(),
+    );
+    let (doc, page) = open_page(pdf);
+    let svg = get_svg_image(&doc, &page, &SvgOptions::default()).expect("svg ok");
+    xml_well_formed(&svg).unwrap_or_else(|e| panic!("malformed: {e}\n{svg}"));
+    // Trm = [20,0,0,20,0,0] · ([1,0,0,1,50,50] · [0,1,-1,0,150,20])
+    //     = [0,20,-20,0,100,70].
+    assert_eq!(
+        glyph_matrix(&svg),
+        vec![0.0, 20.0, -20.0, 0.0, 100.0, 70.0],
+        "rotation must reach the glyph matrix, got:\n{svg}"
+    );
+}
+
+// ============================================================================
+// SVGTRM-003: `Tz` (horizontal scaling) only scales x.
+// ============================================================================
+
+#[test]
+fn svgtrm_003_horizontal_scaling_only_scales_x() {
+    let content = b"BT /F1 10 Tf 50 Tz 20 100 Td (A) Tj ET";
+    let pdf = page_pdf_extra(
+        content,
+        "<< /Font << /F1 10 0 R >> >>",
+        0,
+        embedded_font_objs(),
+    );
+    let (doc, page) = open_page(pdf);
+    let svg = get_svg_image(&doc, &page, &SvgOptions::default()).expect("svg ok");
+    xml_well_formed(&svg).unwrap_or_else(|e| panic!("malformed: {e}\n{svg}"));
+    // params = [Tfs·Th, 0, 0, Tfs, 0, 0] = [5,0,0,10,0,0]; Tm = translate(20,100).
+    assert_eq!(
+        glyph_matrix(&svg),
+        vec![5.0, 0.0, 0.0, 10.0, 20.0, 100.0],
+        "50 Tz halves the x scale only, got:\n{svg}"
+    );
+}
+
+// ============================================================================
+// SVGTRM-004: the `<text>` fallback (no embedded program) also carries the
+// rotation / scale, not just a y-flip.
+// ============================================================================
+
+#[test]
+fn svgtrm_004_text_fallback_carries_rotation() {
+    let content = b"q 0 1 -1 0 150 20 cm BT /F1 20 Tf 50 50 Td (A) Tj ET Q";
+    let font = b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica \
+                 /Encoding /WinAnsiEncoding >>"
+        .to_vec();
+    let pdf = page_pdf_extra(content, "<< /Font << /F1 10 0 R >> >>", 0, vec![(10, font)]);
+    let (doc, page) = open_page(pdf);
+    let svg = get_svg_image(&doc, &page, &SvgOptions::default()).expect("svg ok");
+    xml_well_formed(&svg).unwrap_or_else(|e| panic!("malformed: {e}\n{svg}"));
+    assert!(
+        svg.contains("<text"),
+        "expected a <text> fallback, got:\n{svg}"
+    );
+    // Trm = [0,20,-20,0,100,70]; the `<text>` box is y-down with font-size 20, so
+    // the emitted matrix is [1/20,0,0,-1/20,0,0] · Trm = [0,1,1,0,100,70].
+    assert_eq!(
+        glyph_matrix(&svg),
+        vec![0.0, 1.0, 1.0, 0.0, 100.0, 70.0],
+        "the fallback transform must carry the rotation, got:\n{svg}"
+    );
+    assert!(
+        svg.contains("font-size=\"20\""),
+        "font-size stays the Tfs scalar, got:\n{svg}"
+    );
+}

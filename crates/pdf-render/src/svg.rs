@@ -369,7 +369,12 @@ fn write_glyph_outlines(face: &Face, run: &TextRun, body: &mut String) {
     let fill = hex_color(run.fill_color);
     let op = opacity_attr("fill-opacity", run.fill_alpha);
 
-    for (glyph, &gid) in run.glyphs.iter().zip(run.gids.iter()) {
+    // Glyphs carry their full text-rendering matrix (`Trm = params·Tm·CTM`) in
+    // parallel with `glyphs`; a run recorded without `trms` (legacy) falls back
+    // to the origin + scalar-size reconstruction.
+    let has_trms = run.trms.len() == run.glyphs.len();
+
+    for (i, (glyph, &gid)) in run.glyphs.iter().zip(run.gids.iter()).enumerate() {
         if matches!(glyph.render_mode, 3 | 7) {
             continue;
         }
@@ -384,20 +389,31 @@ fn write_glyph_outlines(face: &Face, run: &TextRun, body: &mut String) {
         if sink.d.is_empty() {
             continue;
         }
-        let s = glyph.size / upem;
-        if !s.is_finite() || s == 0.0 {
-            continue;
+        // font-unit (y-up, /upem normalized in the sink) → user space: the true
+        // `Trm`, which carries the text-matrix / CTM scale, rotation and `Tz`
+        // that the scalar `glyph.size` (pure `Tfs`) drops.
+        let m = glyph_trm(run, glyph, i, has_trms);
+        let det = m.determinant();
+        if !det.is_finite() || det == 0.0 {
+            continue; // singular transform (zero size / collapsed matrix).
         }
-        // font-unit (y-up, /upem normalized in the sink) → user space:
-        // scale by size, translate to the glyph origin.
-        let Point { x: ox, y: oy } = glyph.origin;
-        let m = Matrix::new(glyph.size, 0.0, 0.0, glyph.size, ox, oy);
         let _ = writeln!(
             body,
             "<path d=\"{}\" fill=\"{fill}\"{op} transform=\"matrix({})\"/>",
             sink.d,
             fmt_matrix(&m)
         );
+    }
+}
+
+/// Glyph `i`'s text-rendering matrix: the recorded `Trm`, or — for a legacy run
+/// carrying no `trms` — the origin + scalar-size reconstruction.
+fn glyph_trm(run: &TextRun, glyph: &PositionedGlyph, i: usize, has_trms: bool) -> Matrix {
+    if has_trms {
+        run.trms[i]
+    } else {
+        let Point { x: ox, y: oy } = glyph.origin;
+        Matrix::new(glyph.size, 0.0, 0.0, glyph.size, ox, oy)
     }
 }
 
@@ -415,9 +431,16 @@ fn write_text_fallback(run: &TextRun, body: &mut String) {
     }
     let first = &run.glyphs[0];
     let size = round2(first.size);
-    // The text element lives in the y-up user space of the outer group; flip its
-    // own y so the glyphs read upright.
-    let m = Matrix::new(1.0, 0.0, 0.0, -1.0, first.origin.x, first.origin.y);
+    // The `<text>` box is y-down with an em of `font-size`; normalizing it to a
+    // y-up unit em turns the run's `Trm` into the element transform, so the
+    // text-matrix / CTM rotation and scale survive. In the plain case this is
+    // exactly the previous `[1,0,0,-1,ox,oy]` flip.
+    let trm = glyph_trm(run, first, 0, run.trms.len() == run.glyphs.len());
+    let m = if first.size.is_finite() && first.size != 0.0 && trm.determinant().is_finite() {
+        Matrix::new(1.0 / first.size, 0.0, 0.0, -1.0 / first.size, 0.0, 0.0) * trm
+    } else {
+        Matrix::new(1.0, 0.0, 0.0, -1.0, first.origin.x, first.origin.y)
+    };
     let _ = writeln!(
         body,
         "<text x=\"0\" y=\"0\" font-size=\"{size}\" fill=\"{}\"{} transform=\"matrix({})\">{}</text>",
