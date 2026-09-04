@@ -517,3 +517,105 @@ fn layout_edge_004_empty_input_no_panic() {
     assert!(tp.blocks.is_empty());
     assert_eq!((tp.width, tp.height), (612.0, 792.0));
 }
+
+// === two-column record grids (correlation tables) =========================
+
+/// Lays one cell (`text` starting at `x`, baseline `y`) into `out`.
+fn cell(out: &mut Vec<PositionedGlyph>, text: &str, x: f64, y: f64, size: f64) {
+    for (index, ch) in text.chars().enumerate() {
+        out.push(glyph(
+            &ch.to_string(),
+            x + index as f64 * 0.5 * size,
+            y,
+            size,
+        ));
+    }
+}
+
+fn ordered_block_texts(tp: &pdf_text::model::TextPage) -> Vec<String> {
+    tp.blocks
+        .iter()
+        .filter(|b| b.kind == BlockKind::Text)
+        .map(|b| {
+            b.lines
+                .iter()
+                .flat_map(|line| line.spans.iter())
+                .map(|span| span.text.as_str())
+                .collect()
+        })
+        .collect()
+}
+
+/// Builds a two-column grid painted row-major: `rows` rows at `pitch`×`size`
+/// baseline spacing, left cells at x=68 and right cells at x=303. When
+/// `unpaired` is set every fourth row has no right cell (the empty-cell form of
+/// a real correlation table).
+fn two_column_grid(rows: usize, pitch: f64, unpaired: bool) -> Vec<PositionedGlyph> {
+    let size = 10.0;
+    let mut gs = Vec::new();
+    for row in 0..rows {
+        let baseline = 720.0 - row as f64 * pitch * size;
+        cell(
+            &mut gs,
+            &format!("Article-{row:02}-old"),
+            68.0,
+            baseline,
+            size,
+        );
+        if !(unpaired && row % 4 == 3) {
+            cell(
+                &mut gs,
+                &format!("Article-{row:02}-new"),
+                303.0,
+                baseline,
+                size,
+            );
+        }
+    }
+    gs
+}
+
+/// LAYOUT-ORDER-004: a two-column correlation table (the EUR-Lex annex form —
+/// cells far apart, rows spaced well beyond the prose leading, and rows whose
+/// right cell is empty) must read **row-major**, the way the page is painted.
+/// The XY-cut would otherwise emit the whole left column and then the whole
+/// right one, which is where pdfspine diverged from the official text.
+#[test]
+fn layout_order_004_two_column_record_grid_reads_row_major() {
+    let tp = textpage_from_glyphs(&two_column_grid(14, 2.1, true), &[], letter(), 0);
+    let want: Vec<String> = (0..14)
+        .map(|row| {
+            if row % 4 == 3 {
+                format!("Article-{row:02}-old")
+            } else {
+                format!("Article-{row:02}-oldArticle-{row:02}-new")
+            }
+        })
+        .collect();
+    assert_eq!(ordered_block_texts(&tp), want);
+}
+
+/// LAYOUT-ORDER-005: two-column prose at an ordinary leading keeps column-major
+/// order even when painted row-major. The record-grid path must not swallow it.
+#[test]
+fn layout_order_005_two_column_prose_stays_column_major() {
+    let tp = textpage_from_glyphs(&two_column_grid(14, 1.2, false), &[], letter(), 0);
+    let joined = ordered_block_texts(&tp).join("|");
+    assert!(
+        joined.find("Article-13-old").unwrap() < joined.find("Article-00-new").unwrap(),
+        "two-column prose read row-major: {joined}"
+    );
+}
+
+/// LAYOUT-ORDER-006: a table-pitch two-column layout whose rows are *all*
+/// paired stays column-major — with no empty cell anywhere the two columns are
+/// indistinguishable from two parallel text flows.
+#[test]
+fn layout_order_006_fully_paired_columns_stay_column_major() {
+    let tp = textpage_from_glyphs(&two_column_grid(14, 2.1, false), &[], letter(), 0);
+    let joined = ordered_block_texts(&tp).join("|");
+    assert!(
+        joined.find("Article-13-old").unwrap() < joined.find("Article-00-new").unwrap(),
+        "fully paired columns read row-major: {joined}"
+    );
+}

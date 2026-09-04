@@ -113,6 +113,20 @@ const TABLE_BASELINE_TOL_FRAC: f64 = 0.1;
 const TABLE_BASELINE_TOL_MIN: f64 = 0.5;
 const TABLE_BASELINE_TOL_MAX: f64 = 2.0;
 
+/// Minimum evidence for the two-column **record grid** — the correlation-table
+/// form that closes an EU legal act ("this Regulation" ↔ "the repealed
+/// Directive"). Cells sit in exactly two columns, so no baseline ever carries
+/// the three cells the seeded rule needs, yet the page is painted row by row and
+/// reads row-major. Every threshold below is there to rule out two-column prose,
+/// which has the same paired-baseline shape: prose rows sit at the leading
+/// (≈1.2× the type size, never 1.6×), prose columns are separated by a gutter of
+/// a few ems rather than a third of the page, and two parallel prose flows never
+/// leave a row half empty.
+const TABLE_GRID_MIN_PAIRED_BASELINES: usize = 8;
+const TABLE_GRID_MAX_PAIRED_FRAC: f64 = 0.9;
+const TABLE_GRID_MIN_ROW_PITCH_FRAC: f64 = 1.6;
+const TABLE_GRID_MIN_CELL_GAP_FRAC: f64 = 6.0;
+
 /// Minimum empty horizontal-band height used by the recursive page-region cut.
 /// This deliberately stays much larger than the paragraph-break threshold: ordinary line
 /// spacing may split PyMuPDF text blocks, but it must not split a two-column page
@@ -1661,11 +1675,18 @@ fn is_table_dominant(lines: &[Line]) -> bool {
     }
 
     let normal = (-dominant_dir.1, dominant_dir.0);
-    let mut baselines = Vec::with_capacity(dominant.len());
+    // (baseline, cell start, cell end) per line, the last two along the writing
+    // direction so a rotated page measures cell gaps on its own reading axis.
+    let mut cells: Vec<(f64, f64, f64)> = Vec::with_capacity(dominant.len());
     let mut sizes = Vec::with_capacity(dominant.len());
     for index in dominant {
         let metrics = paragraph_line_metrics(&lines[index]);
-        baselines.push(metrics.baseline_origin.x * normal.0 + metrics.baseline_origin.y * normal.1);
+        let (start, end) = advance_extent(&lines[index].bbox, dominant_dir);
+        cells.push((
+            metrics.baseline_origin.x * normal.0 + metrics.baseline_origin.y * normal.1,
+            start,
+            end,
+        ));
         sizes.push(metrics.effective_size);
     }
     let Some(typical_size) = median_finite(&mut sizes) else {
@@ -1673,20 +1694,36 @@ fn is_table_dominant(lines: &[Line]) -> bool {
     };
     let tolerance = (typical_size * TABLE_BASELINE_TOL_FRAC)
         .clamp(TABLE_BASELINE_TOL_MIN, TABLE_BASELINE_TOL_MAX);
-    baselines.sort_by(f64::total_cmp);
+    cells.sort_by(|a, b| a.0.total_cmp(&b.0));
 
     let mut dense_baselines = 0usize;
     let mut support_lines = 0usize;
+    let mut baseline_count = 0usize;
+    let mut paired_baselines = 0usize;
+    let mut row_pitches: Vec<f64> = Vec::new();
+    let mut cell_gaps: Vec<f64> = Vec::new();
+    let mut previous_anchor: Option<f64> = None;
     let mut index = 0usize;
-    while index < baselines.len() {
-        let anchor = baselines[index];
+    while index < cells.len() {
+        let anchor = cells[index].0;
         let mut end = index + 1;
-        while end < baselines.len() && baselines[end] - anchor <= tolerance {
+        while end < cells.len() && cells[end].0 - anchor <= tolerance {
             end += 1;
         }
         let cluster_size = end - index;
+        baseline_count += 1;
+        if let Some(previous) = previous_anchor {
+            row_pitches.push(anchor - previous);
+        }
+        previous_anchor = Some(anchor);
         if cluster_size >= 2 {
             support_lines += cluster_size;
+            paired_baselines += 1;
+            let mut row: Vec<(f64, f64)> = cells[index..end].iter().map(|c| (c.1, c.2)).collect();
+            row.sort_by(|a, b| a.0.total_cmp(&b.0));
+            for pair in row.windows(2) {
+                cell_gaps.push(pair[1].0 - pair[0].1);
+            }
         }
         if cluster_size >= TABLE_MIN_CELLS_PER_BASELINE {
             dense_baselines += 1;
@@ -1694,8 +1731,51 @@ fn is_table_dominant(lines: &[Line]) -> bool {
         index = end;
     }
 
-    dense_baselines >= TABLE_MIN_DENSE_BASELINES
-        && support_lines as f64 >= visible.len() as f64 * TABLE_SUPPORT_LINE_FRAC
+    let seeded = dense_baselines >= TABLE_MIN_DENSE_BASELINES
+        && support_lines as f64 >= visible.len() as f64 * TABLE_SUPPORT_LINE_FRAC;
+    seeded
+        || is_two_column_record_grid(
+            baseline_count,
+            paired_baselines,
+            &mut row_pitches,
+            &mut cell_gaps,
+            typical_size,
+        )
+}
+
+/// Whether the paired-baseline statistics describe a two-column record grid
+/// (a correlation table) rather than two columns of prose. See the
+/// `TABLE_GRID_*` constants for what each threshold rules out.
+fn is_two_column_record_grid(
+    baseline_count: usize,
+    paired_baselines: usize,
+    row_pitches: &mut Vec<f64>,
+    cell_gaps: &mut Vec<f64>,
+    typical_size: f64,
+) -> bool {
+    if paired_baselines < TABLE_GRID_MIN_PAIRED_BASELINES
+        || paired_baselines as f64 > baseline_count as f64 * TABLE_GRID_MAX_PAIRED_FRAC
+    {
+        return false;
+    }
+    let (Some(pitch), Some(gap)) = (median_finite(row_pitches), median_finite(cell_gaps)) else {
+        return false;
+    };
+    pitch >= typical_size * TABLE_GRID_MIN_ROW_PITCH_FRAC
+        && gap >= typical_size * TABLE_GRID_MIN_CELL_GAP_FRAC
+}
+
+/// A rect's extent along `dir`, as (start, end) in the writing direction.
+fn advance_extent(bbox: &Rect, dir: (f64, f64)) -> (f64, f64) {
+    let b = bbox.normalize();
+    let mut start = f64::INFINITY;
+    let mut end = f64::NEG_INFINITY;
+    for (x, y) in [(b.x0, b.y0), (b.x1, b.y0), (b.x0, b.y1), (b.x1, b.y1)] {
+        let projected = x * dir.0 + y * dir.1;
+        start = start.min(projected);
+        end = end.max(projected);
+    }
+    (start, end)
 }
 
 fn line_has_visible_text(line: &Line) -> bool {

@@ -1080,6 +1080,9 @@ self-built PDFs (reuse `tests/common`). No PyMuPDF files.
 | `LAYOUT-ORDER-001` | single column blocks ordered top-to-bottom | PRD §8.6.2 | green |
 | `LAYOUT-ORDER-002` | two-column page → XY-cut yields column-by-column order | PRD §8.6.2 | green |
 | `LAYOUT-ORDER-003` | block numbers monotonic in reading order | PRD §8.6.2 | green |
+| `LAYOUT-ORDER-004` | two-column record grid (correlation table) reads row-major | PRD §8.6.2 | green |
+| `LAYOUT-ORDER-005` | two-column prose at prose leading stays column-major | PRD §8.6.2 | green |
+| `LAYOUT-ORDER-006` | fully paired two-column layout stays column-major | PRD §8.6.2 | green |
 
 ### PyMuPDF block compatibility — `COMPAT-BLOCK-*`
 
