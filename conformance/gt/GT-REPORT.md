@@ -1,26 +1,28 @@
 # pdfspine — Objective Ground-Truth Accuracy Report
 
-_Generated: 2026-09-03T09:20:21.680087+00:00 • oracle (PyMuPDF/pdfminer) available: True_
+_Generated: 2026-09-03T13:34:26.253720+00:00 • oracle (PyMuPDF/pdfminer) available: True_
 
 Each extractor — **pdfspine**, **pymupdf** (fitz), and **pdfminer** — is scored against the SAME objective ground truth (`gt_text` or JATS `nxml` fulltext), not against another extractor. Cells show **mean / median**. Metrics: `lev` (edit similarity), `f1` (token F1), `jaccard` (word-set overlap), `order` (reading-order similarity). No PyMuPDF output is committed — only scores.
 
 ## 1. Headline — all docs
 
-Corpus: **58** documents (58 with at least one extractor scored, 0 skipped).
+Corpus: **58** documents (58 with at least one extractor scored, 0 skipped, 5 quarantined as corpus mis-pairings).
+
+Aggregates below cover the **53 correctly-paired** documents only — see the corpus pairing warnings section.
 
 | extractor | docs | lev | f1 | jaccard | order |
 |---|---|---|---|---|---|
-| **pdfspine** | 58 | 0.840 / 0.931 | 0.879 / 0.976 | 0.837 / 0.956 | 0.962 / 0.985 |
-| pymupdf | 58 | 0.848 / 0.944 | 0.879 / 0.977 | 0.836 / 0.955 | 0.983 / 0.990 |
-| pdfminer | 58 | 0.784 / 0.857 | 0.869 / 0.973 | 0.834 / 0.946 | 0.918 / 0.951 |
+| **pdfspine** | 53 | 0.905 / 0.939 | 0.945 / 0.982 | 0.901 / 0.959 | 0.975 / 0.985 |
+| pymupdf | 53 | 0.910 / 0.946 | 0.945 / 0.982 | 0.900 / 0.959 | 0.981 / 0.989 |
+| pdfminer | 53 | 0.842 / 0.875 | 0.934 / 0.982 | 0.899 / 0.947 | 0.910 / 0.948 |
 
 ## 2. Objective match/exceed vs fitz (reading order)
 
-Over **58** documents scored by both pdfspine and fitz against ground truth, on the `order` (reading-order) metric:
+Over **53** documents scored by both pdfspine and fitz against ground truth, on the `order` (reading-order) metric:
 
-- **pdfspine ≥ fitz (match or exceed): 33/58 (56.9%)**
+- **pdfspine ≥ fitz (match or exceed): 30/53 (56.6%)**
 - pdfspine strictly beats fitz: 4
-- fitz strictly beats pdfspine: 25
+- fitz strictly beats pdfspine: 23
 
 **Where pdfspine beats fitz vs ground truth:**
 
@@ -35,8 +37,6 @@ Over **58** documents scored by both pdfspine and fitz against ground truth, on 
 
 | doc | pdfspine order | fitz order | Δ |
 |---|---|---|---|
-| `PMC176547.pdf` | 0.521 | 1.000 | -0.479 |
-| `PMC212688.pdf` | 0.660 | 1.000 | -0.340 |
 | `PMC212689.pdf` | 0.599 | 0.749 | -0.150 |
 | `32014R0596_PL.pdf` | 0.942 | 0.960 | -0.018 |
 | `32011L0083_EL.pdf` | 0.974 | 0.990 | -0.016 |
@@ -45,8 +45,22 @@ Over **58** documents scored by both pdfspine and fitz against ground truth, on 
 | `32014R0596_EL.pdf` | 0.947 | 0.961 | -0.014 |
 | `32014R0596_IT.pdf` | 0.946 | 0.960 | -0.014 |
 | `32011L0083_PL.pdf` | 0.975 | 0.989 | -0.014 |
+| `32011L0083_IT.pdf` | 0.977 | 0.990 | -0.013 |
+| `32014R0596_FR.pdf` | 0.949 | 0.962 | -0.013 |
 
-## 3. Per-document scores
+## 3. Corpus pairing warnings (excluded from all aggregates)
+
+These documents' PDF and ground truth are not the same document: every extractor overlapped the truth by jaccard < 0.3 while extracting plenty of text. A `gt coverage` near 1.0 means the PDF is a *superset* of the ground truth — typically a whole multi-article section PDF paired with one article's XML. Their scores carry no diagnostic signal (the `order` metric in particular trends to 1.0 over a handful of matched tokens), so they are excluded from the headline, the per-subset tables and the head-to-head above.
+
+| doc | subset | gt chars | extracted chars (o/f/p) | max jaccard | max gt coverage |
+|---|---|---|---|---|---|
+| `PMC176547.pdf` | manifest | 1908 | 29814/29814/30312 | 0.116 | 1.000 |
+| `PMC176548.pdf` | manifest | 2715 | 29731/29814/30312 | 0.148 | 1.000 |
+| `PMC193606.pdf` | manifest | 2880 | 29814/29814/30312 | 0.137 | 1.000 |
+| `PMC193607.pdf` | manifest | 3413 | 29814/29814/30312 | 0.160 | 1.000 |
+| `PMC212688.pdf` | manifest | 3731 | 29814/29814/30312 | 0.178 | 1.000 |
+
+## 4. Per-document scores
 
 `lev` shown per extractor (o=pdfspine, f=fitz, p=pdfminer); `ord` = order metric.
 
@@ -60,15 +74,15 @@ Over **58** documents scored by both pdfspine and fitz against ground truth, on 
 | `2col-narrow-gutter.pdf` | manifest | 5120 | 0.992 | 0.992 | 0.735 | 1.000 | 1.000 | 0.741 |  |
 | `PMC176545.pdf` | manifest | 62501 | 0.791 | 0.791 | 0.767 | 0.996 | 0.996 | 0.966 |  |
 | `PMC176546.pdf` | manifest | 19968 | 0.705 | 0.705 | 0.609 | 0.995 | 0.995 | 0.858 |  |
-| `PMC176547.pdf` | manifest | 1908 | 0.063 | 0.120 | 0.118 | 0.521 | 1.000 | 1.000 |  |
-| `PMC176548.pdf` | manifest | 2715 | 0.173 | 0.172 | 0.170 | 1.000 | 1.000 | 1.000 |  |
+| `PMC176547.pdf` | manifest | 1908 | 0.063 | 0.120 | 0.118 | 0.521 | 1.000 | 1.000 | QUARANTINED (corpus mis-pairing): every extractor overlaps the ground truth by jaccard <= 0.116 (< 0.3) while extracting |
+| `PMC176548.pdf` | manifest | 2715 | 0.173 | 0.172 | 0.170 | 1.000 | 1.000 | 1.000 | QUARANTINED (corpus mis-pairing): every extractor overlaps the ground truth by jaccard <= 0.148 (< 0.3) while extracting |
 | `PMC193604.pdf` | manifest | 25748 | 0.689 | 0.690 | 0.642 | 0.993 | 0.993 | 0.924 |  |
 | `PMC193605.pdf` | manifest | 34617 | 0.777 | 0.777 | 0.743 | 0.997 | 0.997 | 0.955 |  |
-| `PMC193606.pdf` | manifest | 2880 | 0.175 | 0.175 | 0.173 | 1.000 | 1.000 | 1.000 |  |
-| `PMC193607.pdf` | manifest | 3413 | 0.202 | 0.202 | 0.202 | 0.982 | 0.982 | 1.000 |  |
+| `PMC193606.pdf` | manifest | 2880 | 0.175 | 0.175 | 0.173 | 1.000 | 1.000 | 1.000 | QUARANTINED (corpus mis-pairing): every extractor overlaps the ground truth by jaccard <= 0.137 (< 0.3) while extracting |
+| `PMC193607.pdf` | manifest | 3413 | 0.202 | 0.202 | 0.202 | 0.982 | 0.982 | 1.000 | QUARANTINED (corpus mis-pairing): every extractor overlaps the ground truth by jaccard <= 0.160 (< 0.3) while extracting |
 | `PMC212319.pdf` | manifest | 25700 | 0.754 | 0.753 | 0.675 | 0.997 | 0.996 | 0.893 |  |
 | `PMC212687.pdf` | manifest | 48479 | 0.791 | 0.791 | 0.768 | 0.997 | 0.997 | 0.967 |  |
-| `PMC212688.pdf` | manifest | 3731 | 0.148 | 0.224 | 0.221 | 0.660 | 1.000 | 1.000 |  |
+| `PMC212688.pdf` | manifest | 3731 | 0.148 | 0.224 | 0.221 | 0.660 | 1.000 | 1.000 | QUARANTINED (corpus mis-pairing): every extractor overlaps the ground truth by jaccard <= 0.178 (< 0.3) while extracting |
 | `PMC212689.pdf` | manifest | 21852 | 0.563 | 0.705 | 0.784 | 0.599 | 0.749 | 0.841 |  |
 | `32016R0679_EL.pdf` | manifest | 401422 | 0.969 | 0.969 | 0.963 | 0.995 | 0.995 | 0.992 |  |
 | `32011L0083_EL.pdf` | manifest | 115562 | 0.924 | 0.939 | 0.843 | 0.974 | 0.990 | 0.889 |  |
@@ -78,7 +92,7 @@ Over **58** documents scored by both pdfspine and fitz against ground truth, on 
 | `32016R0679_BG.pdf` | manifest | 363722 | 0.964 | 0.964 | 0.958 | 0.994 | 0.994 | 0.991 |  |
 | `32011L0083_BG.pdf` | manifest | 110036 | 0.957 | 0.961 | 0.865 | 0.985 | 0.989 | 0.891 |  |
 | `32014R0596_BG.pdf` | manifest | 224043 | 0.927 | 0.941 | 0.931 | 0.944 | 0.959 | 0.948 |  |
-| `32006L0112_BG.pdf` | manifest | 363029 | 0.958 | 0.965 | 0.824 | 0.984 | 0.991 | 0.885 |  |
+| `32006L0112_BG.pdf` | manifest | 363029 | 0.958 | 0.965 | 0.824 | 0.984 | 0.991 | 0.886 |  |
 | `32018R1725_BG.pdf` | manifest | 253921 | 0.972 | 0.972 | 0.965 | 0.981 | 0.981 | 0.974 |  |
 | `32016R0679_PL.pdf` | manifest | 364288 | 0.971 | 0.971 | 0.961 | 0.985 | 0.985 | 0.978 |  |
 | `32011L0083_PL.pdf` | manifest | 113147 | 0.933 | 0.946 | 0.846 | 0.975 | 0.989 | 0.884 |  |
