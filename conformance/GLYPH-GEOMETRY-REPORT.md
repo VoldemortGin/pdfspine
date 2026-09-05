@@ -50,8 +50,8 @@ skipped in the rebase.
 transport* (`DevGlyph`'s carried matrices/quad) and *field population* (`build_line`). They sit on
 different decision paths within the same file.
 
-Counted across 151 of 152 test targets; the outstanding target is py-bindings' `_core` unittests, which
-contributes **0 tests** (it is a PyO3 cdylib with no unit tests) and therefore cannot change the total.
+The run completed across all 152 test targets (exit code 0). The last of them, py-bindings' `_core`
+unittests, contributes 0 tests -- it is a PyO3 cdylib with no unit tests.
 
 ---
 
