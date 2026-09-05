@@ -89,11 +89,13 @@ env -u CONDA_PREFIX \
   RUSTC="$HOME/.rustup/toolchains/1.96.0-aarch64-apple-darwin/bin/rustc" \
   CARGO_TARGET_DIR=/tmp/pdfspine-combined-cov/target \
   CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 \
-  bash -euo pipefail -c '
-    source <(cargo llvm-cov show-env --export-prefix)   # RUSTC_WRAPPER + LLVM_PROFILE_FILE
+  bash -eo pipefail -c '
+    # capture-then-source: `source <(...)` breaks under `set -u`.
+    cargo llvm-cov show-env --export-prefix > /tmp/pdfspine-cov-env.sh
+    source /tmp/pdfspine-cov-env.sh                      # RUSTC_WRAPPER + LLVM_PROFILE_FILE
     cargo llvm-cov clean --workspace
     cargo test --workspace --all-features                # Rust test profraw
-    maturin develop                                      # instrumented _core.abi3.so
+    maturin develop                                      # instrumented _core.abi3.so (DEBUG)
     COVERAGE_FILE=/tmp/pdfspine-combined.coverage \
       python -m coverage run --branch --source=python/pdfspine \
       -m pytest -W error --doctest-modules python/pdfspine python/tests
@@ -177,19 +179,29 @@ Raw reports are intentionally kept outside the repository:
 - `/tmp/pdfspine-rust-9da7ca6-coverage.json`
 - `/tmp/pdfspine-rust-9da7ca6-lcov.info`
 
-The checked-in CI `coverage` job now builds this combined Rust+Python profile
-rather than the cargo-only scope: it sources the `cargo llvm-cov` instrumentation,
-`pip install -e .` builds the instrumented `_core`, and `pytest` drives it, so the
-CI LCOV carries the same Python-visible binding coverage as the table above. The
-job retains `lcov.info`, `coverage-python.xml`, and `coverage-python.json` as a
-90-day `coverage-reports` artifact, and uploads to Codecov tokenlessly via OIDC
-(`use_oidc: true` with job-level `id-token: write`), split into `rust` and
-`python` flags — replacing the 2026-09-05 upload that was rejected for lack of a
-token (the public repo has no `CODECOV_TOKEN` secret). A Python `fail_under`
-ratchet (77 — floor of the combined statement+branch total, which is what
+The checked-in CI `coverage` job builds this combined Rust+Python profile rather
+than the cargo-only scope: inside a job-local venv it sources the `cargo llvm-cov`
+instrumentation, builds the instrumented `_core` with `maturin develop`, and lets
+`pytest` drive it. The extension must be a **debug** build: `maturin develop`
+places `_core` in the target's `debug/` dir, which `cargo llvm-cov report` scans
+for objects, so the pytest-run profraw is merged; a release `pip install -e .`
+build lands in `release/`, is absent from report's `-object` list, and its
+counts are silently dropped — degrading the profile to cargo-only. The first CI
+run of an earlier `pip install -e .` variant (run `33972346887`) hit exactly
+that: it acquired an OIDC token and retained the artifact, but the LCOV showed
+`py-bindings` 0/3,465. The job now uses `maturin develop` and an `awk` guard that
+fails the step loudly if `py-bindings` has zero covered lines, so the regression
+cannot pass silently. The job retains `lcov.info`, `coverage-python.xml`, and
+`coverage-python.json` as a 90-day `coverage-reports` artifact, and uploads to
+Codecov tokenlessly via OIDC (`use_oidc: true` with job-level `id-token: write`),
+split into `rust` and `python` flags — replacing the earlier upload rejected for
+lack of a token (the public repo has no `CODECOV_TOKEN` secret). A Python
+`fail_under` ratchet (77 — floor of the combined statement+branch total that
 `coverage report` enforces under `branch = true`, minus one) is checked by
-`coverage report`. These workflow paths are staged and await their first
-post-merge run to confirm the OIDC handshake and artifact retention end to end.
-Before this work the repository contained no retained coverage artifact or
-trustworthy current percentage. The 89.3% figure in `PARITY.md` and `COMPAT.toml`
-is PyMuPDF API implementation coverage, not test coverage.
+`coverage report`. OIDC token acquisition and artifact retention are confirmed by
+run `33972346887`; the combined (non-degraded) LCOV and Codecov ingestion await
+the first post-fix run (Codecov ingestion also needs the repository activated on
+codecov.io, a one-time account action). Before this work the repository contained
+no retained coverage artifact or trustworthy current percentage. The 89.3% figure
+in `PARITY.md` and `COMPAT.toml` is PyMuPDF API implementation coverage, not test
+coverage.

@@ -106,25 +106,36 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install coverage tooling
-        run: |
-          cargo install cargo-llvm-cov --locked
-          pip install "maturin>=1.12,<2" pytest hypothesis coverage
+      - name: Install cargo-llvm-cov
+        run: cargo install cargo-llvm-cov --locked
       - name: Combined Rust+Python coverage (instrumented PyO3 extension)
         run: |
-          # Instrument BOTH the Rust workspace tests and the Python-driven PyO3
-          # extension into one profraw set. In a cargo-only profile py-bindings
-          # is 0% and pdf-api ~22% only because Python never runs; here pytest
-          # exercises the instrumented `_core` so those lines are counted.
-          source <(cargo llvm-cov show-env --export-prefix)
+          # A cargo-only profile shows py-bindings at 0% and pdf-api at ~22% only
+          # because Python never runs. Instrument the extension and drive it from
+          # pytest so those lines are counted. The extension MUST be a DEBUG
+          # (dev-profile) build: `maturin develop` puts `_core` in the target's
+          # debug/ dir alongside the `cargo test` objects that `cargo llvm-cov
+          # report` scans, so the pytest-run profraw is merged. A release
+          # `pip install -e .` build lands in release/, is absent from report's
+          # object list, and its counts are silently dropped (the profile
+          # degrades to cargo-only). `maturin develop` needs an active venv.
+          python -m venv .cov-venv
+          . .cov-venv/bin/activate
+          pip install "maturin>=1.12,<2" pytest hypothesis coverage
+          # Capture-then-source: `source <(...)` can break under strict bash.
+          cargo llvm-cov show-env --export-prefix > .cov-env.sh
+          . .cov-env.sh
           cargo llvm-cov clean --workspace
           cargo test --workspace --all-features
-          pip install -e . --no-build-isolation
+          maturin develop
           coverage run --branch --source=python/pdfspine \
             -m pytest -W error --doctest-modules python/pdfspine python/tests
           cargo llvm-cov report --lcov --output-path lcov.info
           coverage xml -o coverage-python.xml
           coverage json -o coverage-python.json
+          # Guard: fail loudly if the profile silently degraded to cargo-only
+          # (py-bindings has 0 covered lines => the pytest profraw was dropped).
+          awk '/^SF:/{p=($0 ~ /py-bindings/)} p&&/^LH:/{s+=substr($0,4)} END{n=s+0; print "py-bindings covered lines (LH sum) =", n; if(n==0){print "FATAL: combined coverage degraded to cargo-only — pytest-driven profraw was not merged"; exit 1}}' lcov.info
       - name: Upload coverage reports (durable artifact)
         if: always()
         uses: actions/upload-artifact@v4
@@ -150,7 +161,9 @@ jobs:
           flags: python
           fail_ci_if_error: false
       - name: Coverage ratchet + report (only-up fail_under)
-        run: coverage report
+        run: |
+          . .cov-venv/bin/activate
+          coverage report
       - name: cargo-mutants (in-diff)
         run: |
           cargo install cargo-mutants --locked
