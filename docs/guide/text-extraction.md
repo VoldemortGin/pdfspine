@@ -62,6 +62,173 @@ The document title comes from PDF metadata when available, then the input
 filename, and otherwise defaults to `PDF document`. Page HTML fragments are
 preserved in document order.
 
+### Glyph geometry
+
+On top of PyMuPDF's key set, `"dict"`, `"rawdict"`, `"json"` and `"rawjson"`
+publish the full rendering geometry of every span and character, so you never
+have to reverse-engineer a font size from a bbox or repair a rotated run
+yourself. Every pre-existing key (`size`, `flags`, `font`, `color`, `ascender`,
+`descender`, `origin`, `bbox`, `text`, `chars`, the line's `bbox`/`wmode`/`dir`,
+the block's `number`/`type`/`bbox`) keeps its meaning unchanged.
+
+**Span keys** (`dict`, `rawdict`, `json`, `rawjson`):
+
+| Key | Type | Space | Meaning |
+|---|---|---|---|
+| `declared_size` | `float` | — | The `Tf` operand verbatim; the same value as `size`, under an explicit name. |
+| `rendered_size` | `float` | device | `sqrt(\|a·d − b·c\|)` of `matrix` — the size actually painted. |
+| `matrix` | 6-tuple `(a, b, c, d, e, f)` | **device** | Render matrix of the span's first glyph (glyph cell → device space). |
+| `text_matrix` | 6-tuple | **PDF user** | The first glyph's `Tm`, the raw content-stream value (no page transform). |
+| `ctm` | 6-tuple | **PDF user** | The first glyph's CTM, likewise the raw user-space value. |
+| `dir` | 2-tuple | device | Unit vector along the baseline. |
+| `quad` | 8-tuple `(ul.x, ul.y, ur.x, ur.y, ll.x, ll.y, lr.x, lr.y)` | device | Directional envelope: the extent of the glyph quads along `dir` and its normal, rebuilt as four corners. Equals the `bbox` corners for upright text; hugs the run for rotated or sheared text. |
+| `seq` | `int` | — | Painting order: the smallest source-glyph index in the span. |
+
+**Char keys** (`rawdict` / `rawjson` only, in `span["chars"]`):
+
+| Key | Type | Space | Meaning |
+|---|---|---|---|
+| `matrix` | 6-tuple | **device** | The glyph's render matrix. |
+| `quad` | 8-tuple | device | The glyph cell's four true corners — a real parallelogram under rotation or shear; `bbox` is only its axis-aligned envelope. |
+| `rendered_size` | `float` | — | `sqrt(\|det\|)` of `matrix`. |
+| `seq` | `int` | — | Painting order: the glyph's index in the interpreter output. A synthesized space borrows the preceding real glyph's index, so `seq` is non-decreasing along a span. |
+| `synthetic` | `bool` | — | `True` when layout synthesized this char (an inter-word space the PDF never painted, e.g. `TJ` kerning); a space the PDF really drew is `False`. |
+
+**Line keys**: `number` (`int`, the line's reading-order index within the page,
+dense `0..n-1`; concatenating lines sorted by `number` reproduces the line order
+of `get_text("text")`) and `seq` (`int`, painting order: the smallest
+source-glyph index in the line).
+
+**Block keys**: `seq` (`int`, painting order: the smallest line `seq` in the
+block). Only text blocks (`type == 0`) carry `seq`; image blocks do not. The
+existing `number` (reading-order block index) is unchanged.
+
+`get_text("xml")` now fills `<char quad="...">` with the true quad (value for
+value the same as the `rawdict` char `quad`), in the order
+`ul.x ul.y ur.x ur.y ll.x ll.y lr.x lr.y`; it used to carry the axis-aligned
+corners derived from the bbox. This matches PyMuPDF 1.28.2, which also emits the
+real parallelogram.
+
+#### Three coordinate spaces
+
+| Space | Definition | What lives here |
+|---|---|---|
+| **PDF user space** | y up, origin bottom-left; the space the content-stream operators work in. | `text_matrix`, `ctm`. Deliberately **not** multiplied by the page transform: their job is to map an extracted glyph back to the PDF source (which operators painted it), which is impossible once the page transform is folded in. |
+| **Device space** (PyMuPDF device space) | y down, origin top-left; page rotation applied. | The existing `bbox` / `origin` / `dir`, and the new `matrix` / `quad` — same frame as `bbox` / `origin`. |
+| **Glyph cell (text space)** | The glyph's 1000-unit em space ÷ 1000: `[0, descender .. advance, ascender]` (shifted by the vertical displacement vector `−v` for vertical writing). | `matrix` is the matrix that maps this cell into device space. |
+
+Note the intentional asymmetry: **`matrix` / `quad` are device space,
+`text_matrix` / `ctm` are user space.**
+
+Matrices are 6-tuples `(a, b, c, d, e, f)` in the PDF / PyMuPDF **row-vector**
+convention, `(x, y) → (a·x + c·y + e, b·x + d·y + f)`; `m1 * m2` applies `m1`
+first, then `m2` (the same as `pdfspine.Matrix`).
+
+#### Invariants
+
+All three hold for spans and chars alike, and each is covered by a test:
+
+1. `(0, 0) · matrix == origin`
+2. the axis-aligned envelope of `quad` `== bbox`
+3. `matrix == params · text_matrix · ctm · page_transform`, with
+   `params = [Tfs·Th, 0, 0, Tfs, 0, Trise]` (`Tfs` = `declared_size`,
+   `Th` = horizontal scaling `Tz`/100, `Trise` = `Ts`) and
+   `page_transform = page.transformation_matrix` (`[1, 0, 0, -1, 0, 792]` for an
+   unrotated 612×792 page).
+
+#### `rendered_size` vs `size` (a known PyMuPDF parity difference)
+
+- `rendered_size = sqrt(|a·d − b·c|)` — MuPDF's `fz_matrix_expansion`, which is
+  exactly what PyMuPDF reports as the `dict` / `rawdict` span `size`. Pure
+  rotation and pure shear leave it unchanged; anisotropic scaling yields the
+  geometric mean of the two axes (`Tm 20 0 0 10` → `sqrt(200) ≈ 14.142136`);
+  `Tz 50` with `Tf 12` → `sqrt(72) ≈ 8.485281`.
+- Degenerate input: a singular or non-finite matrix yields `rendered_size == 0.0`
+  (no panic, no NaN / Inf); every published matrix and quad component is finite.
+- pdfspine's `span["size"]` is currently the **declared** size (the `Tf` operand,
+  `== declared_size`), whereas PyMuPDF's `span["size"]` is the **rendered** size
+  (`sqrt(|det|)`). The two agree only when all scaling is carried by `Tf`; they
+  differ whenever the scale lives in `Tm` / `cm` / `Tz`. Use `rendered_size`
+  when you want the font size (it has the same meaning as fitz's `size`); use
+  `declared_size` when you want the raw `Tf` operand.
+- `get_texttrace()`'s `size` follows a **different** definition: `|(a, b)|`, the
+  length of the x basis vector. It coincides with `rendered_size` only for
+  conformal matrices and diverges under anisotropic scaling and `Tz`. Do not mix
+  the two.
+
+#### `seq` (painting order) vs `number` (reading order)
+
+- `seq` is the content stream's painting order (source-glyph index) and exists
+  on all four levels — block, line, span, char (the enclosing levels take the
+  minimum). Use it to ask "which stroke painted this", for stable sorting, or to
+  split a span back into source order.
+- `number` is a reading-order index (block index at the block level, page line
+  index at the line level).
+- Known limitation of `number`: pdfspine's current inter-region ordering key is
+  the content stream's painting order, not a purely geometric reading order.
+  `number` therefore promises "the index in the order the engine actually emits,
+  consistent with `get_text("text")`" — **not** "the ideal geometric reading
+  order of the layout". For PDFs whose painting order is scrambled (for example
+  interleaved columns), `number` is scrambled with it. Consumers that need a
+  strict geometric reading order should sort by bbox themselves or pass
+  `sort=True`.
+
+#### Worked numbers
+
+Unrotated 612×792 page (`page_transform = [1, 0, 0, -1, 0, 792]`), a font whose
+every code is 500/1000 wide with ascent 800 and descent −200:
+
+- `BT /F1 1 Tf 12 0 0 12 100 700 Tm (Hi) Tj ET` — span: `size == declared_size == 1.0`,
+  `rendered_size == 12.0`, `matrix == (12, 0, 0, -12, 100, 92)`,
+  `text_matrix == (12, 0, 0, 12, 100, 700)`, `ctm == (1, 0, 0, 1, 0, 0)`,
+  `dir == (1, 0)`, `origin == (100, 92)`, `seq == 0`. First char `"H"`:
+  `matrix == (12, 0, 0, -12, 100, 92)`,
+  `quad == (100, 82.4, 106, 82.4, 100, 94.4, 106, 94.4)`,
+  `bbox == (100, 82.4, 106, 94.4)`, `rendered_size == 12.0`, `seq == 0`,
+  `synthetic == False`.
+- `2 0 0 2 0 0 cm BT /F1 12 Tf 50 350 Td (A) Tj ET` — `declared_size == 12.0`,
+  `rendered_size == 24.0`, `ctm == (2, 0, 0, 2, 0, 0)`,
+  `text_matrix == (1, 0, 0, 1, 50, 350)`.
+- Shear `BT /F1 1 Tf 12 0 6 12 100 700 Tm (A) Tj ET` — the char `quad` is a real
+  parallelogram: its left edge has `ll.x − ul.x == −6` (not 0), so the quad is
+  not the `bbox` corners; `rendered_size` stays `12.0`.
+
+#### Example
+
+```python
+import math
+import pdfspine
+
+page = pdfspine.open("in.pdf")[0]
+span = page.get_text("rawdict")["blocks"][0]["lines"][0]["spans"][0]
+ch = span["chars"][0]
+
+# 1) (0,0) · matrix == origin
+m = pdfspine.Matrix(*ch["matrix"])
+p = pdfspine.Point(0, 0) * m
+assert math.isclose(p.x, ch["origin"][0], abs_tol=1e-9)
+assert math.isclose(p.y, ch["origin"][1], abs_tol=1e-9)
+
+# 2) the envelope of quad == bbox
+xs, ys = ch["quad"][0::2], ch["quad"][1::2]
+env = (min(xs), min(ys), max(xs), max(ys))
+assert all(math.isclose(a, b, abs_tol=1e-9) for a, b in zip(env, ch["bbox"]))
+
+# 3) the real font size — no bbox reverse-engineering needed
+a, b, c, d = ch["matrix"][:4]
+assert math.isclose(ch["rendered_size"], math.sqrt(abs(a * d - b * c)))
+
+# 4) matrix == params · Tm · CTM · page_transform (span level; Tz=100, Ts=0)
+tfs = span["declared_size"]
+params = pdfspine.Matrix(tfs, 0, 0, tfs, 0, 0)
+tm, ctm = pdfspine.Matrix(*span["text_matrix"]), pdfspine.Matrix(*span["ctm"])
+composed = params * tm * ctm * page.transformation_matrix
+assert all(
+    math.isclose(x, y, abs_tol=1e-9)
+    for x, y in zip(composed, span["matrix"])
+)
+```
+
 ## Searching
 
 `Page.search_for(needle, *, hit_max=0, quads=False, clip=None, flags=None, textpage=None)`

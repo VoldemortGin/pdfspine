@@ -274,6 +274,126 @@ page.get_texttrace() -> list[dict]
 - `dict` 顶层键 = `{"blocks", "width", "height"}`（已运行核对）。
 - `flags` 取 `TEXT_*` / `TEXTFLAGS_*` 常量位掩码。
 
+#### 字形几何（pdfspine 扩展：dict / rawdict / json / rawjson 的新键）
+
+pdfspine 在 `get_text("dict"/"rawdict"/"json"/"rawjson")` 的 PyMuPDF 键集合之上，**额外发布每个 span / char 的完整渲染几何**。既有键（`size`/`flags`/`font`/`color`/`ascender`/`descender`/`origin`/`bbox`/`text`/`chars`、line 的 `bbox`/`wmode`/`dir`、block 的 `number`/`type`/`bbox`）语义一律不变。有了这些键，**不必再从 bbox 反推字号，也不必自己修复旋转 / 斜切的字形**。
+
+**span 层**（`dict` / `rawdict` / `json` / `rawjson` 都有）：
+
+| 键 | 类型 | 单位 / 坐标空间 | 含义 |
+|---|---|---|---|
+| `declared_size` | `float` | pt，`Tf` 操作数 | `Tf` 操作数原值，与现有 `size` 同值，只是显式命名 |
+| `rendered_size` | `float` | pt，设备空间 | `sqrt(\|a·d − b·c\|)`（`matrix` 线性部分行列式），即真正画出来的字号 |
+| `matrix` | `tuple[float × 6]` `(a,b,c,d,e,f)` | **设备空间** | span 首字形的 render matrix，把 glyph cell 映到设备空间 |
+| `text_matrix` | `tuple[float × 6]` | **PDF 用户空间** | 首字形的 `Tm`，内容流原始值（**不叠** page transform） |
+| `ctm` | `tuple[float × 6]` | **PDF 用户空间** | 首字形的 CTM，同样是内容流原始值 |
+| `dir` | `tuple[float, float]` | 设备空间，单位向量 | span 基线方向 |
+| `quad` | `tuple[float × 8]` `(ul.x, ul.y, ur.x, ur.y, ll.x, ll.y, lr.x, lr.y)` | 设备空间 | span 的方向包络：沿 `dir` 及其法向取极值重建成四角。正立文本 == bbox 四角；旋转 / 斜切文本贴合文字本身 |
+| `seq` | `int` | 下标 | painting order：span 内最小的源字形下标（内容流绘制序） |
+
+**char 层**（只在 `rawdict` / `rawjson` 的 `span["chars"][i]`）：
+
+| 键 | 类型 | 单位 / 坐标空间 | 含义 |
+|---|---|---|---|
+| `matrix` | `tuple[float × 6]` | **设备空间** | 该字形的 render matrix |
+| `quad` | `tuple[float × 8]` | 设备空间 | 字形 cell 的**四个真角**；旋转 / 斜切时是真平行四边形，`bbox` 只是它的轴对齐外接矩形 |
+| `rendered_size` | `float` | pt | `sqrt(\|det\|)` of `matrix` |
+| `seq` | `int` | 下标 | painting order（该字形在解释器输出里的下标）。**合成空格借用前一个真实字形的下标**，所以 span 内 `seq` 单调不减 |
+| `synthetic` | `bool` | — | `True` = 这个 char 是 layout 合成的词间空格（`TJ` kerning 排出来的间距，PDF 并没画空格字形）；PDF 真画出来的空格是 `False` |
+
+**line 层**（dict / rawdict / json / rawjson）：新增 `number: int`（页内 reading-order 行号，稠密 `0..n-1`；**按 `number` 排序后逐行拼出来的文本 == `get_text("text")` 的行序**）与 `seq: int`（painting order，line 内最小的源字形下标）。
+
+**block 层**：新增 `seq: int`（painting order，block 内最小的 line `seq`）。**只有 text block（`type == 0`）有 `seq`，image block（`type == 1`）没有**。既有 `number`（reading-order 块号）不变。
+
+**`get_text("xml")`**：`<char quad="...">` 现在填**真 quad**（与 `rawdict` char 的 `quad` 逐值一致），顺序仍是 `ul.x ul.y ur.x ur.y ll.x ll.y lr.x lr.y`；以前填的是 bbox 派生的轴对齐四点。这与 PyMuPDF 1.28.2 实测行为一致（fitz 也填真平行四边形），不再是已声明偏差。
+
+**三个坐标空间（最容易踩的坑：新键刻意不对称）**
+
+| 空间 | 定义 | 谁在这里 |
+|---|---|---|
+| **PDF 用户空间** | y 向上、原点左下，内容流操作符所在的空间 | `text_matrix`、`ctm`。**故意不叠 page transform**——它们的用途是把抽出来的字形**对回 PDF 源**（回查是哪几个操作符画的），叠了就对不回去了 |
+| **设备空间**（PyMuPDF device space） | y 向下、原点左上，页面旋转已生效 | 既有的 `bbox` / `origin` / `dir`，以及新键 `matrix` / `quad`——**与 bbox / origin 同基准** |
+| **text space 的 glyph cell** | 字形自己的 1000 单位 em 空间 ÷ 1000：`[0, descender .. advance, ascender]`（竖排还要减去竖直位移向量 v） | `matrix` 就是把这个 cell 映到设备空间的那个矩阵 |
+
+一句话：**`matrix` / `quad` 是设备空间，`text_matrix` / `ctm` 是用户空间。**
+
+**矩阵约定**：6 元组 `(a,b,c,d,e,f)`，PDF / PyMuPDF **行向量**约定 `(x,y) → (a·x + c·y + e, b·x + d·y + f)`；`m1 * m2` = **先 m1 后 m2**（与 `pdfspine.Matrix` 一致）。
+
+**三条不变量**（span 与 char 都成立，均有测试覆盖）：
+
+1. `(0, 0) · matrix == origin`
+2. `quad` 的外接矩形 `== bbox`
+3. `matrix == params · text_matrix · ctm · page_transform`，其中 `params = [Tfs·Th, 0, 0, Tfs, 0, Trise]`（`Tfs` = `declared_size`，`Th` = 水平缩放 `Tz`/100，`Trise` = `Ts`；`page_transform` = `page.transformation_matrix`，不旋转的 612×792 页为 `[1, 0, 0, -1, 0, 792]`）
+
+**`rendered_size` 的语义**
+
+- `rendered_size = sqrt(|a·d − b·c|)`（MuPDF 的 `fz_matrix_expansion`），这**正是 PyMuPDF `dict`/`rawdict` span `size` 的语义**。
+- 纯旋转、纯斜切不改变它；各向异性缩放给两轴的**几何平均**（`Tm 20 0 0 10` → `sqrt(200) ≈ 14.142136`）；`Tz 50` + `Tf 12` → `sqrt(72) ≈ 8.485281`。
+- 退化值：矩阵奇异或分量非有限时 `rendered_size == 0.0`（不 panic、不产生 NaN / Inf）；所有发布的矩阵 / quad 分量恒为有限值。
+- **警告：`get_texttrace()` 的 `size` 是另一套语义**——`|(a, b)|`（x 基向量长度）。两者只在共形矩阵（纯旋转 / 均匀缩放）下一致，在各向异性缩放与 `Tz` 下分道扬镳。**不要混用。**
+
+**`size` 的 PyMuPDF parity 差异（已知，如实记录）**
+
+- pdfspine 的 `span["size"]` 目前是 **declared**（`Tf` 操作数原值，== `declared_size`）。
+- PyMuPDF 的 `span["size"]` 是 **rendered**（`sqrt(|det|)`）。
+- 二者只在"缩放全部由 `Tf` 承担"时相等；缩放藏在 `Tm` / `cm` / `Tz` 里时不等。
+- **要字号请用 `rendered_size`**（与 fitz 的 `size` 同语义）；要 `Tf` 原值请用 `declared_size`。
+
+**`seq`（painting order）vs `number`（reading order）**
+
+- `seq` = 内容流的**绘制顺序**（源字形下标），block / line / span / char 四层都有（block / line / span 取其内最小值）。用于"这段文字是第几笔画上去的"、稳定排序、把 span 拆回源顺序。
+- `number` = **阅读顺序**下标（block 层是块号，line 层是页内行号）。
+- **`number` 的已知局限**：pdfspine 当前的 region 间排序键是内容流**绘制序**，不是纯几何阅读序。所以 `number` 承诺的是 **"引擎实际输出的顺序下标 / 与 `get_text("text")` 的输出顺序一致"**，而**不是**"版面几何意义上的理想阅读顺序"。对绘制序混乱的 PDF（例如分栏内容交错绘制），`number` 会跟着一起乱。需要严格几何阅读序的下游应自己按 bbox 排序，或用 `sort=True`。
+
+**具体数值**（612×792 页、不旋转，`page_transform = [1, 0, 0, -1, 0, 792]`；字体每码宽 500/1000、ascent 800、descent −200）
+
+- 内容流 `BT /F1 1 Tf 12 0 0 12 100 700 Tm (Hi) Tj ET`：
+  - span：`size == declared_size == 1.0`，`rendered_size == 12.0`，`matrix == (12, 0, 0, -12, 100, 92)`，`text_matrix == (12, 0, 0, 12, 100, 700)`，`ctm == (1, 0, 0, 1, 0, 0)`，`dir == (1, 0)`，`origin == (100, 92)`，`seq == 0`
+  - 首个 char `"H"`：`matrix == (12, 0, 0, -12, 100, 92)`，`quad == (100, 82.4, 106, 82.4, 100, 94.4, 106, 94.4)`，`bbox == (100, 82.4, 106, 94.4)`，`rendered_size == 12.0`，`seq == 0`，`synthetic == False`
+- 内容流 `2 0 0 2 0 0 cm BT /F1 12 Tf 50 350 Td (A) Tj ET`：`declared_size == 12.0`，`rendered_size == 24.0`，`ctm == (2, 0, 0, 2, 0, 0)`，`text_matrix == (1, 0, 0, 1, 50, 350)`
+- 斜切 `BT /F1 1 Tf 12 0 6 12 100 700 Tm (A) Tj ET`：char `matrix == (12, 0, 6, -12, 100, 92)`，`quad` 是真平行四边形，左边缘 `ll.x − ul.x == −6`（不是 0），所以 `quad ≠ bbox` 四角；`rendered_size` 仍为 `12.0`
+- 旋转 90° `BT /F1 1 Tf 0 12 -12 0 100 700 Tm (Hi) Tj ET`：`text_matrix == (0, 12, -12, 0, 100, 700)`（用户空间原值），`matrix[:4] == (0, -12, -12, 0)`（设备空间 y 翻转），`dir == (0, -1)`，`rendered_size == 12.0`
+
+**可运行示例**（从 `rawdict` 取一个 char，验证三条不变量）：
+
+```python
+import math
+import pdfspine
+
+page = pdfspine.open("in.pdf")[0]
+span = page.get_text("rawdict")["blocks"][0]["lines"][0]["spans"][0]
+ch = span["chars"][0]
+
+# 1) (0,0) · matrix == origin
+m = pdfspine.Matrix(*ch["matrix"])
+p = pdfspine.Point(0, 0) * m
+assert math.isclose(p.x, ch["origin"][0], abs_tol=1e-9)
+assert math.isclose(p.y, ch["origin"][1], abs_tol=1e-9)
+
+# 2) quad 的外接矩形 == bbox
+xs, ys = ch["quad"][0::2], ch["quad"][1::2]
+env = (min(xs), min(ys), max(xs), max(ys))
+assert all(math.isclose(a, b, abs_tol=1e-9) for a, b in zip(env, ch["bbox"]))
+
+# 3) 真字号（不用再从 bbox 反推）
+a, b, c, d = ch["matrix"][:4]
+assert math.isclose(ch["rendered_size"], math.sqrt(abs(a * d - b * c)))
+
+# 4) matrix == params · Tm · CTM · page_transform（span 层；Tz=100、Ts=0 时 params 就是 [Tfs,0,0,Tfs,0,0]）
+tfs = span["declared_size"]
+params = pdfspine.Matrix(tfs, 0, 0, tfs, 0, 0)
+tm, ctm = pdfspine.Matrix(*span["text_matrix"]), pdfspine.Matrix(*span["ctm"])
+composed = params * tm * ctm * page.transformation_matrix
+assert all(
+    math.isclose(x, y, abs_tol=1e-9)
+    for x, y in zip(composed, span["matrix"])
+)
+
+# 顺带：按 line["number"] 排序即得 get_text("text") 的行序；seq 是绘制序
+lines = [ln for blk in page.get_text("dict")["blocks"] if blk["type"] == 0 for ln in blk["lines"]]
+assert [ln["number"] for ln in sorted(lines, key=lambda ln: ln["number"])] == list(range(len(lines)))
+```
+
 ### 清单 / 资源
 ```python
 page.get_fonts(full=False) -> list[tuple]        # 别名 getImages 等见下

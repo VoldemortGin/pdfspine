@@ -11,6 +11,34 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
+### Added
+
+- **The full glyph rendering geometry is published through `get_text`.** Every
+  `dict` / `rawdict` / `json` / `rawjson` span now carries `declared_size` (the
+  `Tf` operand) and `rendered_size` (`sqrt(|det|)` — the size the text is
+  actually painted at, PyMuPDF's `size` semantics), the device-space render
+  `matrix`, the raw user-space `text_matrix` and `ctm` it was composed from, the
+  baseline `dir`, the rotation-aware `quad` and the painting-order `seq`. Each
+  `rawdict` / `rawjson` char adds `matrix`, `quad`, `rendered_size`, `seq` and
+  `synthetic` (`True` for an inter-word space layout synthesized from a `TJ`
+  kern). Lines gain `number` (reading-order index, consistent with the
+  `get_text("text")` line order) and `seq`; text blocks gain `seq`. Three
+  invariants hold and are tested: `(0,0)·matrix == origin`, the envelope of
+  `quad == bbox`, and `matrix == params · text_matrix · ctm · page_transform`.
+  Downstream no longer has to reverse-engineer a font size out of a bbox or
+  repair a rotated / sheared run by hand. Every pre-existing key keeps its exact
+  meaning; `span["size"]` is still the declared `Tf` operand, which remains a
+  documented parity difference from fitz (use `rendered_size` for the painted
+  size).
+
+### Changed
+
+- **`get_text("xml")`'s `<char quad=…>` is the true glyph quad.** It used to
+  carry the four corners of the axis-aligned bbox; it now carries the glyph
+  cell's real corners, so rotated and sheared text yields a genuine
+  parallelogram — matching PyMuPDF 1.28.2 and the `rawdict` char `quad` value
+  for value. Upright text is unaffected (the corners coincide with the bbox).
+
 ## [0.6.1] — 2026-09-03
 
 ### Fixed

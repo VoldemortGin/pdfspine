@@ -997,7 +997,10 @@ never reverse-engineer a font size out of a bbox nor repair a rotated run
 themselves. `rendered_font_size` is `sqrt(|det|)` of the render matrix — MuPDF's
 `fz_matrix_expansion`, which is what PyMuPDF reports as the `dict`/`rawdict`
 span `size`. Expected numbers for the pure-matrix cases were cross-checked
-against PyMuPDF 1.28.2 on hand-assembled content streams.
+against PyMuPDF 1.28.2 on hand-assembled content streams. All cases live in
+`crates/pdf-text/tests/glyph_geometry.rs`; `GLYPHGEO-010..015` exercise the
+publication through the `dict` / `rawdict` / `json` / `rawjson` / `xml`
+serializers (`serialize.rs`).
 
 | ID | feature | spec ref | status |
 |---|---|---|---|
@@ -1010,6 +1013,12 @@ against PyMuPDF 1.28.2 on hand-assembled content streams.
 | `GLYPHGEO-007` | `cm 2` + `Tf 12` → rendered 24; `ctm == [2,0,0,2,0,0]`, `Tm` pure translation | PyMuPDF 1.28.2 | green |
 | `GLYPHGEO-008` | vertical writing (`Identity-V`): `wmode == 1`, cell/quad carry the `−v` shift | PRD §8.6.1 | green |
 | `GLYPHGEO-009` | invariants everywhere: `(0,0)·render_matrix == origin`, `quad.rect() == bbox` | PRD §8.6.1 | green |
+| `GLYPHGEO-010` | dict span publishes the full geometry keys: `declared_size` / `rendered_size`, `matrix` (device), `text_matrix` / `ctm` (raw user space), `dir`, `quad`, `seq` | PRD §8.6.1 | green |
+| `GLYPHGEO-011` | rawdict char publishes `matrix` / `quad` / `rendered_size` / `seq` / `synthetic`; the four corners are `ul` on top | PRD §8.6.1 | green |
+| `GLYPHGEO-012` | composition invariant `matrix == params · Tm · CTM · page_transform`, `params = [Tfs·Th, 0, 0, Tfs, 0, Trise]` | PRD §8.6.1 | green |
+| `GLYPHGEO-013` | json / rawjson carry the same geometry key set as dict / rawdict | PRD §8.6.1 | green |
+| `GLYPHGEO-014` | `seq` is non-decreasing along a span; line `number` is dense `0..n-1` and matches the `get_text("text")` line order | PRD §8.6.1 | green |
+| `GLYPHGEO-015` | `to_xml` `<char quad>` is the true parallelogram (non-axis-aligned under shear), value-for-value equal to the rawdict char `quad` | PyMuPDF 1.28.2 | green |
 
 ### Form XObject recursion (`interp.rs`) — `INTERP-FORM-*`
 
@@ -1385,6 +1394,27 @@ methods, and the **M2 accuracy exit gate**. Self-generated fixtures only
 | `PYINV-002` | `get_images()` returns the expected tuple(s) | PRD §9.4 | green |
 | `PYFITZ-TEXT-001` | `fitz.open(...).load_page(0).get_text("dict")` parity | PRD §9.5 | green |
 | `PYFITZ-TEXT-002` | `fitz` search returns fitz `Rect`/`Quad` value types | PRD §9.5 | green |
+
+### Python glyph geometry (`test_glyph_geometry.py`) — `PYGEO-*`
+
+The glyph-geometry keys (`GLYPHGEO-010..015`) as seen through the Python
+surface: `get_text("dict"/"rawdict"/"json"/"rawjson")` carries, on top of
+the PyMuPDF key set, the declared *and* rendered font size, the device-space
+render matrix, the raw user-space `Tm` / CTM, the true (possibly sheared) quad,
+the baseline direction and the painting-order / reading-order keys. Fixtures
+are self-generated raw PDF bytes (PRD §10). Tests live in
+`python/tests/test_glyph_geometry.py`.
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `PYGEO-001` | dict span key set + types (`declared_size` / `rendered_size` float, `matrix` / `text_matrix` / `ctm` 6-tuples, `dir` 2-tuple, `quad` 8-tuple, `seq` int) | PRD §8.6.1 | green |
+| `PYGEO-002` | rawdict char key set + types (`matrix`, `quad`, `rendered_size`, `seq`, `synthetic`) | PRD §8.6.1 | green |
+| `PYGEO-003` | `rendered_size` is separate from the declared `size` and equals `sqrt(\|det\|)` of `matrix` | PyMuPDF 1.28.2 | green |
+| `PYGEO-004` | the three geometry invariants on the Python side: `(0,0)·matrix == origin`, envelope of `quad == bbox`, `matrix == params · Tm · CTM · page_transform` | PRD §8.6.1 | green |
+| `PYGEO-005` | sheared char `quad` is a parallelogram (not axis-aligned) and matches `get_text("xml")` `<char quad>` value for value | PyMuPDF 1.28.2 | green |
+| `PYGEO-006` | line `number` / `seq` present; lines sorted by `number` reproduce the `get_text("text")` line order | PRD §8.6.1 | green |
+| `PYGEO-007` | json / rawjson geometry keys equal those of dict / rawdict | PRD §8.6.1 | green |
+| `PYGEO-008` | 90°-rotated run: `dir` turns with the text, `text_matrix` stays the raw user-space operand, `matrix` is the device-space (y-flipped) frame | PRD §8.6.1 | green |
 
 ### M2 accuracy exit gate (`test_text.py`) — `ACCURACY-GT-*`
 
