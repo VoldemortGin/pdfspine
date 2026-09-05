@@ -28,8 +28,9 @@ use pyo3::exceptions::{
     PyAttributeError, PyFileNotFoundError, PyIndexError, PyOSError, PyValueError,
 };
 use pyo3::ffi;
+use pyo3::intern;
 use pyo3::prelude::*;
-use pyo3::types::{PyBytes, PyDict, PyFloat, PyList, PyString, PyTuple};
+use pyo3::types::{PyBytes, PyDict, PyFloat, PyList, PyTuple};
 
 /// The package version (mirrors the Rust workspace version).
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -546,8 +547,8 @@ fn textdict_to_py<'py>(
     sort: bool,
 ) -> PyResult<Bound<'py, PyDict>> {
     let root = PyDict::new(py);
-    root.set_item("width", d.width)?;
-    root.set_item("height", d.height)?;
+    root.set_item(intern!(py, "width"), d.width)?;
+    root.set_item(intern!(py, "height"), d.height)?;
 
     // Block order (optionally sorted by (y0, x0) of the block bbox).
     let mut order: Vec<usize> = (0..d.blocks.len()).collect();
@@ -563,7 +564,7 @@ fn textdict_to_py<'py>(
     for &i in &order {
         blocks.append(dict_block_to_py(py, &d.blocks[i])?)?;
     }
-    root.set_item("blocks", blocks)?;
+    root.set_item(intern!(py, "blocks"), blocks)?;
     Ok(root)
 }
 
@@ -582,33 +583,33 @@ fn dict_block_to_py<'py>(
     let d = PyDict::new(py);
     match block {
         pdf_api::DictBlock::Text(b) => {
-            d.set_item("number", b.number)?;
-            d.set_item("type", 0i32)?;
-            d.set_item("bbox", b.bbox)?;
+            d.set_item(intern!(py, "number"), b.number)?;
+            d.set_item(intern!(py, "type"), 0i32)?;
+            d.set_item(intern!(py, "bbox"), b.bbox)?;
             // Painting order (content-stream), as opposed to `number`'s reading order.
-            d.set_item("seq", b.seq)?;
+            d.set_item(intern!(py, "seq"), b.seq)?;
             let lines = PyList::empty(py);
             for line in &b.lines {
                 lines.append(dict_line_to_py(py, line)?)?;
             }
-            d.set_item("lines", lines)?;
+            d.set_item(intern!(py, "lines"), lines)?;
         }
         pdf_api::DictBlock::Image(b) => {
-            d.set_item("number", b.number)?;
-            d.set_item("type", 1i32)?;
-            d.set_item("bbox", b.bbox)?;
-            d.set_item("width", b.width)?;
-            d.set_item("height", b.height)?;
-            d.set_item("ext", &b.ext)?;
-            d.set_item("colorspace", b.colorspace)?;
-            d.set_item("xres", b.xres)?;
-            d.set_item("yres", b.yres)?;
-            d.set_item("bpc", b.bpc)?;
-            d.set_item("transform", b.transform)?;
-            d.set_item("size", b.size)?;
+            d.set_item(intern!(py, "number"), b.number)?;
+            d.set_item(intern!(py, "type"), 1i32)?;
+            d.set_item(intern!(py, "bbox"), b.bbox)?;
+            d.set_item(intern!(py, "width"), b.width)?;
+            d.set_item(intern!(py, "height"), b.height)?;
+            d.set_item(intern!(py, "ext"), &b.ext)?;
+            d.set_item(intern!(py, "colorspace"), b.colorspace)?;
+            d.set_item(intern!(py, "xres"), b.xres)?;
+            d.set_item(intern!(py, "yres"), b.yres)?;
+            d.set_item(intern!(py, "bpc"), b.bpc)?;
+            d.set_item(intern!(py, "transform"), b.transform)?;
+            d.set_item(intern!(py, "size"), b.size)?;
             // Encoded image bytes (same payload as `Document.extract_image`);
             // empty only for an unresolvable/inline image.
-            d.set_item("image", PyBytes::new(py, &b.image))?;
+            d.set_item(intern!(py, "image"), PyBytes::new(py, &b.image))?;
         }
     }
     Ok(d)
@@ -616,40 +617,70 @@ fn dict_block_to_py<'py>(
 
 fn dict_line_to_py<'py>(py: Python<'py>, line: &pdf_api::DictLine) -> PyResult<Bound<'py, PyDict>> {
     let d = PyDict::new(py);
-    d.set_item("spans", {
+    d.set_item(intern!(py, "spans"), {
         let spans = PyList::empty(py);
         for span in &line.spans {
             spans.append(dict_span_to_py(py, span)?)?;
         }
         spans
     })?;
-    d.set_item("wmode", line.wmode)?;
-    d.set_item("dir", line.dir)?;
-    d.set_item("bbox", line.bbox)?;
+    d.set_item(intern!(py, "wmode"), line.wmode)?;
+    d.set_item(intern!(py, "dir"), line.dir)?;
+    d.set_item(intern!(py, "bbox"), line.bbox)?;
     // Reading-order index within the page, and the painting-order key.
-    d.set_item("number", line.number)?;
-    d.set_item("seq", line.seq)?;
+    d.set_item(intern!(py, "number"), line.number)?;
+    d.set_item(intern!(py, "seq"), line.seq)?;
     Ok(d)
 }
 
-/// Shares equal immutable Python floats within one character's geometry.
-///
-/// Origin, bbox, matrix and quad repeat many coordinates, but converting each
-/// tuple independently boxes every occurrence. Bitwise matching preserves
-/// signed zero and never substitutes a neighbouring glyph's geometry. The
-/// bounded cache lives only for this character and this interpreter call.
-struct CharGeometryFloats<'py> {
-    py: Python<'py>,
-    values: [Option<(u64, Bound<'py, PyFloat>)>; 21],
-    len: usize,
+/// A fast hasher for `f64` bit patterns keyed into [`SpanGeometryFloats`]. The
+/// default SipHash is far too slow for the millions of per-document lookups;
+/// the coordinate bits are already well spread, so an fxhash-style multiply of
+/// each 8-byte word suffices.
+#[derive(Default)]
+struct BitsHasher(u64);
+
+impl std::hash::Hasher for BitsHasher {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+
+    fn write(&mut self, bytes: &[u8]) {
+        let mut hash = self.0;
+        for chunk in bytes.chunks(8) {
+            let mut word = [0u8; 8];
+            word[..chunk.len()].copy_from_slice(chunk);
+            hash = (hash ^ u64::from_le_bytes(word)).wrapping_mul(0x517c_c1b7_2722_0a95);
+        }
+        self.0 = hash;
+    }
 }
 
-impl<'py> CharGeometryFloats<'py> {
-    fn new(py: Python<'py>) -> Self {
+type BitsBuildHasher = std::hash::BuildHasherDefault<BitsHasher>;
+
+/// Shares equal immutable Python floats across every character of one span.
+///
+/// Origin, bbox, matrix and quad repeat a huge number of coordinates within a
+/// span: adjacent glyphs share x-boundaries and every glyph shares the span's
+/// baseline, matrix scale and rendered size, so converting each tuple
+/// independently boxes ~9 floats per glyph where ~1.3 distinct values per glyph
+/// actually occur. Bitwise matching preserves signed zero and never substitutes
+/// a neighbouring glyph's geometry (a different value yields a different key).
+/// The cache lives only for this span and this interpreter call; only the
+/// shared floats it hands out are retained.
+struct SpanGeometryFloats<'py> {
+    py: Python<'py>,
+    values: std::collections::HashMap<u64, Bound<'py, PyFloat>, BitsBuildHasher>,
+}
+
+impl<'py> SpanGeometryFloats<'py> {
+    fn with_capacity(py: Python<'py>, capacity: usize) -> Self {
         Self {
             py,
-            values: std::array::from_fn(|_| None),
-            len: 0,
+            values: std::collections::HashMap::with_capacity_and_hasher(
+                capacity,
+                BitsBuildHasher::default(),
+            ),
         }
     }
 
@@ -659,18 +690,11 @@ impl<'py> CharGeometryFloats<'py> {
         if value.is_nan() {
             return PyFloat::new(self.py, value);
         }
-        let bits = value.to_bits();
-        for (stored_bits, object) in self.values[..self.len].iter().flatten() {
-            if *stored_bits == bits {
-                return object.clone();
-            }
-        }
-        let object = PyFloat::new(self.py, value);
-        if let Some(slot) = self.values.get_mut(self.len) {
-            *slot = Some((bits, object.clone()));
-            self.len += 1;
-        }
-        object
+        let py = self.py;
+        self.values
+            .entry(value.to_bits())
+            .or_insert_with(|| PyFloat::new(py, value))
+            .clone()
     }
 
     fn tuple<const N: usize>(&mut self, values: [f64; N]) -> PyResult<Bound<'py, PyTuple>> {
@@ -680,57 +704,52 @@ impl<'py> CharGeometryFloats<'py> {
 
 fn dict_span_to_py<'py>(py: Python<'py>, span: &pdf_api::DictSpan) -> PyResult<Bound<'py, PyDict>> {
     let d = PyDict::new(py);
-    d.set_item("size", span.size)?;
-    d.set_item("flags", span.flags)?;
-    d.set_item("font", &span.font)?;
-    d.set_item("color", span.color)?;
-    d.set_item("ascender", span.ascender)?;
-    d.set_item("descender", span.descender)?;
-    d.set_item("origin", span.origin)?;
-    d.set_item("bbox", span.bbox)?;
+    // `intern!` reuses one process-interned Python string per key across every
+    // span dict and every call, instead of allocating fresh key strings.
+    d.set_item(intern!(py, "size"), span.size)?;
+    d.set_item(intern!(py, "flags"), span.flags)?;
+    d.set_item(intern!(py, "font"), &span.font)?;
+    d.set_item(intern!(py, "color"), span.color)?;
+    d.set_item(intern!(py, "ascender"), span.ascender)?;
+    d.set_item(intern!(py, "descender"), span.descender)?;
+    d.set_item(intern!(py, "origin"), span.origin)?;
+    d.set_item(intern!(py, "bbox"), span.bbox)?;
     // Full glyph geometry (pdfspine extension over the fitz key set): the
     // declared vs. rendered font size, the device-space render matrix and the
     // raw user-space `Tm`/CTM it was composed from, the baseline direction, the
     // rotation-aware envelope and the painting-order key.
-    d.set_item("declared_size", span.declared_size)?;
-    d.set_item("rendered_size", span.rendered_size)?;
-    d.set_item("matrix", span.matrix)?;
-    d.set_item("text_matrix", span.text_matrix)?;
-    d.set_item("ctm", span.ctm)?;
-    d.set_item("dir", span.dir)?;
-    d.set_item("quad", span.quad)?;
-    d.set_item("seq", span.seq)?;
+    d.set_item(intern!(py, "declared_size"), span.declared_size)?;
+    d.set_item(intern!(py, "rendered_size"), span.rendered_size)?;
+    d.set_item(intern!(py, "matrix"), span.matrix)?;
+    d.set_item(intern!(py, "text_matrix"), span.text_matrix)?;
+    d.set_item(intern!(py, "ctm"), span.ctm)?;
+    d.set_item(intern!(py, "dir"), span.dir)?;
+    d.set_item(intern!(py, "quad"), span.quad)?;
+    d.set_item(intern!(py, "seq"), span.seq)?;
     // dict mode carries `text`; rawdict mode carries `chars`.
     if span.chars.is_empty() {
-        d.set_item("text", &span.text)?;
+        d.set_item(intern!(py, "text"), &span.text)?;
     } else {
         let chars = PyList::empty(py);
-        // Each character has the same keys. Keep interpreter-local interned
-        // strings for this conversion instead of allocating seven repeated
-        // multi-character key strings per glyph. No Python objects are cached
-        // in Rust statics or shared across interpreter lifetimes.
-        let keys = [
-            "origin",
-            "bbox",
-            "c",
-            "matrix",
-            "quad",
-            "rendered_size",
-            "seq",
-            "synthetic",
-        ]
-        .map(|key| PyString::intern(py, key));
+        // Every character dict shares the same eight keys; `intern!` reuses one
+        // process-interned Python string per key across all glyphs and calls,
+        // instead of allocating (or re-interning) them per span.
+        // One float cache shared across every character of this span. Immutable
+        // floats only; dicts, lists and tuples stay distinct per character.
+        let mut floats = SpanGeometryFloats::with_capacity(py, span.chars.len());
         for ch in &span.chars {
             let c = PyDict::new(py);
-            let mut floats = CharGeometryFloats::new(py);
-            c.set_item(&keys[0], floats.tuple([ch.origin.0, ch.origin.1])?)?;
             c.set_item(
-                &keys[1],
+                intern!(py, "origin"),
+                floats.tuple([ch.origin.0, ch.origin.1])?,
+            )?;
+            c.set_item(
+                intern!(py, "bbox"),
                 floats.tuple([ch.bbox.0, ch.bbox.1, ch.bbox.2, ch.bbox.3])?,
             )?;
-            c.set_item(&keys[2], &ch.c)?;
+            c.set_item(intern!(py, "c"), &ch.c)?;
             c.set_item(
-                &keys[3],
+                intern!(py, "matrix"),
                 floats.tuple([
                     ch.matrix.0,
                     ch.matrix.1,
@@ -741,18 +760,18 @@ fn dict_span_to_py<'py>(py: Python<'py>, span: &pdf_api::DictSpan) -> PyResult<B
                 ])?,
             )?;
             c.set_item(
-                &keys[4],
+                intern!(py, "quad"),
                 floats.tuple([
                     ch.quad.0, ch.quad.1, ch.quad.2, ch.quad.3, ch.quad.4, ch.quad.5, ch.quad.6,
                     ch.quad.7,
                 ])?,
             )?;
-            c.set_item(&keys[5], floats.float(ch.rendered_size))?;
-            c.set_item(&keys[6], ch.seq)?;
-            c.set_item(&keys[7], ch.synthetic)?;
+            c.set_item(intern!(py, "rendered_size"), floats.float(ch.rendered_size))?;
+            c.set_item(intern!(py, "seq"), ch.seq)?;
+            c.set_item(intern!(py, "synthetic"), ch.synthetic)?;
             chars.append(c)?;
         }
-        d.set_item("chars", chars)?;
+        d.set_item(intern!(py, "chars"), chars)?;
     }
     Ok(d)
 }
