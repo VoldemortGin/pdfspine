@@ -84,6 +84,22 @@ const TRACKED_RUN_MIN: usize = 4;
 /// well over half the cell visible, and PyMuPDF keeps those spaces.
 const PHANTOM_SPACE_VISIBLE_FRAC: f64 = 0.2;
 
+/// How far the *linear* part of two glyphs' render matrices may differ before
+/// they stop being one visual span, as a fraction of the rendered font size.
+///
+/// A span publishes one `matrix`/`rendered_size`/`quad`, taken from its first
+/// glyph, so every glyph it holds has to be drawn the way that matrix says.
+/// Comparing all four components at once covers scaling, rotation, shear and
+/// `Tz` with a single test, and dividing by the rendered size makes it a
+/// scale-free angle-and-ratio bound rather than an absolute one in points.
+const SPAN_LINEAR_TOL_FRAC: f64 = 0.01;
+
+/// How far a glyph's baseline may sit from the span's, as a fraction of the
+/// rendered font size, before it is a different visual run. Well above the
+/// rounding a producer's re-issued `Tm` introduces (~1e-4 of the size) and well
+/// below any shift an author sets deliberately.
+const SPAN_BASELINE_TOL_FRAC: f64 = 0.02;
+
 /// Baseline movement, in effective font-size units, below which text remains in
 /// the current paragraph regardless of horizontal movement.
 const BLOCK_BASELINE_NEAR: f64 = 0.8;
@@ -1186,6 +1202,50 @@ fn run_glyph_height(idxs: &[usize], dev: &[DevGlyph]) -> f64 {
     hs[hs.len() / 2]
 }
 
+/// Whether `g` is painted the way the span it would join says it is.
+///
+/// The style keys (`font`/`size`/`color`/`flags`) describe the *text state*, not
+/// the paint: a producer that emits `Tf 1` and bakes the scale into `Tm` gives
+/// every glyph on the page the same declared size, so two runs at different
+/// scales — or rotations, or shears, or baselines — used to land in one span
+/// whose published `matrix`, `rendered_size` and `quad` described only its first
+/// glyph. Worse, two such runs interleave once the line is sorted along its
+/// reading axis, handing downstream a span whose text is shuffled between them.
+/// These three tests compare what the span actually publishes:
+///
+/// 1. the **linear part** of the render matrix, all four components at once, so
+///    one bound covers scaling, rotation, shear and `Tz` ([`SPAN_LINEAR_TOL_FRAC`]);
+/// 2. the **writing direction**, on the same ~5° footing lines are clustered with;
+/// 3. the **baseline position** on the span's own cross axis
+///    ([`SPAN_BASELINE_TOL_FRAC`]).
+///
+/// Both distances are relative to the larger of the two rendered sizes, so the
+/// test is scale-free and symmetric. A degenerate matrix has no scale to be
+/// relative to; those glyphs stay merged rather than shatter into one span each.
+fn same_visual_run(s: &Span, g: &DevGlyph, g_rendered_size: f64) -> bool {
+    let scale = s.rendered_size.max(g_rendered_size);
+    if !scale.is_finite() || scale <= 0.0 {
+        return true;
+    }
+    if !dir_matches(&s.dir, &g.dir) {
+        return false;
+    }
+    let (m, n) = (&s.matrix, &g.render_matrix);
+    let linear = (m.a - n.a)
+        .abs()
+        .max((m.b - n.b).abs())
+        .max((m.c - n.c).abs())
+        .max((m.d - n.d).abs());
+    if linear > scale * SPAN_LINEAR_TOL_FRAC {
+        return false;
+    }
+    // Cross axis is the span's `dir` rotated +90°, matching `DevGlyph::cross`,
+    // so this reads as a baseline offset for any page rotation / writing mode.
+    let (dx, dy) = s.dir;
+    let cross = |p: &Point| -dy * p.x + dx * p.y;
+    (cross(&s.origin) - cross(&g.origin)).abs() <= scale * SPAN_BASELINE_TOL_FRAC
+}
+
 /// Two writing directions match if their unit vectors are within ~5°.
 fn dir_matches(a: &(f64, f64), b: &(f64, f64)) -> bool {
     let dot = a.0 * b.0 + a.1 * b.1;
@@ -1485,11 +1545,13 @@ fn build_line(glyphs: &[&DevGlyph], seq: usize, inhibit_spaces: bool) -> Line {
             gflags |= flags::SUPERSCRIPT;
         }
 
+        let glyph_rendered_size = rendered_font_size(&g.render_matrix);
         let can_merge = spans.last().is_some_and(|s| {
             s.font == g.font
                 && (s.size - g.size).abs() < 1e-6
                 && s.color == g.color
                 && s.flags == gflags
+                && same_visual_run(s, g, glyph_rendered_size)
         });
         // A glyph may carry several Unicode scalars (a ligature); each becomes a
         // `Char` sharing the glyph cell geometry, so no text is dropped.
@@ -1519,7 +1581,6 @@ fn build_line(glyphs: &[&DevGlyph], seq: usize, inhibit_spaces: bool) -> Line {
         }
         let si = spans.len() - 1;
         span_envs[si].add(&g.quad);
-        let glyph_rendered_size = rendered_font_size(&g.render_matrix);
         let target = &mut spans[si];
 
         // Synthesize an inter-word space from a spatial gap wider than the
@@ -3517,5 +3578,66 @@ mod tests {
             vec!["important".to_string(), "word".to_string()],
             "get_text(\"words\") disagreed with layout split; got {words:?}"
         );
+    }
+
+    // === SPANVIS-011: the writing-direction criterion in isolation ========
+
+    /// A span opened on `g`, exactly as `build_line` opens one.
+    fn span_of(g: &DevGlyph) -> Span {
+        Span {
+            bbox: g.bbox,
+            font: g.font.clone(),
+            size: g.size,
+            flags: g.flags,
+            color: g.color,
+            ascender: g.ascender,
+            descender: g.descender,
+            origin: g.origin,
+            chars: Vec::new(),
+            text: String::new(),
+            rendered_size: rendered_font_size(&g.render_matrix),
+            matrix: g.render_matrix,
+            text_matrix: g.text_matrix,
+            ctm: g.ctm,
+            dir: g.dir,
+            quad: g.quad,
+            seq: g.seq,
+        }
+    }
+
+    /// A device-space glyph at `(x, y)` with render matrix `size·I` and writing
+    /// direction `dir` — the two inputs `same_visual_run` reads, isolated.
+    fn dev(x: f64, y: f64, size: f64, dir: (f64, f64)) -> DevGlyph {
+        let pg = g("A", x, y, size * 0.5, size);
+        let mut d = DevGlyph::new(&pg, &Matrix::IDENTITY, (1.0, 0.0), (0.0, 1.0), SmolStr::new("F"), 0, 0);
+        d.dir = dir;
+        d
+    }
+
+    #[test]
+    fn spanvis_011_writing_direction_splits_the_span() {
+        let head = dev(0.0, 0.0, 12.0, (1.0, 0.0));
+        let s = span_of(&head);
+        let rs = rendered_font_size(&head.render_matrix);
+
+        // Identical geometry: one run.
+        assert!(same_visual_run(&s, &head, rs));
+
+        // Within ~5°: still one run (cos 4° = 0.99756 > 0.996), and the matrices
+        // are untouched so criterion 1 stays silent.
+        let near = dev(6.0, 0.0, 12.0, (4.0_f64.to_radians().cos(), 4.0_f64.to_radians().sin()));
+        assert!(same_visual_run(&s, &near, rs));
+
+        // Beyond it: a different run, on the same footing lines are clustered.
+        let far = dev(6.0, 0.0, 12.0, (10.0_f64.to_radians().cos(), 10.0_f64.to_radians().sin()));
+        assert!(!same_visual_run(&s, &far, rs));
+
+        // A degenerate (zero-scale) matrix has no size to be relative to; those
+        // stay merged rather than shatter into one span per glyph.
+        let mut flat = dev(6.0, 0.0, 12.0, (1.0, 0.0));
+        flat.render_matrix = Matrix::new(0.0, 0.0, 0.0, 0.0, 6.0, 0.0);
+        let mut zero = span_of(&flat);
+        zero.rendered_size = 0.0;
+        assert!(same_visual_run(&zero, &flat, 0.0));
     }
 }
