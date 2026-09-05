@@ -69,7 +69,10 @@ REQUIRED_FIELDS = ("path", "source", "license", "sha256", "cleared_by", "cleared
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 # Absolute paths that only resolve on one machine: POSIX /Users//home//root,
 # or a Windows drive letter (C:\ ... ). Repo-relative paths are fine.
-ABS_PATH_RE = re.compile(r"(?:/Users/|/home/|/root/|[A-Za-z]:\\\\|[A-Za-z]:/)")
+# A drive letter cannot be the last letter of a URL scheme (the s in https:/).
+ABS_PATH_RE = re.compile(
+    r"(?:/Users/|/home/|/root/|[A-Za-z]:\\\\|(?<![A-Za-z])[A-Za-z]:/)"
+)
 
 
 def _git_tracked(pattern: str) -> list[Path]:
