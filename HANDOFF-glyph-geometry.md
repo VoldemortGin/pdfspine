@@ -1,8 +1,20 @@
 # 交接：Rust 文本层发布完整字形几何 + line/span 聚合修正
 
-> **临时文件**，任务完结后连同本文件一起删除。
-> 当前续做分支 `glyph-geometry-continue`；基线 `aaee2a9`，已同步的 feature 尖端 `9912a23`。
-> §1–§9 保留原始设计与历史过程；**当前验收状态以 §12 为准**。
+> **重启入口（2026-09-05）：**先读 `docs/PRD-NEXT.md` §0 的当前优先队列，
+> 再读本文件 §12 和 `conformance/COVERAGE-REPORT.md` / 专项 geometry reports。
+> 仓库是 `/Users/linhan/startup/spine/pdfspine`；`HEAD`、`origin/main`、`v0.7.1`
+> 均为 `9da7ca6`，旧 `v0.7.0` 保持 `36ed734`。A–G 已完成，不能再按
+> `glyph-geometry-continue` / `9912a23` 的历史状态续做。§1–§11 只保留设计和过程史。
+>
+> `0.7.0` 发布 glyph geometry，`0.7.1` 仅同步文档。PyPI 正式未锁版本安装已
+> 独立验证选择 `0.7.1`、自动安装 `ocrspine-models==0.0.3`，并实测
+> `Tf 1` / `Tm 12` 得 `size == rendered_size == 12`、`declared_size == 1`。
+> GitHub Release `v0.7.1` 已 published、非 draft、非 prerelease，六个附件齐全。
+> 当前新增 coverage report 和本轮 PRD/HANDOFF 整理在 commit 前都只是工作树成果。
+>
+> 下一步依序是：修主 CI 离线 wheel smoke 的模型依赖准备；持久化并联合采集
+> Rust/Python coverage；继续优化 rawdict geometry 成本；用独立语料实验 span
+> 首字形代表问题。不得无证据改 F 阈值。更完整口径见 `docs/PRD-NEXT.md` §0。
 
 ---
 
@@ -528,7 +540,7 @@ rotated-page 差异记录在文本提取文档中。
 
 §9.4 的 C–G 已在本机继续执行；最终结果见 §12。
 
-## 11. 续接环境状态（2026-09-05）
+## 11. 历史续接环境状态（2026-09-05；已被顶部入口取代）
 
 - `git fetch origin` 后 glyph 远端 ref 从旧 `3de8240` 更新到 `9912a23`。新历史包含
   `aaee2a9`、等价的 9 个 rebased glyph commits、rebase 后验证记录，以及已提交的
@@ -599,7 +611,8 @@ leader-dot 长串也明显碎片化。这些是接受的真实结构代价，不
 供布局及 HTML/XML 既有语义使用。300 件上 5803856 个与 PyMuPDF 双向唯一匹配的 glyph 中，
 5495174 个字号误差改善、308367 个不变、315 个恶化；mean absolute error 从 8.1822137 pt
 降至 0.000114815 pt，最大 residual 为 0.6996063 pt（5.83005%）。315 件 residual 只出现在
-GovDocs1 18/53，原因是 F 容许同 span 内最多约 5% 的相邻 geometry 变化，而公开 span size
+两个 GovDocs1 文档的 41 个 span（文档 00018 / 00053），原因是 F 容许同 span 内最多约 5%
+的相邻 geometry 变化，而公开 span size
 只能取首字形值。候选值 100% 等于该 span 的 `rendered_size`；F/G 间 text、words、rawdict
 除 span `size` 外的 1887 页投影全部一致。因此这是大幅 parity 改善，不是完美逐 glyph parity。
 完整匹配、容差口径、315 件逐项归因和复现命令见
@@ -609,7 +622,7 @@ GovDocs1 18/53，原因是 F 容许同 span 内最多约 5% 的相邻 geometry �
 
 G 落地后的最终门全部通过：`cargo fmt` clean；clippy `-D warnings` clean；Rust workspace
 all-features **1702 passed / 0 failed / 1 个显式 profiling ignored**；共享 maturin release build
-成功；Python 在 `-W error --doctest-modules` 下 **805 passed / 63 skipped / 0 failed**；Ruff
+成功；Python 在 `-W error --doctest-modules` 下 **814 passed / 63 skipped / 0 failed**；Ruff
 format/check、mypy、cargo-deny 和四个 drift guard 均通过。首次 Python 运行的三项失败只来自
 PyMuPDF 1.28 对旧 `fitz` compatibility import 写 stdout 的 deprecation warning；三个子进程入口
 改用 `import pymupdf as fitz` 后复跑全绿，没有靠 skip 绕过。

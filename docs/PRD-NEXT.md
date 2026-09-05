@@ -1,53 +1,107 @@
-# PRD-NEXT — Remaining Work Roadmap (code-verified)
+# PRD-NEXT — Remaining Work Roadmap (live restart entry)
 
-> **What this file is.** The single live to-do list for resuming the pdfspine build, **re-verified against
-> the actual source on 2026-06-19** and re-prioritized around the public release. It tracks ONLY what is
-> LEFT; the record of DONE work lives in git history + commit messages, `docs/BENCHMARKS.md` (accuracy),
-> `COMPAT.toml` / `PARITY.md` (API parity), and `conformance/gt/*-REPORT.md` (machine metrics).
->
-> **How priorities are set.** The plan pivots on the first public PyPI tag: **Phase 0** = must-fix-before-tag
-> blockers · **Phase 1** = pre-launch quality (cheap, high-credibility) · **Phase 2** = launch parity push ·
-> **Phase 3** = post-launch correctness · **Phase 4** = post-launch capability. **§3 is the correction log**
-> for where the *previous* A–F framing of this doc was wrong vs the code — read it first if you remember the
-> old structure.
->
-> **🚧 IN FLIGHT — glyph-geometry API expansion (continuation branch
-> `glyph-geometry-continue`, synced to source ref `origin/worktree-agent-ab0626e7f9bd0c95d`
-> at `9912a23`).** The text layer now publishes the full
-> per-glyph geometry through `get_text` — `rendered_size` (fitz's `sqrt(|det|)` semantics),
-> `declared_size`, `matrix` / `text_matrix` / `ctm`, the true rotated `quad`, `dir`, plus `seq`
-> (painting order), `number` (reading order) and `synthetic` (engine-inserted word spaces) — so
-> consumers stop reverse-engineering font sizes out of bboxes. Also fixes the SVG backend to use the
-> real `Trm` instead of the scalar `Tf`.
->
-> **Current measured status (2026-09-05):** A–G are complete. A frozen, hash-verified public
-> 300-document manifest found 0/300 word/text/font differences between `aaee2a9`, `9912a23`, and the
-> post-F build; the 30-document GT slice is likewise exact across revisions. F splits 8,523 real-glyph
-> seams in 79 documents, with the documented cost that 420 alphabetic runs cross a new span boundary
-> (three become one span per character, including the real `HPA` abbreviation). E reduced the original
-> geometry build's retained-rawdict RSS from about 699 MiB to 430 MiB, but the optimized API still costs
-> 59% more streamed rawdict time, 65% more retained rawdict time, and 49% more retained rawdict RSS than
-> the pre-geometry build on the measured 118-page PDF. G's rendered `span["size"]` correction is accepted:
-> 5,495,174 of 5,803,856 uniquely matched glyphs improve, 308,367 are unchanged,
-> and 315 worsen because an F-tolerated span reports its first glyph's rendered size. Mean absolute size
-> error falls from 8.1822 pt to 0.000115 pt; this is a large parity improvement, not perfect value parity.
-> The final unified gate is green: 1,702 Rust tests and 805 pytest tests passed, with clippy, formatting,
-> Ruff, mypy, cargo-deny, and four drift guards clean.
-> A final same-input check found F/G add 0.19% streamed and 0.75% retained rawdict time over the
-> optimized E snapshot (RSS +1.031 MiB / +0.297 MiB); this does not erase the material pre-geometry
-> cost above.
-> See `HANDOFF-glyph-geometry.md` §12 and the dedicated `conformance/GLYPH-GEOMETRY-*-REPORT.md` reports.
+> **Use this file first when resuming pdfspine.** This top section is the current
+> checkpoint as of 2026-09-05. Older dated snapshots and completed phase records
+> remain below for history; they do not override this queue.
+
+## 0. Restart here (2026-09-05)
+
+### Repository and release checkpoint
+
+- Repository: `/Users/linhan/startup/spine/pdfspine`.
+- `HEAD`, `origin/main`, and annotated tag `v0.7.1` point to `9da7ca6`. The
+  glyph-geometry implementation shipped in `0.7.0`; `0.7.1` is the documentation
+  synchronization release. The old `v0.7.0` tag remains at `36ed734`.
+- PyPI `0.7.1` has five platform wheels plus an sdist. An independent repo-external
+  install using an unpinned package name, an empty `PYTHONPATH`, and the official
+  `https://pypi.org/simple` index selected `0.7.1`, installed
+  `ocrspine-models==0.0.3`, and reproduced `size == rendered_size == 12` with
+  `declared_size == 1` for a `Tf 1` / `Tm 12` PDF.
+- GitHub Release `v0.7.1` is published (not draft or prerelease) with all six
+  artifacts: <https://github.com/VoldemortGin/pdfspine/releases/tag/v0.7.1>.
+  PyPI's description and GitHub's raw README contain the same new geometry,
+  platform, and aggregate-benchmark wording; README document links are absolute
+  GitHub URLs so they also work from PyPI.
+- The coverage report and this restart documentation may be present as uncommitted
+  working-tree changes. Do not treat them as pushed until a later `git status` and
+  commit check proves it.
+
+### Read in this order
+
+1. This section and its next-task queue.
+2. `HANDOFF-glyph-geometry.md` top checkpoint and §12 for the completed A–G evidence.
+3. `conformance/COVERAGE-REPORT.md` and the focused
+   `conformance/GLYPH-GEOMETRY-*-REPORT.md` reports. Raw coverage JSON/LCOV is under
+   `/tmp`, not in the repository.
+4. The older phase plan below only when taking one of its still-open items.
+
+### Next task queue
+
+1. **Repair the main-CI offline wheel smoke.** `.github/workflows/ci.yml` installs
+   `pdfspine` from `dist` with `--no-index`, but that directory does not contain
+   the required `ocrspine-models` distribution. Mirror the release workflow's
+   model-package preparation while continuing to prove the local wheel is selected.
+   Ordinary PyPI dependency resolution is already verified. Investigate the
+   separate, non-blocking `cargo-vet` failure independently; do not combine the two
+   into one root cause.
+2. **Make coverage durable and actionable.** Retain machine-readable CI artifacts
+   and restore a reliable Codecov upload (the current upload was rejected because
+   no token was provided). Collect Rust coverage while Python exercises the
+   instrumented PyO3 extension before interpreting `py-bindings` or the low
+   `pdf-api` cargo-only result: Python execution is absent from that profile, so
+   0/3,465 binding lines does not mean the bindings have no tests. Then add targeted
+   tests only after the combined profile identifies real gaps. Current evidence at `9da7ca6`:
+   Python lines 4,384/5,344 (**82.04%**), branches 955/1,498 (**63.75%**), combined
+   5,339/6,842 (**78.03%**), with 814 passed / 63 skipped; Rust workspace lines
+   30,400/41,883 (**72.58%**), functions 2,991/4,517 (**66.22%**), and regions
+   54,096/74,408 (**72.70%**). Rust branch coverage was not enabled. Excluding
+   `py-bindings`, cargo-only Rust line coverage is 30,400/38,418 (**79.13%**);
+   `pdf-core` is 5,253/6,040 (**86.97%**) and `pdf-text` is 5,281/5,773
+   (**91.48%**).
+3. **Reduce the remaining rawdict geometry cost.** The retained-rawdict RSS
+   optimization reduced about 699 MiB to 430 MiB, but the final implementation
+   remains about +59% streamed rawdict time, +65% retained rawdict time, and +49%
+   retained RSS versus pre-geometry on the measured 118-page input. F/G add only
+   +0.2% streamed / +0.8% retained time versus the optimized snapshot.
+4. **Experiment before changing span anchoring.** The public span size is the first
+   glyph's rendered size. Adjacent-transform tolerance can accumulate, producing
+   315 worsening matched characters in two documents / 41 spans, while each
+   character's own `rendered_size` remains correct. Test any anchoring alternative
+   on independent corpora; do not tune the F thresholds without data.
+5. **Continue the existing roadmap.** Preserve the accepted reading-order tradeoff
+   and the remaining Type0/Type3, device-replay, layers, and other deferred work
+   below. None is part of this handoff update.
+
+### Glyph geometry A–G: complete, do not restart
+
+- **A/B:** public geometry fields, serializers, Python surface, SVG `Trm`, tests,
+  and documentation landed; ancestry/rebase validation completed.
+- **C:** the frozen hash-verified 300-document manifest covers 1,887 sampled pages;
+  baseline/current/F/G have 0/300 extraction JSON differences and unchanged
+  word/text projections.
+- **D:** the fixed 30-document GT slice is unchanged across revisions. Its EUR-Lex
+  component is the historical five-document Greek slice, not the 40-document full
+  corpus.
+- **E:** rawdict memory was reduced substantially and the remaining time/RSS cost
+  was measured rather than described as free.
+- **F:** 8,523 span splits across 79 documents; the flattened geometry projection
+  remains identical across 6,812,936 characters. The documented alphabetic and
+  leader-dot fragmentation is an accepted structural cost.
+- **G:** 5,495,174 uniquely matched glyph sizes improve, 308,367 are unchanged,
+  and 315 worsen due to the first-glyph span representative; per-character values
+  remain correct. The release gate is 1,702 Rust tests and 814 Python tests passed,
+  with 63 Python skips.
 
 > **Single source of truth.** Per-symbol disposition lives in **`COMPAT.toml`**, generated from
 > `scripts/_compat_catalog.py` (guarded in CI). **Never hand-edit `COMPAT.toml`** — change dispositions in
 > the catalog and regenerate.
 >
-> **✅ Markdown → PDF original extension — COMPLETE (2026-07-02, in working tree).** See **§9**: a
+> **Historical completion record — Markdown → PDF original extension (2026-07-02).** See **§9**: a
 > brand-new top-level `pdfspine.markdown_to_pdf()`, **NOT** part of the fitz-parity Phases 0–4 above.
-> MD-0..MD-4 all landed 2026-07-02 (CJK **Option A**); P3-5 GriTS scored the same day. Remaining overall:
-> the pre-public flip (§7) and the accepted/deferred items (§5, P3-1r).
+> MD-0..MD-4 all landed 2026-07-02 (CJK **Option A**); P3-5 GriTS scored the same day. This note predates
+> the public releases; the current restart state and remaining work are in §0.
 
-## 1. Snapshot (verified 2026-06-19)
+## 1. Historical product snapshot (verified 2026-06-19)
 
 - **Gate:** 1349 Rust tests + 593 pytest fns floor (locally 658 pytest passed / 1 skipped / 8 xfailed) green ·
   clippy `-D warnings` clean on both lean and OCR variants · 0 real `TODO`/`unimplemented!`/`panic!` in

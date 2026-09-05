@@ -28,6 +28,24 @@
 | Conformance corpus | `CONF-CORPUS-v1` (frozen snapshot; see §3.1 + §10.3) |
 | Audience | Core engineering team, AI build agents, legal/OSS-review, downstream Rust & Python integrators |
 
+### 1.1 Current implementation checkpoint (2026-09-05)
+
+This document preserves the approved product requirements and historical scope.
+Use [`docs/PRD-NEXT.md`](docs/PRD-NEXT.md) §0 as the live restart queue.
+
+- [x] Glyph-geometry phases A–G are complete: structured span/character geometry,
+  rendered-versus-declared size semantics, geometry-aware span splitting, frozen
+  corpus/GT validation, and measured performance limits are documented in
+  [`HANDOFF-glyph-geometry.md`](HANDOFF-glyph-geometry.md) §12 and the
+  `conformance/GLYPH-GEOMETRY-*-REPORT.md` reports.
+- [x] The feature shipped in `0.7.0`; the documentation-only `0.7.1` release is on
+  PyPI and GitHub with a verified ordinary official-index install and six release
+  artifacts. `HEAD`, `origin/main`, and `v0.7.1` are `9da7ca6`; `v0.7.0` remains
+  `36ed734`.
+- [ ] Resume with the prioritized CI, coverage, rawdict-performance, and span-size
+  experiment queue in `docs/PRD-NEXT.md` §0. Do not infer that current uncommitted
+  coverage/PRD working-tree files have already been pushed.
+
 ---
 
 ## 2. Background & Motivation
