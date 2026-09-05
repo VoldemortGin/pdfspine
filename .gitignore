@@ -67,3 +67,10 @@ conformance/gt/__pycache__/
 
 # Regenerable real-corpus validation PDFs (re-fetch via conformance/fetch_corpus.py); never commit.
 fixtures/corpus/
+
+# corpus-diff: driver scripts committed; oracle output and machine-local corpus lists are not.
+conformance/corpus-diff/out/
+conformance/corpus-diff/corpus.txt
+conformance/corpus-diff/*.json
+conformance/corpus-diff/*.log
+conformance/corpus-diff/__pycache__/
