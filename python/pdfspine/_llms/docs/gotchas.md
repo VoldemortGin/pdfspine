@@ -34,16 +34,16 @@
 
 ## 5. 未实现的能力会显式报错（不是静默错值）
 
-- deferred（21 个，计划做）和 out-of-scope（66 个，v1 不做）符号调用时抛 `PdfUnsupportedError`。
+- deferred（16 个，计划做）和 out-of-scope（66 个，v1 不做）符号调用时抛 `PdfUnsupportedError`。
 - 最大的 out-of-scope 块：`Story` / `Xml` / `Archive`（HTML/CSS → PDF 排版引擎，整块不做）。还有部分渲染期 `Tools` 旋钮、Widget JavaScript 钩子、数字签名**创建**。
-- 已知 deferred（节选）：`Document.add_layer`/`get_layers`/`get_oc`/`get_ocmd`/`set_ocmd`/`set_layer_ui_config`/`switch_layer`/`insert_file`/`FormFonts`；`Page.write_text`/`insert_font`/`remove_rotation`/`run`/`extend_textpage`/`refresh`；`DisplayList.run`/`get_textpage`；`Annot.get_textbox`；`Pixmap.warp`；`Tools.set_annot_stem`/`set_subset_fontnames`。
+- 已知 deferred（全部 16 个）：`Document.add_layer`/`get_layers`/`get_oc`/`get_ocmd`/`set_ocmd`/`set_layer_ui_config`/`switch_layer`；`Page.insert_font`/`run`/`extend_textpage`；`DisplayList.run`/`get_textpage`；`Annot.get_textbox`；`Pixmap.warp`；`Tools.set_annot_stem`/`set_subset_fontnames`。
 - 权威清单：包内随附的 PARITY 概览，或仓库 `COMPAT.toml`（per-symbol）。
 
 ## 6. 与真 PyMuPDF 的差异点
 
 - **异常类型不同名**：pdfspine 用 `PdfError` 体系，不是 PyMuPDF 的 `FileDataError` 等。shim 提供别名（`FileDataError = PdfSyntaxError`、`EmptyFileError = PdfSyntaxError`、`mupdf_display_errors = PdfError`），但若你**直接** `import pdfspine`（不经 shim），就该 catch `pdfspine.PdfError` 系列。
 - **覆盖率不是 100%**：当前为 89.3%（687/769）。迁移前用 `COMPAT.toml` 核对你依赖的符号。
-- **渲染/文本是 near-parity 而非逐字节相同**：渲染 SSIM ~0.945；文本在 born-digital 上 parity，Arabic/RTL 更好。像素级/字节级完全一致不要假设。
+- **渲染/文本是 near-parity 而非逐字节相同**：渲染 SSIM 0.984 均值 / 0.989 中位（2026-06-21 实测）；文本在 born-digital 上 parity，Arabic/RTL 更好。像素级/字节级完全一致不要假设。
 - **redaction 是破坏性的**：`apply_redactions()` 真正删除被覆盖内容，不可逆。
 - **camelCase 别名存在但建议用 snake_case**：`getToC`/`insertPDF`/`getPixmap`/`newPage` 等保留以兼容旧代码，新代码用 `get_toc`/`insert_pdf`/`get_pixmap`/`new_page`。
 

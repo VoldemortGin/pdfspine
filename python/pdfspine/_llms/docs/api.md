@@ -210,7 +210,7 @@ doc.set_layer(config=0, *, on=None, off=None, locked=None, **_) -> None
 doc.add_ocg(name, config=None, *, on=True, intent="View", usage=None, **_) -> int
 doc.set_oc(xref, ocg) -> None
 ```
-> deferred（调用抛 `PdfUnsupportedError`）：`add_layer` / `get_layers` / `get_oc` / `get_ocmd` / `set_ocmd` / `set_layer_ui_config` / `switch_layer` / `insert_file` / `FormFonts`。
+> deferred（调用抛 `PdfUnsupportedError`）：`add_layer` / `get_layers` / `get_oc` / `get_ocmd` / `set_ocmd` / `set_layer_ui_config` / `switch_layer`。
 
 ### Journalling（撤销/重做）
 ```python

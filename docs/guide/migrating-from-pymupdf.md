@@ -48,15 +48,17 @@ repository tracks the disposition of every public PyMuPDF symbol:
 
 | Disposition | Count | What it means |
 |---|---:|---|
-| Implemented | 647 | Works today; does not raise on use. |
-| Deferred | 56 | Known and planned for a later milestone. |
+| Implemented | 687 | Works today; does not raise on use. |
+| Deferred | 16 | Known and planned for a later milestone. |
 | Out-of-scope | 66 | Intentionally never in v1. |
-| **Total** | **769** | **84.1% implemented** |
+| **Total** | **769** | **89.3% implemented** |
 
-!!! warning "Accuracy validation is in progress"
+!!! warning "Accuracy is near-parity, not byte-identical"
     "Implemented" means the method exists and returns a result of the right
-    shape. **Byte-for-byte / pixel-for-pixel agreement with PyMuPDF across a real
-    PDF corpus is still being validated.** Verify output on your own documents
+    shape. **Byte-for-byte / pixel-for-pixel agreement with PyMuPDF is not
+    claimed**: measured against a real PDF corpus (2026-06-21, see
+    `docs/BENCHMARKS.md`), text scores trail fitz by 0.2–1.4 percentage points
+    and page renders reach SSIM 0.984 mean. Verify output on your own documents
     before relying on it.
 
 ## How gaps behave
@@ -120,6 +122,7 @@ also sequences, so `r[0]`, `tuple(r)`, and unpacking all behave like PyMuPDF.
 | Sanitize | `scrub`, `bake` | same | ✅ Implemented (subset of toggles) |
 | Embedded files | `embfile_*` | same | ✅ Implemented |
 | OCG / layers | `get_ocgs`, `add_ocg`, `get_layer`, `set_layer`, `set_oc` | same | ✅ Implemented (read + add/toggle/bind) |
+| OCR | `get_textpage_ocr`, `pdfocr_save` / `pdfocr_tobytes` | + `engine="paddle"` (default, pure-Rust PaddleOCR) or `"tesseract"` | ✅ Implemented |
 | xref read | `xref_object`, `xref_stream`, `xref_get_key`, … | same | ✅ Implemented |
 
 ## What differs
@@ -136,23 +139,28 @@ also sequences, so `r[0]`, `tuple(r)`, and unpacking all behave like PyMuPDF.
 
 ## What is not yet implemented
 
-These are *deferred* (planned) — they raise `PdfUnsupportedError` today:
+These are *deferred* (planned) — they raise `PdfUnsupportedError` today (the
+16 deferred symbols in `COMPAT.toml`):
 
-- `convert_to_pdf` / image-as-document inputs (milestone M5).
-- Page-level word/block helpers (`get_text_words`, `get_text_blocks`,
-  `get_textbox`), `get_texttrace` (M2 follow-ups).
-- Image-info helpers (`get_image_info`, `get_image_bbox`, `get_image_rects`).
-- `show_pdf_page`, `write_text`, `insert_font`, `replace_image`, `delete_image`.
-- Page-label read/write, `copy_page` / `move_page` / `delete_pages`.
+- OCG layer-object ops: `add_layer`, `get_layers`, `switch_layer`,
+  `set_layer_ui_config`, `get_oc`, `get_ocmd`, `set_ocmd` (post-v1; the
+  read / add / toggle / bind surface above is implemented).
+- `Page.insert_font` (M4), `Annot.get_textbox` (M4), `Pixmap.warp` (M5).
+- Device-callback replay: `Page.run`, `Page.extend_textpage`,
+  `DisplayList.run`, `DisplayList.get_textpage` (M6; `get_pixmap` covers the
+  raster path).
+- `Tools.set_annot_stem`, `Tools.set_subset_fontnames`.
 
 ## Out of scope for v1
 
 Intentionally **never** in v1 (these raise `PdfUnsupportedError`):
 
-- **OCR** (`get_textpage_ocr`).
-- **EPUB-class reflow** (`doc.layout`, chapters, locations, bookmarks).
-- **HTML/CSS layout** (`insert_htmlbox`).
-- **Journalling / undo-redo** (`journal_*`, `save_snapshot`).
+- **EPUB-class reflow** (`doc.layout`, locations, bookmarks).
+- **HTML/CSS layout** (`Story` / `Xml` / `Archive`, `insert_htmlbox`).
+- **Journal persistence / per-op naming** (`journal_start_op` / `journal_stop_op` /
+  `journal_op_name` / `journal_position` / `journal_save` / `journal_load`,
+  `save_snapshot`); `journal_enable` / `journal_undo` / `journal_redo` /
+  `journal_can_do` are implemented.
 - **Full Unicode shaping** (complex scripts).
 
 Consult the repository's `COMPAT.toml` for the authoritative, per-symbol
