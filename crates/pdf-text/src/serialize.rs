@@ -24,9 +24,9 @@
 //! have no document handle, so they emit geometry-only image blocks (empty
 //! `image`, as fitz does for an unresolvable image).
 
-use pdf_core::geom::{Point, Rect};
+use pdf_core::geom::{Matrix, Point, Quad, Rect};
 
-use crate::model::{Block, BlockKind, Line, Span, TextPage};
+use crate::model::{Block, BlockKind, Char, Line, Span, TextPage};
 use crate::words::words;
 
 // === TEXTFLAGS (PRD §8.6.2 — Tier-A documented values) ====================
@@ -91,6 +91,16 @@ pub mod defaults {
 
 // === tuple shapes (Tier-A, PRD §8.6.2 / §10.7) ============================
 
+/// A flattened affine matrix `(a, b, c, d, e, f)`, the PDF / PyMuPDF row-vector
+/// convention: `(x, y) → (a·x + c·y + e, b·x + d·y + f)`. Same shape as the
+/// `dict` image block's `transform` and as `pdfspine.Matrix`.
+pub type MatrixTuple = (f64, f64, f64, f64, f64, f64);
+
+/// A flattened quadrilateral `(ul.x, ul.y, ur.x, ur.y, ll.x, ll.y, lr.x, lr.y)`
+/// — the corner order of `pdf_core::geom::Quad`, of `search_for(quads=True)`
+/// and of the `get_text("xml")` `<char quad=…>` attribute.
+pub type QuadTuple = (f64, f64, f64, f64, f64, f64, f64, f64);
+
 /// One `get_text("blocks")` tuple: `(x0, y0, x1, y1, text, block_no, type)`
 /// where `type` is `0` (text) or `1` (image).
 pub type BlockTuple = (f64, f64, f64, f64, String, i32, i32);
@@ -133,6 +143,10 @@ pub struct DictTextBlock {
     pub number: i32,
     /// The block bounding box `(x0, y0, x1, y1)`.
     pub bbox: (f64, f64, f64, f64),
+    /// Painting order: the smallest source-glyph index among the block's
+    /// glyphs. Orders blocks the way the content stream painted them, which is
+    /// **not** in general the reading order [`Self::number`] carries.
+    pub seq: usize,
     /// The block's lines.
     pub lines: Vec<DictLine>,
 }
@@ -146,6 +160,11 @@ pub struct DictLine {
     pub wmode: i32,
     /// Writing-direction unit vector `(cos, sin)`.
     pub dir: (f64, f64),
+    /// The line's index within the page in reading order — the order the lines
+    /// leave the engine, i.e. the order their text appears in `get_text("text")`.
+    pub number: usize,
+    /// Painting order: the smallest source-glyph index among the line's glyphs.
+    pub seq: usize,
     /// The line's spans.
     pub spans: Vec<DictSpan>,
 }
@@ -170,6 +189,29 @@ pub struct DictSpan {
     pub origin: (f64, f64),
     /// The span bounding box `(x0, y0, x1, y1)`.
     pub bbox: (f64, f64, f64, f64),
+    /// The **declared** font size — the `Tf` operand verbatim, the same value
+    /// as [`Self::size`] under an explicit name.
+    pub declared_size: f64,
+    /// The **rendered** font size, `sqrt(|det|)` of [`Self::matrix`]'s linear
+    /// part (MuPDF's `fz_matrix_expansion`). Differs from [`Self::size`]
+    /// whenever the scale lives in `Tm` / `cm` / `Tz` rather than in `Tf`.
+    pub rendered_size: f64,
+    /// The span's render matrix in **device space** (first glyph):
+    /// `(0,0)·matrix == origin`.
+    pub matrix: MatrixTuple,
+    /// The first glyph's text matrix `Tm` — the raw content-stream value in
+    /// **PDF user space**, with no page transform folded in.
+    pub text_matrix: MatrixTuple,
+    /// The first glyph's CTM — likewise the raw **user-space** value.
+    pub ctm: MatrixTuple,
+    /// The span's baseline direction as a device-space unit vector.
+    pub dir: (f64, f64),
+    /// The span's directional envelope in device space: the extent of its glyph
+    /// quads along [`Self::dir`] and its normal. Equals the `bbox` corners for
+    /// upright text; hugs the run for rotated or sheared text.
+    pub quad: QuadTuple,
+    /// Painting order: the smallest source-glyph index among the span's glyphs.
+    pub seq: usize,
     /// The span text (dict mode); empty in rawdict mode.
     pub text: String,
     /// The per-character detail (rawdict mode); empty in dict mode.
@@ -185,6 +227,21 @@ pub struct DictChar {
     pub bbox: (f64, f64, f64, f64),
     /// The Unicode scalar (single-char string).
     pub c: String,
+    /// The glyph's render matrix in **device space**: `(0,0)·matrix == origin`.
+    pub matrix: MatrixTuple,
+    /// The glyph cell's four true corners in **device space**. `bbox` is this
+    /// quad's axis-aligned envelope; the quad keeps the parallelogram a rotated
+    /// or sheared `Tm` produces.
+    pub quad: QuadTuple,
+    /// The **rendered** font size, `sqrt(|det|)` of [`Self::matrix`].
+    pub rendered_size: f64,
+    /// Painting order: the source glyph's index in the interpreter output. A
+    /// synthesized space borrows the preceding real glyph's index, so `seq`
+    /// stays non-decreasing along a span.
+    pub seq: usize,
+    /// `true` when layout synthesized this char (an inter-word space the
+    /// content stream never painted); `false` for every glyph the PDF drew.
+    pub synthetic: bool,
 }
 
 /// A `dict` image block (`type` 1). When a caller supplies an [`ImageResolver`],
@@ -656,6 +713,7 @@ fn text_block(block: &Block, raw: bool) -> DictTextBlock {
     DictTextBlock {
         number: block.number as i32,
         bbox: rect_tuple(block.bbox),
+        seq: block.seq,
         lines,
     }
 }
@@ -666,23 +724,15 @@ fn dict_line(line: &Line, raw: bool) -> DictLine {
         bbox: rect_tuple(line.bbox),
         wmode: line.wmode as i32,
         dir: line.dir,
+        number: line.number,
+        seq: line.seq,
         spans,
     }
 }
 
 fn dict_span(span: &Span, raw: bool) -> DictSpan {
     let (text, chars) = if raw {
-        (
-            String::new(),
-            span.chars
-                .iter()
-                .map(|c| DictChar {
-                    origin: point_tuple(c.origin),
-                    bbox: rect_tuple(c.bbox),
-                    c: c.c.to_string(),
-                })
-                .collect(),
-        )
+        (String::new(), span.chars.iter().map(dict_char).collect())
     } else {
         (span.text.clone(), Vec::new())
     };
@@ -695,8 +745,29 @@ fn dict_span(span: &Span, raw: bool) -> DictSpan {
         descender: span.descender,
         origin: point_tuple(span.origin),
         bbox: rect_tuple(span.bbox),
+        declared_size: span.size,
+        rendered_size: span.rendered_size,
+        matrix: matrix_tuple(&span.matrix),
+        text_matrix: matrix_tuple(&span.text_matrix),
+        ctm: matrix_tuple(&span.ctm),
+        dir: span.dir,
+        quad: quad_tuple(&span.quad),
+        seq: span.seq,
         text,
         chars,
+    }
+}
+
+fn dict_char(c: &Char) -> DictChar {
+    DictChar {
+        origin: point_tuple(c.origin),
+        bbox: rect_tuple(c.bbox),
+        c: c.c.to_string(),
+        matrix: matrix_tuple(&c.matrix),
+        quad: quad_tuple(&c.quad),
+        rendered_size: c.rendered_size,
+        seq: c.seq,
+        synthetic: c.synthetic,
     }
 }
 
@@ -801,6 +872,7 @@ fn json_block(s: &mut String, block: &DictBlock, raw: bool) {
             json_comma_bbox(s, "bbox", b.bbox);
             s.push_str(",\"number\":");
             s.push_str(&b.number.to_string());
+            json_comma_raw(s, "seq", &b.seq.to_string());
             s.push_str(",\"lines\":[");
             for (i, line) in b.lines.iter().enumerate() {
                 if i > 0 {
@@ -856,6 +928,8 @@ fn json_line(s: &mut String, line: &DictLine, raw: bool) {
     s.push_str(&fmt_num(line.dir.1));
     s.push(']');
     json_comma_bbox(s, "bbox", line.bbox);
+    json_comma_raw(s, "number", &line.number.to_string());
+    json_comma_raw(s, "seq", &line.seq.to_string());
     s.push_str(",\"spans\":[");
     for (i, span) in line.spans.iter().enumerate() {
         if i > 0 {
@@ -885,6 +959,14 @@ fn json_span(s: &mut String, span: &DictSpan, raw: bool) {
     s.push_str(&fmt_num(span.origin.1));
     s.push(']');
     json_comma_bbox(s, "bbox", span.bbox);
+    json_comma_raw(s, "declared_size", &fmt_num(span.declared_size));
+    json_comma_raw(s, "rendered_size", &fmt_num(span.rendered_size));
+    json_comma_matrix(s, "matrix", span.matrix);
+    json_comma_matrix(s, "text_matrix", span.text_matrix);
+    json_comma_matrix(s, "ctm", span.ctm);
+    json_comma_nums(s, "dir", &[span.dir.0, span.dir.1]);
+    json_comma_quad(s, "quad", span.quad);
+    json_comma_raw(s, "seq", &span.seq.to_string());
     if raw {
         s.push_str(",\"chars\":[");
         for (i, ch) in span.chars.iter().enumerate() {
@@ -899,6 +981,11 @@ fn json_span(s: &mut String, span: &DictSpan, raw: bool) {
             json_comma_bbox(s, "bbox", ch.bbox);
             s.push_str(",\"c\":");
             json_str(s, &ch.c);
+            json_comma_matrix(s, "matrix", ch.matrix);
+            json_comma_quad(s, "quad", ch.quad);
+            json_comma_raw(s, "rendered_size", &fmt_num(ch.rendered_size));
+            json_comma_raw(s, "seq", &ch.seq.to_string());
+            json_comma_raw(s, "synthetic", if ch.synthetic { "true" } else { "false" });
             s.push('}');
         }
         s.push(']');
@@ -921,6 +1008,38 @@ fn json_comma_bbox(s: &mut String, key: &str, bbox: (f64, f64, f64, f64)) {
     s.push(',');
     s.push_str(&fmt_num(bbox.3));
     s.push(']');
+}
+
+/// Writes `,"key":[v, …]` with the shared number formatting.
+fn json_comma_nums(s: &mut String, key: &str, vals: &[f64]) {
+    s.push_str(",\"");
+    s.push_str(key);
+    s.push_str("\":[");
+    for (i, v) in vals.iter().enumerate() {
+        if i > 0 {
+            s.push(',');
+        }
+        s.push_str(&fmt_num(*v));
+    }
+    s.push(']');
+}
+
+/// Writes `,"key":[a,b,c,d,e,f]`.
+fn json_comma_matrix(s: &mut String, key: &str, m: MatrixTuple) {
+    json_comma_nums(s, key, &[m.0, m.1, m.2, m.3, m.4, m.5]);
+}
+
+/// Writes `,"key":[ul.x,ul.y,ur.x,ur.y,ll.x,ll.y,lr.x,lr.y]`.
+fn json_comma_quad(s: &mut String, key: &str, q: QuadTuple) {
+    json_comma_nums(s, key, &[q.0, q.1, q.2, q.3, q.4, q.5, q.6, q.7]);
+}
+
+/// Writes `,"key":<already-rendered JSON literal>`.
+fn json_comma_raw(s: &mut String, key: &str, lit: &str) {
+    s.push_str(",\"");
+    s.push_str(key);
+    s.push_str("\":");
+    s.push_str(lit);
 }
 
 fn json_kv_num(s: &mut String, key: &str, v: f64) {
@@ -1174,15 +1293,16 @@ fn xml_span(s: &mut String, span: &Span) {
     ));
     let color = format!("#{:06x}", span.color & 0x00FF_FFFF);
     for ch in &span.chars {
-        let cb = ch.bbox.normalize();
-        // The char quad: four corners of the (axis-aligned) bbox,
-        // ul, ur, ll, lr (PyMuPDF `<char quad=…>`).
+        // The char quad: the glyph cell's four *true* corners in device space,
+        // `ul, ur, ll, lr` (PyMuPDF `<char quad=…>`). Rotated or sheared text
+        // yields a real parallelogram; for upright text it is the bbox corners.
+        let q = &ch.quad;
         s.push_str(&format!(
             "<char quad=\"{} {} {} {} {} {} {} {}\" x=\"{}\" y=\"{}\" bidi=\"0\" color=\"{}\" alpha=\"#ff\" flags=\"{}\" c=\"{}\"/>\n",
-            fmt_num(cb.x0), fmt_num(cb.y0),
-            fmt_num(cb.x1), fmt_num(cb.y0),
-            fmt_num(cb.x0), fmt_num(cb.y1),
-            fmt_num(cb.x1), fmt_num(cb.y1),
+            fmt_num(q.ul.x), fmt_num(q.ul.y),
+            fmt_num(q.ur.x), fmt_num(q.ur.y),
+            fmt_num(q.ll.x), fmt_num(q.ll.y),
+            fmt_num(q.lr.x), fmt_num(q.lr.y),
             fmt_num(ch.origin.x),
             fmt_num(ch.origin.y),
             color,
@@ -1230,4 +1350,14 @@ fn rect_tuple(r: Rect) -> (f64, f64, f64, f64) {
 
 fn point_tuple(p: Point) -> (f64, f64) {
     (p.x, p.y)
+}
+
+fn matrix_tuple(m: &Matrix) -> MatrixTuple {
+    (m.a, m.b, m.c, m.d, m.e, m.f)
+}
+
+fn quad_tuple(q: &Quad) -> QuadTuple {
+    (
+        q.ul.x, q.ul.y, q.ur.x, q.ur.y, q.ll.x, q.ll.y, q.lr.x, q.lr.y,
+    )
 }

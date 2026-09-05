@@ -393,7 +393,8 @@ struct DevGlyph {
     /// is exactly `origin`.
     render_matrix: Matrix,
     /// The glyph cell's four corners in **device space** —
-    /// `cell.quad().transform(Trm · page_transform)`. Unlike `bbox` this keeps
+    /// The cell's four corners through `Trm · page_transform`, named in the
+    /// glyph's own frame (`ul` = ascender-left). Unlike `bbox` this keeps
     /// the true parallelogram of a rotated / sheared `Tm`; `quad.rect()` is
     /// `bbox`.
     quad: Quad,
@@ -464,7 +465,19 @@ impl DevGlyph {
         // `origin`/`bbox`; `quad` is the *untransformed* cell mapped through it,
         // preserving the parallelogram that `bbox` flattens away.
         let render_matrix = Matrix::concat(&g.render_matrix, p);
-        let quad = Quad::from_rect(&g.cell).transform(&render_matrix);
+        // Corner *roles*, not rect order: text space is y-up (the ascender edge
+        // is the visual top), device space y-down. Naming the corners in the
+        // glyph's own frame before transforming keeps `ul` the upper-left of the
+        // painted glyph — the `<char quad=…>`/`fitz.Quad` convention — instead of
+        // the y-flipped one `Quad::from_rect` would hand back.
+        let c = g.cell.normalize();
+        let quad = Quad::new(
+            Point::new(c.x0, c.y1),
+            Point::new(c.x1, c.y1),
+            Point::new(c.x0, c.y0),
+            Point::new(c.x1, c.y0),
+        )
+        .transform(&render_matrix);
         DevGlyph {
             origin,
             bbox,

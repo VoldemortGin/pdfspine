@@ -585,6 +585,8 @@ fn dict_block_to_py<'py>(
             d.set_item("number", b.number)?;
             d.set_item("type", 0i32)?;
             d.set_item("bbox", b.bbox)?;
+            // Painting order (content-stream), as opposed to `number`'s reading order.
+            d.set_item("seq", b.seq)?;
             let lines = PyList::empty(py);
             for line in &b.lines {
                 lines.append(dict_line_to_py(py, line)?)?;
@@ -624,6 +626,9 @@ fn dict_line_to_py<'py>(py: Python<'py>, line: &pdf_api::DictLine) -> PyResult<B
     d.set_item("wmode", line.wmode)?;
     d.set_item("dir", line.dir)?;
     d.set_item("bbox", line.bbox)?;
+    // Reading-order index within the page, and the painting-order key.
+    d.set_item("number", line.number)?;
+    d.set_item("seq", line.seq)?;
     Ok(d)
 }
 
@@ -637,6 +642,18 @@ fn dict_span_to_py<'py>(py: Python<'py>, span: &pdf_api::DictSpan) -> PyResult<B
     d.set_item("descender", span.descender)?;
     d.set_item("origin", span.origin)?;
     d.set_item("bbox", span.bbox)?;
+    // Full glyph geometry (pdfspine extension over the fitz key set): the
+    // declared vs. rendered font size, the device-space render matrix and the
+    // raw user-space `Tm`/CTM it was composed from, the baseline direction, the
+    // rotation-aware envelope and the painting-order key.
+    d.set_item("declared_size", span.declared_size)?;
+    d.set_item("rendered_size", span.rendered_size)?;
+    d.set_item("matrix", span.matrix)?;
+    d.set_item("text_matrix", span.text_matrix)?;
+    d.set_item("ctm", span.ctm)?;
+    d.set_item("dir", span.dir)?;
+    d.set_item("quad", span.quad)?;
+    d.set_item("seq", span.seq)?;
     // dict mode carries `text`; rawdict mode carries `chars`.
     if span.chars.is_empty() {
         d.set_item("text", &span.text)?;
@@ -647,6 +664,11 @@ fn dict_span_to_py<'py>(py: Python<'py>, span: &pdf_api::DictSpan) -> PyResult<B
             c.set_item("origin", ch.origin)?;
             c.set_item("bbox", ch.bbox)?;
             c.set_item("c", &ch.c)?;
+            c.set_item("matrix", ch.matrix)?;
+            c.set_item("quad", ch.quad)?;
+            c.set_item("rendered_size", ch.rendered_size)?;
+            c.set_item("seq", ch.seq)?;
+            c.set_item("synthetic", ch.synthetic)?;
             chars.append(c)?;
         }
         d.set_item("chars", chars)?;

@@ -335,12 +335,12 @@ def test_pytext_003_dict_keys_and_types():
     assert isinstance(d["width"], float) and isinstance(d["height"], float)
 
     block = d["blocks"][0]
-    assert set(block.keys()) == {"number", "type", "bbox", "lines"}
+    assert set(block.keys()) == {"number", "type", "bbox", "seq", "lines"}
     assert block["type"] == 0
     assert isinstance(block["bbox"], tuple) and len(block["bbox"]) == 4
 
     line = block["lines"][0]
-    assert set(line.keys()) == {"spans", "wmode", "dir", "bbox"}
+    assert set(line.keys()) == {"spans", "wmode", "dir", "bbox", "number", "seq"}
     assert isinstance(line["bbox"], tuple)
 
     span = line["spans"][0]
@@ -354,6 +354,15 @@ def test_pytext_003_dict_keys_and_types():
         "origin",
         "bbox",
         "text",
+        # pdfspine glyph-geometry extension (PYGEO-*).
+        "declared_size",
+        "rendered_size",
+        "matrix",
+        "text_matrix",
+        "ctm",
+        "dir",
+        "quad",
+        "seq",
     }
     assert isinstance(span["color"], int)
     assert isinstance(span["bbox"], tuple) and len(span["bbox"]) == 4
@@ -391,7 +400,17 @@ def test_pytext_006_rawdict_chars():
     assert "chars" in span
     assert "text" not in span
     char = span["chars"][0]
-    assert set(char.keys()) == {"origin", "bbox", "c"}
+    assert set(char.keys()) == {
+        "origin",
+        "bbox",
+        "c",
+        # pdfspine glyph-geometry extension (PYGEO-*).
+        "matrix",
+        "quad",
+        "rendered_size",
+        "seq",
+        "synthetic",
+    }
     assert isinstance(char["c"], str)
     assert isinstance(char["bbox"], tuple) and len(char["bbox"]) == 4
     assert isinstance(char["origin"], tuple) and len(char["origin"]) == 2
