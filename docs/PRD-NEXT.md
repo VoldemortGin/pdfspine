@@ -1,76 +1,165 @@
 # PRD-NEXT — Remaining Work Roadmap (live restart entry)
 
 > **Use this file first when resuming pdfspine.** This top section is the current
-> checkpoint as of 2026-09-05. Older dated snapshots and completed phase records
+> checkpoint as of the evening of 2026-09-05; it supersedes the morning checkpoint
+> that previously occupied it. Older dated snapshots and completed phase records
 > remain below for history; they do not override this queue.
 
-## 0. Restart here (2026-09-05)
+## 0. Restart here (2026-09-05, evening checkpoint)
 
 ### Repository and release checkpoint
 
-- Repository: `/Users/linhan/startup/spine/pdfspine`.
-- `HEAD`, `origin/main`, and annotated tag `v0.7.1` point to `9da7ca6`. The
-  glyph-geometry implementation shipped in `0.7.0`; `0.7.1` is the documentation
-  synchronization release. The old `v0.7.0` tag remains at `36ed734`.
-- PyPI `0.7.1` has five platform wheels plus an sdist. An independent repo-external
-  install using an unpinned package name, an empty `PYTHONPATH`, and the official
-  `https://pypi.org/simple` index selected `0.7.1`, installed
-  `ocrspine-models==0.0.3`, and reproduced `size == rendered_size == 12` with
-  `declared_size == 1` for a `Tf 1` / `Tm 12` PDF.
-- GitHub Release `v0.7.1` is published (not draft or prerelease) with all six
-  artifacts: <https://github.com/VoldemortGin/pdfspine/releases/tag/v0.7.1>.
-  PyPI's description and GitHub's raw README contain the same new geometry,
-  platform, and aggregate-benchmark wording; README document links are absolute
-  GitHub URLs so they also work from PyPI.
-- The coverage report and this restart documentation may be present as uncommitted
-  working-tree changes. Do not treat them as pushed until a later `git status` and
-  commit check proves it.
+- Repository: `/Users/linhan/startup/spine/pdfspine`. The published release is still
+  `v0.7.1` at `9da7ca6` (annotated tag, GitHub Release, PyPI wheels and sdist all
+  unchanged since the morning checkpoint).
+- Local `main` after `9da7ca6`: `e8afdef` docs → `1f82655` fix(ci) wheel smoke →
+  `55c661c` ci(coverage) → `13c25f2` perf(py-bindings) → `18b7afc` ci(coverage)
+  `maturin develop` → `fad0bf0` docs anchoring experiment. `origin/main` reached `18b7afc`
+  (CI run 33975022511 green); `fad0bf0` and this PRD update are pushed together
+  after it (the pre-push gate runs the full sdist build and is slow). Verify with `git status -sb` and
+  `git log origin/main -1` before trusting any of this.
+- Local branches: `glyph-geometry-continue`, `glyph-geometry-pre-sync-3de8240` (its 9
+  commits are all patch-equivalent to commits on `main`), and the two agent worktree
+  branches were deleted. Remaining: `main` and `glyph-span-size-experiment` (every
+  commit already on `main`, but its worktree at `/private/tmp/pdfspine-glyph-G` still
+  holds 22 uncommitted files, not yet triaged). The stale remote branch
+  `origin/worktree-agent-ab0626e7f9bd0c95d` was not deleted.
+- Environment: the internal disk filled up once. `target/` is now a symlink to
+  `/Volumes/Cargo/target/pdfspine` and `.gitignore` gained `/target`. The pre-push
+  gate needs `PATH="$PWD/.venv/bin:$PATH"`; the Homebrew python3.14 on `PATH` has no
+  `ruff`.
 
 ### Read in this order
 
-1. This section and its next-task queue.
+1. This section: the next-task queue, then the completion records below it.
 2. `HANDOFF-glyph-geometry.md` top checkpoint and §12 for the completed A–G evidence.
-3. `conformance/COVERAGE-REPORT.md` and the focused
-   `conformance/GLYPH-GEOMETRY-*-REPORT.md` reports. Raw coverage JSON/LCOV is under
-   `/tmp`, not in the repository.
-4. The older phase plan below only when taking one of its still-open items.
+3. `conformance/COVERAGE-REPORT.md`, in particular its "Combined Rust+Python profile"
+   section, and the focused `conformance/GLYPH-GEOMETRY-*-REPORT.md` reports. Raw
+   coverage JSON/LCOV is not in the repository; the CI `coverage-reports` artifact
+   (90-day retention) is the durable copy.
+4. `conformance/GLYPH-GEOMETRY-ANCHORING-EXPERIMENT.md` before touching span
+   anchoring or the F thresholds.
+5. The older phase plan below only when taking one of its still-open items.
 
 ### Next task queue
 
-1. **Repair the main-CI offline wheel smoke.** `.github/workflows/ci.yml` installs
-   `pdfspine` from `dist` with `--no-index`, but that directory does not contain
-   the required `ocrspine-models` distribution. Mirror the release workflow's
-   model-package preparation while continuing to prove the local wheel is selected.
-   Ordinary PyPI dependency resolution is already verified. Investigate the
-   separate, non-blocking `cargo-vet` failure independently; do not combine the two
-   into one root cause.
-2. **Make coverage durable and actionable.** Retain machine-readable CI artifacts
-   and restore a reliable Codecov upload (the current upload was rejected because
-   no token was provided). Collect Rust coverage while Python exercises the
-   instrumented PyO3 extension before interpreting `py-bindings` or the low
-   `pdf-api` cargo-only result: Python execution is absent from that profile, so
-   0/3,465 binding lines does not mean the bindings have no tests. Then add targeted
-   tests only after the combined profile identifies real gaps. Current evidence at `9da7ca6`:
-   Python lines 4,384/5,344 (**82.04%**), branches 955/1,498 (**63.75%**), combined
-   5,339/6,842 (**78.03%**), with 814 passed / 63 skipped; Rust workspace lines
-   30,400/41,883 (**72.58%**), functions 2,991/4,517 (**66.22%**), and regions
-   54,096/74,408 (**72.70%**). Rust branch coverage was not enabled. Excluding
-   `py-bindings`, cargo-only Rust line coverage is 30,400/38,418 (**79.13%**);
-   `pdf-core` is 5,253/6,040 (**86.97%**) and `pdf-text` is 5,281/5,773
-   (**91.48%**).
-3. **Reduce the remaining rawdict geometry cost.** The retained-rawdict RSS
-   optimization reduced about 699 MiB to 430 MiB, but the final implementation
-   remains about +59% streamed rawdict time, +65% retained rawdict time, and +49%
-   retained RSS versus pre-geometry on the measured 118-page input. F/G add only
-   +0.2% streamed / +0.8% retained time versus the optimized snapshot.
-4. **Experiment before changing span anchoring.** The public span size is the first
-   glyph's rendered size. Adjacent-transform tolerance can accumulate, producing
-   315 worsening matched characters in two documents / 41 spans, while each
-   character's own `rendered_size` remains correct. Test any anchoring alternative
-   on independent corpora; do not tune the F thresholds without data.
-5. **Continue the existing roadmap.** Preserve the accepted reading-order tradeoff
-   and the remaining Type0/Type3, device-replay, layers, and other deferred work
-   below. None is part of this handoff update.
+1. **Activate the repository on codecov.io** (maintainer account: GitHub login on
+   codecov.io or the Codecov GitHub App), then confirm that both the `rust` and
+   `python` flags are ingested.
+2. **Add targeted tests from the combined profile** (the top-5 Rust and Python lists
+   in the coverage record below), raising `fail_under` in `pyproject.toml` after each
+   batch lands.
+3. **Remaining rawdict cost.** Construct Python objects directly instead of through
+   the `DictChar` intermediate copy in `pdf-text/src/serialize.rs` (cross-crate, may
+   change output, needs the same 300-document digest gate), plus the two cheap
+   preallocation items listed in the rawdict record.
+4. **cargo-vet supply-chain audit sprint.** Blocked on a maintainer decision about
+   `cargo vet trust`, `cargo vet import`, and exemption regeneration.
+5. **Continue the existing roadmap** (Type0/Type3, device-replay, layers, and the
+   other deferred work below). The accepted reading-order tradeoff is unchanged.
+
+### Completed 2026-09-05: offline wheel smoke (queue item 1)
+
+- Root cause: under `--no-index`, pip could not resolve the hard dependency
+  `ocrspine-models` (CI log:
+  `No matching distribution found for ocrspine-models<0.1,>=0.0.1`).
+- Fix `1f82655`: `pip install ocrspine-models` first, then
+  `--no-index --find-links dist pdfspine`, and assert that the installed version equals
+  the version in the wheel filename.
+- Evidence: runs 33970659588 and 33972346887 are green for the wheels on all three
+  platforms; the log shows `wheel=0.7.1 installed=0.7.1`.
+
+### Investigated 2026-09-05: cargo-vet (nothing changed)
+
+- 187 unvetted crates (`Vetting Failed! 187 unvetted dependencies`, backlog about
+  2.64M lines). `supply-chain/audits.toml` is empty and there are only 4 exemptions;
+  `imports.lock` fetches normally (123 trusted audits). The check has failed since
+  the first commit `342dd63`, so this is not a regression. `cargo vet --locked`
+  reproduces the same 187 locally.
+- Decisions left to the maintainer: `cargo vet trust`, `cargo vet import isrg`, and
+  `cargo vet regenerate exemptions`. Keep `continue-on-error: true` until then.
+
+### Completed 2026-09-05: durable combined coverage (queue item 2)
+
+- `55c661c`: the coverage job is now a combined profile (show-env → `cargo test` →
+  instrumented extension build → `coverage run` pytest → merged lcov); the
+  `coverage-reports` artifact is retained 90 days; Codecov moved to
+  `codecov-action@v5` with `use_oidc: true` (job `permissions: id-token: write`);
+  `pyproject.toml` gained `[tool.coverage]` with `fail_under = 77`. With
+  `branch = true`, coverage.py compares the combined statement+branch figure
+  (78.03%), not the 82.04% line figure; `fail_under = 81` makes `report`, `xml`, and
+  `json` all exit 2.
+- Local combined profile at `1f82655`: workspace lines 36,446/41,883 (**87.02%**;
+  cargo-only was 72.58%); `py-bindings` 2,908/3,465 (**83.92%**, previously 0);
+  `pdf-api` 2,408/3,215 (**74.90%**, previously 21.80%); `pdf-edit` 87.66%. Python is
+  unchanged at 82.04% lines / 63.75% branches / 78.03% combined. Details are in the
+  "Combined Rust+Python profile" section of `conformance/COVERAGE-REPORT.md`.
+- First CI run 33972346887: every step green, artifact retained, OIDC token obtained,
+  ratchet 78% ≥ 77 passed, pytest 804 passed / 73 skipped (the runner has no
+  tesseract and similar), **but** the lcov degraded to cargo-only (`py-bindings`
+  0/3,465). Root cause confirmed locally: `pip install -e .` builds the extension in
+  release mode under `release/`, `cargo llvm-cov report` only scans debug objects, so
+  pytest's profraw was discarded. `18b7afc` switches to an in-job venv with
+  `maturin develop` (debug), writes show-env to a file before sourcing it, and adds
+  an awk guard (exit 1 when the `py-bindings` LH total is 0). The same recipe gives
+  `py-bindings` 2,910 lines locally.
+- CI verification of `18b7afc`: run 33975022511 is green. The awk guard printed
+  `py-bindings covered lines (LH sum) = 2888`, and the `coverage-reports` artifact
+  lcov reads `py-bindings` 2,888/3,468 (83.28%), `pdf-api` 2,408/3,215 (74.90%),
+  workspace 36,405/41,886 (86.91%); pytest 804 passed / 73 skipped, ratchet 78% ≥ 77.
+  Codecov still answers `Repository not found` on both flags (see below).
+- **Codecov rejected the upload:**
+  `Upload queued for processing failed: {"message":"Repository not found"}`. OIDC
+  worked; the repository has never been activated on codecov.io. A maintainer must
+  log in to codecov.io with GitHub or install the Codecov GitHub App; there is
+  nothing further to do on the engineering side.
+- Test candidates that remain low under the combined profile. Rust:
+  `pdf-api/src/lib.rs` 561 uncovered lines, `py-bindings/src/lib.rs` 557,
+  `pdf-render/src/type1.rs` 310, `pdf-edit/src/redact.rs` 265,
+  `pdf-render/src/render.rs` 242. Python: `document.py` 395, `_tatr.py` 196,
+  `_tatr_postprocess.py` 130, `geometry.py` 116, `helpers.py` 76. Rust branch
+  coverage is still not enabled (needs nightly).
+
+### Completed 2026-09-05: rawdict geometry cost (queue item 3)
+
+- `13c25f2`, `crates/py-bindings/src/lib.rs` only: geometry float objects are shared
+  per span (8.86 → 1.30 distinct floats per character, about 2.8M fewer `PyFloat`
+  objects) and every constant dict key is `intern!`ed (the span/line/block keys were
+  previously created on every call, 12.0 MiB).
+- 118-page EUR-Lex `32006L0112_EN.pdf`, median of 7 runs: retained rawdict RSS
+  430.7 → 331.5 MiB (+49.0% → **+14.7%** versus pre-geometry); streamed rawdict time
+  336.3 → 292.4 ms (+66% → **+45%**); retained rawdict time 389.8 → 340.5 ms
+  (+67% → +45.8%).
+- The frozen 300-document manifest shows 0 differences in the bit-level
+  text/dict/rawdict digests. 1,702 Rust tests, 811 pytest (66 skipped), clippy
+  `-D warnings`, and fmt are all green.
+- Remaining: 45–48% of in-function time is on the Rust side. The next lever is
+  constructing Python objects directly instead of through the `DictChar`
+  intermediate copy in `pdf-text/src/serialize.rs` (cross-crate, may change output,
+  needs the same 300-document digest gate). Two cheap items were not done:
+  `Vec::with_capacity`/`PyList` preallocation, and the duplicated
+  `rendered_font_size` computation around `layout.rs` L1591/L1603. The per-character
+  `matrix`/`quad` tuples (about 80 MiB) cannot be reduced further under the dict API.
+
+### Completed 2026-09-05: span anchoring experiment (queue item 4); keep first-glyph
+
+- `fad0bf0` adds `conformance/GLYPH-GEOMETRY-ANCHORING-EXPERIMENT.md`. The 315
+  worsening characters reproduce exactly across two independent runs: two scanned OCR
+  documents (govdocs1-00018: 126 characters / 30 spans; govdocs1-00053: 189
+  characters / 11 spans), Times-Roman 36 + Helvetica 5, zero leader-dot spans,
+  in-span size spread median 0.247 pt / max 0.700 pt.
+- Alternatives over the 300 documents (improved / unchanged / worsened): first_glyph
+  (current) 5,495,174 / 308,367 / 315; mode 5,495,331 / 308,380 / 145 (+1,288
+  characters move inside the strict tolerance, no metric regresses); median 159
+  worsened; mean 150 worsened but tolerance coverage −4,566; first_nonws 311
+  worsened. On the independent 25-document corpus (7 PMC + 18 fintabnet held-out)
+  every alternative is identical with 0 worsened, because no span there mixes sizes.
+- Every difference comes from multi-size spans produced by F's accumulated
+  adjacent-tolerance merging; the F thresholds were not changed; word/text
+  projections are unaffected. Recommendation: keep first-glyph. If the count must be
+  reduced, `mode` is the only candidate and needs validation on an independent
+  scanned corpus first. No product code changed. The harness and JSON live in
+  `/Volumes/ExternalSSD/pdfspine-archive/anchor-experiment/`.
 
 ### Glyph geometry A–G: complete, do not restart
 
