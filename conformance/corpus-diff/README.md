@@ -23,16 +23,36 @@ python conformance/gt/fetch_eurlex.py         # EUR-Lex
 python conformance/gt/fetch_govinfo.py        # govinfo
 python conformance/gt/born_digital.py         # born-digital（合成）
 
-# 1) 生成 corpus.txt（每行一个 PDF 绝对路径；机器之间不通用，各自生成）
-python conformance/corpus-diff/build_corpus.py
+# 1) 精确重建已冻结语料；缺文件或 SHA-256 不同会立即失败
+python conformance/corpus-diff/build_corpus.py \
+  --manifest conformance/corpus-diff/baselines/glyph-geometry-2026-09-05-manifest.json
+
+# 只有有意刷新基线时才按目录重新选样，并写出新的可入库 manifest
+python conformance/corpus-diff/build_corpus.py --cap 300 \
+  --root fixtures \
+  --root conformance/gt/corpus-born \
+  --root conformance/gt/corpus-cjk \
+  --root conformance/gt/corpus-arabic \
+  --root conformance/gt/corpus-eurlex \
+  --root conformance/gt/corpus-robustness \
+  --root conformance/gt/corpus-fintabnet \
+  --freeze conformance/corpus-diff/baselines/new-manifest.json
 
 # 2) 两侧抽取（各自最多 180s/文件；已存在的 json 会跳过，重跑前先把 out/<engine> 挪走）
 python conformance/corpus-diff/run_engine.py fitz     /path/to/python-with-pymupdf
 python conformance/corpus-diff/run_engine.py pdfspine /path/to/python-with-pdfspine
+# 第三个参数可选，可把同一 engine 的不同版本隔离到不同输出目录
+python conformance/corpus-diff/run_engine.py pdfspine /path/to/baseline-python baseline
 
 # 3) 差分 + 归类
 python conformance/corpus-diff/compare.py     # → summary.json + stdout 汇总表
+python conformance/corpus-diff/compare.py fitz baseline summary-baseline.json
+python conformance/corpus-diff/stream_flags.py
+python conformance/corpus-diff/font_extra.py
 python conformance/corpus-diff/classify2.py   # → over-split 事件按机制归类
+
+# 4) F 阶段：量测当前 span 内已合并 glyph seam（原始结果仍不入库）
+python conformance/corpus-diff/sample_span_seams.py  # → span-seams.json
 ```
 
 `compare.py` 的 stdout 汇总表就是验收口径；`classify2.py` 把 over-split 分成
@@ -40,9 +60,15 @@ python conformance/corpus-diff/classify2.py   # → over-split 事件按机制�
 `words_only`（text 模式完整、仅 words 模式拆）/ `unknown`，并与
 `stream_flags.json`（`Tc≠0`、Descent 符号等页级特征）交叉。
 
+`baselines/glyph-geometry-2026-09-05-manifest.json` 是可入库的精确 300 文档清单；每项
+记录仓库相对路径、source ID、上游 ID、大小和 SHA-256，顶层记录来源 URL/生成器及版本。
+同目录的 `*-summary.json` 保存可入库的聚合验收值，不包含 oracle 原始输出。
+
 ## 已知基线
 
-2026-09 在 300 文档语料上：**over 334/83、under 332/160**。
+2026-09 在 300 文档语料上记录过：**over 334/83、under 332/160**。原始清单、清单指纹、
+斜杠两侧的版本映射和 oracle 版本均未随报告保留，因此该数字不能作为新清单的逐值验收线。
+新运行以同一指纹清单上的 baseline/current/oracle 三侧对照为准。
 改动 `get_text` 词切分相关逻辑后应复跑，**不得退化**。
 
 ## 注意

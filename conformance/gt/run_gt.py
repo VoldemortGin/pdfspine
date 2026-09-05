@@ -679,22 +679,67 @@ def build_payload(records: list[dict], oracle_available: bool) -> dict:
     }
 
 
+def _entry_identifiers(entry: dict) -> set[str]:
+    """Return the stable names accepted by ``--include-id`` for one entry."""
+    identifiers = {
+        str(value)
+        for value in (entry.get("id"), entry.get("name"))
+        if value is not None and str(value)
+    }
+    pdf_raw = entry.get("pdf") or entry.get("path") or entry.get("file")
+    if pdf_raw:
+        pdf = Path(str(pdf_raw))
+        identifiers.update((pdf.name, pdf.stem))
+    return identifiers
+
+
+def _filter_entries(entries: list[dict], include_ids: set[str]) -> tuple[list[dict], set[str]]:
+    """Select manifest entries and report which requested identifiers matched."""
+    if not include_ids:
+        return entries, set()
+    selected: list[dict] = []
+    matched: set[str] = set()
+    for entry in entries:
+        hits = _entry_identifiers(entry) & include_ids
+        if hits:
+            selected.append(entry)
+            matched.update(hits)
+    return selected, matched
+
+
 def run(
     manifests: list[Path],
     py: str,
     oracle_py: str,
     timeout: float,
     limit: int | None,
+    include_ids: list[str] | None = None,
 ) -> dict:
     """Process all manifests and return the assembled payload."""
     score_all = _import_score_all()
     oracle_available = Path(oracle_py).exists()
-    records: list[dict] = []
+    requested = set(include_ids or [])
+    matched: set[str] = set()
+    loaded: list[tuple[Path, str, list[dict]]] = []
     for mpath in manifests:
         subset, entries = load_manifest(mpath)
-        manifest_dir = mpath.resolve().parent
+        entries, _manifest_matches = _filter_entries(entries, requested)
         if limit is not None:
             entries = entries[:limit]
+        for entry in entries:
+            matched.update(_entry_identifiers(entry) & requested)
+        loaded.append((mpath, subset, entries))
+
+    missing = requested - matched
+    if missing:
+        raise ValueError(
+            "requested --include-id value(s) not found in any manifest: "
+            + ", ".join(sorted(missing))
+        )
+
+    records: list[dict] = []
+    for mpath, subset, entries in loaded:
+        manifest_dir = mpath.resolve().parent
         print(f"[manifest] {mpath} subset={subset} entries={len(entries)}", flush=True)
         for i, entry in enumerate(entries, 1):
             rec = process_entry(
@@ -833,6 +878,18 @@ def _selftest() -> int:
         # order proxy: sequence ratio (sensitive to word order)
         order = lev
         return {"lev": lev, "f1": f1, "jaccard": jac, "order": order}
+
+    # Explicit corpus selection accepts manifest ids/names and PDF names/stems.
+    selection_fixture = [
+        {"id": "alpha", "pdf": "/corpus/a.pdf"},
+        {"name": "beta", "pdf": "/corpus/b.pdf"},
+        {"pdf": "/corpus/c.pdf"},
+    ]
+    selected, matched = _filter_entries(selection_fixture, {"beta", "c.pdf"})
+    assert selected == selection_fixture[1:], selected
+    assert matched == {"beta", "c.pdf"}, matched
+    _selected, matched = _filter_entries(selection_fixture, {"missing"})
+    assert {"missing"} - matched == {"missing"}, matched
 
     gt1 = "the quick brown fox jumps over the lazy dog"
     gt2 = "left column text right column text continues here"
@@ -986,6 +1043,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--oracle-python", default=str(REPO_ROOT / ".venv-oracle" / "bin" / "python"))
     ap.add_argument("--timeout", type=float, default=120.0, help="per-PDF wall-clock timeout (s)")
     ap.add_argument("--limit", type=int, default=None, help="cap entries per manifest")
+    ap.add_argument("--include-id", action="append", default=[],
+                    help="score only this manifest id/name or PDF basename/stem (repeatable; "
+                         "an unknown value is an error)")
     ap.add_argument("--selftest", action="store_true",
                     help="run offline plumbing self-test (no wheel/network/oracle) and exit")
     ap.add_argument("--baseline-manifest", type=Path,
@@ -1032,7 +1092,18 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERROR: manifest(s) not found: {missing}", file=sys.stderr)
         return 1
 
-    payload = run(args.manifest, args.python, args.oracle_python, args.timeout, args.limit)
+    try:
+        payload = run(
+            args.manifest,
+            args.python,
+            args.oracle_python,
+            args.timeout,
+            args.limit,
+            args.include_id,
+        )
+    except ValueError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
 
     args.json_out.parent.mkdir(parents=True, exist_ok=True)
     args.json_out.write_text(json.dumps(payload, indent=2), encoding="utf-8")

@@ -4,8 +4,8 @@
 The crate version in ``Cargo.toml`` ([workspace.package].version) is the single
 source of truth for the wheel: maturin's ``dynamic = ["version"]`` reads it into
 the dist metadata (and thus ``pdfspine.__version__`` via importlib.metadata), and
-``CARGO_PKG_VERSION`` reads it for ``_core.version()``. Local/dev builds leave it
-at the ``0.0.0`` default; a tagged CI build calls this to stamp the real version.
+``CARGO_PKG_VERSION`` reads it for ``_core.version()``. Local/dev builds use the
+checked-in workspace version; tagged CI builds call this to stamp the tag version.
 
 Usage (from repo root)::
 

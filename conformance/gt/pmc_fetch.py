@@ -10,7 +10,12 @@ the publisher's JATS XML (``.nxml``); the XML gives us ground-truth body text
 Only CC0 / CC BY articles are collected (excluding CC BY-NC*, CC BY-ND, and
 "Other") so the corpus is permissively licensed.
 
-Network reality (verified June 2026):
+Network reality:
+* In August 2026 PMC removed the legacy FTP and OA Web Service data. Exact
+  historical IDs are now recovered from the anonymous ``pmc-oa-opendata`` S3
+  bucket with ``--pmcid``. The metadata license and object MD5 are verified.
+* The legacy path below is retained for reproducibility of older environments,
+  but its general ``--n`` discovery mode no longer works against the live site.
 * The PMC FTP service moved all legacy bulk files into ``/pub/pmc/deprecated/``;
   the old top-level ``oa_package/`` 404s. Tarballs now live at
   ``https://ftp.ncbi.nlm.nih.gov/pub/pmc/deprecated/<File>`` where ``<File>`` is
@@ -30,6 +35,8 @@ CLI::
 
     env -u CONDA_PREFIX .venv/bin/python conformance/gt/pmc_fetch.py \
         --out conformance/gt/corpus-pmc --n 25
+    env -u CONDA_PREFIX .venv/bin/python conformance/gt/pmc_fetch.py \
+        --out conformance/gt/corpus-pmc --pmcid PMC176545 --pmcid PMC212689
 
 API::
 
@@ -50,7 +57,9 @@ import sys
 import tarfile
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 # --------------------------------------------------------------------------- #
@@ -68,6 +77,10 @@ FILE_LIST_FALLBACK_URL = "https://ftp.ncbi.nlm.nih.gov/pub/pmc/deprecated/oa_fil
 PACKAGE_BASE = "https://ftp.ncbi.nlm.nih.gov/pub/pmc/deprecated/"
 # OA Web Service (per-article download links).
 OA_FCGI = "https://www.ncbi.nlm.nih.gov/pmc/utils/oa/oa.fcgi?id="
+
+# The replacement cloud dataset, live since August 2026. Explicit PMCID
+# retrieval uses this path; the legacy lists above are retained for old runs.
+CLOUD_BASE = "https://pmc-oa-opendata.s3.amazonaws.com"
 
 _UA = "pdfspine-conformance/1.0 (+ground-truth corpus; pubmedcentral OA subset)"
 
@@ -270,6 +283,118 @@ def _extract_pdf_and_nxml(data: bytes) -> tuple[bytes, bytes] | None:
     return pdf_bytes, nxml_bytes
 
 
+def _cloud_versions(pmcid: str) -> list[str]:
+    """Return article-version identifiers for a PMCID from the public S3 bucket."""
+    query = urllib.parse.urlencode(
+        {"list-type": "2", "prefix": f"{pmcid}.", "delimiter": "/"}
+    )
+    root = ET.fromstring(_get_bytes(f"{CLOUD_BASE}/?{query}"))
+    namespace = {"s3": "http://s3.amazonaws.com/doc/2006-03-01/"}
+    versions = []
+    for prefix in root.findall("s3:CommonPrefixes/s3:Prefix", namespace):
+        if prefix.text:
+            versions.append(prefix.text.rstrip("/"))
+    return sorted(versions)
+
+
+def _cloud_object_url(s3_url: str) -> tuple[str, str | None]:
+    """Convert a public s3:// object URL to HTTPS and return its optional MD5."""
+    parsed = urllib.parse.urlparse(s3_url)
+    if parsed.scheme != "s3" or not parsed.netloc or not parsed.path:
+        raise ValueError(f"unexpected PMC cloud URL: {s3_url!r}")
+    query = urllib.parse.parse_qs(parsed.query)
+    md5 = query.get("md5", [None])[0]
+    return f"https://{parsed.netloc}.s3.amazonaws.com{parsed.path}", md5
+
+
+def _checked_cloud_download(s3_url: str) -> bytes:
+    """Download one cloud object and verify the MD5 supplied by PMC metadata."""
+    url, expected_md5 = _cloud_object_url(s3_url)
+    data = _get_bytes(url)
+    actual_md5 = hashlib.md5(data, usedforsecurity=False).hexdigest()
+    if expected_md5 and actual_md5 != expected_md5:
+        raise ValueError(f"PMC cloud MD5 mismatch: expected {expected_md5}, got {actual_md5}")
+    return data
+
+
+def fetch_pmcids_from_cloud(
+    out_dir: Path,
+    pmcids: list[str],
+    licenses: tuple[str, ...] = DEFAULT_LICENSES,
+    *,
+    verbose: bool = True,
+) -> list[dict]:
+    """Fetch exact PMCIDs from the current public cloud dataset.
+
+    A bare PMCID must resolve to exactly one version. If PMC exposes multiple
+    versions, pass ``PMCID.version`` explicitly rather than guessing which one
+    is the intended ground-truth pair.
+    """
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    accepted = set(licenses)
+    manifest: list[dict] = []
+    seen_pdfs: dict[str, str] = {}
+
+    def log(message: str) -> None:
+        if verbose:
+            print(message, flush=True)
+
+    for requested in dict.fromkeys(pmcids):
+        match = re.fullmatch(r"(PMC\d+)(?:\.(\d+))?", requested)
+        if match is None:
+            raise ValueError(f"invalid PMCID or article version: {requested!r}")
+        pmcid, explicit_version = match.groups()
+        if explicit_version is None:
+            versions = _cloud_versions(pmcid)
+            if len(versions) != 1:
+                log(f"  SKIP   {pmcid} — expected one cloud version, found {versions}")
+                continue
+            article_version = versions[0]
+        else:
+            article_version = f"{pmcid}.{explicit_version}"
+
+        metadata_url = f"{CLOUD_BASE}/metadata/{article_version}.json"
+        metadata = json.loads(_get_bytes(metadata_url))
+        license_code = str(metadata.get("license_code", ""))
+        if license_code not in accepted:
+            log(f"  SKIP   {article_version} — license {license_code!r} not accepted")
+            continue
+        if not metadata.get("pdf_url") or not metadata.get("xml_url"):
+            log(f"  SKIP   {article_version} — cloud metadata lacks PDF or XML")
+            continue
+
+        pdf_path = out_dir / f"{pmcid}.pdf"
+        nxml_path = out_dir / f"{pmcid}.nxml"
+        pdf_bytes = _checked_cloud_download(str(metadata["pdf_url"]))
+        nxml_bytes = _checked_cloud_download(str(metadata["xml_url"]))
+        if not pdf_bytes.startswith(b"%PDF"):
+            raise ValueError(f"cloud object for {article_version} is not a PDF")
+        owner = _claim_pdf(seen_pdfs, pdf_bytes, pmcid)
+        if owner is not None:
+            log(f"  SKIP   {article_version} — shares its PDF with {owner}")
+            continue
+        pdf_path.write_bytes(pdf_bytes)
+        nxml_path.write_bytes(nxml_bytes)
+        entry = _entry(pmcid, pdf_path, nxml_path, license_code)
+        entry.update(
+            {
+                "article_version": article_version,
+                "metadata": metadata_url,
+                "source": "pmc-oa-opendata",
+            }
+        )
+        manifest.append(entry)
+        log(
+            f"  OK     {article_version} ({license_code}) "
+            f"pdf={len(pdf_bytes):,}B xml={len(nxml_bytes):,}B"
+        )
+
+    _write_manifest(out_dir, manifest)
+    log(f"\nFetched {len(manifest)} exact article(s) -> {out_dir / 'manifest.json'}")
+    return manifest
+
+
 # --------------------------------------------------------------------------- #
 # Public API
 # --------------------------------------------------------------------------- #
@@ -389,6 +514,17 @@ def _entry(pmcid: str, pdf: Path, nxml: Path, license_: str) -> dict:
 
 def _load_existing(out_dir: Path) -> list[dict]:
     """Rebuild a manifest from whatever PDF+nxml pairs already exist on disk."""
+    manifest_path = out_dir / "manifest.json"
+    if manifest_path.exists():
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        retained = []
+        for entry in manifest:
+            pdf = Path(entry["pdf"])
+            nxml = Path(entry["nxml"])
+            if pdf.is_file() and nxml.is_file():
+                retained.append(entry)
+        if retained:
+            return retained
     entries: list[dict] = []
     for pdf in sorted(out_dir.glob("PMC*.pdf")):
         nxml = pdf.with_suffix(".nxml")
@@ -421,6 +557,13 @@ def _self_test() -> int:
     ftp_href = "ftp://ftp.ncbi.nlm.nih.gov/pub/pmc/oa_package/81/5e/PMC193604.tar.gz"
     https_href = ftp_href.replace("ftp://ftp.ncbi.nlm.nih.gov/", "https://ftp.ncbi.nlm.nih.gov/")
     assert https_href.startswith("https://ftp.ncbi.nlm.nih.gov/"), "ftp->https conversion wrong"
+    cloud_url, cloud_md5 = _cloud_object_url(
+        "s3://pmc-oa-opendata/PMC176545.1/PMC176545.1.pdf?md5=012345"
+    )
+    assert cloud_url == (
+        "https://pmc-oa-opendata.s3.amazonaws.com/PMC176545.1/PMC176545.1.pdf"
+    )
+    assert cloud_md5 == "012345"
 
     # main-PDF selection (offline)
     names = ["PMC193604/pbio.0000013.sg001.pdf", "PMC193604/pbio.0000013.pdf",
@@ -495,6 +638,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--n", type=int, default=25, help="number of good articles to fetch")
     ap.add_argument("--licenses", default="CC0,CC BY",
                     help="comma-separated allowed licenses (exact CSV License values)")
+    ap.add_argument(
+        "--pmcid",
+        action="append",
+        default=[],
+        help="exact PMCID or PMCID.version from the current cloud dataset; may be repeated",
+    )
     ap.add_argument("--self-test", action="store_true", help="run offline self-test and exit")
     args = ap.parse_args(argv)
 
@@ -502,7 +651,10 @@ def main(argv: list[str] | None = None) -> int:
         return _self_test()
 
     licenses = tuple(s.strip() for s in args.licenses.split(",") if s.strip())
-    fetch_commercial_sample(args.out, n=args.n, licenses=licenses)
+    if args.pmcid:
+        fetch_pmcids_from_cloud(args.out, args.pmcid, licenses=licenses)
+    else:
+        fetch_commercial_sample(args.out, n=args.n, licenses=licenses)
     return 0
 
 

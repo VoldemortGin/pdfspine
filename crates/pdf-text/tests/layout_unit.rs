@@ -7,7 +7,7 @@
 
 use pdf_core::geom::{Matrix, Point, Rect};
 use pdf_text::model::{flags, BlockKind, WritingDir};
-use pdf_text::{page_size, page_transform, textpage_from_glyphs, ImageRef, PositionedGlyph};
+use pdf_text::{page_size, page_transform, textpage_from_glyphs, words, ImageRef, PositionedGlyph};
 use smol_str::SmolStr;
 
 const EPS: f64 = 1e-6;
@@ -48,6 +48,21 @@ fn glyph_styled(c: &str, ox: f64, oy: f64, size: f64, font: &str, color: u32) ->
         render_matrix: Matrix::new(size, 0.0, 0.0, size, ox, oy),
         cell: Rect::new(0.0, -0.2, w / size, 0.7),
     }
+}
+
+/// A declared-12pt glyph whose actual rendering geometry is supplied directly.
+/// Keeps origin, bbox and advance direction consistent with the matrix so the
+/// tests exercise layout rather than malformed fixture artifacts.
+fn glyph_with_matrix(c: &str, matrix: Matrix) -> PositionedGlyph {
+    let mut g = glyph(c, matrix.e, matrix.f, 12.0);
+    g.origin = Point::new(matrix.e, matrix.f);
+    g.render_matrix = matrix;
+    let norm = (matrix.a * matrix.a + matrix.b * matrix.b).sqrt();
+    if norm > f64::EPSILON {
+        g.advance_dir = (matrix.a / norm, matrix.b / norm);
+    }
+    g.bbox = g.cell.transform(&matrix).normalize();
+    g
 }
 
 fn approx(a: f64, b: f64) {
@@ -253,6 +268,240 @@ fn layout_span_005_text_is_char_concat() {
     let span = &tp.blocks[0].lines[0].spans[0];
     let from_chars: String = span.chars.iter().map(|c| c.c).collect();
     assert_eq!(span.text, from_chars);
+}
+
+/// LAYOUT-SPAN-006: adjacent glyphs with one declared `Tf` but materially
+/// different painted scale / Tz / shear form distinct visual spans. They remain
+/// one line and their flattened text, word, bbox and order contracts stay intact.
+#[test]
+fn layout_span_006_render_matrix_changes_split_without_text_reordering() {
+    let gs = vec![
+        glyph_with_matrix("A", Matrix::new(12.0, 0.0, 0.0, 12.0, 100.0, 700.0)),
+        glyph_with_matrix("B", Matrix::new(18.0, 0.0, 0.0, 12.0, 104.0, 700.0)),
+        glyph_with_matrix("C", Matrix::new(18.0, 0.0, 6.0, 12.0, 108.0, 700.0)),
+        glyph_with_matrix("D", Matrix::new(12.0, 0.0, 0.0, 12.0, 112.0, 700.0)),
+    ];
+    let tp = textpage_from_glyphs(&gs, &[], letter(), 0);
+    let lines: Vec<_> = tp.blocks.iter().flat_map(|block| &block.lines).collect();
+    assert_eq!(lines.len(), 1, "geometry-only changes must remain one line");
+    let line = lines[0];
+    assert_eq!(
+        line.spans
+            .iter()
+            .map(|span| span.text.as_str())
+            .collect::<Vec<_>>(),
+        vec!["A", "B", "C", "D"]
+    );
+    assert_eq!(line.number, 0);
+    assert_eq!(
+        words(&tp)
+            .iter()
+            .map(|word| word.text.as_str())
+            .collect::<Vec<_>>(),
+        vec!["ABCD"],
+        "span boundaries must not become word boundaries"
+    );
+    let char_bbox = line
+        .spans
+        .iter()
+        .flat_map(|span| &span.chars)
+        .fold(Rect::default(), |bbox, ch| bbox.union(&ch.bbox));
+    approx(line.bbox.x0, char_bbox.x0);
+    approx(line.bbox.y0, char_bbox.y0);
+    approx(line.bbox.x1, char_bbox.x1);
+    approx(line.bbox.y1, char_bbox.y1);
+}
+
+/// LAYOUT-SPAN-007: a 4° change remains inside the existing 5° line-direction
+/// tolerance, yet its linear matrix delta is large enough to split the span.
+#[test]
+fn layout_span_007_small_rotation_stays_one_line_but_splits_span() {
+    let angle = 4.0_f64.to_radians();
+    let (sin, cos) = angle.sin_cos();
+    let first = glyph_with_matrix("A", Matrix::new(12.0, 0.0, 0.0, 12.0, 10.0, 782.0));
+    let second = glyph_with_matrix(
+        "B",
+        Matrix::new(
+            12.0 * cos,
+            12.0 * sin,
+            -12.0 * sin,
+            12.0 * cos,
+            10.0 + 6.0 * cos,
+            782.0 + 6.0 * sin,
+        ),
+    );
+    let tp = textpage_from_glyphs(&[first, second], &[], letter(), 0);
+    let lines: Vec<_> = tp.blocks.iter().flat_map(|block| &block.lines).collect();
+    assert_eq!(lines.len(), 1);
+    assert_eq!(lines[0].spans.len(), 2);
+    assert_eq!(
+        lines[0]
+            .spans
+            .iter()
+            .map(|span| span.text.as_str())
+            .collect::<Vec<_>>(),
+        vec!["A", "B"]
+    );
+}
+
+/// LAYOUT-SPAN-008: a cross-axis jump can stay inside the broad line cluster
+/// while two same-flag glyphs on that line still split into visual spans.
+#[test]
+fn layout_span_008_adjacent_baseline_jump_splits_same_flag_glyphs() {
+    let gs = vec![
+        glyph("s", 94.0, 782.0, 12.0),
+        glyph("a", 100.0, 780.0, 12.0),
+        glyph("b", 106.0, 780.0, 12.0),
+        glyph("c", 112.0, 778.0, 12.0),
+    ];
+    let tp = textpage_from_glyphs(&gs, &[], letter(), 0);
+    let lines: Vec<_> = tp.blocks.iter().flat_map(|block| &block.lines).collect();
+    assert_eq!(lines.len(), 1);
+    let line = lines[0];
+    assert_eq!(
+        line.spans
+            .iter()
+            .map(|span| span.text.as_str())
+            .collect::<Vec<_>>(),
+        vec!["s", "ab", "c"]
+    );
+    assert_eq!(line.spans[1].flags, line.spans[2].flags);
+}
+
+/// LAYOUT-SPAN-009: an ordinary run and a normal superscript run each remain
+/// cohesive. The pre-existing style flag makes the boundary between them.
+#[test]
+fn layout_span_009_normal_and_superscript_runs_are_not_over_split() {
+    let gs = vec![
+        glyph("a", 100.0, 780.0, 12.0),
+        glyph("b", 106.0, 780.0, 12.0),
+        glyph("c", 112.0, 780.0, 12.0),
+        glyph("2", 118.0, 783.0, 8.0),
+        glyph("3", 122.0, 783.0, 8.0),
+    ];
+    let tp = textpage_from_glyphs(&gs, &[], letter(), 0);
+    let line = &tp.blocks[0].lines[0];
+    assert_eq!(
+        line.spans
+            .iter()
+            .map(|span| span.text.as_str())
+            .collect::<Vec<_>>(),
+        vec!["abc", "23"]
+    );
+    assert_eq!(line.spans[1].flags & flags::SUPERSCRIPT, flags::SUPERSCRIPT);
+}
+
+/// LAYOUT-SPAN-010: several Unicode scalars carried by one glyph never acquire
+/// an artificial internal geometry seam.
+#[test]
+fn layout_span_010_ligature_mapping_stays_one_span() {
+    let tp = textpage_from_glyphs(&[glyph("fi", 100.0, 700.0, 12.0)], &[], letter(), 0);
+    let span = &tp.blocks[0].lines[0].spans[0];
+    assert_eq!(span.text, "fi");
+    assert_eq!(span.chars.len(), 2);
+    assert_eq!(span.chars[0].bbox, span.chars[1].bbox);
+    assert_eq!(span.chars[0].quad, span.chars[1].quad);
+}
+
+/// LAYOUT-SPAN-011: translating the same pair on the page cannot change the
+/// geometry split; the baseline test is based on adjacent deltas.
+#[test]
+fn layout_span_011_split_is_translation_invariant() {
+    let build = |dx: f64, dy: f64| {
+        let gs = vec![
+            glyph_with_matrix(
+                "A",
+                Matrix::new(12.0, 0.0, 0.0, 12.0, 20.0 + dx, 700.0 + dy),
+            ),
+            glyph_with_matrix(
+                "B",
+                Matrix::new(18.0, 0.0, 0.0, 18.0, 26.0 + dx, 700.0 + dy),
+            ),
+        ];
+        textpage_from_glyphs(&gs, &[], letter(), 0)
+    };
+    let original = build(0.0, 0.0);
+    let translated = build(250.0, -300.0);
+    for tp in [&original, &translated] {
+        let line = &tp.blocks[0].lines[0];
+        assert_eq!(line.spans.len(), 2);
+        assert_eq!(
+            line.spans
+                .iter()
+                .map(|span| span.text.as_str())
+                .collect::<String>(),
+            "AB"
+        );
+    }
+}
+
+/// LAYOUT-SPAN-012: singular matrices follow a finite conservative policy:
+/// identical finite linear parts may merge on one baseline, a changed singular
+/// transform splits, and no NaN or panic escapes into the model.
+#[test]
+fn layout_span_012_degenerate_matrix_policy_is_finite() {
+    let gs = vec![
+        glyph_with_matrix("A", Matrix::new(12.0, 0.0, 0.0, 0.0, 100.0, 700.0)),
+        glyph_with_matrix("B", Matrix::new(12.0, 0.0, 0.0, 0.0, 106.0, 700.0)),
+        glyph_with_matrix("C", Matrix::new(12.0, 0.0, 1.0, 0.0, 112.0, 700.0)),
+    ];
+    let tp = textpage_from_glyphs(&gs, &[], letter(), 0);
+    let line = &tp.blocks[0].lines[0];
+    assert_eq!(
+        line.spans
+            .iter()
+            .map(|span| span.text.as_str())
+            .collect::<Vec<_>>(),
+        vec!["AB", "C"]
+    );
+    assert!(line.bbox.x0.is_finite() && line.bbox.x1.is_finite());
+}
+
+/// LAYOUT-SPAN-013: a synthesized word space remains exactly once at a geometry
+/// span boundary and `words()` still sees the same two words.
+#[test]
+fn layout_span_013_synthetic_space_survives_geometry_boundary_once() {
+    let gs = vec![
+        glyph_with_matrix("A", Matrix::new(12.0, 0.0, 0.0, 12.0, 100.0, 700.0)),
+        glyph_with_matrix("B", Matrix::new(18.0, 0.0, 0.0, 18.0, 110.0, 700.0)),
+    ];
+    let tp = textpage_from_glyphs(&gs, &[], letter(), 0);
+    let line = &tp.blocks[0].lines[0];
+    assert_eq!(line.spans.len(), 2);
+    let flattened: String = line.spans.iter().map(|span| span.text.as_str()).collect();
+    assert_eq!(flattened, "A B");
+    let spaces: Vec<_> = line
+        .spans
+        .iter()
+        .flat_map(|span| &span.chars)
+        .filter(|ch| ch.c == ' ')
+        .collect();
+    assert_eq!(spaces.len(), 1);
+    assert!(spaces[0].synthetic);
+    assert_eq!(
+        words(&tp)
+            .iter()
+            .map(|word| word.text.as_str())
+            .collect::<Vec<_>>(),
+        vec!["A", "B"]
+    );
+}
+
+/// LAYOUT-SPAN-014: decimal representation noise at the named 5% boundary is
+/// absorbed by the separate numerical epsilon, while a material excess splits.
+#[test]
+fn layout_span_014_linear_threshold_has_numeric_slack_only() {
+    let span_count = |shear: f64| {
+        let gs = vec![
+            glyph_with_matrix("A", Matrix::new(10.0, 0.0, 0.0, 10.0, 100.0, 700.0)),
+            glyph_with_matrix("B", Matrix::new(10.0, 0.0, shear, 10.0, 105.0, 700.0)),
+        ];
+        let tp = textpage_from_glyphs(&gs, &[], letter(), 0);
+        tp.blocks[0].lines[0].spans.len()
+    };
+
+    assert_eq!(span_count(0.5000000000000012), 1);
+    assert_eq!(span_count(0.500001), 2);
 }
 
 // === block grouping + reading order ======================================

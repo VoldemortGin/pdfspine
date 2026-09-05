@@ -6,8 +6,8 @@ build-backend = "maturin"
 name = "pdfspine"
 # The version is taken from the Rust workspace (Cargo.toml [workspace.package])
 # at build time via maturin's `dynamic` metadata — that crate version is the
-# single source of truth. Local/dev builds show 0.0.0; tagged CI builds set it
-# from the git tag (see .github/workflows/release.yml).
+# single source of truth. Local/dev builds use the checked-in workspace version;
+# tagged CI builds verify/stamp it from the tag (see .github/workflows/release.yml).
 dynamic = ["version"]
 description = "Apache-2.0-licensed, pure-Rust reimplementation of PyMuPDF (fitz) with PyO3 bindings."
 readme = "README.md"

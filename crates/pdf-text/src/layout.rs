@@ -84,6 +84,27 @@ const TRACKED_RUN_MIN: usize = 4;
 /// well over half the cell visible, and PyMuPDF keeps those spaces.
 const PHANTOM_SPACE_VISIBLE_FRAC: f64 = 0.2;
 
+/// Maximum change in one render-matrix linear component, relative to the
+/// larger adjacent rendered font size, that may remain in one span. The value
+/// is calibrated by the 300-document span-boundary corpus.
+const SPAN_LINEAR_TOL_FRAC: f64 = 0.05;
+
+/// Adjacent-baseline displacement allowed inside one span, measured on the
+/// previous glyph's normal and relative to the larger rendered size. The value
+/// retains measured 1pt / 10pt table alignment and splits the next reviewed
+/// cross-label example.
+const SPAN_BASELINE_TOL_FRAC: f64 = 0.1;
+
+/// Numerical slack for comparisons at the named normalized thresholds. This
+/// absorbs representation noise (for example, nominal 5% becoming
+/// 0.05000000000000012) without widening the corpus-level policy.
+const SPAN_GEOMETRY_NUMERIC_EPSILON: f64 = 1e-9;
+
+/// Degenerate render matrices have no usable relative size. Identical finite
+/// linear parts may still merge when their baselines agree to this absolute
+/// device-space tolerance; every other degenerate pair splits conservatively.
+const SPAN_DEGENERATE_BASELINE_EPSILON: f64 = 1e-6;
+
 /// Baseline movement, in effective font-size units, below which text remains in
 /// the current paragraph regardless of horizontal movement.
 const BLOCK_BASELINE_NEAR: f64 = 0.8;
@@ -1192,6 +1213,64 @@ fn dir_matches(a: &(f64, f64), b: &(f64, f64)) -> bool {
     dot > 0.996 // cos(5°) ≈ 0.9962
 }
 
+/// Whether two adjacent real glyphs may publish one visual span.
+///
+/// Translation along the writing direction is deliberately absent: normal
+/// character advance must not split a span. Matrix comparison uses only the
+/// linear part, direction reuses the line-clustering convention, and baseline
+/// displacement projects the adjacent-origin delta onto the *previous* glyph's
+/// normal. Using two absolute cross coordinates would make the answer depend on
+/// where the same run sits on the page when its directions differ slightly.
+fn span_geometry_matches(previous: &DevGlyph, current: &DevGlyph) -> bool {
+    if !dir_matches(&previous.dir, &current.dir) {
+        return false;
+    }
+
+    let normal = (-previous.dir.1, previous.dir.0);
+    let delta = (
+        current.origin.x - previous.origin.x,
+        current.origin.y - previous.origin.y,
+    );
+    let baseline_delta = (delta.0 * normal.0 + delta.1 * normal.1).abs();
+    if !baseline_delta.is_finite() {
+        return false;
+    }
+
+    let previous_linear = [
+        previous.render_matrix.a,
+        previous.render_matrix.b,
+        previous.render_matrix.c,
+        previous.render_matrix.d,
+    ];
+    let current_linear = [
+        current.render_matrix.a,
+        current.render_matrix.b,
+        current.render_matrix.c,
+        current.render_matrix.d,
+    ];
+    if !previous_linear.iter().all(|value| value.is_finite())
+        || !current_linear.iter().all(|value| value.is_finite())
+    {
+        return false;
+    }
+
+    let previous_scale = rendered_font_size(&previous.render_matrix);
+    let current_scale = rendered_font_size(&current.render_matrix);
+    if previous_scale <= f64::EPSILON || current_scale <= f64::EPSILON {
+        return previous_linear == current_linear
+            && baseline_delta <= SPAN_DEGENERATE_BASELINE_EPSILON;
+    }
+    let scale = previous_scale.max(current_scale);
+
+    let linear_delta = previous_linear
+        .iter()
+        .zip(current_linear)
+        .map(|(left, right)| (left - right).abs())
+        .fold(0.0_f64, f64::max);
+    linear_delta / scale <= SPAN_LINEAR_TOL_FRAC + SPAN_GEOMETRY_NUMERIC_EPSILON
+        && baseline_delta / scale <= SPAN_BASELINE_TOL_FRAC + SPAN_GEOMETRY_NUMERIC_EPSILON
+}
+
 /// Detects a predominantly right-to-left run (Hebrew/Arabic blocks).
 fn is_rtl_run(idxs: &[usize], dev: &[DevGlyph]) -> bool {
     let mut rtl = 0usize;
@@ -1485,11 +1564,13 @@ fn build_line(glyphs: &[&DevGlyph], seq: usize, inhibit_spaces: bool) -> Line {
             gflags |= flags::SUPERSCRIPT;
         }
 
+        let geometry_matches_previous = gi == 0 || span_geometry_matches(glyphs[gi - 1], g);
         let can_merge = spans.last().is_some_and(|s| {
             s.font == g.font
                 && (s.size - g.size).abs() < 1e-6
                 && s.color == g.color
                 && s.flags == gflags
+                && geometry_matches_previous
         });
         // A glyph may carry several Unicode scalars (a ligature); each becomes a
         // `Char` sharing the glyph cell geometry, so no text is dropped.
@@ -2716,6 +2797,88 @@ mod tests {
     // A US-Letter page.
     fn letter() -> Rect {
         Rect::new(0.0, 0.0, 612.0, 792.0)
+    }
+
+    fn geometry_dev(origin: Point, render_matrix: Matrix, dir: (f64, f64)) -> DevGlyph {
+        let source = g("A", origin.x, origin.y, 6.0, 10.0);
+        let mut dev = DevGlyph::new(
+            &source,
+            &Matrix::IDENTITY,
+            (1.0, 0.0),
+            (0.0, -1.0),
+            SmolStr::new("Helvetica"),
+            0,
+            0,
+        );
+        dev.origin = origin;
+        dev.render_matrix = render_matrix;
+        dev.dir = dir;
+        dev
+    }
+
+    #[test]
+    fn span_geometry_adjacent_delta_is_translation_invariant() {
+        let angle = 2.0_f64.to_radians();
+        let (sin, cos) = angle.sin_cos();
+        let matrix_a = Matrix::new(10.0, 0.0, 0.0, 10.0, 0.0, 0.0);
+        let matrix_b = Matrix::new(10.0 * cos, 10.0 * sin, -10.0 * sin, 10.0 * cos, 0.0, 0.0);
+
+        for translation in [(0.0, 0.0), (800.0, -450.0)] {
+            let previous = geometry_dev(
+                Point::new(10.0 + translation.0, 100.0 + translation.1),
+                matrix_a,
+                (1.0, 0.0),
+            );
+            let same_baseline = geometry_dev(
+                Point::new(15.0 + translation.0, 100.0 + translation.1),
+                matrix_b,
+                (cos, sin),
+            );
+            let different_baseline = geometry_dev(
+                Point::new(15.0 + translation.0, 101.1 + translation.1),
+                matrix_b,
+                (cos, sin),
+            );
+            assert!(span_geometry_matches(&previous, &same_baseline));
+            assert!(!span_geometry_matches(&previous, &different_baseline));
+        }
+    }
+
+    #[test]
+    fn span_geometry_baseline_threshold_has_numeric_slack_only() {
+        let matrix = Matrix::new(10.0, 0.0, 0.0, 10.0, 0.0, 0.0);
+        let previous = geometry_dev(Point::new(10.0, 100.0), matrix, (1.0, 0.0));
+        let nominal = geometry_dev(Point::new(15.0, 101.0000000000000024), matrix, (1.0, 0.0));
+        let above = geometry_dev(Point::new(15.0, 101.00001), matrix, (1.0, 0.0));
+        assert!(span_geometry_matches(&previous, &nominal));
+        assert!(!span_geometry_matches(&previous, &above));
+    }
+
+    #[test]
+    fn span_geometry_singular_and_regular_matrices_split() {
+        let singular = geometry_dev(
+            Point::new(10.0, 100.0),
+            Matrix::new(10.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+            (1.0, 0.0),
+        );
+        let same_singular = geometry_dev(
+            Point::new(15.0, 100.0),
+            Matrix::new(10.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+            (1.0, 0.0),
+        );
+        let regular = geometry_dev(
+            Point::new(15.0, 100.0),
+            Matrix::new(10.0, 0.0, 0.0, 10.0, 0.0, 0.0),
+            (1.0, 0.0),
+        );
+        let nearly_singular = geometry_dev(
+            Point::new(15.0, 100.0),
+            Matrix::new(10.0, 0.0, 0.0, 1e-32, 0.0, 0.0),
+            (1.0, 0.0),
+        );
+        assert!(span_geometry_matches(&singular, &same_singular));
+        assert!(!span_geometry_matches(&singular, &regular));
+        assert!(!span_geometry_matches(&singular, &nearly_singular));
     }
 
     /// COMPAT-LINE-GAP-001: independent runs split at exactly 0.8× the

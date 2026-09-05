@@ -161,15 +161,19 @@ def test_pygeo_002_rawdict_char_geometry_keys() -> None:
 
 def test_pygeo_003_rendered_size_beats_declared_size() -> None:
     span = _first_span(_page(TM_SCALED), "rawdict")
-    # `size` stays the declared `Tf` operand (a known parity difference vs fitz,
-    # which reports the rendered size there).
-    assert span["size"] == 1.0
+    # Structured output reports the rendered size, matching fitz; the original
+    # `Tf` operand remains available under its explicit name.
+    assert span["size"] == 12.0
     assert span["declared_size"] == 1.0
     # `rendered_size` is sqrt(|det|) of the render matrix — the painted size.
     assert math.isclose(span["rendered_size"], 12.0, abs_tol=1e-9)
     a, b, c, d = span["matrix"][:4]
-    assert math.isclose(span["rendered_size"], math.sqrt(abs(a * d - b * c)), abs_tol=1e-9)
-    assert all(math.isclose(ch["rendered_size"], 12.0, abs_tol=1e-9) for ch in span["chars"])
+    assert math.isclose(
+        span["rendered_size"], math.sqrt(abs(a * d - b * c)), abs_tol=1e-9
+    )
+    assert all(
+        math.isclose(ch["rendered_size"], 12.0, abs_tol=1e-9) for ch in span["chars"]
+    )
 
 
 # === PYGEO-004: the three geometry invariants ============================
@@ -312,7 +316,32 @@ def test_pygeo_008_rotated_run_dir_and_matrix() -> None:
     ):
         assert math.isclose(got, want, abs_tol=1e-9)
     # ...while `matrix` is device space: the y-flip negates the second column.
-    for got, want in zip(
-        span["matrix"][:4], (0.0, -12.0, -12.0, 0.0), strict=True
-    ):
+    for got, want in zip(span["matrix"][:4], (0.0, -12.0, -12.0, 0.0), strict=True):
         assert math.isclose(got, want, abs_tol=1e-9)
+
+
+# === PYGEO-009: rotated quad keeps glyph-frame corner names =============
+
+
+def test_pygeo_009_rotated_quad_keeps_glyph_frame_corner_names() -> None:
+    char = _first_span(
+        _page(b"BT /F1 1 Tf 0 12 -12 0 100 700 Tm (A) Tj ET"), "rawdict"
+    )["chars"][0]
+    ul, ur, ll, lr = (
+        char["quad"][0:2],
+        char["quad"][2:4],
+        char["quad"][4:6],
+        char["quad"][6:8],
+    )
+
+    # PyMuPDF 1.28.2's XML oracle labels the glyph cell in its y-up text-space
+    # frame before transforming it.  After a 90-degree run rotation, `ul` is
+    # therefore not the visually topmost point: ul->ur follows the baseline
+    # upward, while ul->ll points right.  Keep that topology even though our
+    # Helvetica fallback metrics produce different absolute coordinates.
+    assert math.isclose(ul[0], ur[0], abs_tol=1e-9)
+    assert ur[1] < ul[1]
+    assert ll[0] > ul[0]
+    assert math.isclose(ll[1], ul[1], abs_tol=1e-9)
+    assert math.isclose(lr[0], ll[0], abs_tol=1e-9)
+    assert math.isclose(lr[1], ur[1], abs_tol=1e-9)

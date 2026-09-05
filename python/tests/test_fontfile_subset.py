@@ -77,7 +77,7 @@ def test_ts3_songti_subset_fitz_oracle_readback(tmp_path):
     # get_pixmap forces MuPDF to parse the embedded subset program (a stronger
     # oracle than text extraction alone, which only reads the ToUnicode CMap).
     code = (
-        "import fitz, sys;"
+        "import pymupdf as fitz, sys;"
         "page = fitz.open(sys.argv[1])[0];"
         "pm = page.get_pixmap(dpi=96);"
         "print('INK' if len(set(pm.samples)) > 1 else 'BLANK');"

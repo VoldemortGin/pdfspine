@@ -29,7 +29,7 @@ use pyo3::exceptions::{
 };
 use pyo3::ffi;
 use pyo3::prelude::*;
-use pyo3::types::{PyBytes, PyDict, PyList, PyTuple};
+use pyo3::types::{PyBytes, PyDict, PyFloat, PyList, PyString, PyTuple};
 
 /// The package version (mirrors the Rust workspace version).
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -632,6 +632,52 @@ fn dict_line_to_py<'py>(py: Python<'py>, line: &pdf_api::DictLine) -> PyResult<B
     Ok(d)
 }
 
+/// Shares equal immutable Python floats within one character's geometry.
+///
+/// Origin, bbox, matrix and quad repeat many coordinates, but converting each
+/// tuple independently boxes every occurrence. Bitwise matching preserves
+/// signed zero and never substitutes a neighbouring glyph's geometry. The
+/// bounded cache lives only for this character and this interpreter call.
+struct CharGeometryFloats<'py> {
+    py: Python<'py>,
+    values: [Option<(u64, Bound<'py, PyFloat>)>; 21],
+    len: usize,
+}
+
+impl<'py> CharGeometryFloats<'py> {
+    fn new(py: Python<'py>) -> Self {
+        Self {
+            py,
+            values: std::array::from_fn(|_| None),
+            len: 0,
+        }
+    }
+
+    fn float(&mut self, value: f64) -> Bound<'py, PyFloat> {
+        // Python containers may compare identical objects without calling float
+        // equality. Keep NaNs distinct even when their payload bits match.
+        if value.is_nan() {
+            return PyFloat::new(self.py, value);
+        }
+        let bits = value.to_bits();
+        for (stored_bits, object) in self.values[..self.len].iter().flatten() {
+            if *stored_bits == bits {
+                return object.clone();
+            }
+        }
+        let object = PyFloat::new(self.py, value);
+        if let Some(slot) = self.values.get_mut(self.len) {
+            *slot = Some((bits, object.clone()));
+            self.len += 1;
+        }
+        object
+    }
+
+    fn tuple<const N: usize>(&mut self, values: [f64; N]) -> PyResult<Bound<'py, PyTuple>> {
+        PyTuple::new(self.py, values.map(|value| self.float(value)))
+    }
+}
+
 fn dict_span_to_py<'py>(py: Python<'py>, span: &pdf_api::DictSpan) -> PyResult<Bound<'py, PyDict>> {
     let d = PyDict::new(py);
     d.set_item("size", span.size)?;
@@ -659,16 +705,51 @@ fn dict_span_to_py<'py>(py: Python<'py>, span: &pdf_api::DictSpan) -> PyResult<B
         d.set_item("text", &span.text)?;
     } else {
         let chars = PyList::empty(py);
+        // Each character has the same keys. Keep interpreter-local interned
+        // strings for this conversion instead of allocating seven repeated
+        // multi-character key strings per glyph. No Python objects are cached
+        // in Rust statics or shared across interpreter lifetimes.
+        let keys = [
+            "origin",
+            "bbox",
+            "c",
+            "matrix",
+            "quad",
+            "rendered_size",
+            "seq",
+            "synthetic",
+        ]
+        .map(|key| PyString::intern(py, key));
         for ch in &span.chars {
             let c = PyDict::new(py);
-            c.set_item("origin", ch.origin)?;
-            c.set_item("bbox", ch.bbox)?;
-            c.set_item("c", &ch.c)?;
-            c.set_item("matrix", ch.matrix)?;
-            c.set_item("quad", ch.quad)?;
-            c.set_item("rendered_size", ch.rendered_size)?;
-            c.set_item("seq", ch.seq)?;
-            c.set_item("synthetic", ch.synthetic)?;
+            let mut floats = CharGeometryFloats::new(py);
+            c.set_item(&keys[0], floats.tuple([ch.origin.0, ch.origin.1])?)?;
+            c.set_item(
+                &keys[1],
+                floats.tuple([ch.bbox.0, ch.bbox.1, ch.bbox.2, ch.bbox.3])?,
+            )?;
+            c.set_item(&keys[2], &ch.c)?;
+            c.set_item(
+                &keys[3],
+                floats.tuple([
+                    ch.matrix.0,
+                    ch.matrix.1,
+                    ch.matrix.2,
+                    ch.matrix.3,
+                    ch.matrix.4,
+                    ch.matrix.5,
+                ])?,
+            )?;
+            c.set_item(
+                &keys[4],
+                floats.tuple([
+                    ch.quad.0, ch.quad.1, ch.quad.2, ch.quad.3, ch.quad.4, ch.quad.5, ch.quad.6,
+                    ch.quad.7,
+                ])?,
+            )?;
+            c.set_item(&keys[5], floats.float(ch.rendered_size))?;
+            c.set_item(&keys[6], ch.seq)?;
+            c.set_item(&keys[7], ch.synthetic)?;
             chars.append(c)?;
         }
         d.set_item("chars", chars)?;

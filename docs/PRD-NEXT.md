@@ -11,20 +11,32 @@
 > for where the *previous* A–F framing of this doc was wrong vs the code — read it first if you remember the
 > old structure.
 >
-> **🚧 IN FLIGHT — glyph-geometry API expansion (branch
-> `worktree-agent-ab0626e7f9bd0c95d`, 5 commits, pushed).** The text layer now publishes the full
+> **🚧 IN FLIGHT — glyph-geometry API expansion (continuation branch
+> `glyph-geometry-continue`, synced to source ref `origin/worktree-agent-ab0626e7f9bd0c95d`
+> at `9912a23`).** The text layer now publishes the full
 > per-glyph geometry through `get_text` — `rendered_size` (fitz's `sqrt(|det|)` semantics),
 > `declared_size`, `matrix` / `text_matrix` / `ctm`, the true rotated `quad`, `dir`, plus `seq`
 > (painting order), `number` (reading order) and `synthetic` (engine-inserted word spaces) — so
 > consumers stop reverse-engineering font sizes out of bboxes. Also fixes the SVG backend to use the
 > real `Trm` instead of the scalar `Tf`.
 >
-> **The remaining work, the measured baselines, the design decisions and the known traps live in
-> `HANDOFF-glyph-geometry.md` at the repo root (§9 is the current status).** Not yet done there:
-> full gates + an end-to-end Python read-back for the publication commit; rebase onto the two-column
-> table fix; corpus / GT non-regression; performance numbers; the span-aggregation tightening (with
-> tolerance calibration); and the `span["size"]` declared-vs-rendered parity decision. That file is
-> temporary — fold anything worth keeping into this doc and delete it when the work lands.
+> **Current measured status (2026-09-05):** A–G are complete. A frozen, hash-verified public
+> 300-document manifest found 0/300 word/text/font differences between `aaee2a9`, `9912a23`, and the
+> post-F build; the 30-document GT slice is likewise exact across revisions. F splits 8,523 real-glyph
+> seams in 79 documents, with the documented cost that 420 alphabetic runs cross a new span boundary
+> (three become one span per character, including the real `HPA` abbreviation). E reduced the original
+> geometry build's retained-rawdict RSS from about 699 MiB to 430 MiB, but the optimized API still costs
+> 59% more streamed rawdict time, 65% more retained rawdict time, and 49% more retained rawdict RSS than
+> the pre-geometry build on the measured 118-page PDF. G's rendered `span["size"]` correction is accepted:
+> 5,495,174 of 5,803,856 uniquely matched glyphs improve, 308,367 are unchanged,
+> and 315 worsen because an F-tolerated span reports its first glyph's rendered size. Mean absolute size
+> error falls from 8.1822 pt to 0.000115 pt; this is a large parity improvement, not perfect value parity.
+> The final unified gate is green: 1,702 Rust tests and 805 pytest tests passed, with clippy, formatting,
+> Ruff, mypy, cargo-deny, and four drift guards clean.
+> A final same-input check found F/G add 0.19% streamed and 0.75% retained rawdict time over the
+> optimized E snapshot (RSS +1.031 MiB / +0.297 MiB); this does not erase the material pre-geometry
+> cost above.
+> See `HANDOFF-glyph-geometry.md` §12 and the dedicated `conformance/GLYPH-GEOMETRY-*-REPORT.md` reports.
 
 > **Single source of truth.** Per-symbol disposition lives in **`COMPAT.toml`**, generated from
 > `scripts/_compat_catalog.py` (guarded in CI). **Never hand-edit `COMPAT.toml`** — change dispositions in
@@ -207,7 +219,7 @@ oracle-cross-checked against real PyMuPDF 1.24.14 (`.venv-oracle`) with zero reg
   - Harness (built 2026-06-20): `conformance/gt/grits.py` (pure-stdlib **GriTS** Top+Con, AGPL-free port, 7-case self-test passes), `fetch_fintabnet.py` (FinTabNet.c, CDLA-Permissive), and a `tables_diff.py --gold` mode (parse gold → run pdfspine `find_tables` in the isolated worker → match by IoU → GriTS). Default fitz-agreement mode unchanged.
   - **Unblocked + scored (2026-07-02):** the original `dax-cdn.cdn.appdomain.cloud` host is **permanently decommissioned** (whole DNS zone SERVFAIL); `fetch_fintabnet.py` now extracts source PDFs from the verbatim HF mirror (`Leon1207/FinTabNet` `archive.zip`, license unchanged CDLA-Permissive-1.0) via zip64 HTTP-Range member extraction (central-directory index cached; `--self-test` green 3/3; provenance recorded in manifest `pdf_source`/`pdf_source_original`). Corpus: **150 pages / 186 structure-eligible gold tables**.
   - **Scores** (recall-weighted over all 186 gold tables; `tables_diff.py --gold` gained a `--strategy` flag, default `lines` unchanged): default `lines` GriTS_Top **0.073** / Con **0.070** (39/150 pages any detection) — **parity with fitz**, whose default also detects ~0 on these borderless financial tables; `strategy="text"` GriTS_Top **0.185** / Con **0.107** (148/150 pages, 148/148 predictions match gold IoU>0.5) — the engine's real detection capability, with a documented structure-quality tradeoff (page-grid over-merge/over-split; matched-only means drop vs lines' few-but-clean matches). These are custom **end-to-end extraction** baselines (full-page detection first; missed gold tables count 0). They are not directly comparable with Microsoft's published TATR ~0.98, which is TSR-only GriTS on gold cropped-table inputs. Reports: `GT-REPORT-tables-gold.md` (+ strategy-comparison section) and `GT-REPORT-tables-gold-text.md`.
-  - **TATR vision vertical slice (2026-08-03): implemented, corpus re-score pending raw-data refetch.** `page.find_tables(strategy="vision", backend="tatr")` now runs pinned Microsoft detection (`34669b5…`, no-timm backbone) + v1.1-all structure (`7587a7e…`) checkpoints through an optional Python extra. It preserves the base wheel, uses Microsoft's MIT canonical row/column/header/supercell post-processing with the official 10px crop padding, and slots exact pdfspine native words into cells (built-in OCR only when the whole page has no text layer). The default `native_line_guidance=True` can enlarge the structure-recognition crop with a matching native vector-line outline, while `adaptive_crop=True` can add up to two model-driven context expansions when structure objects touch an edge; both retain detector/crop provenance in metadata. Disable native guidance for a pure TATR path, and disable adaptive crop too for a single recognition pass. Real offline CPU smoke: synthetic ruled table detected as exactly 2×3 with `A1…C2` unchanged in ~1.7s. The gold harness consumes direct cells, requires bbox IoU ≥0.5, scores detector P/R/F1 from the raw `metadata.detection_bbox`, pairs extracted structure by the final `Table.bbox`, reports both recall-weighted end-to-end and matched-only GriTS, and uses a persistent JSONL worker so both models load once per run. Worker/model failure now stops immediately, writes `status=invalid` with no aggregate score, and exits non-zero. A gold-crop TSR-only mode remains required for a true apples-to-apples comparison with the published ~0.98. The ignored FinTabNet PDFs are not currently present in this checkout, so no replacement 150-page number is claimed yet; re-fetch then run `tables_diff.py --gold ... --strategy vision`.
+  - **TATR vision vertical slice (2026-08-03): implemented, corpus re-score pending.** `page.find_tables(strategy="vision", backend="tatr")` now runs pinned Microsoft detection (`34669b5…`, no-timm backbone) + v1.1-all structure (`7587a7e…`) checkpoints through an optional Python extra. It preserves the base wheel, uses Microsoft's MIT canonical row/column/header/supercell post-processing with the official 10px crop padding, and slots exact pdfspine native words into cells (built-in OCR only when the whole page has no text layer). The default `native_line_guidance=True` can enlarge the structure-recognition crop with a matching native vector-line outline, while `adaptive_crop=True` can add up to two model-driven context expansions when structure objects touch an edge; both retain detector/crop provenance in metadata. Disable native guidance for a pure TATR path, and disable adaptive crop too for a single recognition pass. Real offline CPU smoke: synthetic ruled table detected as exactly 2×3 with `A1…C2` unchanged in ~1.7s. The gold harness consumes direct cells, requires bbox IoU ≥0.5, scores detector P/R/F1 from the raw `metadata.detection_bbox`, pairs extracted structure by the final `Table.bbox`, reports both recall-weighted end-to-end and matched-only GriTS, and uses a persistent JSONL worker so both models load once per run. Worker/model failure now stops immediately, writes `status=invalid` with no aggregate score, and exits non-zero. A gold-crop TSR-only mode remains required for a true apples-to-apples comparison with the published ~0.98. The 150/150 FinTabNet source PDFs were recovered during the 2026-09-05 glyph-geometry corpus run, but the separate vision score has not been rerun; use `tables_diff.py --gold ... --strategy vision` when resuming this item.
 
 ### Phase 4 — Post-launch capability / strategic
 

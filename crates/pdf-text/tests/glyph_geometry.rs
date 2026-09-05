@@ -330,14 +330,14 @@ fn glyphgeo_010_dict_span_geometry_keys() {
     // declared and rendered sizes disagree — the whole point of the new keys.
     let span = first_span(b"BT /F1 1 Tf 12 0 0 12 100 700 Tm (Hi) Tj ET", false);
 
-    // The pre-existing keys keep their exact meaning.
-    approx(span.size, 1.0, EPS);
+    // Structured size is rendered; the remaining existing keys keep their meaning.
+    approx(span.size, 12.0, EPS);
     approx(span.origin.0, 100.0, 1e-9);
     approx(span.origin.1, 92.0, 1e-9); // 792 − 700
     assert_eq!(span.text, "Hi");
 
-    // `declared_size` is `size` under an explicit name; `rendered_size` is
-    // `sqrt(|det|)` of the render matrix (PyMuPDF's rawdict `size` semantics).
+    // The original `Tf` remains explicit; `size` and `rendered_size` both use
+    // `sqrt(|det|)` of the render matrix (PyMuPDF's rawdict size semantics).
     approx(span.declared_size, 1.0, EPS);
     approx(span.rendered_size, 12.0, EPS);
 

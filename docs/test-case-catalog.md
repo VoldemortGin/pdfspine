@@ -1100,6 +1100,15 @@ self-built PDFs (reuse `tests/common`). No PyMuPDF files.
 | `LAYOUT-SPAN-003` | font-size change splits spans | PRD §8.6.2 | green |
 | `LAYOUT-SPAN-004` | color change splits spans | PRD §8.6.2 | green |
 | `LAYOUT-SPAN-005` | span text == concatenation of its chars | PRD §10.7 | green |
+| `LAYOUT-SPAN-006` | same-Tf scale/Tz/shear changes split without changing text, words, bbox, or order | HANDOFF §9.4 | green |
+| `LAYOUT-SPAN-007` | a small rotation may remain on one line while splitting the visual span | HANDOFF §9.4 | green |
+| `LAYOUT-SPAN-008` | adjacent cross-axis baseline movement splits same-style glyphs | HANDOFF §9.4 | green |
+| `LAYOUT-SPAN-009` | ordinary and superscript runs remain internally cohesive | HANDOFF §9.4 | green |
+| `LAYOUT-SPAN-010` | one ligature glyph never gains an internal geometry seam | HANDOFF §9.4 | green |
+| `LAYOUT-SPAN-011` | translating a page does not change a geometry split | HANDOFF §9.4 | green |
+| `LAYOUT-SPAN-012` | singular matrices follow a finite conservative merge policy | HANDOFF §9.4 | green |
+| `LAYOUT-SPAN-013` | a synthesized word space survives exactly once across a geometry seam | HANDOFF §9.4 | green |
+| `LAYOUT-SPAN-014` | nominal 5% representation noise is distinct from a material threshold excess | HANDOFF §9.4 | green |
 
 ### Block grouping + reading order (`layout.rs`) — `LAYOUT-BLOCK-*` / `LAYOUT-ORDER-*`
 
@@ -1409,12 +1418,16 @@ are self-generated raw PDF bytes (PRD §10). Tests live in
 |---|---|---|---|
 | `PYGEO-001` | dict span key set + types (`declared_size` / `rendered_size` float, `matrix` / `text_matrix` / `ctm` 6-tuples, `dir` 2-tuple, `quad` 8-tuple, `seq` int) | PRD §8.6.1 | green |
 | `PYGEO-002` | rawdict char key set + types (`matrix`, `quad`, `rendered_size`, `seq`, `synthetic`) | PRD §8.6.1 | green |
-| `PYGEO-003` | `rendered_size` is separate from the declared `size` and equals `sqrt(\|det\|)` of `matrix` | PyMuPDF 1.28.2 | green |
+| `PYGEO-003` | structured `size == rendered_size == sqrt(\|det\|)`; `declared_size` retains `Tf` | PyMuPDF 1.28.2 | green |
+| `PYSIZE-001` | Seven affine probes check rendered `size`, retained `declared_size`, and types in dict/rawdict/json/rawjson | G size parity | green |
+| `PYSIZE-002` | Structured size does not redefine HTML/XHTML/XML or texttrace declared size | G scope | green |
+| `PYSIZE-003` | Oracle matching uses Unicode + origin and rejects ambiguous duplicates | G measurement | green |
 | `PYGEO-004` | the three geometry invariants on the Python side: `(0,0)·matrix == origin`, envelope of `quad == bbox`, `matrix == params · Tm · CTM · page_transform` | PRD §8.6.1 | green |
 | `PYGEO-005` | sheared char `quad` is a parallelogram (not axis-aligned) and matches `get_text("xml")` `<char quad>` value for value | PyMuPDF 1.28.2 | green |
 | `PYGEO-006` | line `number` / `seq` present; lines sorted by `number` reproduce the `get_text("text")` line order | PRD §8.6.1 | green |
 | `PYGEO-007` | json / rawjson geometry keys equal those of dict / rawdict | PRD §8.6.1 | green |
 | `PYGEO-008` | 90°-rotated run: `dir` turns with the text, `text_matrix` stays the raw user-space operand, `matrix` is the device-space (y-flipped) frame | PRD §8.6.1 | green |
+| `PYGEO-009` | 90°-rotated glyph keeps the PyMuPDF XML corner topology: corners are named in the glyph frame before transformation, rather than relabelled by final visual position | PyMuPDF 1.28.2; `conformance/probe_glyph_quad_corners.py` | green |
 
 ### M2 accuracy exit gate (`test_text.py`) — `ACCURACY-GT-*`
 

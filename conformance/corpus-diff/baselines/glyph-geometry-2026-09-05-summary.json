@@ -1,0 +1,300 @@
+{
+  "schema": 1,
+  "date": "2026-09-05",
+  "manifest": "glyph-geometry-2026-09-05-manifest.json",
+  "selection_sha256": "87804b5a316632e3920ec198f24bdc26c50131a6344bd51dd522a858963e82c0",
+  "engines": {
+    "baseline": "aaee2a9968bd31ae7e68cb86650071c3015002a8",
+    "candidate": "9912a2362a924cf976d81b8af84952731d5e0ad9",
+    "oracle": "PyMuPDF 1.28.2",
+    "post_f_wheel_sha256": "4f8426b4cddff4ca2938a1338b4826121320b2538e95de351e2b6c7011a241b5",
+    "post_g_wheel_sha256": "65189975eaedc11656771ec174060db40e5910f6279ef61280021e975ec5d3b5"
+  },
+  "word_boundary": {
+    "files": 300,
+    "pages": 1887,
+    "over": 137,
+    "over_alpha": 73,
+    "over_punct": 17,
+    "under": 329,
+    "under_alpha": 184,
+    "mixed": 130,
+    "oracle_words": 1038694,
+    "pdfspine_words": 1037205,
+    "content_equal_pages": 1246,
+    "oracle_errors": 0,
+    "pdfspine_errors": 0,
+    "baseline_candidate_different_documents": 0,
+    "candidate_post_f_different_documents": 0,
+    "post_f_post_g_different_documents": 0
+  },
+  "pre_f_seams": {
+    "spans": 398591,
+    "seams": 6212741,
+    "degenerate": 0,
+    "errors": 0,
+    "distributions": {
+      "linear": {
+        "count": 6212741,
+        "zero": 6203695,
+        "nonzero": 9046,
+        "all_quantiles": {
+          "0.5": 0.0,
+          "0.9": 0.0,
+          "0.95": 0.0,
+          "0.99": 0.0,
+          "0.999": 0.111108772077553
+        },
+        "nonzero_quantiles": {
+          "0.5": 0.11110879055588382,
+          "0.9": 0.35001776198934287,
+          "0.95": 0.35329341317365265,
+          "0.99": 0.45999999999999996,
+          "0.999": 0.8669508340000193
+        },
+        "min_nonzero": 8.333332818267664e-06,
+        "max": 1.333457887211666
+      },
+      "dir_dot": {
+        "count": 6212741,
+        "zero": 0,
+        "nonzero": 6212741,
+        "all_quantiles": {
+          "0.5": 1.0,
+          "0.9": 1.0,
+          "0.95": 1.0,
+          "0.99": 1.0,
+          "0.999": 1.0
+        },
+        "nonzero_quantiles": {
+          "0.5": 1.0,
+          "0.9": 1.0,
+          "0.95": 1.0,
+          "0.99": 1.0,
+          "0.999": 1.0
+        },
+        "min_nonzero": 0.999997334762639,
+        "max": 1.0
+      },
+      "baseline": {
+        "count": 6212741,
+        "zero": 6202957,
+        "nonzero": 9784,
+        "all_quantiles": {
+          "0.5": 0.0,
+          "0.9": 0.0,
+          "0.95": 0.0,
+          "0.99": 0.0,
+          "0.999": 2.368265246459239e-05
+        },
+        "nonzero_quantiles": {
+          "0.5": 5.262825505633082e-05,
+          "0.9": 0.030151134457777506,
+          "0.95": 0.13764098642706918,
+          "0.99": 0.6541054296086205,
+          "0.999": 1.2150949330001006
+        },
+        "min_nonzero": 1.8504131232447892e-17,
+        "max": 1.2150949330001006
+      }
+    },
+    "thresholds_strictly_greater_than": {
+      "linear": {
+        "0.001": {
+          "seams": 8894,
+          "spans": 6418,
+          "documents": 78
+        },
+        "0.005": {
+          "seams": 8891,
+          "spans": 6416,
+          "documents": 77
+        },
+        "0.01": {
+          "seams": 8822,
+          "spans": 6415,
+          "documents": 77
+        },
+        "0.02": {
+          "seams": 8752,
+          "spans": 6410,
+          "documents": 77
+        },
+        "0.05": {
+          "seams": 8378,
+          "spans": 6344,
+          "documents": 77
+        },
+        "0.1": {
+          "seams": 7659,
+          "spans": 6138,
+          "documents": 74
+        },
+        "0.2": {
+          "seams": 3069,
+          "spans": 1980,
+          "documents": 62
+        }
+      },
+      "baseline": {
+        "0.001": {
+          "seams": 2034,
+          "spans": 842,
+          "documents": 59
+        },
+        "0.005": {
+          "seams": 1818,
+          "spans": 734,
+          "documents": 49
+        },
+        "0.01": {
+          "seams": 1390,
+          "spans": 576,
+          "documents": 41
+        },
+        "0.02": {
+          "seams": 1003,
+          "spans": 415,
+          "documents": 38
+        },
+        "0.05": {
+          "seams": 899,
+          "spans": 382,
+          "documents": 32
+        },
+        "0.1": {
+          "seams": 806,
+          "spans": 309,
+          "documents": 27
+        },
+        "0.2": {
+          "seams": 356,
+          "spans": 131,
+          "documents": 18
+        }
+      }
+    }
+  },
+  "post_f_seams": {
+    "spans": 407114,
+    "seams": 6204218,
+    "degenerate": 0,
+    "errors": 0,
+    "distributions": {
+      "linear": {
+        "count": 6204218,
+        "zero": 6203549,
+        "nonzero": 669,
+        "all_quantiles": {
+          "0.5": 0.0,
+          "0.9": 0.0,
+          "0.95": 0.0,
+          "0.99": 0.0,
+          "0.999": 0.0
+        },
+        "nonzero_quantiles": {
+          "0.5": 0.02355133439753151,
+          "0.9": 0.04608735379818358,
+          "0.95": 0.047632550822954096,
+          "0.99": 0.04926646390821463,
+          "0.999": 0.05000000000000012
+        },
+        "min_nonzero": 8.333332818267664e-06,
+        "max": 0.05000000000000012
+      },
+      "dir_dot": {
+        "count": 6204218,
+        "zero": 0,
+        "nonzero": 6204218,
+        "all_quantiles": {
+          "0.5": 1.0,
+          "0.9": 1.0,
+          "0.95": 1.0,
+          "0.99": 1.0,
+          "0.999": 1.0
+        },
+        "nonzero_quantiles": {
+          "0.5": 1.0,
+          "0.9": 1.0,
+          "0.95": 1.0,
+          "0.99": 1.0,
+          "0.999": 1.0
+        },
+        "min_nonzero": 0.999997334762639,
+        "max": 1.0
+      },
+      "baseline": {
+        "count": 6204218,
+        "zero": 6199481,
+        "nonzero": 4737,
+        "all_quantiles": {
+          "0.5": 0.0,
+          "0.9": 0.0,
+          "0.95": 0.0,
+          "0.99": 0.0,
+          "0.999": 0.0
+        },
+        "nonzero_quantiles": {
+          "0.5": 2.8908700928530717e-05,
+          "0.9": 0.007770873402004381,
+          "0.95": 0.01505197549200917,
+          "0.99": 0.041666666666666664,
+          "0.999": 0.07891840101068824
+        },
+        "min_nonzero": 1.8504131232447892e-17,
+        "max": 0.1
+      }
+    },
+    "changed_documents": 79,
+    "new_boundaries": 8523,
+    "boundary_kinds": {
+      "space": 7289,
+      "letter_letter": 565,
+      "dot": 40,
+      "digit_digit": 4,
+      "other": 625
+    },
+    "old_spans_split": 6394,
+    "new_single_glyph_pieces": 7607,
+    "whole_word_charwise": [
+      "govdocs1-00056.pdf#p1:КnОm",
+      "govdocs1-00067.pdf#p0:sitm",
+      "govdocs1-00073.pdf#p5:HPA"
+    ]
+  },
+  "span_length_counts": {
+    "before": {
+      "1": 137829,
+      "2": 38459,
+      "3-5": 51262,
+      "6-10": 59001,
+      "11-20": 29450,
+      "21-50": 29966,
+      "51+": 52624
+    },
+    "after": {
+      "1": 145436,
+      "2": 38163,
+      "3-5": 51906,
+      "6-10": 59445,
+      "11-20": 29610,
+      "21-50": 30197,
+      "51+": 52357
+    }
+  },
+  "char_projection": {
+    "fields": [
+      "c",
+      "origin",
+      "bbox",
+      "matrix",
+      "quad",
+      "rendered_size",
+      "seq",
+      "synthetic"
+    ],
+    "pages": 1887,
+    "chars": 6812936,
+    "different_pages": 0
+  }
+}

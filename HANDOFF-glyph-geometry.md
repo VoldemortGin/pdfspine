@@ -1,7 +1,8 @@
 # 交接：Rust 文本层发布完整字形几何 + line/span 聚合修正
 
 > **临时文件**，任务完结后连同本文件一起删除。
-> 分支 `worktree-agent-ab0626e7f9bd0c95d`，基线 `origin/main` = `75a1ace`（v0.6.1）。
+> 当前续做分支 `glyph-geometry-continue`；基线 `aaee2a9`，已同步的 feature 尖端 `9912a23`。
+> §1–§9 保留原始设计与历史过程；**当前验收状态以 §12 为准**。
 
 ---
 
@@ -69,7 +70,7 @@ SVG 后端此前用 `glyph.size`（纯 `Tfs` 标量）当字形矩阵的线性�
 
 ---
 
-## 2. 未完成 —— 接手要做的事（按优先级）
+## 2. 原始接手清单（历史；现均已处理，见 §12）
 
 ### T1. 清理（5 分钟）
 - **删掉 `crates/pdf-text/tests/zz_size_probe.rs`** —— 临时探针（只打印
@@ -175,7 +176,8 @@ py 层 `lib.rs:640-653` 靠 `span.chars.is_empty()` 判断输出哪个。
 | 斜切 `Tm 12 0 6 12` | (12,0,6,12) | **12**（旋转/斜切不变） |
 | 判别探针 `(3,4,−8,6)` | — | **7.070711** = `√\|3·6−4·(−8)\|`，决定性 |
 
-**pdfspine 当前的 `Span.size` 是 `Tf` 声明值**（`interp.rs` 的 `size: ts.font_size`）。
+**G 之前 pdfspine 的内部 `Span.size` 与公开 `span["size"]` 都是 `Tf` 声明值**
+（`interp.rs` 的 `size: ts.font_size`）。G 的最终公开语义见 §12.5。
 所以那个"89.7% 双峰分布"**不是风格差异，是这个键本身错了**；
 下游被迫用 bbox 反推字号，正是这个 bug 的下游症状。
 
@@ -286,7 +288,7 @@ env VIRTUAL_ENV="$PWD/.venv" \
 
 ---
 
-## 7. 本机 scratchpad 资产（**另一台电脑没有，需要时重跑**）
+## 7. 原环境 scratchpad 资产（历史；当前已用可追踪清单取代）
 
 `/private/tmp/claude-502/-Users-linhan-startup-spine/b8ac4adb-94a4-4e9b-9547-3a9e21ef1393/scratchpad/`
 
@@ -319,7 +321,7 @@ Claude-Session: https://claude.ai/code/session_01FrgNdzHnsp6pGgLyL4HfTy
 
 ---
 
-## 9. 进度更新（⚠️ 本节的「未验证」标注已被 §10 推翻，先读 §10）
+## 9. 历史进度更新（其中陈旧状态已被 §10–§12 取代）
 
 ### 9.1 已推送到 `origin/worktree-agent-ab0626e7f9bd0c95d` 的 4 个 commit
 
@@ -365,18 +367,18 @@ Claude-Session: https://claude.ai/code/session_01FrgNdzHnsp6pGgLyL4HfTy
 **已完成，不要重做**（证据见 §10 与 `conformance/GLYPH-GEOMETRY-REPORT.md`）：
 
 - ~~A · 跑完整门 + Python 实测证据~~ ✅ 全绿，含真实 PDF 读回与三条不变量
-- ~~B · rebase 到 `aaee2a9`~~ ✅ 由协调者在主仓完成，9 个 commit 零冲突，
-  已 ff-merge 进 main。**rebase 后复跑全量测试仍全绿**，其中
+- ~~B · rebase 到 `aaee2a9`~~ ✅ 已在远端 feature 历史完成，9 个 commit 零冲突。
+  **rebase 后复跑全量测试仍全绿**，其中
   `LAYOUT-ORDER-004/005/006`（双列对照表）与 `GLYPHGEO-001..015` 同时通过 ——
   两边虽同改 `layout.rs`，但双列修复动的是 **region 选择策略**、本次动的是
   **`DevGlyph` 几何携带 + `build_line` 字段填充**，不在同一条决策路径上，故不冲突。
 
-**仍未做**（按建议顺序）：
+**当时仍未做**（现状见 §12）：
 
 | 项 | 内容 | 验收口径 / 已知基线 |
 |---|---|---|
 | **F** | **span 聚合收紧**（用户诉求中唯一未落地的一块，最大工作量） | 见下 §9.4.1 |
-| C | 300 文档语料 over/under 不退化 | 基线 **over 334/83、under 332/160**；回路见 §7，`out/fitz/` 300 份已缓存，只需跑我们这侧 |
+| C | 300 文档语料 over/under 不退化 | 基线 **over 334/83、under 332/160**；回路已提交在 `conformance/corpus-diff/`，本机语料与两侧缓存均缺，需按 README 同批重建 |
 | D | GT 子集不退化 | **EUR-Lex lev 0.9287/0.9486、order 0.9811/0.9852**（双列修复后新基线，mean/median 口径请在 `run_gt.py` 输出里自行确认）；**born / CJK / Arabic 逐位不变**；**PMC 7 篇 order 0.939/0.996** |
 | E | 性能：大文档抽取耗时 + 峰值 RSS | 无历史基线，需先在改动前测一次做对照。`PositionedGlyph` 已从 168 → **344 字节**（+176 = 3×Matrix + Rect），`Char` 56 → 184，需确认大文档上的实际代价 |
 | G | `size` declared-vs-rendered 的 parity 决策 | fitz 报 rendered（`sqrt(\|det\|)`，§3① 有完整探针表），我们报 declared。改动会连带影响 `build_line` 的词切分阈值、`to_html` 的 `font-size`、`to_xml` 的 `<font size=>`，**必须用 C/D 的语料实测决定**，不要凭判断改 |
@@ -415,21 +417,20 @@ C/D/E 是计算密集型验证，适合在算力空闲的机器上跑。F 需要
 D 的四个子集不得退化，全量门全绿。**退化就停下汇报，不要调容差硬凑数字。**
 
 
-### 9.5 环境坑：pre-push hook 推不上去
+### 9.5 历史环境坑：pre-push hook 推不上去
 
-pre-push hook 跑 `quality_gate.py`，其中 pytest 用的是 **`/opt/anaconda3/bin/python3`**，
-而那个解释器里的 `pdfspine` 指向**主仓**（`/Users/linhan/startup/spine/pdfspine/python/pdfspine/`，
-版本 0.6.0），却运行在 worktree 上 → 两条 version 断言必然失败：
+一次 pre-push hook 运行 `quality_gate.py` 时，pytest 显示解释器为
+**`/opt/anaconda3/bin/python3`**，并发生以下版本断言失败：
 
 ```
 assert pdfspine.VersionBind == pdfspine.__version__
 AssertionError: assert '0.6.1' == '0.6.0'
 ```
 
-**与被推的代码无关**，任何 worktree 分支都会被拒。
-worktree 自己的 `.venv` 里 `0.6.1 == 0.6.1` 正常。
-当前绕过办法：`git push --no-verify`（前提是已在本地独立跑过全量门）。
-**建议单独修 hook 的解释器选择**，这是个会反复咬人的坑。
+worktree 自己的 `.venv` 中 `0.6.1 == 0.6.1`。当时据此推测 hook 选错了解释器或导入路径，
+但没有保存足以证明完整因果链的诊断记录；因此不能把该推测当作已确认根因，也不能据此
+断言所有 worktree push 都会失败。后续若复现，应先记录 hook 实际解释器、`sys.path`、
+导入模块路径和环境变量，再修选择逻辑。
 
 ---
 
@@ -451,10 +452,10 @@ worktree 自己的 `.venv` 里 `0.6.1 == 0.6.1` 正常。
 ### 10.2 新增测试
 
 - Rust `GLYPHGEO-010..015`（`crates/pdf-text/tests/glyph_geometry.rs` 共 15 条全绿）
-- Python `PYGEO-001..008`（`python/tests/test_glyph_geometry.py`）
+- Python `PYGEO-001..009`（`python/tests/test_glyph_geometry.py`）
 - `PYTEXT-003` / `PYTEXT-006` 的精确键集合断言已补上新键
 
-### 10.3 真实 PDF 实测（`fixtures/born/pangrams.pdf`，`get_text("rawdict")`，612×792 不旋转）
+### 10.3 原始发布版真实 PDF 实测（pre-G；`fixtures/born/pangrams.pdf`，`get_text("rawdict")`）
 
 ```
 block[0]  {'number': 0, 'type': 0, 'bbox': (72.0, 62.4, 393.444, 116.4), 'seq': 0}
@@ -489,7 +490,7 @@ chars[0]  origin (72.0, 72.0)   bbox (72.0, 62.4, 79.332, 74.4)   c 'T'
 另：`rendered_size == sqrt(|det|) == 12.0` ✅；
 `get_text("xml")` 的 `<char quad>` 与 rawdict `quad` **逐值相同** ✅（T3 生效）。
 
-### 10.4 合成 PDF 补充实测
+### 10.4 原始发布版合成 PDF 补充实测（pre-G）
 
 - `BT /F1 1 Tf 12 0 0 12 100 700 Tm (Hi) Tj ET`
   → `size == declared_size == 1.0`、**`rendered_size == 12.0`**、
@@ -503,7 +504,7 @@ chars[0]  origin (72.0, 72.0)   bbox (72.0, 62.4, 79.332, 74.4)   c 'T'
   `matrix == (0.0, -12.0, -12.0, -0.0, 100.0, 92.0)`
 - `page.transformation_matrix` 实测 `(1.0, 0.0, 0.0, -1.0, -0.0, 792.0)`
 
-### 10.5 需要复核的唯一语义点
+### 10.5 quad 角命名语义 —— ✅ 已复核
 
 `layout.rs` 的 `DevGlyph::new` 里，glyph cell 的 quad 现在是**先在字形自身坐标系里命名四角**
 （`ul` = ascender-left）再做变换，而不是 `Quad::from_rect(&g.cell)` 之后再变换。
@@ -512,9 +513,103 @@ chars[0]  origin (72.0, 72.0)   bbox (72.0, 62.4, 79.332, 74.4)   c 'T'
 经设备空间 y 翻转后 `ul` 实际落在**视觉下方** —— 正立文本的 `ul`/`ll` 会颠倒。
 
 修正后 `quad.rect()` 不变，因此 `bbox` 与所有既有输出**逐字节不变**（XML golden 仍绿）。
-若要与 MuPDF 的内部约定再对一次，这是唯一需要复核的地方。
+已用 PyMuPDF 1.28.2 对正立、斜切、内容流旋转 90° 三种自生成 PDF 复核。
+MuPDF 同样先在 glyph 的 y-up 坐标框架中命名 `ul/ur/ll/lr` 再变换；旋转 90° 后
+`ul -> ur` 沿旋转后的基线向上，`ul -> ll` 向右，不会按最终视觉位置重新命名。
+`PYGEO-009` 固化此拓扑，可复现双引擎脚本为
+`conformance/probe_glyph_quad_corners.py`。两边 Helvetica fallback 的竖直 metrics 不同，
+所以绝对 quad 数值不相等；探针对比的是归一化边方向。
 
-### 10.6 因此，剩余工作只剩
+同一探针另发现页面字典 `/Rotate` 的坐标基准差异：PyMuPDF 1.28.2 的文本 XML
+仍用未旋转页坐标，pdfspine 会应用 page transform。此项与角命名无关，现作为已知
+rotated-page 差异记录在文本提取文档中。
 
-§9.4 的 **B–G**：rebase 到 `aaee2a9` → 语料 / GT 不退化 → 性能数据 →
-span 聚合收紧（含容差校准）→ `size` declared-vs-rendered 的 parity 决策。
+### 10.6 后续状态
+
+§9.4 的 C–G 已在本机继续执行；最终结果见 §12。
+
+## 11. 续接环境状态（2026-09-05）
+
+- `git fetch origin` 后 glyph 远端 ref 从旧 `3de8240` 更新到 `9912a23`。新历史包含
+  `aaee2a9`、等价的 9 个 rebased glyph commits、rebase 后验证记录，以及已提交的
+  `conformance/corpus-diff/`。`range-diff` 确认旧、新 9 个 glyph commits 逐一等价。
+  本地 `glyph-geometry-continue` 已同步并跟踪该远端 ref；旧尖端由本地分支
+  `glyph-geometry-pre-sync-3de8240` 保留。`origin/main` 仍为 `75a1ace`，未修改、未 push。
+- **B 已完成**：`aaee2a9` 是 `9912a23` 的祖先，rebase 后 1690 个 Rust 测试及双方
+  定向测试的持久证据见 §9.4 与验证报告。
+- `.venv-oracle` 已按 PyMuPDF 1.28.2 + `pdfminer.six` 重建；`.venv` 是搬迁环境，`activate` 内仍带旧
+  路径，使用时显式设置 `VIRTUAL_ENV`，并确保 `~/.cargo/bin` 在 Homebrew cargo 前，
+  才会采用仓库要求的 rustc 1.96。以该方式 `maturin develop --release --uv` 已成功。
+- 本节记录的是同步刚完成时的环境快照。随后恢复的精确语料、缓存和验收结果见 §12；
+  不应继续按此处“尚未下载/缓存缺失”的旧状态安排工作。
+
+## 12. 当前验收状态（2026-09-05）
+
+| 项 | 状态 | 持久证据 |
+|---|---|---|
+| A | ✅ 完成 | §10；全量 Rust / Python 门与真实 PDF 读回 |
+| B | ✅ 完成 | `aaee2a9` 是 `9912a23` 祖先；rebase 后 1690 Rust 测试全绿 |
+| C | ✅ 完成 | `conformance/GLYPH-GEOMETRY-CORPUS-REPORT.md`；精确 300 件 manifest 下 baseline/current/F/G 均 0/300 word/text/font 差异 |
+| D | ✅ 完成 | `conformance/GLYPH-GEOMETRY-GT-REPORT.md`；30 件固定子集逐文档分数和字符数完全一致 |
+| E | ✅ 已测量并缓解 | `conformance/GLYPH-GEOMETRY-PERFORMANCE-REPORT.md`；优化后仍有显著 rawdict 时间/RSS 成本 |
+| F | ✅ 完成 | `conformance/GLYPH-GEOMETRY-SPAN-REPORT.md`；阈值、8523 个新边界、负例和结构代价均已固化 |
+| G | ✅ 完成 | `conformance/GLYPH-GEOMETRY-SIZE-PARITY-REPORT.md`；完整 300 件差分、专项门和最终统一门通过 |
+
+### 12.1 C：可重建的 300 文档差分基线
+
+历史 `over 334/83、under 332/160` 所依赖的私有文件列表、指纹、oracle 版本和斜杠列含义
+均未保留，不能严格复现，也不能拿任意 300 件与其作数值比较。新基线固定在
+`conformance/corpus-diff/baselines/glyph-geometry-2026-09-05-manifest.json`：每项含仓库相对路径、
+source ID、大小和 PDF SHA-256，portable fingerprint 为
+`87804b5a316632e3920ec198f24bdc26c50131a6344bd51dd522a858963e82c0`。语料构成为
+FinTabNet 132、GovDocs1 100、EUR-Lex 41、fixtures 9、Arabic 9、born 6、CJK 3；共 1887 页。
+
+同一清单上，`aaee2a9`、`9912a23`、post-F、post-G 的 extraction JSON 均逐文档一致。
+固定 PyMuPDF 1.28.2 比较为 over 137、under 329、mixed 130，oracle/pdfspine 均零提取错误。
+这些数字是新的可复现基线，不宣称重现旧 `334/332` 数字。
+
+### 12.2 D：固定 GT 子集
+
+born 6、CJK 3、Arabic 9、EUR-Lex 历史希腊文切片 5、PMC 历史 clean slice 7，共 30 件，
+在 `aaee2a9`、`9912a23` 和 post-F 间逐文档 unrounded metric、字符数及 aggregate 完全一致。
+PMC 通过新的官方匿名 `pmc-oa-opendata` S3 metadata 精确恢复，重现 order mean/median
+`0.9391/0.9962`。EUR-Lex 验收只跑了历史 5 件 / 352 页切片，不是完整 40 件 / 2816 页。
+
+### 12.3 E：性能结论
+
+原 geometry build 在 118 页 EUR-Lex 样本上令 streamed rawdict 时间增加 85.9%、retained
+rawdict 峰值 RSS 增加 141.6%。复用 Python key 与不可变 float 后，retained rawdict RSS 从约
+699 MiB 降至 430 MiB；相对 pre-geometry 同窗口仍增加 59.0% streamed rawdict 时间、65.3%
+retained rawdict 时间和 48.9% retained rawdict RSS。这是已量化并缓解的显著成本，不是零退化。
+最终同输入复测中，F/G 相对已优化 E 快照增加 0.19% streamed、0.75% retained rawdict
+时间，RSS 增加 1.031 MiB / 0.297 MiB；全部模式 elapsed 最大增幅 3.25%。这说明 F/G
+没引入新的大幅退化，不改变上述相对 pre-geometry 的残余成本结论。
+
+### 12.4 F：span 几何门
+
+最终阈值为 linear `<= 0.05 + 1e-9`、baseline `<= 0.1 + 1e-9`、direction dot `> 0.996`；
+奇异矩阵走有限线性部分精确相等且 absolute baseline `<= 1e-6`。冻结语料中新增 8523 个
+span 边界，涉及 79/300 文档；1887 页、6812936 个字符的扁平几何投影完全不变。
+420 个 alphabetic run 跨新 span 边界，三个变成逐字符 span，其中包含正常缩写 `HPA`；
+leader-dot 长串也明显碎片化。这些是接受的真实结构代价，不能表述为“无过拆”。
+
+### 12.5 G：`span["size"]` 决策
+
+已接受把结构化 `DictSpan.size` 改为首字形的 `rendered_size`，同时保留内部 `Span.size` / `Tf`
+供布局及 HTML/XML 既有语义使用。300 件上 5803856 个与 PyMuPDF 双向唯一匹配的 glyph 中，
+5495174 个字号误差改善、308367 个不变、315 个恶化；mean absolute error 从 8.1822137 pt
+降至 0.000114815 pt，最大 residual 为 0.6996063 pt（5.83005%）。315 件 residual 只出现在
+GovDocs1 18/53，原因是 F 容许同 span 内最多约 5% 的相邻 geometry 变化，而公开 span size
+只能取首字形值。候选值 100% 等于该 span 的 `rendered_size`；F/G 间 text、words、rawdict
+除 span `size` 外的 1887 页投影全部一致。因此这是大幅 parity 改善，不是完美逐 glyph parity。
+完整匹配、容差口径、315 件逐项归因和复现命令见
+`conformance/GLYPH-GEOMETRY-SIZE-PARITY-REPORT.md`。
+
+### 12.6 最终统一门
+
+G 落地后的最终门全部通过：`cargo fmt` clean；clippy `-D warnings` clean；Rust workspace
+all-features **1702 passed / 0 failed / 1 个显式 profiling ignored**；共享 maturin release build
+成功；Python 在 `-W error --doctest-modules` 下 **805 passed / 63 skipped / 0 failed**；Ruff
+format/check、mypy、cargo-deny 和四个 drift guard 均通过。首次 Python 运行的三项失败只来自
+PyMuPDF 1.28 对旧 `fitz` compatibility import 写 stdout 的 deprecation warning；三个子进程入口
+改用 `import pymupdf as fitz` 后复跑全绿，没有靠 skip 绕过。

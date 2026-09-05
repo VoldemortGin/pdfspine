@@ -584,7 +584,7 @@ def test_font_fontfile_cross_check_oracle():
     if not os.path.exists(oracle):
         pytest.skip("real-PyMuPDF oracle not available")
     code = (
-        "import fitz, json, sys;"
+        "import pymupdf as fitz, json, sys;"
         "f=fitz.Font(fontfile=sys.argv[1]);"
         "print(json.dumps({"
         "'name': f.name,"
@@ -643,7 +643,7 @@ def test_font_valid_codepoints_subset_of_fitz():
     if not os.path.exists(oracle):
         pytest.skip("real-PyMuPDF oracle not available")
     code = (
-        "import fitz, json;"
+        "import pymupdf as fitz, json;"
         "print(json.dumps({n: sorted(fitz.Font(n).valid_codepoints()) "
         "for n in ['helv','tiro','cour','symb','zadb']}))"
     )

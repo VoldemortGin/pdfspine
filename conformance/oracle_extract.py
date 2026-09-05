@@ -26,7 +26,11 @@ import sys
 
 def _pymupdf_pages(path: str) -> dict:
     try:
-        import fitz  # PyMuPDF
+        # PyMuPDF 1.28 warns to stdout when importing the deprecated ``fitz``
+        # compatibility module.  This process reserves stdout for its JSON
+        # payload, so use the supported module name and keep the ``fitz`` alias
+        # used by the extraction code below.
+        import pymupdf as fitz
     except Exception as exc:  # noqa: BLE001
         return {"ok": False, "error": f"import: {type(exc).__name__}: {exc}", "pages": []}
     try:

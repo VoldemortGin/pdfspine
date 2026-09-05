@@ -11,33 +11,48 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-09-05
+
 ### Added
 
-- **The full glyph rendering geometry is published through `get_text`.** Every
-  `dict` / `rawdict` / `json` / `rawjson` span now carries `declared_size` (the
-  `Tf` operand) and `rendered_size` (`sqrt(|det|)` — the size the text is
-  actually painted at, PyMuPDF's `size` semantics), the device-space render
-  `matrix`, the raw user-space `text_matrix` and `ctm` it was composed from, the
-  baseline `dir`, the rotation-aware `quad` and the painting-order `seq`. Each
-  `rawdict` / `rawjson` char adds `matrix`, `quad`, `rendered_size`, `seq` and
-  `synthetic` (`True` for an inter-word space layout synthesized from a `TJ`
-  kern). Lines gain `number` (reading-order index, consistent with the
-  `get_text("text")` line order) and `seq`; text blocks gain `seq`. Three
-  invariants hold and are tested: `(0,0)·matrix == origin`, the envelope of
-  `quad == bbox`, and `matrix == params · text_matrix · ctm · page_transform`.
-  Downstream no longer has to reverse-engineer a font size out of a bbox or
-  repair a rotated / sheared run by hand. Every pre-existing key keeps its exact
-  meaning; `span["size"]` is still the declared `Tf` operand, which remains a
-  documented parity difference from fitz (use `rendered_size` for the painted
-  size).
+- **Full glyph rendering geometry through `get_text`.** Structured spans
+  (`dict`, `rawdict`, `json`, `rawjson`) expose `declared_size` (the original
+  `Tf` operand), `rendered_size`, the device-space render `matrix`, source
+  `text_matrix` and `ctm`, baseline `dir`, rotation-aware `quad`, and painting
+  order `seq`. Raw characters expose `matrix`, `quad`, `rendered_size`, `seq`,
+  and `synthetic`; lines add reading-order `number` and painting-order `seq`,
+  and text blocks add `seq`.
+- Reproducible corpus, ground-truth, performance, span-boundary, and size-parity
+  reports with a trackable 300-document manifest in `conformance/`.
 
 ### Changed
 
-- **`get_text("xml")`'s `<char quad=…>` is the true glyph quad.** It used to
-  carry the four corners of the axis-aligned bbox; it now carries the glyph
-  cell's real corners, so rotated and sheared text yields a genuine
-  parallelogram — matching PyMuPDF 1.28.2 and the `rawdict` char `quad` value
-  for value. Upright text is unaffected (the corners coincide with the bbox).
+- **Structured `span["size"]` now reports rendered font size**, matching the
+  `sqrt(abs(det(matrix)))` rule, instead of the declared `Tf` operand. For
+  example, `1 Tf` with a 12× text matrix now reports `size == rendered_size ==
+  12.0` and `declared_size == 1.0`. Consumers needing the old structured value
+  should use `declared_size`. HTML, XHTML, XML font-size attributes, and
+  `get_texttrace()` retain their existing declared-size semantics. Span-level
+  rendered size represents the first glyph; per-character `rendered_size`
+  preserves variation within a span.
+- **Visual span boundaries account for affine geometry and baseline changes.**
+  Materially different transforms or baselines now split spans, while small
+  within-span variation is tolerated. Text, words, and flattened character
+  geometry are preserved on the fixed 1,887-page corpus. Some alphabetic and
+  leader-dot runs consequently cross additional span boundaries.
+- **XML character quads now carry the true glyph corners**, including rotated
+  and sheared parallelograms, instead of axis-aligned bounding-box corners.
+
+### Fixed
+
+- SVG glyphs use their actual text rendering matrix, correcting scale and
+  orientation under text matrices, CTMs, and horizontal scaling.
+- Two-column correlation tables are read row by row.
+- Rawdict conversion shares immutable keys and numeric values to reduce the
+  memory cost of the expanded geometry without sharing mutable containers.
+  Geometry remains unconditional: the measured optimized rawdict path still
+  costs about 59% more streamed time and 49% more retained peak RSS than the
+  pre-geometry baseline on the documented 118-page sample.
 
 ## [0.6.1] — 2026-09-03
 
@@ -519,7 +534,8 @@ published wheel's version is set from the `v0.1.0` git tag at build time.
   2858 ms → 819 ms). `rayon` is a feature-gated (`paddle-ocr`) optional dep and
   is not in the lean base wheel.
 
-[Unreleased]: https://github.com/VoldemortGin/pdfspine/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/VoldemortGin/pdfspine/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/VoldemortGin/pdfspine/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/VoldemortGin/pdfspine/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/VoldemortGin/pdfspine/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/VoldemortGin/pdfspine/compare/v0.4.1...v0.5.0

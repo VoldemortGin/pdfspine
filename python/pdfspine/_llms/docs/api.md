@@ -276,13 +276,14 @@ page.get_texttrace() -> list[dict]
 
 #### 字形几何（pdfspine 扩展：dict / rawdict / json / rawjson 的新键）
 
-pdfspine 在 `get_text("dict"/"rawdict"/"json"/"rawjson")` 的 PyMuPDF 键集合之上，**额外发布每个 span / char 的完整渲染几何**。既有键（`size`/`flags`/`font`/`color`/`ascender`/`descender`/`origin`/`bbox`/`text`/`chars`、line 的 `bbox`/`wmode`/`dir`、block 的 `number`/`type`/`bbox`）语义一律不变。有了这些键，**不必再从 bbox 反推字号，也不必自己修复旋转 / 斜切的字形**。
+pdfspine 在 `get_text("dict"/"rawdict"/"json"/"rawjson")` 的 PyMuPDF 键集合之上，**额外发布每个 span / char 的完整渲染几何**。结构化输出的 span `size` 使用渲染字号，`declared_size` 保留原始 `Tf`；其他既有键语义不变。有了这些键，**不必再从 bbox 反推字号，也不必自己修复旋转 / 斜切的字形**。
 
 **span 层**（`dict` / `rawdict` / `json` / `rawjson` 都有）：
 
 | 键 | 类型 | 单位 / 坐标空间 | 含义 |
 |---|---|---|---|
-| `declared_size` | `float` | pt，`Tf` 操作数 | `Tf` 操作数原值，与现有 `size` 同值，只是显式命名 |
+| `size` | `float` | pt，设备空间 | 首个字形的渲染字号，等于 `rendered_size` |
+| `declared_size` | `float` | pt，`Tf` 操作数 | 独立保留 `Tf` 操作数原值（包括符号） |
 | `rendered_size` | `float` | pt，设备空间 | `sqrt(\|a·d − b·c\|)`（`matrix` 线性部分行列式），即真正画出来的字号 |
 | `matrix` | `tuple[float × 6]` `(a,b,c,d,e,f)` | **设备空间** | span 首字形的 render matrix，把 glyph cell 映到设备空间 |
 | `text_matrix` | `tuple[float × 6]` | **PDF 用户空间** | 首字形的 `Tm`，内容流原始值（**不叠** page transform） |
@@ -312,7 +313,11 @@ pdfspine 在 `get_text("dict"/"rawdict"/"json"/"rawjson")` 的 PyMuPDF 键集合
 | 空间 | 定义 | 谁在这里 |
 |---|---|---|
 | **PDF 用户空间** | y 向上、原点左下，内容流操作符所在的空间 | `text_matrix`、`ctm`。**故意不叠 page transform**——它们的用途是把抽出来的字形**对回 PDF 源**（回查是哪几个操作符画的），叠了就对不回去了 |
-| **设备空间**（PyMuPDF device space） | y 向下、原点左上，页面旋转已生效 | 既有的 `bbox` / `origin` / `dir`，以及新键 `matrix` / `quad`——**与 bbox / origin 同基准** |
+| **pdfspine 设备空间** | y 向下、原点左上，页面旋转已生效 | 既有的 `bbox` / `origin` / `dir`，以及新键 `matrix` / `quad`——**与 bbox / origin 同基准** |
+
+页面带 `/Rotate` 时存在一个已实测的坐标基准差异：PyMuPDF 1.28.2 的文本 XML
+仍返回未旋转页面坐标，pdfspine 会应用 page transform。这个差异不影响
+`ul` / `ur` / `ll` / `lr` 的角命名约定。
 | **text space 的 glyph cell** | 字形自己的 1000 单位 em 空间 ÷ 1000：`[0, descender .. advance, ascender]`（竖排还要减去竖直位移向量 v） | `matrix` 就是把这个 cell 映到设备空间的那个矩阵 |
 
 一句话：**`matrix` / `quad` 是设备空间，`text_matrix` / `ctm` 是用户空间。**
@@ -330,14 +335,9 @@ pdfspine 在 `get_text("dict"/"rawdict"/"json"/"rawjson")` 的 PyMuPDF 键集合
 - `rendered_size = sqrt(|a·d − b·c|)`（MuPDF 的 `fz_matrix_expansion`），这**正是 PyMuPDF `dict`/`rawdict` span `size` 的语义**。
 - 纯旋转、纯斜切不改变它；各向异性缩放给两轴的**几何平均**（`Tm 20 0 0 10` → `sqrt(200) ≈ 14.142136`）；`Tz 50` + `Tf 12` → `sqrt(72) ≈ 8.485281`。
 - 退化值：矩阵奇异或分量非有限时 `rendered_size == 0.0`（不 panic、不产生 NaN / Inf）；所有发布的矩阵 / quad 分量恒为有限值。
-- **警告：`get_texttrace()` 的 `size` 是另一套语义**——`|(a, b)|`（x 基向量长度）。两者只在共形矩阵（纯旋转 / 均匀缩放）下一致，在各向异性缩放与 `Tz` 下分道扬镳。**不要混用。**
-
-**`size` 的 PyMuPDF parity 差异（已知，如实记录）**
-
-- pdfspine 的 `span["size"]` 目前是 **declared**（`Tf` 操作数原值，== `declared_size`）。
-- PyMuPDF 的 `span["size"]` 是 **rendered**（`sqrt(|det|)`）。
-- 二者只在"缩放全部由 `Tf` 承担"时相等；缩放藏在 `Tm` / `cm` / `Tz` 里时不等。
-- **要字号请用 `rendered_size`**（与 fitz 的 `size` 同语义）；要 `Tf` 原值请用 `declared_size`。
+- `dict` / `rawdict` / `json` / `rawjson` 四种结构化输出统一采用 `span["size"] == span["rendered_size"]`，`declared_size` 保留 `Tf` 原值。
+- span 字号代表**首个字形**，不是整段平均值，也不保证所有字形等大。相邻字形可在几何合并容差内逐渐变化，累积漂移及分段差异仍可能与 PyMuPDF 不同；300 文档实测显著改善，不代表完美 parity。逐字字号应读 `rawdict` / `rawjson` 的 `char["rendered_size"]`。
+- HTML / XHTML / XML 和 pdfspine 的 `get_texttrace()` 保持既有 declared 字号语义。本次只改结构化四格式，没有统一所有输出。PyMuPDF **texttrace** 的字号另用 `|(a, b)|`（x 基向量长度），在各向异性缩放与 `Tz` 下也不等于 `sqrt(|det|)`；不要混用。
 
 **`seq`（painting order）vs `number`（reading order）**
 
@@ -348,7 +348,7 @@ pdfspine 在 `get_text("dict"/"rawdict"/"json"/"rawjson")` 的 PyMuPDF 键集合
 **具体数值**（612×792 页、不旋转，`page_transform = [1, 0, 0, -1, 0, 792]`；字体每码宽 500/1000、ascent 800、descent −200）
 
 - 内容流 `BT /F1 1 Tf 12 0 0 12 100 700 Tm (Hi) Tj ET`：
-  - span：`size == declared_size == 1.0`，`rendered_size == 12.0`，`matrix == (12, 0, 0, -12, 100, 92)`，`text_matrix == (12, 0, 0, 12, 100, 700)`，`ctm == (1, 0, 0, 1, 0, 0)`，`dir == (1, 0)`，`origin == (100, 92)`，`seq == 0`
+  - span：`declared_size == 1.0`，`size == rendered_size == 12.0`，`matrix == (12, 0, 0, -12, 100, 92)`，`text_matrix == (12, 0, 0, 12, 100, 700)`，`ctm == (1, 0, 0, 1, 0, 0)`，`dir == (1, 0)`，`origin == (100, 92)`，`seq == 0`
   - 首个 char `"H"`：`matrix == (12, 0, 0, -12, 100, 92)`，`quad == (100, 82.4, 106, 82.4, 100, 94.4, 106, 94.4)`，`bbox == (100, 82.4, 106, 94.4)`，`rendered_size == 12.0`，`seq == 0`，`synthetic == False`
 - 内容流 `2 0 0 2 0 0 cm BT /F1 12 Tf 50 350 Td (A) Tj ET`：`declared_size == 12.0`，`rendered_size == 24.0`，`ctm == (2, 0, 0, 2, 0, 0)`，`text_matrix == (1, 0, 0, 1, 50, 350)`
 - 斜切 `BT /F1 1 Tf 12 0 6 12 100 700 Tm (A) Tj ET`：char `matrix == (12, 0, 6, -12, 100, 92)`，`quad` 是真平行四边形，左边缘 `ll.x − ul.x == −6`（不是 0），所以 `quad ≠ bbox` 四角；`rendered_size` 仍为 `12.0`

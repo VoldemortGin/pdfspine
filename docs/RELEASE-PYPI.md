@@ -80,7 +80,7 @@ secret. (Trusted Publishing is wired up in the workflow but **not** registered o
 PyPI — see §F.1.)
 
 Matrix produced (one abi3 wheel each): linux `x86_64` (manylinux auto) + `aarch64`
-(manylinux 2_28), macOS `x86_64` (macos-13) + `aarch64` (macos-14), Windows `x64`,
+(manylinux 2_28), macOS `x86_64` (cross-compiled on macos-14) + `aarch64` (macos-14), Windows `x64`,
 plus the sdist. All built `--strip`. maturin-action's containers carry the C/asm
 toolchain the OCR `tract` kernels need.
 

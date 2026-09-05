@@ -173,7 +173,7 @@ pub struct DictLine {
 /// mode; the other collection is empty (M2e picks the right field per mode).
 #[derive(Clone, Debug, PartialEq)]
 pub struct DictSpan {
-    /// The font size.
+    /// The rendered font size of the first glyph, equal to [`Self::rendered_size`].
     pub size: f64,
     /// The span-flag bitfield.
     pub flags: i32,
@@ -189,12 +189,12 @@ pub struct DictSpan {
     pub origin: (f64, f64),
     /// The span bounding box `(x0, y0, x1, y1)`.
     pub bbox: (f64, f64, f64, f64),
-    /// The **declared** font size — the `Tf` operand verbatim, the same value
-    /// as [`Self::size`] under an explicit name.
+    /// The **declared** font size — the `Tf` operand verbatim, independently
+    /// preserved when the rendering transform changes [`Self::size`].
     pub declared_size: f64,
     /// The **rendered** font size, `sqrt(|det|)` of [`Self::matrix`]'s linear
-    /// part (MuPDF's `fz_matrix_expansion`). Differs from [`Self::size`]
-    /// whenever the scale lives in `Tm` / `cm` / `Tz` rather than in `Tf`.
+    /// part (MuPDF's `fz_matrix_expansion`), also published as [`Self::size`].
+    /// May differ from [`Self::declared_size`] when scale lives in `Tm` / `cm` / `Tz`.
     pub rendered_size: f64,
     /// The span's render matrix in **device space** (first glyph):
     /// `(0,0)·matrix == origin`.
@@ -737,7 +737,7 @@ fn dict_span(span: &Span, raw: bool) -> DictSpan {
         (span.text.clone(), Vec::new())
     };
     DictSpan {
-        size: span.size,
+        size: span.rendered_size,
         flags: span.flags as i32,
         font: span.font.to_string(),
         color: span.color as i32,

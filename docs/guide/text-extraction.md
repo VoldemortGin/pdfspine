@@ -67,15 +67,15 @@ preserved in document order.
 On top of PyMuPDF's key set, `"dict"`, `"rawdict"`, `"json"` and `"rawjson"`
 publish the full rendering geometry of every span and character, so you never
 have to reverse-engineer a font size from a bbox or repair a rotated run
-yourself. Every pre-existing key (`size`, `flags`, `font`, `color`, `ascender`,
-`descender`, `origin`, `bbox`, `text`, `chars`, the line's `bbox`/`wmode`/`dir`,
-the block's `number`/`type`/`bbox`) keeps its meaning unchanged.
+yourself. Structured span `size` reports the rendered size; `declared_size`
+preserves the original `Tf` operand. Other existing keys keep their meaning.
 
 **Span keys** (`dict`, `rawdict`, `json`, `rawjson`):
 
 | Key | Type | Space | Meaning |
 |---|---|---|---|
-| `declared_size` | `float` | — | The `Tf` operand verbatim; the same value as `size`, under an explicit name. |
+| `size` | `float` | device | First glyph’s rendered size, equal to `rendered_size`. |
+| `declared_size` | `float` | — | The `Tf` operand verbatim, independently preserved. |
 | `rendered_size` | `float` | device | `sqrt(\|a·d − b·c\|)` of `matrix` — the size actually painted. |
 | `matrix` | 6-tuple `(a, b, c, d, e, f)` | **device** | Render matrix of the span's first glyph (glyph cell → device space). |
 | `text_matrix` | 6-tuple | **PDF user** | The first glyph's `Tm`, the raw content-stream value (no page transform). |
@@ -114,7 +114,12 @@ real parallelogram.
 | Space | Definition | What lives here |
 |---|---|---|
 | **PDF user space** | y up, origin bottom-left; the space the content-stream operators work in. | `text_matrix`, `ctm`. Deliberately **not** multiplied by the page transform: their job is to map an extracted glyph back to the PDF source (which operators painted it), which is impossible once the page transform is folded in. |
-| **Device space** (PyMuPDF device space) | y down, origin top-left; page rotation applied. | The existing `bbox` / `origin` / `dir`, and the new `matrix` / `quad` — same frame as `bbox` / `origin`. |
+| **pdfspine device space** | y down, origin top-left; page rotation applied. | The existing `bbox` / `origin` / `dir`, and the new `matrix` / `quad` — same frame as `bbox` / `origin`. |
+
+PyMuPDF 1.28.2's text XML keeps unrotated page coordinates when a page has
+`/Rotate`, while pdfspine applies its page transform. This is a known coordinate-basis
+difference for rotated pages; it does not change the `ul` / `ur` / `ll` / `lr`
+corner convention described above.
 | **Glyph cell (text space)** | The glyph's 1000-unit em space ÷ 1000: `[0, descender .. advance, ascender]` (shifted by the vertical displacement vector `−v` for vertical writing). | `matrix` is the matrix that maps this cell into device space. |
 
 Note the intentional asymmetry: **`matrix` / `quad` are device space,
@@ -136,7 +141,7 @@ All three hold for spans and chars alike, and each is covered by a test:
    `page_transform = page.transformation_matrix` (`[1, 0, 0, -1, 0, 792]` for an
    unrotated 612×792 page).
 
-#### `rendered_size` vs `size` (a known PyMuPDF parity difference)
+#### Rendered and declared size
 
 - `rendered_size = sqrt(|a·d − b·c|)` — MuPDF's `fz_matrix_expansion`, which is
   exactly what PyMuPDF reports as the `dict` / `rawdict` span `size`. Pure
@@ -145,16 +150,19 @@ All three hold for spans and chars alike, and each is covered by a test:
   `Tz 50` with `Tf 12` → `sqrt(72) ≈ 8.485281`.
 - Degenerate input: a singular or non-finite matrix yields `rendered_size == 0.0`
   (no panic, no NaN / Inf); every published matrix and quad component is finite.
-- pdfspine's `span["size"]` is currently the **declared** size (the `Tf` operand,
-  `== declared_size`), whereas PyMuPDF's `span["size"]` is the **rendered** size
-  (`sqrt(|det|)`). The two agree only when all scaling is carried by `Tf`; they
-  differ whenever the scale lives in `Tm` / `cm` / `Tz`. Use `rendered_size`
-  when you want the font size (it has the same meaning as fitz's `size`); use
-  `declared_size` when you want the raw `Tf` operand.
-- `get_texttrace()`'s `size` follows a **different** definition: `|(a, b)|`, the
-  length of the x basis vector. It coincides with `rendered_size` only for
-  conformal matrices and diverges under anisotropic scaling and `Tz`. Do not mix
-  the two.
+- In all four structured formats, `span["size"] == span["rendered_size"]`.
+  `span["declared_size"]` retains the raw `Tf` operand, including its sign.
+- Span size represents the **first glyph**, not an average or a guarantee that
+  every glyph has that size. Geometry-compatible adjacent glyphs can retain
+  small transform differences; cumulative drift within a span can differ from
+  PyMuPDF's span grouping. For per-character size use `char["rendered_size"]`
+  in `rawdict` / `rawjson`. The 300-document comparison improves size parity
+  substantially but does not establish perfect span-by-span parity.
+- HTML / XHTML / XML output and pdfspine's `get_texttrace()` retain their
+  existing declared-size semantics; this structured-output change does not
+  redefine them. PyMuPDF's **texttrace** size instead uses `|(a, b)|`, the x
+  basis length, which differs from the determinant definition under `Tz` and
+  anisotropic scaling. Do not substitute either trace API for structured size.
 
 #### `seq` (painting order) vs `number` (reading order)
 
@@ -178,8 +186,8 @@ All three hold for spans and chars alike, and each is covered by a test:
 Unrotated 612×792 page (`page_transform = [1, 0, 0, -1, 0, 792]`), a font whose
 every code is 500/1000 wide with ascent 800 and descent −200:
 
-- `BT /F1 1 Tf 12 0 0 12 100 700 Tm (Hi) Tj ET` — span: `size == declared_size == 1.0`,
-  `rendered_size == 12.0`, `matrix == (12, 0, 0, -12, 100, 92)`,
+- `BT /F1 1 Tf 12 0 0 12 100 700 Tm (Hi) Tj ET` — span: `declared_size == 1.0`,
+  `size == rendered_size == 12.0`, `matrix == (12, 0, 0, -12, 100, 92)`,
   `text_matrix == (12, 0, 0, 12, 100, 700)`, `ctm == (1, 0, 0, 1, 0, 0)`,
   `dir == (1, 0)`, `origin == (100, 92)`, `seq == 0`. First char `"H"`:
   `matrix == (12, 0, 0, -12, 100, 92)`,
