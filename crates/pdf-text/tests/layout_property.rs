@@ -1,6 +1,6 @@
 //! M2c property / containment / never-panic tests. Catalog IDs: `LAYOUT-PROP-*`.
 
-use pdf_core::geom::{Point, Rect};
+use pdf_core::geom::{Matrix, Point, Rect};
 use pdf_text::model::WritingDir;
 use pdf_text::{textpage_from_glyphs, words, PositionedGlyph, TextPage};
 use smol_str::SmolStr;
@@ -25,6 +25,12 @@ fn glyph(c: &str, ox: f64, oy: f64, size: f64) -> PositionedGlyph {
         spacing_advance: (0.0, 0.0),
         ascender: 0.7,
         descender: -0.2,
+        // Synthetic glyph: an upright Trm that reproduces the origin + size, and
+        // a cell whose quad through it is exactly `bbox`.
+        text_matrix: Matrix::translate(ox, oy),
+        ctm: Matrix::IDENTITY,
+        render_matrix: Matrix::new(size, 0.0, 0.0, size, ox, oy),
+        cell: Rect::new(0.0, -0.2, w / size, 0.7),
     }
 }
 

@@ -15,7 +15,7 @@
 
 use std::sync::Arc;
 
-use pdf_core::geom::{Point, Rect};
+use pdf_core::geom::{Matrix, Point, Quad, Rect};
 use pdf_core::page::Page;
 use pdf_core::{DocumentStore, Limits, SaveOptions};
 
@@ -102,7 +102,13 @@ fn build_textpage(words: &[OcrWord], s: f64, width: f64, height: f64) -> TextPag
         // is y-down, baseline ≈ bbox bottom minus the descender; we use the box
         // bottom, which is correct enough for extraction + search).
         let origin = Point::new(bbox.x0, bbox.y1);
-        let chars = char_cells(&w.text, &bbox);
+        let chars = char_cells(&w.text, &bbox, i);
+        // OCR words come from pixels, not from a content stream: there is no real
+        // `Tm`/CTM to report, so those stay identity. The device-space render
+        // matrix is synthesized from the recognized cell so the published
+        // invariants still hold — `(0,0)·matrix == origin` and
+        // `rendered_font_size(matrix) == size`.
+        let matrix = Matrix::new(size, 0.0, 0.0, size, origin.x, origin.y);
         let span = Span {
             bbox,
             font: "GlyphlessFont".into(),
@@ -114,6 +120,13 @@ fn build_textpage(words: &[OcrWord], s: f64, width: f64, height: f64) -> TextPag
             origin,
             chars,
             text: w.text.clone(),
+            rendered_size: size,
+            matrix,
+            text_matrix: Matrix::IDENTITY,
+            ctm: Matrix::IDENTITY,
+            dir: (1.0, 0.0),
+            quad: Quad::from_rect(&bbox),
+            seq: i,
         };
         lines.push(Line {
             bbox,
@@ -121,6 +134,7 @@ fn build_textpage(words: &[OcrWord], s: f64, width: f64, height: f64) -> TextPag
             dir: (1.0, 0.0),
             spans: vec![span],
             seq: i,
+            number: i,
         });
         page_bbox = if any { page_bbox | bbox } else { bbox };
         any = true;
@@ -149,20 +163,32 @@ fn build_textpage(words: &[OcrWord], s: f64, width: f64, height: f64) -> TextPag
 
 /// Distributes per-character cells evenly across the word box (OCR gives no
 /// per-glyph boxes; even spacing is the fitz-compatible `rawdict` approximation).
-fn char_cells(text: &str, bbox: &Rect) -> Vec<Char> {
+fn char_cells(text: &str, bbox: &Rect, seq: usize) -> Vec<Char> {
     let chars: Vec<char> = text.chars().collect();
     let n = chars.len().max(1) as f64;
     let cell_w = bbox.width() / n;
+    let size = bbox.height().max(1.0);
     chars
         .iter()
         .enumerate()
         .map(|(i, &c)| {
             let x0 = bbox.x0 + cell_w * i as f64;
             let x1 = x0 + cell_w;
+            let cell = Rect::new(x0, bbox.y0, x1, bbox.y1);
+            let origin = Point::new(x0, bbox.y1);
             Char {
-                origin: Point::new(x0, bbox.y1),
-                bbox: Rect::new(x0, bbox.y0, x1, bbox.y1),
+                origin,
+                bbox: cell,
                 c,
+                // Synthesized like the span's (see `build_textpage`): OCR has no
+                // content-stream matrix, so the cell defines it.
+                matrix: Matrix::new(size, 0.0, 0.0, size, origin.x, origin.y),
+                quad: Quad::from_rect(&cell),
+                rendered_size: size,
+                seq,
+                // Every OCR char is a recognized glyph, never a
+                // layout-synthesized space.
+                synthetic: false,
             }
         })
         .collect()

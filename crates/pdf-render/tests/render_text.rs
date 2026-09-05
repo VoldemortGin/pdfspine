@@ -268,6 +268,11 @@ fn a_glyph() -> PositionedGlyph {
         spacing_advance: (0.0, 0.0),
         ascender: 0.8,
         descender: -0.2,
+        // Test glyph: an upright Trm reproducing the origin + size.
+        text_matrix: Matrix::translate(0.0, 10.0),
+        ctm: Matrix::IDENTITY,
+        render_matrix: Matrix::new(50.0, 0.0, 0.0, 50.0, 0.0, 10.0),
+        cell: Rect::new(0.0, 0.0, 1.0, 1.0),
     }
 }
 

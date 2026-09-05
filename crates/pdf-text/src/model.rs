@@ -6,7 +6,7 @@
 //! here is in **PDF user space** (origin bottom-left, y up) as produced by the
 //! text rendering matrix `Trm` (PRD §8.6.1).
 
-use pdf_core::geom::{Point, Rect};
+use pdf_core::geom::{Matrix, Point, Quad, Rect};
 use smol_str::SmolStr;
 
 /// The writing direction of a glyph (horizontal vs. vertical writing mode).
@@ -74,6 +74,62 @@ pub struct PositionedGlyph {
     /// The font descender normalized to a unit font size (`/Descent ÷ 1000`,
     /// usually negative), matching PyMuPDF's span `descender`.
     pub descender: f64,
+    /// The text matrix `Tm` in effect when this glyph was painted — the **raw
+    /// content-stream value**, deliberately carrying neither the `params`
+    /// pre-multiplier nor the CTM. Together with [`Self::ctm`] it maps an
+    /// extracted glyph back onto the operators that drew it.
+    pub text_matrix: Matrix,
+    /// The CTM in effect when this glyph was painted — again the **raw
+    /// content-stream value** (`cm` operators + the base CTM of the stream),
+    /// not folded into anything else.
+    pub ctm: Matrix,
+    /// The full text rendering matrix `Trm = params · Tm · CTM`, where
+    /// `params = [Tfs·Th, 0, 0, Tfs, 0, Trise]` (ISO 32000-1 §9.4.4). This is
+    /// the matrix [`Self::origin`] and [`Self::bbox`] are derived from:
+    /// `origin == (0,0)·render_matrix` and
+    /// `bbox == cell.quad().transform(render_matrix).rect()`.
+    ///
+    /// Its `sqrt(|det|)` is the **rendered** font size — see
+    /// [`rendered_font_size`]; [`Self::size`] is the *declared* `Tf` operand and
+    /// the two differ whenever the scale lives in `Tm`/`cm`/`Tz` instead.
+    pub render_matrix: Matrix,
+    /// The **untransformed** glyph cell, in the text space `params` operates on
+    /// (i.e. 1000-unit glyph space ÷ 1000, before the font size is applied):
+    /// `[0, descender, advance, ascender]` for horizontal writing, shifted by
+    /// the vertical position vector `−v` for vertical writing. Transforming its
+    /// quad by [`Self::render_matrix`] reproduces the true (possibly rotated or
+    /// sheared) glyph quad, of which [`Self::bbox`] is only the axis-aligned
+    /// envelope.
+    pub cell: Rect,
+}
+
+/// The **rendered** font size of a text rendering matrix: `sqrt(|det|)` of its
+/// linear part — MuPDF's `fz_matrix_expansion`, which is what PyMuPDF reports as
+/// the `dict`/`rawdict` span `size`.
+///
+/// This is the size the glyph is actually *painted* at, so it accounts for scale
+/// living in `Tm`, in the CTM (`cm`), or in horizontal scaling (`Tz`), none of
+/// which the declared `Tf` operand sees. Pure rotation and pure skew leave it
+/// unchanged; anisotropic scaling gives the geometric mean of the two axes
+/// (`Tm 20 0 0 10` → `sqrt(200)`).
+///
+/// Note this is **not** the size semantics of PyMuPDF's `get_texttrace()`, which
+/// reports `|(a, b)|` — the length of the x basis vector. The two agree only for
+/// conformal matrices.
+///
+/// Degenerate or non-finite matrices yield `0.0`; this never panics.
+#[must_use]
+pub fn rendered_font_size(m: &Matrix) -> f64 {
+    let det = m.determinant();
+    if !det.is_finite() {
+        return 0.0;
+    }
+    let size = det.abs().sqrt();
+    if size.is_finite() {
+        size
+    } else {
+        0.0
+    }
 }
 
 impl PositionedGlyph {
@@ -219,6 +275,26 @@ pub struct Char {
     /// The Unicode scalar this glyph maps to (`\u{FFFD}` for unmapped codes,
     /// matching PyMuPDF's replacement behavior).
     pub c: char,
+    /// The glyph's render matrix in **device space** (the same basis as
+    /// [`Self::origin`]/[`Self::bbox`]): `(0,0)·matrix == origin`.
+    pub matrix: Matrix,
+    /// The glyph cell's four true corners in **device space**. `quad.rect()` is
+    /// [`Self::bbox`]; the quad additionally keeps the parallelogram shape a
+    /// rotated or sheared `Tm` produces.
+    pub quad: Quad,
+    /// The **rendered** font size, `sqrt(|det|)` of [`Self::matrix`] (see
+    /// [`rendered_font_size`]).
+    pub rendered_size: f64,
+    /// Painting order: the source glyph's index in the interpreter output. A
+    /// synthesized space (see [`Self::synthetic`]) borrows the index of the
+    /// **preceding real glyph**, so `seq` stays non-decreasing along a span.
+    pub seq: usize,
+    /// `true` when this char was **not** painted by the PDF: layout synthesizes
+    /// an inter-word space whenever the spatial gap between two glyphs exceeds
+    /// the word-gap threshold and neither side is already whitespace (`TJ`-kerned
+    /// text that paints no space glyph). A space that the content stream really
+    /// drew is `false`, like every other char.
+    pub synthetic: bool,
 }
 
 /// A contiguous same-style run of characters (PyMuPDF dict/rawdict `span`).
@@ -247,6 +323,31 @@ pub struct Span {
     pub chars: Vec<Char>,
     /// The span text (concatenation of `chars[i].c`), the dict-level field.
     pub text: String,
+    /// The **rendered** font size of the span's first glyph — `sqrt(|det|)` of
+    /// [`Self::matrix`], i.e. the size the text is actually painted at
+    /// (see [`rendered_font_size`]). Differs from [`Self::size`], which is the
+    /// declared `Tf` operand, whenever the scale lives in `Tm` / `cm` / `Tz`.
+    pub rendered_size: f64,
+    /// The span's render matrix in **device space** — the first glyph's
+    /// `Trm · page_transform`, so `(0,0)·matrix == origin`.
+    pub matrix: Matrix,
+    /// The first glyph's text matrix `Tm`, in **user space**: the raw
+    /// content-stream value with no page transform applied.
+    pub text_matrix: Matrix,
+    /// The first glyph's CTM, in **user space**: likewise the raw
+    /// content-stream value.
+    pub ctm: Matrix,
+    /// The span's baseline direction as a device-space unit vector (the same
+    /// convention as [`Line::dir`]).
+    pub dir: (f64, f64),
+    /// The span's directional envelope: the min/max extent of its glyph quads
+    /// along [`Self::dir`] and its normal, rebuilt into four corners. For
+    /// upright text this equals `Quad::from_rect(&bbox)`; for rotated or sheared
+    /// text it hugs the run instead of its axis-aligned box.
+    pub quad: Quad,
+    /// Painting order: the smallest source-glyph index among the span's glyphs
+    /// (i.e. the first glyph's, spans being built in advance order).
+    pub seq: usize,
 }
 
 /// One line of text: a baseline-aligned, advance-ordered run of spans
@@ -265,6 +366,11 @@ pub struct Line {
     /// line's glyphs. Used to order blocks in document/content order, which is
     /// how MuPDF/PyMuPDF sequences its structured-text blocks (PRD §8.6.2).
     pub seq: usize,
+    /// The line's index within the page in **reading order** — the order the
+    /// lines come out of the engine, i.e. the order their text appears in
+    /// `get_text("text")`. Assigned after block ordering, counting across every
+    /// text block of the page.
+    pub number: usize,
 }
 
 /// An image placed on the page (PyMuPDF image block), device-space bbox only;

@@ -3,7 +3,7 @@
 //! structs with explicit char bboxes so geometry assertions are deterministic.
 //! No PyMuPDF files. Catalog IDs: `SEARCH-001` … `SEARCH-011`.
 
-use pdf_core::geom::{Point, Rect};
+use pdf_core::geom::{Matrix, Point, Quad, Rect};
 use pdf_text::model::{Block, BlockKind, Char, Line, Span, TextPage};
 use pdf_text::{search, SearchOptions};
 
@@ -11,10 +11,17 @@ const EPS: f64 = 1e-6;
 
 /// A device-space char cell `[x .. x + w] × [y0 .. y1]` carrying `c`.
 fn ch(c: char, x: f64, w: f64, y0: f64, y1: f64) -> Char {
+    let bbox = Rect::new(x, y0, x + w, y1);
+    let size = y1 - y0;
     Char {
         origin: Point::new(x, y1),
-        bbox: Rect::new(x, y0, x + w, y1),
+        bbox,
         c,
+        matrix: Matrix::new(size, 0.0, 0.0, size, x, y1),
+        quad: Quad::from_rect(&bbox),
+        rendered_size: size,
+        seq: 0,
+        synthetic: false,
     }
 }
 
@@ -41,6 +48,13 @@ fn span_of(text: &str, x0: f64, w: f64, y0: f64, y1: f64) -> Span {
         origin: Point::new(x0, y1),
         text: text.to_string(),
         chars,
+        rendered_size: y1 - y0,
+        matrix: Matrix::new(y1 - y0, 0.0, 0.0, y1 - y0, x0, y1),
+        text_matrix: Matrix::translate(x0, y1),
+        ctm: Matrix::IDENTITY,
+        dir: (1.0, 0.0),
+        quad: Quad::from_rect(&bbox),
+        seq: 0,
     }
 }
 
@@ -55,6 +69,7 @@ fn line_of(spans: Vec<Span>) -> Line {
         dir: (1.0, 0.0),
         spans,
         seq: 0,
+        number: 0,
     }
 }
 

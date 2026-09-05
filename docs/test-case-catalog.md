@@ -989,6 +989,28 @@ font fixtures only (we control every byte; no PyMuPDF files). Tests live in
 | `COORD-ROT-90-TRM` | 90°-rotated `Tm` → correct axis-aligned bbox envelope | PRD §8.6.1 | green |
 | `COORD-ROT-180-TRM` | 180°-rotated `Tm` → correct envelope + origin | PRD §8.6.1 | green |
 
+### Glyph geometry publication (`model.rs` / `layout.rs`) — `GLYPHGEO-*`
+
+The interpreter publishes the full text rendering matrix `Trm`, the raw `Tm` and
+CTM it was built from, and the untransformed glyph cell, so downstream consumers
+never reverse-engineer a font size out of a bbox nor repair a rotated run
+themselves. `rendered_font_size` is `sqrt(|det|)` of the render matrix — MuPDF's
+`fz_matrix_expansion`, which is what PyMuPDF reports as the `dict`/`rawdict`
+span `size`. Expected numbers for the pure-matrix cases were cross-checked
+against PyMuPDF 1.28.2 on hand-assembled content streams.
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `GLYPHGEO-001` | identity `Trm == [12,0,0,12,100,700]`; `origin == (0,0)·Trm` | PRD §8.6.1 | green |
+| `GLYPHGEO-002` | `Tf 1` + `Tm 12 0 0 12` → rendered 12, declared 1 (fitz reports 12) | PyMuPDF 1.28.2 | green |
+| `GLYPHGEO-003` | 90° rotation leaves rendered size 12 unchanged | PyMuPDF 1.28.2 | green |
+| `GLYPHGEO-004` | skew `Tm 12 0 6 12` → rendered 12; quad is a parallelogram, not a rect | PyMuPDF 1.28.2 | green |
+| `GLYPHGEO-005` | `50 Tz` → rendered `sqrt(72)` ≈ 8.485281; declared stays 12 | PyMuPDF 1.28.2 | green |
+| `GLYPHGEO-006` | anisotropic `Tm 20 0 0 10` → rendered `sqrt(200)` ≈ 14.142136 | PyMuPDF 1.28.2 | green |
+| `GLYPHGEO-007` | `cm 2` + `Tf 12` → rendered 24; `ctm == [2,0,0,2,0,0]`, `Tm` pure translation | PyMuPDF 1.28.2 | green |
+| `GLYPHGEO-008` | vertical writing (`Identity-V`): `wmode == 1`, cell/quad carry the `−v` shift | PRD §8.6.1 | green |
+| `GLYPHGEO-009` | invariants everywhere: `(0,0)·render_matrix == origin`, `quad.rect() == bbox` | PRD §8.6.1 | green |
+
 ### Form XObject recursion (`interp.rs`) — `INTERP-FORM-*`
 
 | ID | feature | spec ref | status |

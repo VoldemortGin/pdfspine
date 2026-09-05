@@ -36,8 +36,8 @@ pub use layout::{
     textpage_from_glyphs_clipped, textpage_from_glyphs_flagged,
 };
 pub use model::{
-    flags, Block, BlockKind, Char, DrawPath, ImageBlock, ImageRef, InterpretResult, Line,
-    PaintKind, PathItem, PositionedGlyph, Span, TextPage, Word, WritingDir,
+    flags, rendered_font_size, Block, BlockKind, Char, DrawPath, ImageBlock, ImageRef,
+    InterpretResult, Line, PaintKind, PathItem, PositionedGlyph, Span, TextPage, Word, WritingDir,
 };
 pub use renderops::{ImageOp, RenderOp, RenderSink, ShadingOp, TextRun};
 pub use search::{search, SearchOptions};

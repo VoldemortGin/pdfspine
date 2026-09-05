@@ -4,7 +4,7 @@
 //! a human for well-formedness + correct escaping/structure. Catalog IDs:
 //! `HTML-*`, `XHTML-*`, `XML-*`.
 
-use pdf_core::geom::{Point, Rect};
+use pdf_core::geom::{Matrix, Point, Rect};
 use pdf_text::model::WritingDir;
 use pdf_text::serialize::{defaults, to_html, to_xhtml, to_xml};
 use pdf_text::{textpage_from_glyphs, PositionedGlyph};
@@ -29,6 +29,12 @@ fn glyph(c: &str, ox: f64, oy: f64, size: f64, w: f64, font: &str, color: u32) -
         spacing_advance: (0.0, 0.0),
         ascender: 0.7,
         descender: -0.2,
+        // Synthetic glyph: an upright Trm reproducing the origin + size, and a
+        // cell whose quad through it is exactly `bbox`.
+        text_matrix: Matrix::translate(ox, oy),
+        ctm: Matrix::IDENTITY,
+        render_matrix: Matrix::new(size, 0.0, 0.0, size, ox, oy),
+        cell: Rect::new(0.0, -0.2, w / size, 0.7),
     }
 }
 

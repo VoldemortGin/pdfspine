@@ -166,7 +166,7 @@ pub fn get_bboxlog(tp: &TextPage) -> Vec<BBoxLogEntry> {
 mod tests {
     use super::*;
     use crate::model::{Block, BlockKind, Char, Line, Span, TextPage};
-    use pdf_core::geom::{Point, Rect};
+    use pdf_core::geom::{Matrix, Point, Quad, Rect};
     use smol_str::SmolStr;
 
     fn sample_page() -> TextPage {
@@ -174,6 +174,11 @@ mod tests {
             origin: Point::new(72.0, 100.0),
             bbox: Rect::new(72.0, 84.0, 86.0, 104.0),
             c: 'H',
+            matrix: Matrix::new(20.0, 0.0, 0.0, 20.0, 72.0, 100.0),
+            quad: Quad::from_rect(&Rect::new(72.0, 84.0, 86.0, 104.0)),
+            rendered_size: 20.0,
+            seq: 0,
+            synthetic: false,
         };
         let span = Span {
             bbox: Rect::new(72.0, 84.0, 90.0, 104.0),
@@ -186,6 +191,13 @@ mod tests {
             origin: Point::new(72.0, 100.0),
             chars: vec![ch],
             text: "H".to_string(),
+            rendered_size: 20.0,
+            matrix: Matrix::new(20.0, 0.0, 0.0, 20.0, 72.0, 100.0),
+            text_matrix: Matrix::translate(72.0, 100.0),
+            ctm: Matrix::IDENTITY,
+            dir: (1.0, 0.0),
+            quad: Quad::from_rect(&Rect::new(72.0, 84.0, 90.0, 104.0)),
+            seq: 0,
         };
         let line = Line {
             bbox: Rect::new(72.0, 84.0, 90.0, 104.0),
@@ -193,6 +205,7 @@ mod tests {
             dir: (1.0, 0.0),
             spans: vec![span],
             seq: 0,
+            number: 0,
         };
         let block = Block {
             bbox: Rect::new(72.0, 84.0, 90.0, 104.0),

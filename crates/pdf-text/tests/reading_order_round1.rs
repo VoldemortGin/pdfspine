@@ -10,7 +10,7 @@
 //!   - a glyph string outside the CropBox is excluded from `get_text("text")`;
 //!   - no line is double-emitted and whitespace stays sane.
 
-use pdf_core::geom::{Point, Rect};
+use pdf_core::geom::{Matrix, Point, Rect};
 use pdf_text::model::WritingDir;
 use pdf_text::{
     defaults, textpage_from_glyphs, textpage_from_glyphs_clipped, to_text, PositionedGlyph,
@@ -38,6 +38,12 @@ fn glyph(c: char, ox: f64, oy: f64, size: f64) -> PositionedGlyph {
         spacing_advance: (0.0, 0.0),
         ascender: 0.7,
         descender: -0.2,
+        // Synthetic glyph: an upright Trm reproducing the origin + size, and a
+        // cell whose quad through it is exactly `bbox`.
+        text_matrix: Matrix::translate(ox, oy),
+        ctm: Matrix::IDENTITY,
+        render_matrix: Matrix::new(size, 0.0, 0.0, size, ox, oy),
+        cell: Rect::new(0.0, -0.2, w / size, 0.7),
     }
 }
 

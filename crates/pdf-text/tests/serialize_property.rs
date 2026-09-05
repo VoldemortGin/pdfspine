@@ -1,7 +1,7 @@
 //! M2d serializer property tests (PRD §8.6.2, §10.7, §8.1): cross-mode
 //! consistency + never-panic. Catalog IDs: `SERIAL-PROP-*`.
 
-use pdf_core::geom::{Point, Rect};
+use pdf_core::geom::{Matrix, Point, Rect};
 use pdf_text::model::{BlockKind, WritingDir};
 use pdf_text::serialize::{
     defaults, get_textbox, to_blocks, to_dict, to_html, to_json, to_text, to_words, to_xhtml,
@@ -31,6 +31,12 @@ fn glyph(c: char, ox: f64, oy: f64, size: f64) -> PositionedGlyph {
         spacing_advance: (0.0, 0.0),
         ascender: 0.7,
         descender: -0.2,
+        // Synthetic glyph: an upright Trm reproducing the origin + size, and a
+        // cell whose quad through it is exactly `bbox`.
+        text_matrix: Matrix::translate(ox, oy),
+        ctm: Matrix::IDENTITY,
+        render_matrix: Matrix::new(size, 0.0, 0.0, size, ox, oy),
+        cell: Rect::new(0.0, -0.2, w / size, 0.7),
     }
 }
 

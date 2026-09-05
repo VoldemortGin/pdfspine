@@ -13,15 +13,15 @@
 //!
 //! Word segmentation lives in [`crate::words`]; serialization is M2d.
 
-use pdf_core::geom::{Matrix, Point, Rect};
+use pdf_core::geom::{Matrix, Point, Quad, Rect};
 use pdf_core::page::Page;
 use pdf_core::{DocumentStore, Limits, Name, Object};
 use smol_str::SmolStr;
 
 use crate::interp::ContentInterpreter;
 use crate::model::{
-    flags, Block, BlockKind, Char, ImageBlock, ImageRef, InterpretResult, Line, PositionedGlyph,
-    Span, TextPage, WritingDir,
+    flags, rendered_font_size, Block, BlockKind, Char, ImageBlock, ImageRef, InterpretResult, Line,
+    PositionedGlyph, Span, TextPage, WritingDir,
 };
 use crate::serialize::textflags;
 
@@ -255,7 +255,10 @@ fn textpage_core(
     let mut font_cache: std::collections::HashMap<SmolStr, (SmolStr, u32)> =
         std::collections::HashMap::new();
     let mut dev: Vec<DevGlyph> = Vec::with_capacity(glyphs.len());
-    for g in glyphs {
+    // `seq` is the glyph's index in the *interpreter's* output — its painting
+    // order. Clipped-away glyphs leave gaps rather than renumbering, so the key
+    // stays comparable with the raw glyph list.
+    for (seq, g) in glyphs.iter().enumerate() {
         if let Some(c) = clip.as_ref() {
             if !origin_in_clip(g.origin, c) {
                 continue;
@@ -271,7 +274,7 @@ fn textpage_core(
                 (resolved, flags)
             })
             .clone();
-        dev.push(DevGlyph::new(g, &p, dir_h, dir_v, font, flags));
+        dev.push(DevGlyph::new(g, &p, dir_h, dir_v, font, flags, seq));
     }
 
     // 2/3. lines + spans.
@@ -302,6 +305,7 @@ fn textpage_core(
     // 5. reading order + number assignment (content/document order, matching how
     //    MuPDF/PyMuPDF sequences its structured-text blocks).
     order_blocks(&mut blocks);
+    number_lines(&mut blocks);
 
     TextPage {
         width,
@@ -384,6 +388,27 @@ struct DevGlyph {
     ascender: f64,
     /// Font descender normalized to a unit font size (PyMuPDF span `descender`).
     descender: f64,
+    /// The glyph's render matrix in **device space**: `Trm · page_transform`.
+    /// Same basis as [`Self::origin`]/[`Self::bbox`], so `(0,0)·render_matrix`
+    /// is exactly `origin`.
+    render_matrix: Matrix,
+    /// The glyph cell's four corners in **device space** —
+    /// `cell.quad().transform(Trm · page_transform)`. Unlike `bbox` this keeps
+    /// the true parallelogram of a rotated / sheared `Tm`; `quad.rect()` is
+    /// `bbox`.
+    quad: Quad,
+    /// The glyph's `Tm` — passed through from user space **verbatim**, with the
+    /// page transform deliberately *not* applied: its value is to point back at
+    /// the content-stream operators that drew the glyph, which the device basis
+    /// would destroy.
+    text_matrix: Matrix,
+    /// The glyph's CTM — likewise the raw user-space content-stream value, for
+    /// the same reason as [`Self::text_matrix`].
+    ctm: Matrix,
+    /// Painting order: the glyph's index in the interpreter's output. CropBox
+    /// clipping drops glyphs, so these indices are *not* contiguous — the
+    /// original index is kept so the value stays a stable paint-order key.
+    seq: usize,
 }
 
 impl DevGlyph {
@@ -398,6 +423,7 @@ impl DevGlyph {
         dir_v: (f64, f64),
         font: SmolStr,
         flags: u32,
+        seq: usize,
     ) -> Self {
         let origin = g.origin.transform(p);
         let bbox = g.bbox.transform(p).normalize();
@@ -433,6 +459,12 @@ impl DevGlyph {
             let (sx, sy) = g.spacing_advance;
             (p.a * sx + p.c * sy, p.b * sx + p.d * sy)
         };
+        // Device-space glyph geometry. `render_matrix` is the user-space `Trm`
+        // carried through the page transform, so it stays in the same basis as
+        // `origin`/`bbox`; `quad` is the *untransformed* cell mapped through it,
+        // preserving the parallelogram that `bbox` flattens away.
+        let render_matrix = Matrix::concat(&g.render_matrix, p);
+        let quad = Quad::from_rect(&g.cell).transform(&render_matrix);
         DevGlyph {
             origin,
             bbox,
@@ -446,6 +478,12 @@ impl DevGlyph {
             spacing,
             ascender: g.ascender,
             descender: g.descender,
+            render_matrix,
+            quad,
+            // `Tm`/CTM stay in user space on purpose (see the field docs).
+            text_matrix: g.text_matrix,
+            ctm: g.ctm,
+            seq,
         }
     }
 
@@ -665,7 +703,7 @@ fn group_lines(dev: &[DevGlyph], inhibit_spaces: bool) -> Vec<Line> {
         }
         // Content-order key: the smallest source-glyph index in this run, i.e. the
         // earliest-painted glyph of the line (document order).
-        let seq = run.iter().copied().min().unwrap_or(0);
+        let seq = run.iter().map(|&i| dev[i].seq).min().unwrap_or(0);
         let line_glyphs: Vec<&DevGlyph> = run.iter().map(|&i| &dev[i]).collect();
         lines.push(build_line(&line_glyphs, seq, inhibit_spaces));
     }
@@ -1403,6 +1441,10 @@ fn build_line(glyphs: &[&DevGlyph], seq: usize, inhibit_spaces: bool) -> Line {
     let max_track = eff_size * LETTER_SPACING_MAX_FRAC;
 
     let mut spans: Vec<Span> = Vec::new();
+    // Per-span directional envelope of the *real* glyph quads (synthesized word
+    // spaces are excluded, exactly as they are from the span bbox), collapsed to
+    // four corners once the line is complete.
+    let mut span_envs: Vec<DirEnvelope> = Vec::new();
     let mut line_bbox = Rect::default();
     // Trailing reading-axis edge of the previously emitted glyph + the last char
     // we emitted, so we can synthesize one inter-word space whenever a spatial
@@ -1415,6 +1457,9 @@ fn build_line(glyphs: &[&DevGlyph], seq: usize, inhibit_spaces: bool) -> Line {
     // The previous glyph's pen position in device x, so a synthesized space can
     // span the seam it stands for.
     let mut prev_pen_x: Option<f64> = None;
+    // The paint index of the previous real glyph, which a synthesized space in
+    // the seam after it inherits.
+    let mut prev_seq: Option<usize> = None;
 
     // Which glyphs sit inside a tracked run (see [`tracked_runs`]).
     let tracked = tracked_runs(glyphs, eff_size);
@@ -1435,9 +1480,7 @@ fn build_line(glyphs: &[&DevGlyph], seq: usize, inhibit_spaces: bool) -> Line {
         });
         // A glyph may carry several Unicode scalars (a ligature); each becomes a
         // `Char` sharing the glyph cell geometry, so no text is dropped.
-        let target = if can_merge {
-            spans.last_mut().unwrap()
-        } else {
+        if !can_merge {
             spans.push(Span {
                 bbox: g.bbox,
                 font: g.font.clone(),
@@ -1449,9 +1492,22 @@ fn build_line(glyphs: &[&DevGlyph], seq: usize, inhibit_spaces: bool) -> Line {
                 origin: g.origin,
                 chars: Vec::new(),
                 text: String::new(),
+                // Glyph geometry is taken from the span's *first* glyph, which is
+                // also where `origin` comes from — so `(0,0)·matrix == origin`.
+                rendered_size: rendered_font_size(&g.render_matrix),
+                matrix: g.render_matrix,
+                text_matrix: g.text_matrix,
+                ctm: g.ctm,
+                dir: g.dir,
+                quad: g.quad,
+                seq: g.seq,
             });
-            spans.last_mut().unwrap()
-        };
+            span_envs.push(DirEnvelope::new(g.dir));
+        }
+        let si = spans.len() - 1;
+        span_envs[si].add(&g.quad);
+        let glyph_rendered_size = rendered_font_size(&g.render_matrix);
+        let target = &mut spans[si];
 
         // Synthesize an inter-word space from a spatial gap wider than the
         // word-gap threshold (same rule as `words.rs`), so text/dict/blocks word
@@ -1504,10 +1560,22 @@ fn build_line(glyphs: &[&DevGlyph], seq: usize, inhibit_spaces: bool) -> Line {
             let gap = lead - pe - explained;
             if gap > gap_thresh && !inhibit_spaces && !is_synth_ws(pc) && !is_synth_ws(fc) {
                 target.text.push(' ');
+                let sb = synth_space_bbox(prev_pen_x, g);
                 target.chars.push(Char {
                     origin: g.origin,
-                    bbox: synth_space_bbox(prev_pen_x, g),
+                    bbox: sb,
                     c: ' ',
+                    // A synthesized space has no glyph of its own: it borrows the
+                    // following glyph's matrix (as `origin` already does) and its
+                    // quad is the synthesized cell, so `quad.rect() == bbox` holds
+                    // for every char.
+                    matrix: g.render_matrix,
+                    quad: Quad::from_rect(&sb),
+                    rendered_size: glyph_rendered_size,
+                    // The seam belongs to the glyph *before* it, so the space
+                    // does not jump ahead of the run it separates.
+                    seq: prev_seq.unwrap_or(g.seq),
+                    synthetic: true,
                 });
                 prev_char = Some(' ');
             }
@@ -1520,13 +1588,23 @@ fn build_line(glyphs: &[&DevGlyph], seq: usize, inhibit_spaces: bool) -> Line {
                 origin: g.origin,
                 bbox: g.bbox,
                 c,
+                matrix: g.render_matrix,
+                quad: g.quad,
+                rendered_size: glyph_rendered_size,
+                seq: g.seq,
+                synthetic: false,
             });
             prev_char = Some(c);
         }
         prev_end = Some(end);
         prev_spacing = g.spacing_along();
         prev_pen_x = Some(if g.dir.0 >= 0.0 { g.bbox.x1 } else { g.bbox.x0 });
+        prev_seq = Some(g.seq);
         line_bbox = line_bbox.union(&g.bbox);
+    }
+
+    for (span, env) in spans.iter_mut().zip(span_envs) {
+        span.quad = env.collapse();
     }
 
     Line {
@@ -1535,6 +1613,60 @@ fn build_line(glyphs: &[&DevGlyph], seq: usize, inhibit_spaces: bool) -> Line {
         dir,
         spans,
         seq,
+        // Filled in once the page's blocks are ordered (see `number_lines`).
+        number: 0,
+    }
+}
+
+/// Accumulates the extent of a set of quads along a reading direction and its
+/// normal, so a span can publish a rotation-aware envelope instead of only its
+/// axis-aligned `bbox`.
+///
+/// The axes are `dir` (the baseline direction) and `dir` rotated +90°
+/// (`(-sin, cos)`) — the same pair [`DevGlyph::along`]/[`DevGlyph::cross`] use.
+/// In device space (y down) with an upright `dir = (1, 0)` the minimum cross is
+/// the top edge, so collapsing reproduces `Quad::from_rect(&bbox)` exactly.
+#[derive(Clone, Copy, Debug)]
+struct DirEnvelope {
+    dir: (f64, f64),
+    along: (f64, f64),
+    cross: (f64, f64),
+}
+
+impl DirEnvelope {
+    fn new(dir: (f64, f64)) -> Self {
+        DirEnvelope {
+            dir,
+            along: (f64::INFINITY, f64::NEG_INFINITY),
+            cross: (f64::INFINITY, f64::NEG_INFINITY),
+        }
+    }
+
+    fn add(&mut self, q: &Quad) {
+        let (dx, dy) = self.dir;
+        for p in [q.ul, q.ur, q.ll, q.lr] {
+            let a = dx * p.x + dy * p.y;
+            let c = -dy * p.x + dx * p.y;
+            self.along = (self.along.0.min(a), self.along.1.max(a));
+            self.cross = (self.cross.0.min(c), self.cross.1.max(c));
+        }
+    }
+
+    /// Maps the accumulated `(along, cross)` extremes back into device space.
+    /// Corner roles follow [`Quad`]: `ul` is (min along, min cross), i.e. the
+    /// reading-start / top corner in the span's own frame.
+    fn collapse(self) -> Quad {
+        if !self.along.0.is_finite() || !self.cross.0.is_finite() {
+            return Quad::default();
+        }
+        let (dx, dy) = self.dir;
+        let pt = |a: f64, c: f64| Point::new(a * dx - c * dy, a * dy + c * dx);
+        Quad::new(
+            pt(self.along.0, self.cross.0),
+            pt(self.along.1, self.cross.0),
+            pt(self.along.0, self.cross.1),
+            pt(self.along.1, self.cross.1),
+        )
     }
 }
 
@@ -2375,6 +2507,20 @@ fn order_blocks(blocks: &mut [Block]) {
     }
 }
 
+/// Numbers every line of the page in reading order — i.e. the order the blocks
+/// have just been put in, which is the order their text comes out of
+/// `get_text("text")`. Runs after [`order_blocks`] so the counter follows the
+/// final block sequence.
+fn number_lines(blocks: &mut [Block]) {
+    let mut n = 0usize;
+    for b in blocks {
+        for l in &mut b.lines {
+            l.number = n;
+            n += 1;
+        }
+    }
+}
+
 // === images ===============================================================
 
 /// The device-space bbox of an image: its placement CTM maps the unit square
@@ -2495,6 +2641,10 @@ mod tests {
             spacing_advance: (0.0, 0.0),
             ascender: 0.7,
             descender: -0.2,
+            text_matrix: Matrix::translate(ox, oy),
+            ctm: Matrix::IDENTITY,
+            render_matrix: Matrix::new(size, 0.0, 0.0, size, ox, oy),
+            cell: Rect::new(0.0, -0.2, w / size, 0.7),
         }
     }
 
@@ -3109,6 +3259,11 @@ mod tests {
             spacing: (0.0, 0.0),
             ascender: 0.7,
             descender: -0.2,
+            render_matrix: Matrix::new(10.0, 0.0, 0.0, 10.0, 0.0, 0.0),
+            quad: Quad::from_rect(&Rect::new(0.0, 0.0, 1.0, 1.0)),
+            text_matrix: Matrix::IDENTITY,
+            ctm: Matrix::IDENTITY,
+            seq: 0,
         }
     }
 
@@ -3290,6 +3445,12 @@ mod tests {
             spacing_advance: (0.0, 0.0),
             ascender: 0.7,
             descender: -0.2,
+            // `Tf 1` with the scale in the matrix: the declared size stays 1.0
+            // while the render matrix carries `scale`.
+            text_matrix: Matrix::new(scale, 0.0, 0.0, scale, ox, oy),
+            ctm: Matrix::IDENTITY,
+            render_matrix: Matrix::new(scale, 0.0, 0.0, scale, ox, oy),
+            cell: Rect::new(0.0, -0.2, w / scale, 0.7),
         }
     }
 

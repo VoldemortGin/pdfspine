@@ -922,6 +922,11 @@ mod tests {
             spacing_advance: (0.0, 0.0),
             ascender: 0.8,
             descender: -0.2,
+            // Test glyph: an upright Trm reproducing the origin + size.
+            text_matrix: Matrix::translate(origin.x, origin.y),
+            ctm: Matrix::IDENTITY,
+            render_matrix: Matrix::new(size, 0.0, 0.0, size, origin.x, origin.y),
+            cell: Rect::new(0.0, 0.0, 1.0, 1.0),
         }
     }
 

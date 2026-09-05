@@ -1531,6 +1531,10 @@ fn emit_glyph_into(
                 spacing_advance,
                 ascender: asc,
                 descender: desc,
+                text_matrix: sanitize_matrix(*tm),
+                ctm: sanitize_matrix(gs.ctm),
+                render_matrix: sanitize_matrix(trm),
+                cell: sanitize_rect(cell),
             });
         }
 
@@ -1570,6 +1574,10 @@ fn emit_glyph_into(
             spacing_advance,
             ascender: asc,
             descender: desc,
+            text_matrix: sanitize_matrix(*tm),
+            ctm: sanitize_matrix(gs.ctm),
+            render_matrix: sanitize_matrix(trm),
+            cell: sanitize_rect(cell),
         });
     }
 
@@ -1851,6 +1859,20 @@ fn sanitize_point(p: Point) -> Point {
 /// Replaces non-finite rect edges with 0 (never emit NaN/Inf — PRD §8.6.2).
 fn sanitize_rect(r: Rect) -> Rect {
     Rect::new(finite(r.x0), finite(r.y0), finite(r.x1), finite(r.y1))
+}
+
+/// Replaces non-finite matrix components with 0 (never emit NaN/Inf — PRD
+/// §8.6.2), mirroring [`sanitize_point`]/[`sanitize_rect`] for the glyph
+/// geometry matrices.
+fn sanitize_matrix(m: Matrix) -> Matrix {
+    Matrix::new(
+        finite(m.a),
+        finite(m.b),
+        finite(m.c),
+        finite(m.d),
+        finite(m.e),
+        finite(m.f),
+    )
 }
 
 #[inline]

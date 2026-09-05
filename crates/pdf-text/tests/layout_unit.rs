@@ -41,6 +41,12 @@ fn glyph_styled(c: &str, ox: f64, oy: f64, size: f64, font: &str, color: u32) ->
         spacing_advance: (0.0, 0.0),
         ascender: 0.7,
         descender: -0.2,
+        // Synthetic glyph: an upright Trm reproducing the origin + size, and a
+        // cell whose quad through it is exactly `bbox`.
+        text_matrix: Matrix::translate(ox, oy),
+        ctm: Matrix::IDENTITY,
+        render_matrix: Matrix::new(size, 0.0, 0.0, size, ox, oy),
+        cell: Rect::new(0.0, -0.2, w / size, 0.7),
     }
 }
 
