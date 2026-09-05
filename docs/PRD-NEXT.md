@@ -11,6 +11,21 @@
 > for where the *previous* A–F framing of this doc was wrong vs the code — read it first if you remember the
 > old structure.
 >
+> **🚧 IN FLIGHT — glyph-geometry API expansion (branch
+> `worktree-agent-ab0626e7f9bd0c95d`, 5 commits, pushed).** The text layer now publishes the full
+> per-glyph geometry through `get_text` — `rendered_size` (fitz's `sqrt(|det|)` semantics),
+> `declared_size`, `matrix` / `text_matrix` / `ctm`, the true rotated `quad`, `dir`, plus `seq`
+> (painting order), `number` (reading order) and `synthetic` (engine-inserted word spaces) — so
+> consumers stop reverse-engineering font sizes out of bboxes. Also fixes the SVG backend to use the
+> real `Trm` instead of the scalar `Tf`.
+>
+> **The remaining work, the measured baselines, the design decisions and the known traps live in
+> `HANDOFF-glyph-geometry.md` at the repo root (§9 is the current status).** Not yet done there:
+> full gates + an end-to-end Python read-back for the publication commit; rebase onto the two-column
+> table fix; corpus / GT non-regression; performance numbers; the span-aggregation tightening (with
+> tolerance calibration); and the `span["size"]` declared-vs-rendered parity decision. That file is
+> temporary — fold anything worth keeping into this doc and delete it when the work lands.
+
 > **Single source of truth.** Per-symbol disposition lives in **`COMPAT.toml`**, generated from
 > `scripts/_compat_catalog.py` (guarded in CI). **Never hand-edit `COMPAT.toml`** — change dispositions in
 > the catalog and regenerate.
