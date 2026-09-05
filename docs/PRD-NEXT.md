@@ -43,19 +43,16 @@
 
 ### Next task queue
 
-1. **Activate the repository on codecov.io** (maintainer account: GitHub login on
-   codecov.io or the Codecov GitHub App), then confirm that both the `rust` and
-   `python` flags are ingested.
-2. **Add targeted tests from the combined profile** (the top-5 Rust and Python lists
+1. **Add targeted tests from the combined profile** (the top-5 Rust and Python lists
    in the coverage record below), raising `fail_under` in `pyproject.toml` after each
    batch lands.
-3. **Remaining rawdict cost.** Construct Python objects directly instead of through
+2. **Remaining rawdict cost.** Construct Python objects directly instead of through
    the `DictChar` intermediate copy in `pdf-text/src/serialize.rs` (cross-crate, may
    change output, needs the same 300-document digest gate), plus the two cheap
    preallocation items listed in the rawdict record.
-4. **cargo-vet supply-chain audit sprint.** Blocked on a maintainer decision about
+3. **cargo-vet supply-chain audit sprint.** Blocked on a maintainer decision about
    `cargo vet trust`, `cargo vet import`, and exemption regeneration.
-5. **Continue the existing roadmap** (Type0/Type3, device-replay, layers, and the
+4. **Continue the existing roadmap** (Type0/Type3, device-replay, layers, and the
    other deferred work below). The accepted reading-order tradeoff is unchanged.
 
 ### Completed 2026-09-05: offline wheel smoke (queue item 1)
@@ -107,12 +104,12 @@
   `py-bindings covered lines (LH sum) = 2888`, and the `coverage-reports` artifact
   lcov reads `py-bindings` 2,888/3,468 (83.28%), `pdf-api` 2,408/3,215 (74.90%),
   workspace 36,405/41,886 (86.91%); pytest 804 passed / 73 skipped, ratchet 78% ≥ 77.
-  Codecov still answers `Repository not found` on both flags (see below).
-- **Codecov rejected the upload:**
-  `Upload queued for processing failed: {"message":"Repository not found"}`. OIDC
-  worked; the repository has never been activated on codecov.io. A maintainer must
-  log in to codecov.io with GitHub or install the Codecov GitHub App; there is
-  nothing further to do on the engineering side.
+- **Codecov is live.** Runs up to 33975022511 were rejected with
+  `{"message":"Repository not found"}` because the repository had never been
+  activated on codecov.io; the maintainer activated it on 2026-09-05. A rerun of the
+  coverage job on run 33975717510 (`56dc463`) uploaded both the `rust` and `python`
+  flags (`Upload queued for processing complete`); results are at
+  <https://app.codecov.io/github/voldemortgin/pdfspine/commit/56dc463ea5c4ea2195ab36afd72a615b3e4cc3f8>.
 - Test candidates that remain low under the combined profile. Rust:
   `pdf-api/src/lib.rs` 561 uncovered lines, `py-bindings/src/lib.rs` 557,
   `pdf-render/src/type1.rs` 310, `pdf-edit/src/redact.rs` 265,
