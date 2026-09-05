@@ -319,7 +319,7 @@ Claude-Session: https://claude.ai/code/session_01FrgNdzHnsp6pGgLyL4HfTy
 
 ---
 
-## 9. 进度更新（本节最新，覆盖 §1/§2 中已过时的部分）
+## 9. 进度更新（⚠️ 本节的「未验证」标注已被 §10 推翻，先读 §10）
 
 ### 9.1 已推送到 `origin/worktree-agent-ab0626e7f9bd0c95d` 的 4 个 commit
 
@@ -390,3 +390,91 @@ AssertionError: assert '0.6.1' == '0.6.0'
 worktree 自己的 `.venv` 里 `0.6.1 == 0.6.1` 正常。
 当前绕过办法：`git push --no-verify`（前提是已在本地独立跑过全量门）。
 **建议单独修 hook 的解释器选择**，这是个会反复咬人的坑。
+
+---
+
+## 10. 验证结果 —— **推翻 §9.1 与 §9.4-A 的「未验证」标注**
+
+§9 写于验证跑完之前。实际上**全量门与端到端实测都已跑完，且全部通过**。
+§9.4 的 A 项（"跑完整门 + Python 实测证据"）**已完成，不需要再做**。
+
+### 10.1 全量门（全绿）
+
+| 门 | 结果 |
+|---|---|
+| `cargo fmt --all` | 干净 |
+| `cargo clippy --workspace --all-targets --all-features -- -D warnings` | **零 warning 零 error** |
+| `cargo test --workspace --all-features` | **1687 passed / 0 failed** |
+| `maturin develop --release --uv` | 成功（`pdfspine-0.6.1-cp311-abi3-macosx_11_0_arm64`） |
+| `pytest python/tests` | **780 passed / 66 skipped / 0 failed** |
+
+### 10.2 新增测试
+
+- Rust `GLYPHGEO-010..015`（`crates/pdf-text/tests/glyph_geometry.rs` 共 15 条全绿）
+- Python `PYGEO-001..008`（`python/tests/test_glyph_geometry.py`）
+- `PYTEXT-003` / `PYTEXT-006` 的精确键集合断言已补上新键
+
+### 10.3 真实 PDF 实测（`fixtures/born/pangrams.pdf`，`get_text("rawdict")`，612×792 不旋转）
+
+```
+block[0]  {'number': 0, 'type': 0, 'bbox': (72.0, 62.4, 393.444, 116.4), 'seq': 0}
+line[0]   {'wmode': 0, 'dir': (1.0, 0.0), 'bbox': (72.0, 62.4, 312.768, 74.4),
+           'number': 0, 'seq': 0}
+
+span[0]   size          12.0          declared_size 12.0
+          rendered_size 12.0          flags         0
+          font          'Helvetica'   color         0
+          ascender      0.8           descender     -0.2
+          origin        (72.0, 72.0)
+          bbox          (72.0, 62.4, 312.768, 74.4)
+          matrix        (12.0, 0.0, 0.0, -12.0, 72.0, 72.0)
+          text_matrix   (1.0, 0.0, 0.0, 1.0, 72.0, 720.0)
+          ctm           (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+          dir           (1.0, 0.0)
+          quad          (72.0, 62.4, 312.768, 62.4, 72.0, 74.4, 312.768, 74.4)
+          seq           0
+
+chars[0]  origin (72.0, 72.0)   bbox (72.0, 62.4, 79.332, 74.4)   c 'T'
+          matrix (12.0, 0.0, 0.0, -12.0, 72.0, 72.0)
+          quad   (72.0, 62.4, 79.332, 62.4, 72.0, 74.4, 79.332, 74.4)
+          rendered_size 12.0   seq 0   synthetic False
+```
+
+**三条不变量在真实 PDF 上全部通过**：
+1. `(0,0)·matrix == origin` → `(72.0, 72.0)` ✅（span 与 char 均通过）
+2. `quad` 外接矩形 == `bbox` ✅（bbox 侧有 1e-14 级浮点噪声，`isclose` 通过）
+3. `matrix == params · text_matrix · ctm · page_transform` → 复合结果
+   `(12.0, 0.0, 0.0, -12.0, 72.0, 72.0)` 与 `matrix` 逐值相同 ✅
+
+另：`rendered_size == sqrt(|det|) == 12.0` ✅；
+`get_text("xml")` 的 `<char quad>` 与 rawdict `quad` **逐值相同** ✅（T3 生效）。
+
+### 10.4 合成 PDF 补充实测
+
+- `BT /F1 1 Tf 12 0 0 12 100 700 Tm (Hi) Tj ET`
+  → `size == declared_size == 1.0`、**`rendered_size == 12.0`**、
+  `matrix == (12,0,0,-12,100,92)`、`text_matrix == (12,0,0,12,100,700)`；
+  char `"H"` 的 `quad == (100, 82.4, 106, 82.4, 100, 94.4, 106, 94.4)`
+  —— **这正是"下游不必再靠 bbox 反推字号"的证据**：declared 1.0 而 rendered 12.0。
+- 斜切 `Tm 12 0 6 12` → char `matrix == (12.0, 0.0, 6.0, -12.0, 100.0, 92.0)`，
+  `quad == (104.8, 82.4, 110.8, 82.4, 98.8, 94.4, 104.8, 94.4)`
+  —— 真平行四边形，`ll.x − ul.x == −6`
+- 旋转 90° `Tm 0 12 -12 0` → `dir == (0.0, -1.0)`、
+  `matrix == (0.0, -12.0, -12.0, -0.0, 100.0, 92.0)`
+- `page.transformation_matrix` 实测 `(1.0, 0.0, 0.0, -1.0, -0.0, 792.0)`
+
+### 10.5 需要复核的唯一语义点
+
+`layout.rs` 的 `DevGlyph::new` 里，glyph cell 的 quad 现在是**先在字形自身坐标系里命名四角**
+（`ul` = ascender-left）再做变换，而不是 `Quad::from_rect(&g.cell)` 之后再变换。
+
+原因：cell 在 text space 是 y 向上（`y0` 是 descender），`from_rect` 会把 `ul` 取成 descender 角，
+经设备空间 y 翻转后 `ul` 实际落在**视觉下方** —— 正立文本的 `ul`/`ll` 会颠倒。
+
+修正后 `quad.rect()` 不变，因此 `bbox` 与所有既有输出**逐字节不变**（XML golden 仍绿）。
+若要与 MuPDF 的内部约定再对一次，这是唯一需要复核的地方。
+
+### 10.6 因此，剩余工作只剩
+
+§9.4 的 **B–G**：rebase 到 `aaee2a9` → 语料 / GT 不退化 → 性能数据 →
+span 聚合收紧（含容差校准）→ `size` declared-vs-rendered 的 parity 决策。
