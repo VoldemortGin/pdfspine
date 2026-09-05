@@ -1,58 +1,58 @@
 # Command-line interface
 
-!!! warning "Coming soon — not yet implemented"
-    The `pdfspine` command-line tool is **planned but not yet shipped**. There
-    is no console-script entry point in the current build, so the commands below
-    describe the *intended* CLI and are not yet runnable. This page will be
-    updated to match the implementation when it lands. For now, use the Python
-    API ([Quickstart](quickstart.md)).
+The `pdfspine` command-line tool ships with the package (console-script entry
+point `pdfspine`, since 0.1.0) and uses only the standard-library `argparse`.
+Page selectors are **1-based**, in the `1-3,5,8-` style (comma-separated pages
+or ranges; either end of a range may be omitted). Errors are reported as a
+single `pdfspine: <message>` line on stderr with a non-zero exit code.
 
-## Planned usage
+## Usage
 
 ```bash
 pdfspine <command> [options] <file.pdf>
+pdfspine --version
 ```
 
-## Planned subcommands
+## Subcommands
 
 | Command | Purpose |
 |---|---|
 | `info` | Print document facts (page count, metadata, encryption, PDF version). |
-| `text` | Extract text from a page range (plain / json / html variants). |
-| `render` | Rasterize pages to PNG at a given DPI. |
+| `text` | Extract text from a page range (`--format text` / `json` / `html` / `xhtml` / `xml` / `blocks` / `words` / `dict` / `rawdict` / `rawjson`). |
+| `render` | Rasterize pages to PNG at a given `--dpi` (or `--zoom`). |
 | `merge` | Concatenate several PDFs into one. |
-| `split` | Split a PDF into per-page or per-range files. |
-| `pages` | Select / reorder / delete pages into a new file. |
+| `split` | Split a PDF into per-page or per-`--ranges` files. |
+| `pages` | Keep / reorder pages (`--select`) into a new file. |
 | `images` | Extract embedded images from a document. |
-| `toc` | Print or set the table of contents. |
+| `toc` | Print the table of contents (bookmarks / outline). |
 
-### Illustrative examples (planned)
+### Examples
 
 ```bash
 # Document facts.
 pdfspine info input.pdf
 
 # Extract text from pages 1-3 to stdout.
-pdfspine text --pages 1-3 input.pdf
+pdfspine text input.pdf --pages 1-3
 
 # Render every page to PNG at 150 DPI into ./out/.
-pdfspine render --dpi 150 --out out/ input.pdf
+pdfspine render input.pdf --dpi 150 -o out/
 
 # Merge several PDFs.
-pdfspine merge a.pdf b.pdf c.pdf --out merged.pdf
+pdfspine merge a.pdf b.pdf c.pdf -o merged.pdf
 
 # Split into one file per page.
-pdfspine split input.pdf --out parts/
+pdfspine split input.pdf -o parts/
 
 # Keep only pages 3, 1, 2 (reorder) into a new file.
-pdfspine pages --select 3,1,2 input.pdf --out reordered.pdf
+pdfspine pages input.pdf --select 3,1,2 -o reordered.pdf
 
 # Dump embedded images.
-pdfspine images input.pdf --out images/
+pdfspine images input.pdf -o images/
 
 # Print the table of contents.
 pdfspine toc input.pdf
 ```
 
-Until the CLI ships, each of these can be scripted against the Python API — see
+Each of these can also be scripted against the Python API — see
 [Quickstart](quickstart.md) and [Editing & saving](editing.md).

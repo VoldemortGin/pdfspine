@@ -19,7 +19,8 @@
 > (climbing), with **1,702 Rust tests + 814 Python tests** passing in the 0.7.0
 > release gate. In the dated 58-document benchmark, its aggregate mean text scores
 > trail fitz by 0.2–1.4 percentage points (and it beats fitz on Arabic / RTL); rendering
-> is near-parity and ~1.74× faster, and the pure-Rust PaddleOCR engine beats fitz on CJK scans
+> is at/near parity (SSIM 0.984 mean, 2026-06-21) though ~2× slower than fitz
+> (2026-06-16 bench), and the pure-Rust PaddleOCR engine beats fitz on CJK scans
 > (see [Accuracy](#accuracy)).
 > Now on PyPI: `pip install pdfspine` (see [Install](#install)); or
 > [build from source](#build--install).
@@ -67,7 +68,7 @@ pdfspine is a **drop-in-shaped, permissively-licensed (Apache-2.0)** alternative
 | **OCR** | pure-Rust PaddleOCR by default (PP-OCRv5, weights from the shared `ocrspine-models` package, stronger on CJK), with an explicit Tesseract compatibility adapter → searchable-sandwich PDF |
 | **CLI** | `pdfspine info / text / render / merge / split / pages / images / toc` |
 
-Planned next: reading-order accuracy improvements, Type1/Type3 glyph rendering,
+Planned next: reading-order residuals, Type0/Type3 glyph-rendering edges,
 broader CJK coverage. See [`PRD.md`](https://github.com/VoldemortGin/pdfspine/blob/main/PRD.md) / [`docs/ROADMAP.md`](https://github.com/VoldemortGin/pdfspine/blob/main/docs/ROADMAP.md).
 Out of scope: digital-signature *creation*.
 
@@ -171,15 +172,18 @@ committed). See [`docs/BENCHMARKS.md`](https://github.com/VoldemortGin/pdfspine/
   token-F1, word-set-Jaccard, and reading-order scores trail fitz by **0.2–1.4
   percentage points**. It reaches parity on selected born-digital metrics and
   **beats fitz on Arabic / RTL** (correct bidi reordering).
-- **Rendering is near-parity** with fitz (page-image SSIM ~**0.945**) and ~**1.74×
-  faster** after a font-cache fix.
+- **Rendering is at/near parity** with fitz (page-image SSIM **0.984** mean /
+  **0.989** median over a 46-document sample, 2026-06-21). Speed, per the dated
+  2026-06-16 [`conformance/BENCH.md`](https://github.com/VoldemortGin/pdfspine/blob/main/conformance/BENCH.md):
+  open **1.4×** and text extraction **2.7×** faster than fitz; rendering about
+  **2× slower** (the from-scratch Rust rasterizer is still young).
 - **OCR beats fitz on CJK scans**: the pure-Rust PaddleOCR engine (PP-OCRv5, with
   weights from the shared `ocrspine-models` package) outperforms fitz's OCR path
   on Chinese/Japanese/Korean documents.
 - Real-corpus robustness: **open rate 100%**, **0 panics/hangs**, **re-saved files
   100% `qpdf --check`-clean** across the public-domain US-government corpus.
 
-Remaining accuracy work (multi-column reading order, Type1/Type3 glyph rendering,
+Remaining accuracy work (reading-order residuals, Type0/Type3 glyph-rendering edges,
 broader CJK) is tracked in [`docs/PRD-NEXT.md`](https://github.com/VoldemortGin/pdfspine/blob/main/docs/PRD-NEXT.md).
 
 ## Build & install
