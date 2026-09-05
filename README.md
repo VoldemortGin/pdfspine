@@ -8,7 +8,7 @@
 > zero framework lock-in, Protocol-ized seams, offline-capable. **pdfspine** is the *PDF spine* (this
 > repo); **ragspine** is the *RAG spine* (deterministic dual-channel retrieval + agent orchestration).
 >
-> **🤖 For AI agents / LLMs:** before using this library, read [`llms.txt`](llms.txt) (concise index) and [`python/pdfspine/_llms/docs/`](python/pdfspine/_llms/docs/) (full API / recipes / gotchas); after `pip install` they ship at `site-packages/pdfspine/_llms/`.
+> **🤖 For AI agents / LLMs:** before using this library, read [`llms.txt`](https://github.com/VoldemortGin/pdfspine/blob/main/llms.txt) (concise index) and [`python/pdfspine/_llms/docs/`](https://github.com/VoldemortGin/pdfspine/tree/main/python/pdfspine/_llms/docs/) (full API / recipes / gotchas); after `pip install` they ship at `site-packages/pdfspine/_llms/`.
 
 > **Status: alpha / pre-1.0, but the core is feature-complete.** pdfspine can
 > already parse/repair/decrypt PDFs, extract text & tables, search, edit / merge /
@@ -44,7 +44,7 @@ pdfspine is a **drop-in-shaped, permissively-licensed (Apache-2.0)** alternative
   registered under the global `fitz` / `pymupdf` names with one call to
   `pdfspine.install_fitz_shim()`. A default install is collision-safe: it does
   **not** claim those global names, so it coexists with a real PyMuPDF in the
-  same environment. A machine-readable [`COMPAT.toml`](COMPAT.toml) documents
+  same environment. A machine-readable [`COMPAT.toml`](https://github.com/VoldemortGin/pdfspine/blob/main/COMPAT.toml) documents
   every symbol's status.
 - **Memory-safe by construction.** `#![forbid(unsafe_code)]` in every first-party
   crate except the single audited PyO3 FFI chokepoint.
@@ -68,7 +68,7 @@ pdfspine is a **drop-in-shaped, permissively-licensed (Apache-2.0)** alternative
 | **CLI** | `pdfspine info / text / render / merge / split / pages / images / toc` |
 
 Planned next: reading-order accuracy improvements, Type1/Type3 glyph rendering,
-broader CJK coverage. See [`PRD.md`](PRD.md) / [`docs/ROADMAP.md`](docs/ROADMAP.md).
+broader CJK coverage. See [`PRD.md`](https://github.com/VoldemortGin/pdfspine/blob/main/PRD.md) / [`docs/ROADMAP.md`](https://github.com/VoldemortGin/pdfspine/blob/main/docs/ROADMAP.md).
 Out of scope: digital-signature *creation*.
 
 ### Glyph geometry (0.7.0)
@@ -84,11 +84,11 @@ when glyph sizes vary.
 `matrix` / `quad` use the page's device space, while `text_matrix` / `ctm` remain
 in PDF user space. HTML / XHTML / XML and `get_texttrace()` retain their existing
 declared-size semantics, and rotated-page coordinates and geometry-aware span
-boundaries can differ from PyMuPDF. See the [text extraction guide](docs/guide/text-extraction.md)
-for the field contract and the [geometry](conformance/GLYPH-GEOMETRY-REPORT.md),
-[size parity](conformance/GLYPH-GEOMETRY-SIZE-PARITY-REPORT.md),
-[span parity](conformance/GLYPH-GEOMETRY-SPAN-REPORT.md), and
-[performance](conformance/GLYPH-GEOMETRY-PERFORMANCE-REPORT.md) reports for the
+boundaries can differ from PyMuPDF. See the [text extraction guide](https://github.com/VoldemortGin/pdfspine/blob/main/docs/guide/text-extraction.md)
+for the field contract and the [geometry](https://github.com/VoldemortGin/pdfspine/blob/main/conformance/GLYPH-GEOMETRY-REPORT.md),
+[size parity](https://github.com/VoldemortGin/pdfspine/blob/main/conformance/GLYPH-GEOMETRY-SIZE-PARITY-REPORT.md),
+[span parity](https://github.com/VoldemortGin/pdfspine/blob/main/conformance/GLYPH-GEOMETRY-SPAN-REPORT.md), and
+[performance](https://github.com/VoldemortGin/pdfspine/blob/main/conformance/GLYPH-GEOMETRY-PERFORMANCE-REPORT.md) reports for the
 measured limits and cost.
 
 ## Install
@@ -164,8 +164,8 @@ pdfspine merge a.pdf b.pdf -o merged.pdf
 
 Validated against an objective ground-truth harness and with PyMuPDF (`fitz`) as
 the differential oracle (clean-room: the AGPL oracle is run locally only and never
-committed). See [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) and the
-[`conformance/gt/`](conformance/gt/) reports for the dated, reproducible evidence.
+committed). See [`docs/BENCHMARKS.md`](https://github.com/VoldemortGin/pdfspine/blob/main/docs/BENCHMARKS.md) and the
+[`conformance/gt/`](https://github.com/VoldemortGin/pdfspine/tree/main/conformance/gt/) reports for the dated, reproducible evidence.
 
 - In the dated 58-document benchmark, pdfspine's aggregate mean edit-similarity,
   token-F1, word-set-Jaccard, and reading-order scores trail fitz by **0.2–1.4
@@ -180,7 +180,7 @@ committed). See [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) and the
   100% `qpdf --check`-clean** across the public-domain US-government corpus.
 
 Remaining accuracy work (multi-column reading order, Type1/Type3 glyph rendering,
-broader CJK) is tracked in [`docs/PRD-NEXT.md`](docs/PRD-NEXT.md).
+broader CJK) is tracked in [`docs/PRD-NEXT.md`](https://github.com/VoldemortGin/pdfspine/blob/main/docs/PRD-NEXT.md).
 
 ## Build & install
 
@@ -248,16 +248,16 @@ python conformance/run_validation.py …       # real-corpus accuracy harness
 ```
 
 pdfspine is built strictly **test-first** (red → green → refactor → harden); the
-per-function test plan is in [`docs/test-case-catalog.md`](docs/test-case-catalog.md).
+per-function test plan is in [`docs/test-case-catalog.md`](https://github.com/VoldemortGin/pdfspine/blob/main/docs/test-case-catalog.md).
 
 ## Documentation
 
 Guide + API reference + PyMuPDF migration guide: build the docs site with
-`mkdocs serve` (see [`mkdocs.yml`](mkdocs.yml) / [`docs/`](docs/)). The
-authoritative design lives in [`PRD.md`](PRD.md).
+`mkdocs serve` (see [`mkdocs.yml`](https://github.com/VoldemortGin/pdfspine/blob/main/mkdocs.yml) / [`docs/`](https://github.com/VoldemortGin/pdfspine/tree/main/docs/)). The
+authoritative design lives in [`PRD.md`](https://github.com/VoldemortGin/pdfspine/blob/main/PRD.md).
 
 ## License
 
-**Apache-2.0** — see [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE). All third-party
+**Apache-2.0** — see [`LICENSE`](https://github.com/VoldemortGin/pdfspine/blob/main/LICENSE) and [`NOTICE`](https://github.com/VoldemortGin/pdfspine/blob/main/NOTICE). All third-party
 dependencies are permissive (MIT / Apache-2.0 / BSD / Zlib / …); the shipped graph
 is CI-verified free of copyleft.
