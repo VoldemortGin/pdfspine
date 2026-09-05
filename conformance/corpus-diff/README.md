@@ -11,8 +11,9 @@ PDF 上悄悄退化，单元测试看不见 —— 这套回路就是用来兜�
 PyMuPDF 是 AGPL，本仓库是 Apache-2.0。按 `conformance/REPORT.md` 与 `docs/BENCHMARKS.md`
 的既有声明：**oracle 只在本地当差分参照运行，其输出永不提交** —— 只提交相似度/统计数字。
 
-因此 `out/`、`summary*.json`、`corpus.txt` 全部**不入库**（见 `.gitignore`）。
-本目录只有驱动脚本。
+因此工作输出 `out/`、本目录根部的 `summary*.json`、`corpus.txt` 全部**不入库**
+（见 `.gitignore`）。仓库只保留驱动脚本，以及 `baselines/` 下不含 oracle 原始输出的
+可移植语料清单和聚合验收值。
 
 ## 用法
 

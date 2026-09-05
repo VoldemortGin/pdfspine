@@ -314,11 +314,11 @@ pdfspine 在 `get_text("dict"/"rawdict"/"json"/"rawjson")` 的 PyMuPDF 键集合
 |---|---|---|
 | **PDF 用户空间** | y 向上、原点左下，内容流操作符所在的空间 | `text_matrix`、`ctm`。**故意不叠 page transform**——它们的用途是把抽出来的字形**对回 PDF 源**（回查是哪几个操作符画的），叠了就对不回去了 |
 | **pdfspine 设备空间** | y 向下、原点左上，页面旋转已生效 | 既有的 `bbox` / `origin` / `dir`，以及新键 `matrix` / `quad`——**与 bbox / origin 同基准** |
+| **text space 的 glyph cell** | 字形自己的 1000 单位 em 空间 ÷ 1000：`[0, descender .. advance, ascender]`（竖排还要减去竖直位移向量 v） | `matrix` 就是把这个 cell 映到设备空间的那个矩阵 |
 
 页面带 `/Rotate` 时存在一个已实测的坐标基准差异：PyMuPDF 1.28.2 的文本 XML
 仍返回未旋转页面坐标，pdfspine 会应用 page transform。这个差异不影响
 `ul` / `ur` / `ll` / `lr` 的角命名约定。
-| **text space 的 glyph cell** | 字形自己的 1000 单位 em 空间 ÷ 1000：`[0, descender .. advance, ascender]`（竖排还要减去竖直位移向量 v） | `matrix` 就是把这个 cell 映到设备空间的那个矩阵 |
 
 一句话：**`matrix` / `quad` 是设备空间，`text_matrix` / `ctm` 是用户空间。**
 

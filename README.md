@@ -16,9 +16,10 @@
 > forms, redact (destructively), open image files as documents, **render pages to
 > images**, and **OCR** (Tesseract + a pure-Rust PaddleOCR engine, stronger on CJK).
 > **89.3%** (687 / 769) of the PyMuPDF 1.24 public API is implemented and tested
-> (climbing), with **1349+ Rust tests + 593+ Python tests** green. Text extraction
-> is at fitz parity (and beats fitz on Arabic / RTL), rendering is near-parity and
-> ~1.74× faster, and the pure-Rust PaddleOCR engine beats fitz on CJK scans
+> (climbing), with **1,702 Rust tests + 814 Python tests** passing in the 0.7.0
+> release gate. In the dated 58-document benchmark, its aggregate mean text scores
+> trail fitz by 0.2–1.4 percentage points (and it beats fitz on Arabic / RTL); rendering
+> is near-parity and ~1.74× faster, and the pure-Rust PaddleOCR engine beats fitz on CJK scans
 > (see [Accuracy](#accuracy)).
 > Now on PyPI: `pip install pdfspine` (see [Install](#install)); or
 > [build from source](#build--install).
@@ -55,7 +56,7 @@ pdfspine is a **drop-in-shaped, permissively-licensed (Apache-2.0)** alternative
 | Area | Capabilities |
 |---|---|
 | **Read** | open (file/bytes), **malformed-PDF repair**, encrypted PDFs (RC4 / AES-128 / AES-256, R2–R6) |
-| **Text** | `get_text` (`text/words/blocks/dict/rawdict/json/html/xhtml/xml`), `search_for`, `TextPage`, fonts/images inventory |
+| **Text** | `get_text` (`text/words/blocks/dict/rawdict/json/rawjson/html/xhtml/xml`), per-glyph rendering geometry, `search_for`, `TextPage`, fonts/images inventory |
 | **Tables** | `find_tables` with merged-cell detection → `extract()` / `to_markdown()` / **`to_html()`**; optional Microsoft TATR vision backend for borderless tables |
 | **Edit & save** | full + **byte-exact incremental** save, garbage collection, page insert/delete/copy/move/select, **`insert_pdf`** merge, metadata/XMP, TOC, links, encryption write |
 | **Annotate** | all common annotation types with `/AP` appearance streams; AcroForm read / fill / flatten + `Widget`; **destructive redaction** (verified content removal) |
@@ -70,6 +71,26 @@ Planned next: reading-order accuracy improvements, Type1/Type3 glyph rendering,
 broader CJK coverage. See [`PRD.md`](PRD.md) / [`docs/ROADMAP.md`](docs/ROADMAP.md).
 Out of scope: digital-signature *creation*.
 
+### Glyph geometry (0.7.0)
+
+The structured `dict` / `rawdict` / `json` / `rawjson` formats expose span
+`matrix`, `text_matrix`, `ctm`, `dir`, `quad`, `seq`, `declared_size`, and
+`rendered_size`; raw characters also expose `matrix`, `quad`, `rendered_size`,
+`seq`, and `synthetic`. The first glyph determines `span["size"]`; it equals
+`span["rendered_size"]` and `sqrt(abs(det(matrix)))`, while `declared_size`
+preserves the signed PDF `Tf` operand. Use each raw character's `rendered_size`
+when glyph sizes vary.
+
+`matrix` / `quad` use the page's device space, while `text_matrix` / `ctm` remain
+in PDF user space. HTML / XHTML / XML and `get_texttrace()` retain their existing
+declared-size semantics, and rotated-page coordinates and geometry-aware span
+boundaries can differ from PyMuPDF. See the [text extraction guide](docs/guide/text-extraction.md)
+for the field contract and the [geometry](conformance/GLYPH-GEOMETRY-REPORT.md),
+[size parity](conformance/GLYPH-GEOMETRY-SIZE-PARITY-REPORT.md),
+[span parity](conformance/GLYPH-GEOMETRY-SPAN-REPORT.md), and
+[performance](conformance/GLYPH-GEOMETRY-PERFORMANCE-REPORT.md) reports for the
+measured limits and cost.
+
 ## Install
 
 ```bash
@@ -81,6 +102,10 @@ the shared [`ocrspine-models`](https://pypi.org/project/ocrspine-models/) data
 package — a runtime dependency `pip` pulls in automatically — so the wheel itself
 stays lean and no longer embeds them. To build from source instead, see
 [Build & install](#build--install).
+
+Python **3.12+** is supported. Prebuilt wheels are published for Linux x86-64 /
+ARM64, macOS Intel / Apple silicon, and Windows x86-64; an sdist is also available
+for other supported environments.
 
 ## Quick start
 
@@ -100,7 +125,7 @@ for t in tables.tables:
     print(t.to_markdown())                    # or t.to_html() for merged cells
 
 # Optional: pip install "pdfspine[tatr]", then prefetch the pinned checkpoints.
-vision_tables = page.find_tables(strategy="vision", backend="tatr")
+# vision_tables = page.find_tables(strategy="vision", backend="tatr")
 
 doc.save("output.pdf", garbage=4, deflate=True)
 doc.save_html("output.html")                 # complete UTF-8 HTML5 document
@@ -142,8 +167,10 @@ the differential oracle (clean-room: the AGPL oracle is run locally only and nev
 committed). See [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) and the
 [`conformance/gt/`](conformance/gt/) reports for the dated, reproducible evidence.
 
-- **Text extraction is at fitz parity** on born-digital corpora, and **beats fitz
-  on Arabic / RTL** (correct bidi reordering).
+- In the dated 58-document benchmark, pdfspine's aggregate mean edit-similarity,
+  token-F1, word-set-Jaccard, and reading-order scores trail fitz by **0.2–1.4
+  percentage points**. It reaches parity on selected born-digital metrics and
+  **beats fitz on Arabic / RTL** (correct bidi reordering).
 - **Rendering is near-parity** with fitz (page-image SSIM ~**0.945**) and ~**1.74×
   faster** after a font-cache fix.
 - **OCR beats fitz on CJK scans**: the pure-Rust PaddleOCR engine (PP-OCRv5, with
@@ -158,7 +185,7 @@ broader CJK) is tracked in [`docs/PRD-NEXT.md`](docs/PRD-NEXT.md).
 ## Build & install
 
 Requirements: Rust (pinned to **1.96.0** by `rust-toolchain.toml`), **Python ≥
-3.12**, [maturin](https://www.maturin.rs/) ≥ 1.7. [uv](https://docs.astral.sh/uv/)
+3.12**, [maturin](https://www.maturin.rs/) ≥ 1.12,<2. [uv](https://docs.astral.sh/uv/)
 recommended.
 
 ```bash

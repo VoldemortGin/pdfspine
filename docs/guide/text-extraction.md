@@ -115,12 +115,12 @@ real parallelogram.
 |---|---|---|
 | **PDF user space** | y up, origin bottom-left; the space the content-stream operators work in. | `text_matrix`, `ctm`. Deliberately **not** multiplied by the page transform: their job is to map an extracted glyph back to the PDF source (which operators painted it), which is impossible once the page transform is folded in. |
 | **pdfspine device space** | y down, origin top-left; page rotation applied. | The existing `bbox` / `origin` / `dir`, and the new `matrix` / `quad` — same frame as `bbox` / `origin`. |
+| **Glyph cell (text space)** | The glyph's 1000-unit em space ÷ 1000: `[0, descender .. advance, ascender]` (shifted by the vertical displacement vector `−v` for vertical writing). | `matrix` is the matrix that maps this cell into device space. |
 
 PyMuPDF 1.28.2's text XML keeps unrotated page coordinates when a page has
 `/Rotate`, while pdfspine applies its page transform. This is a known coordinate-basis
 difference for rotated pages; it does not change the `ul` / `ur` / `ll` / `lr`
 corner convention described above.
-| **Glyph cell (text space)** | The glyph's 1000-unit em space ÷ 1000: `[0, descender .. advance, ascender]` (shifted by the vertical displacement vector `−v` for vertical writing). | `matrix` is the matrix that maps this cell into device space. |
 
 Note the intentional asymmetry: **`matrix` / `quad` are device space,
 `text_matrix` / `ctm` are user space.**

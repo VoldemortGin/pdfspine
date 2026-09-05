@@ -11,6 +11,21 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
+## [0.7.1] — 2026-09-05
+
+### Changed
+
+- **Documentation-only release; PDF processing behavior is unchanged.**
+  Synchronize the GitHub README and PyPI project description with the 0.7.0
+  glyph-geometry fields, rendered versus declared font sizes, supported Python
+  versions and wheel platforms, and current build requirements.
+- State the dated text benchmark's aggregate mean differences precisely, retain
+  the historical 0.7.0 release-gate counts, and mark the TATR quick-start call
+  as optional.
+- Clarify which corpus baseline manifests and aggregate summaries are tracked,
+  and repair the coordinate-space tables in the English text-extraction guide
+  and bundled Chinese API reference.
+
 ## [0.7.0] — 2026-09-05
 
 ### Added
@@ -534,7 +549,8 @@ published wheel's version is set from the `v0.1.0` git tag at build time.
   2858 ms → 819 ms). `rayon` is a feature-gated (`paddle-ocr`) optional dep and
   is not in the lean base wheel.
 
-[Unreleased]: https://github.com/VoldemortGin/pdfspine/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/VoldemortGin/pdfspine/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/VoldemortGin/pdfspine/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/VoldemortGin/pdfspine/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/VoldemortGin/pdfspine/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/VoldemortGin/pdfspine/compare/v0.5.0...v0.6.0
