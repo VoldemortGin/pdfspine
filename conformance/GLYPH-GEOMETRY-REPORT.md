@@ -1,6 +1,6 @@
 # pdfspine — Glyph Geometry Publication Verification Report
 
-_Generated: 2026-09-05 • branch `worktree-agent-ab0626e7f9bd0c95d` • base `origin/main` 75a1ace (v0.6.1)_
+_Generated: 2026-09-05 • branch `worktree-agent-ab0626e7f9bd0c95d` • originally measured on base `75a1ace` (v0.6.1), re-verified after rebase onto `aaee2a9` (two-column correlation-table fix)_
 _Oracle: PyMuPDF 1.28.2 (local diff reference only; no oracle output committed — only values we assert)_
 
 Verification record for the glyph-geometry API expansion: the text layer now publishes each glyph's
@@ -25,6 +25,33 @@ corpus/GT non-regression, performance measurement, and the span-aggregation tigh
 | `pytest python/tests` | **780 passed / 66 skipped / 0 failed** |
 
 No `-A` lint escapes were used. Baseline before this work was 1666 Rust tests.
+
+### 1.1 Re-verification after the rebase onto `aaee2a9`
+
+The branch was rebased onto main's two-column correlation-table fix (`aaee2a9`), which touches the same
+file this work touches (`crates/pdf-text/src/layout.rs`). A clean textual rebase does not prove the two
+changes agree behaviourally, so the suite was re-run on the rebased tree:
+
+| check | result |
+|---|---|
+| `cargo test --workspace --all-features` | **1690 passed / 0 failed** |
+| `LAYOUT-ORDER-004` two-column record grid reads row-major | ok |
+| `LAYOUT-ORDER-005` two-column prose stays column-major | ok |
+| `LAYOUT-ORDER-006` fully paired columns stay column-major | ok |
+| `GLYPHGEO-001..015` | 15/15 ok |
+
+The three counts reconcile exactly: **1682** (this work on base `75a1ace`) → **1687** (after the
+remaining `GLYPHGEO-010..015` and `PYGEO-*` landed) → **1690** on the rebased tree, the difference being
+precisely the three `LAYOUT-ORDER-004/005/006` cases `aaee2a9` adds. Nothing was lost or silently
+skipped in the rebase.
+
+**Why the two changes do not interact:** `aaee2a9` alters *region selection* (adding an
+`is_two_column_record_grid` path beside `is_table_dominant`), while this work alters *glyph geometry
+transport* (`DevGlyph`'s carried matrices/quad) and *field population* (`build_line`). They sit on
+different decision paths within the same file.
+
+Counted across 151 of 152 test targets; the outstanding target is py-bindings' `_core` unittests, which
+contributes **0 tests** (it is a PyO3 cdylib with no unit tests) and therefore cannot change the total.
 
 ---
 
