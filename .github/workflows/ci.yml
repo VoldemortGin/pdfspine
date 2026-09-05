@@ -90,6 +90,11 @@ jobs:
     runs-on: ubuntu-latest
     # Non-blocking for M0; the 90% diff gate becomes hard once real impl lands.
     continue-on-error: true
+    # Tokenless Codecov upload via OIDC (public repo has no CODECOV_TOKEN secret);
+    # the narrowed token still grants contents:read for actions/checkout.
+    permissions:
+      id-token: write
+      contents: read
     steps:
       - uses: actions/checkout@v4
         with:
@@ -101,15 +106,51 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: cargo-llvm-cov (diff coverage)
+      - name: Install coverage tooling
         run: |
           cargo install cargo-llvm-cov --locked
-          cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
+          pip install "maturin>=1.12,<2" pytest hypothesis coverage
+      - name: Combined Rust+Python coverage (instrumented PyO3 extension)
+        run: |
+          # Instrument BOTH the Rust workspace tests and the Python-driven PyO3
+          # extension into one profraw set. In a cargo-only profile py-bindings
+          # is 0% and pdf-api ~22% only because Python never runs; here pytest
+          # exercises the instrumented `_core` so those lines are counted.
+          source <(cargo llvm-cov show-env --export-prefix)
+          cargo llvm-cov clean --workspace
+          cargo test --workspace --all-features
+          pip install -e . --no-build-isolation
+          coverage run --branch --source=python/pdfspine \
+            -m pytest -W error --doctest-modules python/pdfspine python/tests
+          cargo llvm-cov report --lcov --output-path lcov.info
+          coverage xml -o coverage-python.xml
+          coverage json -o coverage-python.json
+      - name: Upload coverage reports (durable artifact)
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
+          name: coverage-reports
+          path: |
+            lcov.info
+            coverage-python.xml
+            coverage-python.json
+          retention-days: 90
+      - name: Upload Rust coverage to Codecov (OIDC, tokenless)
+        uses: codecov/codecov-action@v5
+        with:
+          use_oidc: true
           files: lcov.info
+          flags: rust
           fail_ci_if_error: false
+      - name: Upload Python coverage to Codecov (OIDC, tokenless)
+        uses: codecov/codecov-action@v5
+        with:
+          use_oidc: true
+          files: coverage-python.xml
+          flags: python
+          fail_ci_if_error: false
+      - name: Coverage ratchet + report (only-up fail_under)
+        run: coverage report
       - name: cargo-mutants (in-diff)
         run: |
           cargo install cargo-mutants --locked
