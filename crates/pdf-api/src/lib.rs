@@ -50,9 +50,10 @@ pub use pdf_crypto::{EncryptMethod, EncryptSpec};
 // these free functions (the orphan rule forbids inherent `impl Page` here, since
 // `Page` is defined in `pdf-core`).
 pub use text::{
-    extract_imginfo, extract_selection, extract_textbox, get_fonts, get_image_bbox, get_image_info,
-    get_image_rects, get_images, get_text, get_xobjects, search, textpage, textpage_poolsize,
-    FontInfo, ImageInfo, ImageInfoEntry, ImageRect, ImgInfoEntry, TextOutput, XObjectInfo,
+    dict_blocks, extract_imginfo, extract_selection, extract_textbox, get_fonts, get_image_bbox,
+    get_image_info, get_image_rects, get_images, get_text, get_xobjects, search, textpage,
+    textpage_poolsize, FontInfo, ImageInfo, ImageInfoEntry, ImageRect, ImgInfoEntry, TextOutput,
+    XObjectInfo,
 };
 
 // Image path (M5): `Pixmap`, `get_pixmap`, `extract_image`, image documents
@@ -66,8 +67,9 @@ pub use image::{
 
 // `pdf-text` types the bindings need so they only depend on `pdf-api` (PRD §9.1).
 pub use pdf_text::{
-    defaults, BBoxLogEntry, BlockTuple, DictBlock, DictChar, DictImageBlock, DictLine, DictSpan,
-    DictTextBlock, SearchOptions, TextDict, TextPage, TraceChar, TraceSpan, WordTuple,
+    defaults, BBoxLogEntry, Block, BlockTuple, Char, DictBlock, DictBlockRef, DictChar,
+    DictImageBlock, DictLine, DictSpan, DictTextBlock, Line, SearchOptions, Span, TextDict,
+    TextPage, TraceChar, TraceSpan, WordTuple,
 };
 
 // Standalone Core-14 font handle (PyMuPDF `fitz.Font`) — name/metrics/advances.
