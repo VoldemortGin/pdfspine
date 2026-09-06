@@ -1,79 +1,115 @@
 # Test coverage report
 
-Measured locally on **2026-09-05 (Pacific time)** at commit
-`9da7ca6b8a61b6f24d2c6318bab5c412604a16ee` (`0.7.1`). The release is a
-documentation-only change from `0.7.0`, so the product-code coverage is also
-representative of that release.
+Measured locally on **2026-09-05 (Pacific time)** at commit `2b7df16` — the
+targeted-test batch (`4149071` Rust tests, `2b7df16` Python tests) that
+followed the `1f82655` combined profile. Product code is unchanged since the
+`0.7.1` release (`9da7ca6`) apart from `13c25f2` (a `py-bindings` performance
+change), so these numbers describe the released code under the enlarged suite.
 
 There is no single reliable cross-language percentage. Python's `coverage.py`
-cannot see native Rust execution, and the Rust CI coverage command does not run
-the Python suite against an instrumented PyO3 extension. The two source sets are
-therefore reported separately.
+cannot see native Rust execution, and a cargo-only `cargo llvm-cov` run cannot
+see the Python suite. The Rust rows below therefore come from the combined
+profile described in the next section (an instrumented PyO3 extension driven by
+`pytest`, merged with the Rust workspace tests); the two source sets are still
+reported separately.
 
 ## Headline results
 
 | Scope | Metric | Covered / total | Coverage |
 |---|---:|---:|---:|
-| Python package (`python/pdfspine/*.py`) | lines/statements | 4,384 / 5,344 | **82.04%** |
-| Python package | branches | 955 / 1,498 | **63.75%** |
-| Python package | coverage.py combined line + branch score | 5,339 / 6,842 | **78.03%** |
-| Rust workspace, CI scope (all crates, all features) | lines | 30,400 / 41,883 | **72.58%** |
-| Rust workspace, CI scope | functions | 2,991 / 4,517 | **66.22%** |
-| Rust workspace, CI scope | regions | 54,096 / 74,408 | **72.70%** |
-| Rust libraries excluding `py-bindings` | lines | 30,400 / 38,418 | **79.13%** |
-| Rust libraries excluding `py-bindings` and `pdf-ocr` | lines | 29,923 / 37,888 | **78.98%** |
-| `pdf-core` only | lines | 5,253 / 6,040 | **86.97%** |
+| Python package (`python/pdfspine/*.py`) | lines/statements | 5,275 / 5,344 | **98.71%** |
+| Python package | branches | 1,427 / 1,498 | **95.26%** |
+| Python package | coverage.py combined line + branch score | 6,702 / 6,842 | **97.95%** |
+| Rust workspace, combined profile (all crates, all features) | lines | 38,053 / 41,886 | **90.85%** |
+| Rust workspace, combined profile | functions | 4,149 / 4,519 | **91.81%** |
+| Rust workspace, combined profile | regions | 66,719 / 74,504 | **89.55%** |
+| Rust libraries excluding `py-bindings` | lines | 34,852 / 38,418 | **90.72%** |
+| Rust libraries excluding `py-bindings` and `pdf-ocr` | lines | 34,367 / 37,888 | **90.71%** |
+| `pdf-core` only | lines | 5,431 / 6,040 | **89.92%** |
 
 The Rust workspace number includes `py-bindings` in the denominator. That crate
-has 0 Rust unit tests and contributes 0 / 3,465 covered lines in this command.
-Python tests do exercise the installed native extension, but that execution is
-not visible to `cargo llvm-cov`; treating it as covered would be an unsupported
-inference. `pdf-testdata` is a comment-only placeholder and emitted no
-reportable source lines.
+has 0 Rust unit tests; it is counted (3,201 / 3,468 lines, 92.30%) only because
+the profile is the combined one — a cargo-only run still reports it as 0 (see
+the historical table below). `pdf-testdata` is a comment-only placeholder and
+emitted no reportable source lines.
 
 The Python combined score is coverage.py's weighted total over 5,344 statements
-and 1,498 branches. It is included for reproducibility; the line percentage is
-the usual answer when someone asks for line coverage.
+and 1,498 branches. It is the figure the `fail_under = 96` ratchet in
+`pyproject.toml` compares against; the line percentage is the usual answer when
+someone asks for line coverage.
 
 ## Combined Rust+Python profile (Python-driven instrumented extension)
 
-Measured on **2026-09-05 (Pacific time)** at commit
-`1f82655` — the commit after the `9da7ca6` headline measurement. The Python suite
-is byte-for-byte identical here (814 passed / 63 skipped, line **82.04%**, branch
-**63.75%**), so the two commits share one Python profile; only the Rust side is
-re-measured below.
+Measured on **2026-09-05 (Pacific time)** at commit `2b7df16` (1,774 Rust
+tests passed / 1 ignored; 1,059 Python tests passed / 66 skipped; 158 profraw
+files merged). The "before" columns are the same profile re-measured at
+`a45b66d`, the parent of the two test commits (`4149071`, `2b7df16`); between
+the two only tests were added, so every delta is attributable to the new tests.
+The earlier measurement at `1f82655` (workspace **87.02%**, `py-bindings`
+83.92%, `pdf-api` 74.90%) agrees with the `a45b66d` column within
+instrumentation noise and is kept in this file's history.
 
 The caveat above — that Python's exercise of the native extension is invisible to
 a cargo-only `cargo llvm-cov` run — is removed by instrumenting the PyO3 extension
 and driving it from `pytest`. `cargo llvm-cov show-env` exports the LLVM
 instrumentation environment; the Rust workspace tests and a `maturin`-built
-`_core` both write into one profraw set (155 profraw files merged), which
-`cargo llvm-cov report` combines. That attributes the binding and Python-facing
-API lines to the tests that actually reach them:
+`_core` both write into one profraw set, which `cargo llvm-cov report` combines.
+That attributes the binding and Python-facing API lines to the tests that
+actually reach them. A cargo-only run reports `py-bindings` at 0 / 3,468 and
+`pdf-api` at about 22% (see the historical table below); the combined profile:
 
-| Crate | cargo-only lines | combined lines | combined line % | Δ (pp) |
+| Crate | combined lines @ `a45b66d` | combined lines @ `2b7df16` | line % @ `2b7df16` | Δ (pp) |
 |---|---:|---:|---:|---:|
-| `pdf-api` | 701 / 3,215 (21.80%) | 2,408 / 3,215 | **74.90%** | +53.09 |
-| `pdf-core` | 5,253 / 6,040 (86.97%) | 5,394 / 6,040 | 89.30% | +2.33 |
+| `pdf-api` | 2,408 / 3,215 (74.90%) | 2,929 / 3,215 | **91.10%** | +16.20 |
+| `pdf-core` | 5,401 / 6,040 (89.42%) | 5,431 / 6,040 | 89.92% | +0.50 |
 | `pdf-crypto` | 801 / 836 (95.81%) | 801 / 836 | 95.81% | +0.00 |
-| `pdf-edit` | 6,519 / 8,729 (74.68%) | 7,652 / 8,729 | 87.66% | +12.98 |
-| `pdf-fonts` | 2,194 / 2,434 (90.14%) | 2,206 / 2,434 | 90.63% | +0.49 |
-| `pdf-image` | 2,193 / 2,732 (80.27%) | 2,218 / 2,732 | 81.19% | +0.92 |
+| `pdf-edit` | 7,652 / 8,729 (87.66%) | 7,957 / 8,729 | **91.16%** | +3.50 |
+| `pdf-fonts` | 2,206 / 2,434 (90.63%) | 2,206 / 2,434 | 90.63% | +0.00 |
+| `pdf-image` | 2,217 / 2,732 (81.15%) | 2,212 / 2,732 | 80.97% | −0.18 |
 | `pdf-markdown` | 1,480 / 1,579 (93.73%) | 1,480 / 1,579 | 93.73% | +0.00 |
-| `pdf-ocr` | 477 / 530 (90.00%) | 485 / 530 | 91.51% | +1.51 |
-| `pdf-render` | 2,988 / 3,739 (79.91%) | 2,974 / 3,739 | 79.54% | −0.37 |
-| `pdf-text` | 5,281 / 5,773 (91.48%) | 5,407 / 5,773 | 93.66% | +2.18 |
+| `pdf-ocr` | 485 / 530 (91.51%) | 485 / 530 | 91.51% | +0.00 |
+| `pdf-render` | 2,975 / 3,739 (79.57%) | 3,394 / 3,739 | **90.77%** | +11.20 |
+| `pdf-text` | 5,373 / 5,773 (93.07%) | 5,444 / 5,773 | 94.30% | +1.23 |
 | `pdf-typeset` | 2,513 / 2,811 (89.40%) | 2,513 / 2,811 | 89.40% | +0.00 |
-| `py-bindings` | 0 / 3,465 (0.00%) | 2,908 / 3,465 | **83.92%** | +83.92 |
-| **Workspace total** | 30,400 / 41,883 (72.58%) | **36,446 / 41,883** | **87.02%** | +14.44 |
+| `py-bindings` | 2,910 / 3,468 (83.91%) | 3,201 / 3,468 | **92.30%** | +8.39 |
+| **Workspace total** | 36,421 / 41,886 (86.95%) | **38,053 / 41,886** | **90.85%** | +3.90 |
 
-The two crates the cargo-only profile could not see are the whole point:
-`py-bindings` rises from 0 to **83.92%** and `pdf-api` from 21.80% to **74.90%**,
-lifting workspace line coverage from 72.58% to **87.02%** over the same 41,883
-instrumented lines. `pdf-render` dips 0.37 pp (14 lines) because the `maturin`
-build does not link every example/harness path a pure `cargo test` build does;
-that difference is within run-to-run instrumentation noise. `pdf-testdata`
-remains a comment-only placeholder and emits no reportable lines.
+The test batch was aimed at the ten files with the most uncovered lines in the
+`1f82655` profile (five Rust, five Python). Per-file result, same two runs
+(Python from `coverage.py --branch`, Rust from the merged `cargo llvm-cov`
+report):
+
+| File | before | after | Δ (pp) | uncovered lines |
+|---|---:|---:|---:|---:|
+| `crates/pdf-api/src/lib.rs` | 1,301 / 1,862 (69.87%) | 1,810 / 1,862 (**97.21%**) | +27.34 | 561 → 52 |
+| `crates/py-bindings/src/lib.rs` | 2,910 / 3,468 (83.91%) | 3,201 / 3,468 (**92.30%**) | +8.39 | 558 → 267 |
+| `crates/pdf-render/src/type1.rs` | 582 / 892 (65.25%) | 847 / 892 (**94.96%**) | +29.71 | 310 → 45 |
+| `crates/pdf-edit/src/redact.rs` | 633 / 898 (70.49%) | 869 / 898 (**96.77%**) | +26.28 | 265 → 29 |
+| `crates/pdf-render/src/render.rs` | 533 / 775 (68.77%) | 681 / 775 (**87.87%**) | +19.10 | 242 → 94 |
+| `python/pdfspine/document.py` | 2,038 / 2,433 (83.76%) | 2,414 / 2,433 (**99.22%**) | +15.45 | 395 → 19 |
+| `python/pdfspine/_tatr.py` | 516 / 712 (72.47%) | 710 / 712 (**99.72%**) | +27.25 | 196 → 2 |
+| `python/pdfspine/_tatr_postprocess.py` | 402 / 532 (75.56%) | 531 / 532 (**99.81%**) | +24.25 | 130 → 1 |
+| `python/pdfspine/geometry.py` | 673 / 789 (85.30%) | 789 / 789 (**100.00%**) | +14.70 | 116 → 0 |
+| `python/pdfspine/helpers.py` | 212 / 288 (73.61%) | 288 / 288 (**100.00%**) | +26.39 | 76 → 0 |
+| Python package, lines | 4,384 / 5,344 (82.04%) | 5,275 / 5,344 (**98.71%**) | +16.67 | 960 → 69 |
+| Python package, branches | 955 / 1,498 (63.75%) | 1,427 / 1,498 (**95.26%**) | +31.51 | 543 → 71 |
+| Python package, coverage.py combined | 5,339 / 6,842 (78.03%) | 6,702 / 6,842 (**97.95%**) | +19.92 | 1,503 → 140 |
+
+The remaining `py-bindings` lines are mostly error-mapping closures and
+`PyErr` conversions that need malformed native state to reach; the remaining
+`render.rs` lines are the Type0/CID `resolve_gid` and Type3 charproc paths,
+which need composite-font fixtures and are left for the font roadmap items.
+`pdf-image` moves by 5 lines (−0.18 pp) between the two runs with no change to
+its tests; that is run-to-run instrumentation noise. `pdf-testdata` remains a
+comment-only placeholder and emits no reportable lines.
+
+Two product behaviours were documented by the new tests rather than changed
+(tests only): `Page.remove_rotation()` raises `PdfUnsupportedError` on a rotated
+page that carries form widgets, because it assigns `widget.rect` on existing
+(read-only) widgets (`python/pdfspine/document.py:3428-3430`); and
+`pdf-edit/src/redact.rs` re-emits the `'` and `"` show operators as bare `TJ`,
+dropping the implicit line advance and spacing operands from the rewritten
+stream (a fidelity issue; secret removal is unaffected).
 
 ### Reproduction (combined profile)
 
@@ -109,7 +145,10 @@ non-zero in the combined report (it is 0 in the cargo-only profile). Rebuild the
 normal extension afterwards (`maturin develop --release`, or `pip install -e .`)
 so the working tree is not left with an instrumented `.so`.
 
-## Rust coverage by crate
+## Rust coverage by crate (historical cargo-only profile at `9da7ca6`)
+
+This is the cargo-only scope measured at the `0.7.1` release commit, kept for
+comparison with the combined profile above; it does not see the Python suite.
 
 | Crate | Covered / total lines | Line coverage | Covered / total functions | Function coverage |
 |---|---:|---:|---:|---:|
@@ -196,9 +235,9 @@ cannot pass silently. The job retains `lcov.info`, `coverage-python.xml`, and
 Codecov tokenlessly via OIDC (`use_oidc: true` with job-level `id-token: write`),
 split into `rust` and `python` flags — replacing the earlier upload rejected for
 lack of a token (the public repo has no `CODECOV_TOKEN` secret). A Python
-`fail_under` ratchet (77 — floor of the combined statement+branch total that
-`coverage report` enforces under `branch = true`, minus one) is checked by
-`coverage report`. OIDC token acquisition and artifact retention are confirmed by
+`fail_under` ratchet (96 — floor of the 97.95% combined statement+branch total
+that `coverage report` enforces under `branch = true`, minus one; it was 77 at
+`1f82655`) is checked by `coverage report`. OIDC token acquisition and artifact retention are confirmed by
 run `33972346887`; the combined (non-degraded) LCOV and Codecov ingestion await
 the first post-fix run (Codecov ingestion also needs the repository activated on
 codecov.io, a one-time account action). Before this work the repository contained
