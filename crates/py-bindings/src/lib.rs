@@ -585,7 +585,7 @@ fn dict_block_to_py<'py>(
         pdf_api::DictBlock::Text(b) => {
             d.set_item(intern!(py, "number"), b.number)?;
             d.set_item(intern!(py, "type"), 0i32)?;
-            d.set_item(intern!(py, "bbox"), b.bbox)?;
+            d.set_item(intern!(py, "bbox"), untracked_tuple(py, b.bbox)?)?;
             // Painting order (content-stream), as opposed to `number`'s reading order.
             d.set_item(intern!(py, "seq"), b.seq)?;
             let lines = PyList::empty(py);
@@ -597,7 +597,7 @@ fn dict_block_to_py<'py>(
         pdf_api::DictBlock::Image(b) => {
             d.set_item(intern!(py, "number"), b.number)?;
             d.set_item(intern!(py, "type"), 1i32)?;
-            d.set_item(intern!(py, "bbox"), b.bbox)?;
+            d.set_item(intern!(py, "bbox"), untracked_tuple(py, b.bbox)?)?;
             d.set_item(intern!(py, "width"), b.width)?;
             d.set_item(intern!(py, "height"), b.height)?;
             d.set_item(intern!(py, "ext"), &b.ext)?;
@@ -605,7 +605,7 @@ fn dict_block_to_py<'py>(
             d.set_item(intern!(py, "xres"), b.xres)?;
             d.set_item(intern!(py, "yres"), b.yres)?;
             d.set_item(intern!(py, "bpc"), b.bpc)?;
-            d.set_item(intern!(py, "transform"), b.transform)?;
+            d.set_item(intern!(py, "transform"), untracked_tuple(py, b.transform)?)?;
             d.set_item(intern!(py, "size"), b.size)?;
             // Encoded image bytes (same payload as `Document.extract_image`);
             // empty only for an unresolvable/inline image.
@@ -625,8 +625,8 @@ fn dict_line_to_py<'py>(py: Python<'py>, line: &pdf_api::DictLine) -> PyResult<B
         spans
     })?;
     d.set_item(intern!(py, "wmode"), line.wmode)?;
-    d.set_item(intern!(py, "dir"), line.dir)?;
-    d.set_item(intern!(py, "bbox"), line.bbox)?;
+    d.set_item(intern!(py, "dir"), untracked_tuple(py, line.dir)?)?;
+    d.set_item(intern!(py, "bbox"), untracked_tuple(py, line.bbox)?)?;
     // Reading-order index within the page, and the painting-order key.
     d.set_item(intern!(py, "number"), line.number)?;
     d.set_item(intern!(py, "seq"), line.seq)?;
@@ -698,8 +698,41 @@ impl<'py> SpanGeometryFloats<'py> {
     }
 
     fn tuple<const N: usize>(&mut self, values: [f64; N]) -> PyResult<Bound<'py, PyTuple>> {
-        PyTuple::new(self.py, values.map(|value| self.float(value)))
+        let tuple = PyTuple::new(self.py, values.map(|value| self.float(value)))?;
+        untrack_float_tuple(&tuple);
+        Ok(tuple)
     }
+}
+
+/// Takes a freshly built tuple of floats off the cyclic collector's tracking
+/// list.
+///
+/// A tuple of plain floats can never take part in a reference cycle, which is
+/// why CPython's own collector untracks such tuples the first time it visits
+/// them — but only after paying to traverse them. rawdict builds millions of
+/// these per document, and while they stay tracked every young-generation
+/// collection walks the whole page's geometry. Untracking them up front also
+/// keeps each character/span dict untracked (a dict is only tracked once it
+/// holds a tracked value), so the collector never visits the per-character
+/// objects at all. Only the collector's bookkeeping changes: the tuple's
+/// contents, type and identity are untouched.
+fn untrack_float_tuple(tuple: &Bound<'_, PyTuple>) {
+    // SAFETY: `tuple` is a live tuple this call site has just created and
+    // holds only floats, so it can never be part of a cycle; untracking a
+    // tuple is what CPython's collector does itself in that case, and
+    // untracking an already-untracked object is a no-op.
+    unsafe { ffi::PyObject_GC_UnTrack(tuple.as_ptr().cast()) };
+}
+
+/// Converts a Rust tuple of floats into an untracked Python tuple (see
+/// [`untrack_float_tuple`]).
+fn untracked_tuple<'py, T>(py: Python<'py>, value: T) -> PyResult<Bound<'py, PyTuple>>
+where
+    T: IntoPyObject<'py, Target = PyTuple, Output = Bound<'py, PyTuple>>,
+{
+    let tuple = value.into_pyobject(py).map_err(Into::into)?;
+    untrack_float_tuple(&tuple);
+    Ok(tuple)
 }
 
 fn dict_span_to_py<'py>(py: Python<'py>, span: &pdf_api::DictSpan) -> PyResult<Bound<'py, PyDict>> {
@@ -712,19 +745,22 @@ fn dict_span_to_py<'py>(py: Python<'py>, span: &pdf_api::DictSpan) -> PyResult<B
     d.set_item(intern!(py, "color"), span.color)?;
     d.set_item(intern!(py, "ascender"), span.ascender)?;
     d.set_item(intern!(py, "descender"), span.descender)?;
-    d.set_item(intern!(py, "origin"), span.origin)?;
-    d.set_item(intern!(py, "bbox"), span.bbox)?;
+    d.set_item(intern!(py, "origin"), untracked_tuple(py, span.origin)?)?;
+    d.set_item(intern!(py, "bbox"), untracked_tuple(py, span.bbox)?)?;
     // Full glyph geometry (pdfspine extension over the fitz key set): the
     // declared vs. rendered font size, the device-space render matrix and the
     // raw user-space `Tm`/CTM it was composed from, the baseline direction, the
     // rotation-aware envelope and the painting-order key.
     d.set_item(intern!(py, "declared_size"), span.declared_size)?;
     d.set_item(intern!(py, "rendered_size"), span.rendered_size)?;
-    d.set_item(intern!(py, "matrix"), span.matrix)?;
-    d.set_item(intern!(py, "text_matrix"), span.text_matrix)?;
-    d.set_item(intern!(py, "ctm"), span.ctm)?;
-    d.set_item(intern!(py, "dir"), span.dir)?;
-    d.set_item(intern!(py, "quad"), span.quad)?;
+    d.set_item(intern!(py, "matrix"), untracked_tuple(py, span.matrix)?)?;
+    d.set_item(
+        intern!(py, "text_matrix"),
+        untracked_tuple(py, span.text_matrix)?,
+    )?;
+    d.set_item(intern!(py, "ctm"), untracked_tuple(py, span.ctm)?)?;
+    d.set_item(intern!(py, "dir"), untracked_tuple(py, span.dir)?)?;
+    d.set_item(intern!(py, "quad"), untracked_tuple(py, span.quad)?)?;
     d.set_item(intern!(py, "seq"), span.seq)?;
     // dict mode carries `text`; rawdict mode carries `chars`.
     if span.chars.is_empty() {
