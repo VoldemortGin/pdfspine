@@ -4,53 +4,59 @@ Honest, reproducible comparison of **pdfspine** against three other PDF librarie
 
 ## Summary
 
-- **open** — vs fitz: pdfspine 1.39x faster; vs pypdfium2: pdfspine 1.55x faster; vs pypdf: pdfspine 23.15x faster.
-- **text extraction** — vs fitz: pdfspine 2.68x faster; vs pypdfium2: pdfspine 1.37x faster; vs pypdf: pdfspine 11.11x faster.
-- **render @150dpi** — vs fitz: pdfspine 2.09x slower; vs pypdfium2: pdfspine 2.29x slower; pypdf: unsupported.
+- **open** — vs fitz: pdfspine 1.26x faster; vs pypdfium2: pdfspine 1.65x faster; vs pypdf: pdfspine 18.29x faster.
+- **text extraction** — vs fitz: pdfspine 2.26x faster; vs pypdfium2: pdfspine 1.22x slower; vs pypdf: pdfspine 6.90x faster.
+- **render @150dpi** — vs fitz: pdfspine 1.28x slower; vs pypdfium2: pdfspine 1.73x slower; pypdf: unsupported.
 
 Read the ratios as *pdfspine relative to the competitor*: "faster" means pdfspine took less wall-clock time per document. All numbers are warm medians (see Methodology).
 
 ## Environment
 
-- **CPU**: Apple M1 Pro (10 cores)
-- **OS / arch**: macOS-26.3.1-arm64-arm-64bit / arm64
-- **Python (orchestrator/pdfspine)**: 3.11.11
-- **Python (.venv-bench / competitors)**: 3.12.12
+- **CPU**: Apple M4 Max (16 cores)
+- **OS / arch**: macOS-26.5.1-arm64-arm-64bit / arm64
+- **Python (orchestrator/pdfspine)**: 3.12.11
+- **Python (.venv-bench / competitors)**: 3.12.11
 
 Library versions:
 
 - **pdfspine**: 0.0.0 (pure Rust, Apache-2.0)
-- **pypdf**: 6.13.2 (pure Python, MIT)
-- **pypdfium2**: 5.10.1 (C-engine binding, BSD-3/Apache-2.0, PDFium 151.0.7891.0)
-- **fitz / PyMuPDF**: 1.27.2.3 (C-engine binding over MuPDF, **AGPL-3.0** — bench-only diff reference; runs in the gitignored `.venv-oracle`, never linked into our build, only its timings are recorded)
+- **pypdf**: 6.17.0 (pure Python, MIT)
+- **pypdfium2**: 5.13.0 (C-engine binding, BSD-3/Apache-2.0, PDFium 153.0.7999.0)
+- **fitz / PyMuPDF**: 1.28.2 (C-engine binding over MuPDF, **AGPL-3.0** — bench-only diff reference; runs in the gitignored `.venv-oracle`, never linked into our build, only its timings are recorded)
 
-Corpus: **30** public-domain PDFs in `fixtures/corpus/` (US gov / IRS / NASA / NIST / USGS / CDC documents).
+Corpus: **27** public-domain PDFs in `fixtures/corpus/` (US gov / IRS / NASA / NIST / USGS / CDC documents).
 
 ## Results (median seconds per document)
 
 | Operation | pdfspine | fitz | pypdfium2 | pypdf | pdfspine vs fitz | pdfspine vs pypdfium2 |
 |---|---|---|---|---|---|---|
-| open + page_count | 244 us | 340 us | 378 us | 5.66 ms | pdfspine 1.39x faster | pdfspine 1.55x faster |
-| get_text (whole doc) | 12.17 ms | 32.65 ms | 16.69 ms | 135.30 ms | pdfspine 2.68x faster | pdfspine 1.37x faster |
-| render page 1 @ 150dpi | 27.87 ms | 13.32 ms | 12.17 ms | n/a (unsupported) | pdfspine 2.09x slower | pdfspine 2.29x slower |
+| open + page_count | 157 us | 197 us | 259 us | 2.86 ms | pdfspine 1.26x faster | pdfspine 1.65x faster |
+| get_text (whole doc) | 10.81 ms | 24.42 ms | 8.83 ms | 74.57 ms | pdfspine 2.26x faster | pdfspine 1.22x slower |
+| render page 1 @ 150dpi | 11.40 ms | 8.93 ms | 6.59 ms | n/a (unsupported) | pdfspine 1.28x slower | pdfspine 1.73x slower |
 
-*Cell = median across the per-document medians (each document timed as the median of 5 warm runs). "render" is page 1 only.*
+*Cell = median across the per-document medians (each document timed as the median of 7 warm runs). "render" is page 1 only.*
 
 ## Totals across corpus (sum of per-doc medians)
 
 | Operation | pdfspine | fitz | pypdfium2 | pypdf | #docs (pdfspine) |
 |---|---|---|---|---|---|
-| open + page_count | 10.26 ms | 17.63 ms | 14.26 ms | 271.33 ms | 30 |
-| get_text (whole doc) | 1.162 s | 3.111 s | 1.365 s | 12.016 s | 30 |
-| render page 1 @ 150dpi | 1.038 s | 884.00 ms | 651.01 ms | n/a | 30 |
+| open + page_count | 6.43 ms | 9.06 ms | 8.27 ms | 125.02 ms | 27 |
+| get_text (whole doc) | 970.83 ms | 2.284 s | 777.71 ms | 7.017 s | 27 |
+| render page 1 @ 150dpi | 464.48 ms | 468.44 ms | 349.48 ms | n/a | 27 |
 
 ## Documents a library failed to process
 
-None — every library opened and processed all corpus documents.
+- **pdfspine**: none
+- **pypdf**: 1 failed:
+  - `irs-p502.pdf` — PdfReadError: Invalid object in /Pages
+- **pypdfium2**: 1 failed:
+  - `irs-p502.pdf` — PdfiumError: Failed to load document (PDFium: Data format error).
+- **fitz**: 1 failed:
+  - `irs-p502.pdf` — ValueError: page not in document
 
 ## Methodology
 
-- **Warm medians.** Each (library, document, operation) is run once to warm OS/file caches and validate the op, then timed 5 times; the reported per-document number is the median of those timed runs.
+- **Warm medians.** Each (library, document, operation) is run once to warm OS/file caches and validate the op, then timed 7 times; the reported per-document number is the median of those timed runs.
 - **Subprocess isolation.** Every measurement runs in a fresh worker process via the correct interpreter — pdfspine in the project `.venv`, pypdf/pypdfium2 in a separate gitignored `.venv-bench`, fitz/PyMuPDF in the gitignored `.venv-oracle`. This keeps the AGPL/3rd-party deps out of our build's interpreter and contains crashes/hangs (a per-document wall-clock timeout marks a cell failed).
 - **Operations.** `open` = open + read `page_count`; `text` = extract text over the *whole* document (pdfspine `page.get_text()`, pypdf `page.extract_text()`, pypdfium2 `textpage.get_text_bounded()`, fitz `page.get_text()`); `render` = rasterize page 1 at 150 dpi (pdfspine `page.get_pixmap(dpi=150)`, pypdfium2 `page.render(scale=150/72)`, fitz `page.get_pixmap(dpi=150)`).
 - **Process-creation overhead** is excluded: workers are spawned once per (library, document) and time only the in-process op loop, never the interpreter startup.
