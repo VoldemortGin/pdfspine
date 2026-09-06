@@ -1,33 +1,40 @@
 # PRD-NEXT — Remaining Work Roadmap (live restart entry)
 
 > **Use this file first when resuming pdfspine.** This top section is the current
-> checkpoint as of late 2026-09-05 (fan-out checkpoint); it supersedes the morning
-> and evening checkpoints that previously occupied it. Older dated snapshots and
-> completed phase records remain below for history; they do not override this queue.
+> checkpoint as of 2026-09-06 (pause checkpoint: the weekly model quota ran out with
+> four branches in flight); it supersedes the 2026-09-05 morning, evening and
+> fan-out checkpoints. Older dated snapshots and completed phase records remain
+> below for history; they do not override this queue.
 
-## 0. Restart here (late 2026-09-05, fan-out checkpoint)
+## 0. Restart here (2026-09-06, pause checkpoint)
 
 ### Repository and release checkpoint
 
 - Repository: `/Users/linhan/startup/spine/pdfspine`. The published release is still
   `v0.7.1` at `9da7ca6` (annotated tag, GitHub Release, PyPI wheels and sdist all
-  unchanged; `git describe --tags main` reads `v0.7.1-49-g64ea53d`).
-- Local `main` is `64ea53d`: twelve branches merged on top of `a45b66d` (the evening
-  checkpoint) in the order recorded by the "Completed 2026-09-05" sections below
-  (`git log --oneline a45b66d..64ea53d`). `origin/main` reached `f31a118` (OCG);
-  `64ea53d` (render performance) and this PRD update are pushed after it. Verify with
-  `git status -sb` and `git log origin/main -1` before trusting any of this.
-- Local branches: only `main`; zero worktrees. Every fan-out agent worktree and its
-  branch was deleted after its merge, and `glyph-span-size-experiment` with its
-  `/private/tmp/pdfspine-glyph-G` worktree is gone. The stale remote branch
-  `origin/worktree-agent-ab0626e7f9bd0c95d` was still not deleted.
+  unchanged). Nothing since has been released.
+- `main` = `origin/main` = `ec798bd`. On top of the fan-out checkpoint `21d636a`:
+  `4489aef` (merge of `4e20fb9`, refreshed frozen manifest) and `ec798bd` (merge of
+  `3aa558b`, redact `'`/`"` operator fix). CI run 34013201908 on `21d636a` was
+  22/22 green; the two later pushes passed the local pre-push gate (full
+  `cargo test` + pytest). Verify with `git status -sb` and `git log origin/main -1`.
+- **Four branches are in flight, each in its own worktree with a HANDOFF file**; see
+  "In-flight branches" below. They are not merged and must not be deleted.
 - `.venv` extension rule: the pre-push gate does not rebuild the extension. After
   merging any Rust change into `main`, run `maturin develop --release` (with
   `PATH="$PWD/.venv/bin:$PATH"`) before `git push`, or pytest runs against the previous
-  `.so`.
+  `.so`. Also run `.venv/bin/python -m ruff format --check python/pdfspine python/tests
+  scripts` before pushing; branches formatted with another ruff fail the gate.
 - Environment: `target/` is a symlink to `/Volumes/Cargo/target/pdfspine` (`/target`
-  is in `.gitignore`); the Homebrew python3.14 on `PATH` has no `ruff`. LibreOffice
-  26.8.0.3 (brew cask) was reinstalled today for the typeset oracle.
+  is in `.gitignore`); the Homebrew python3.14 on `PATH` has no `ruff`; LibreOffice
+  26.8.0.3 (brew cask) is installed for the typeset oracle. The pre-push gate's
+  `cargo test` was SIGKILLed once while six agents were building concurrently; the
+  rerun passed. Bench corpora live in `fixtures/corpus` and `conformance/gt/corpus-*`
+  (gitignored).
+- Quota: the session limit was hit at 20:40 and again at 01:40 America/Los_Angeles on
+  2026-09-05/06. Agents that stop with a 429 keep their worktree; resume them after
+  the reset rather than restarting. One agent per worktree: two sub-agents sharing a
+  worktree deleted each other's venv and killed a scoring run.
 
 ### Read in this order
 
@@ -44,36 +51,65 @@
    anchoring or the F thresholds.
 5. The older phase plan below only when taking one of its still-open items.
 
+### In-flight branches (resume these first)
+
+| Branch / worktree | Commit | State | Handoff |
+|---|---|---|---|
+| `worktree-agent-adf6ef49d2e5f6b57` at `.claude/worktrees/agent-adf6ef49d2e5f6b57` | `17dd57d` (wip) | `get_text(clip=)` fix: `pdf_text::clip_textpage`, pdf-api applies clip after building the TextPage, py-bindings dispatch pre-clips for every Rust mode except html/xhtml/xml; `cargo check` passes. Tests, catalog rows, the 300-document 0-difference digest and all gates are still pending. PyMuPDF semantics were measured (character-level strict intersection; `dict` width/height become the clip size; `textpage=` ignores clip). | `HANDOFF-clip.md` in the worktree |
+| `worktree-agent-ab9e257cbb9ab89c3` at `.claude/worktrees/agent-ab9e257cbb9ab89c3` | `9edd635` (wip) | `remove_rotation()` fix works: annotations, widgets and links are transformed once by the content matrix and single-stream `/AP /N` gets `/Matrix` composed; targeted tests (`DOCPY-037[0/90/180/270]`) pass and 0/90/180 match PyMuPDF 1.28.2 (PyMuPDF itself writes an off-page rect at 270). Remaining: the catalog description for `DOCPY-037`, the full gates, and renaming the commit to `fix(python): let remove_rotation transform widget rectangles`. | `HANDOFF-remove-rotation.md` |
+| `worktree-agent-ae07f5282e4af72f5` at `.claude/worktrees/agent-ae07f5282e4af72f5` | `2be80e5` (wip) | Reading order stages 3/4: baseline reproduced for PMC, born, PMC212689 and both FR runs; the EUR-Lex GT run was killed at 22/40 by a sub-agent that shared the worktree. Stage 3/4 specs are drafted (`stage3-spec.md`, `stage4-spec.md` in the worktree); no product code yet. Evidence and scripts in `/Volumes/ExternalSSD/tmp/ro34/`. | `HANDOFF-reading-order-3-4.md` |
+| `worktree-agent-a86bc39cb9edfca42` at `.claude/worktrees/agent-a86bc39cb9edfca42` | `ed79776` (wip) | OCG gaps, research only: PyMuPDF writes `/OC /MCn BDC … EMC` inside `q`/`Q` for text and shapes (keys `/MCn`, reused per xref) and puts `/OC` on the XObject for images; `/Usage /View /ViewState /OFF` hides regardless of `/AS`; MuPDF ignores `/AS`. Implementation, tests and docs not started. | `HANDOFF-ocg-gaps.md` |
+
+Resume procedure for each: `cd` into the worktree, read its HANDOFF file, `git merge
+main` (main moved to `ec798bd`; the redact and manifest changes must be picked up),
+rebuild with `maturin develop`, finish the pending items, run the gates listed in the
+HANDOFF, then from the main checkout `git merge --no-ff <branch>`, rebuild `.venv`,
+run the ruff check, push, and delete the worktree and branch.
+
 ### Next task queue
 
-1. **Fix the three pre-existing bugs found today.** The Rust side of
-   `get_text(clip=)` does not clip in the text/dict modes (the Python layer filters
-   by bbox itself); `Page.remove_rotation()` raises `PdfUnsupportedError` on a rotated
-   page that has widgets (`document.py` around L3428); `redact.rs` rewrites the `'`
-   and `"` operators as a bare `TJ` and drops their spacing arguments (around
-   L363–385).
-2. **Re-freeze or exclude `typeset-lo-slide.pdf`** in
-   `conformance/corpus-diff/baselines/glyph-geometry-2026-09-05-manifest.json` (its
-   sha256/size went stale with `32e6232`, 1/300); `conformance/corpus-diff/build_corpus.py`
-   hard-fails until then.
-3. **Reading order stages 3/4** per `docs/reading-order-root-cause.md`: the geometric
-   band → column → y discriminant and geometric line order inside regions, plus FR
-   running-header fragmentation (appendix D4) and Y-root pages that are still in
-   paint order.
-4. **Render, remaining cost:** first-seen glyph rasterization (~30%), `into_pixmap`
-   (~10%), J2K decoding on image pages; root cause of the govdocs1-00074 near-blank
-   page (SSIM 0.2654).
-5. **Coverage ratchet** (`fail_under` is 96) and Rust branch coverage (needs nightly).
-6. **OCG gaps:** `insert_text` / `insert_image` / `Shape` with `oc=` should emit
-   BDC/EMC; `/Usage /ViewState` and `/AS`.
-7. **The 9 remaining deferred symbols:** device-replay (4), `Page.insert_font`,
-   `Pixmap.warp`, `Annot.get_textbox`, Tools (2).
-8. **typeset next increment:** docx paragraph borders/shading, `RunStyle`
-   superscript/subscript and character spacing, docx lineGap placement.
-9. **ocrspine:** the 5 pre-existing `cargo fmt --check` violations; the remaining
-   `AI → Al` homoglyph in the OCR Latin benchmark.
-10. **cargo-vet trust entries expire 2027-09-05**; otherwise continue the existing
-    roadmap (§4–§6 below).
+1. **Finish the four in-flight branches** in this order: clip fix, `remove_rotation`,
+   reading order 3/4, OCG gaps. Each has a HANDOFF with the exact remaining steps.
+2. **govdocs1-00074 near-blank render** (fitz SSIM 0.2654 at baseline): not started;
+   the agent was cut off while reading. Corpus is in `fixtures/corpus`.
+3. **Render, remaining cost:** first-seen glyph rasterization (~30% of text pages),
+   `into_pixmap` (~10%), J2K decoding on image pages. Do this after item 2 so the two
+   do not collide in `pdf-render`.
+4. **The 9 remaining deferred symbols:** device-replay (`Page.run`,
+   `Page.extend_textpage`, `DisplayList.run`, `DisplayList.get_textpage`), then
+   `Page.insert_font`, `Pixmap.warp`, `Annot.get_textbox`,
+   `Tools.set_annot_stem` / `set_subset_fontnames`.
+5. **typeset next increments:** docx paragraph borders/shading (`pBdr` / `shd`),
+   `RunStyle` superscript/subscript and character spacing, docx lineGap placement
+   (confirm Word's behaviour first).
+6. **Coverage:** keep the `fail_under` ratchet (96) moving; enable Rust branch
+   coverage in the CI coverage job on a nightly toolchain.
+7. **OCR and supply chain:** the `AI → Al` homoglyph in the Latin benchmark; the 5
+   pre-existing `cargo fmt --check` violations in ocrspine; a CI check that warns
+   30 days before the cargo-vet trust entries expire (2027-09-05).
+8. **Continue the existing roadmap** (§4–§6 below).
+
+### Completed 2026-09-06: frozen manifest refreshed (`4e20fb9`, merge `4489aef`)
+
+- `build_corpus.py` gained `--manifest OLD --refresh-stale --freeze NEW`, which
+  re-hashes only stale entries and records `previous_sha256` / `previous_size`,
+  `supersedes` and `refreshed_utc`. The new
+  `conformance/corpus-diff/baselines/glyph-geometry-2026-09-05b-manifest.json`
+  (selection `6c7126de…`) differs from the old one in the `typeset-lo-slide.pdf`
+  entry only; the old manifest is untouched so the C–G evidence stays verifiable.
+- Full 300-document words/text re-run against PyMuPDF 1.28.2: totals identical to
+  `glyph-geometry-2026-09-05-summary.json`; 299/300 per-document JSON identical to
+  the local post-G cache, the slide fixture differing only in word boxes.
+
+### Completed 2026-09-06: redact keeps `'` and `"` semantics (`3aa558b`, merge `ec798bd`)
+
+- `redact.rs` now emits an explicit `T*` before a rewritten `'` show and
+  `aw Tw ac Tc T*` before a rewritten `"` show, on both the mappable-font and the
+  verbatim paths. Rust e2e `REDACT-TEXT-010..013` fail on the old code and pass now;
+  `PYM4-REDACT-003` checks surviving word boxes against an explicit-operator page
+  (PyMuPDF 1.28.2 itself drops the leading when redacting `'`/`"` text, so it cannot
+  serve as the oracle for that form). The pre-push gate ran the full workspace tests
+  and pytest on the merge.
 
 ### Completed 2026-09-05: offline wheel smoke
 
