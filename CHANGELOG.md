@@ -72,6 +72,15 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ### Fixed
 
+- `Page.remove_rotation()` no longer raises `PdfUnsupportedError` on a rotated
+  page that carries form widgets (it assigned the read-only `Widget.rect`).
+  Widgets are rewritten through their annotation handle, and every annotation
+  `/Rect` now moves by the content derotation matrix in PDF user space (the
+  y-down PyMuPDF inverse was being applied to y-up rects, throwing 90°/270°
+  annotations and links off the page; links were also transformed twice); a
+  single-stream `/AP /N` gets its `/Matrix` composed with the same matrix so
+  the appearance follows the content. Widget `/Rect` now matches PyMuPDF 1.28
+  for 0°/90°/180° (PyMuPDF itself writes an off-page rect at 270°).
 - **PaddleOCR Latin accuracy 0.839 → 0.990** (CJK 0.989 → 0.993, speed unchanged)
   on the 16-scan CJK+Latin benchmark (`docs/BENCHMARKS.md` §6) by pinning
   `ocrspine` `e810a9c`: the recognizer right-padded each height-48 crop to its

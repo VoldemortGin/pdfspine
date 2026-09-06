@@ -26,7 +26,14 @@ from ._markdown import (
     render_page,
     table_is_plausible,
 )
-from .constants import CS_CMYK, CS_GRAY, CS_RGB, TEXT_PRESERVE_IMAGES, TEXTFLAGS_DICT
+from .constants import (
+    CS_CMYK,
+    CS_GRAY,
+    CS_RGB,
+    PDF_ANNOT_LINK,
+    TEXT_PRESERVE_IMAGES,
+    TEXTFLAGS_DICT,
+)
 
 # Back-compat re-exports: these constants historically lived in this module; keep
 # them importable as ``pdfspine.document.PDF_ENCRYPT_*`` (canonical home is now
@@ -3585,20 +3592,25 @@ class Page:
         if rot in (90, 270):  # 交换 x / y 边界
             self.set_mediabox(Rect(mb.y0, mb.x0, mb.y1, mb.x1))
         self.set_rotation(0)
-        inv = ~mat  # derotation 矩阵的逆——用来回写注释 / 链接 / 控件坐标
+        inv = ~mat  # derotation 矩阵的逆(PyMuPDF 的返回值)
+        # pdfspine 的 Annot.rect / Widget.rect / link["from"] 与内容流同处 PDF 用户空间，
+        # 所以注释矩形要和内容一样用 mat 变换(PyMuPDF 的 rect 是 y 向下的页面坐标，
+        # 才用 inv);/AP /N 的 /Matrix 也叠加 mat，让外观原样跟着内容走。这里的
+        # annots() 已包含控件注释，故控件矩形不再单独回写(Widget.rect 只读)。
         for annot in self.annots():
-            annot.set_rect(annot.rect * inv)
+            if annot.type[0] == PDF_ANNOT_LINK:
+                continue  # 链接走下面的 delete / insert 循环
+            annot.set_rect(annot.rect * mat)
+            if not annot.apn_bbox().is_infinite:  # 有单一 /AP /N 流时外观随内容变换
+                annot.set_apn_matrix(annot.apn_matrix() * mat)
         for link in self.get_links():
-            moved = link["from"] * inv
+            moved = link["from"] * mat
             self.delete_link(link)
             link["from"] = moved
             try:  # 非法链接保持删除态
                 self.insert_link(link)
             except Exception:
                 pass
-        for widget in self.widgets():
-            widget.rect = widget.rect * inv
-            widget.update()
         return inv
 
     def write_text(

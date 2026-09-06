@@ -69,8 +69,8 @@ def test_remove_rotation_rewrites_annot_rect() -> None:
 
     inv = page.remove_rotation()
 
-    moved = before * inv
-    # annot.rect 现在应落在逆矩阵变换后的位置。
+    # annot.rect 是 PDF 用户空间坐标，和内容流一样按 derotation 矩阵(返回值的逆)移动。
+    moved = before * ~inv
     live = next(page.annots())
     assert tuple(live.rect) == pytest.approx(tuple(moved), abs=1e-3)
     doc.close()
