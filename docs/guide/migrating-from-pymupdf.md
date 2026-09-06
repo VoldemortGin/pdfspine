@@ -48,10 +48,10 @@ repository tracks the disposition of every public PyMuPDF symbol:
 
 | Disposition | Count | What it means |
 |---|---:|---|
-| Implemented | 687 | Works today; does not raise on use. |
-| Deferred | 16 | Known and planned for a later milestone. |
+| Implemented | 694 | Works today; does not raise on use. |
+| Deferred | 9 | Known and planned for a later milestone. |
 | Out-of-scope | 66 | Intentionally never in v1. |
-| **Total** | **769** | **89.3% implemented** |
+| **Total** | **769** | **90.2% implemented** |
 
 !!! warning "Accuracy is near-parity, not byte-identical"
     "Implemented" means the method exists and returns a result of the right
@@ -121,7 +121,7 @@ also sequences, so `r[0]`, `tuple(r)`, and unpacking all behave like PyMuPDF.
 | Redaction | `add_redact_annot`, `apply_redactions` | same | ✅ Implemented |
 | Sanitize | `scrub`, `bake` | same | ✅ Implemented (subset of toggles) |
 | Embedded files | `embfile_*` | same | ✅ Implemented |
-| OCG / layers | `get_ocgs`, `add_ocg`, `get_layer`, `set_layer`, `set_oc` | same | ✅ Implemented (read + add/toggle/bind) |
+| OCG / layers | `get_ocgs`, `add_ocg`, `get_layer`, `set_layer`, `set_oc`, `get_layers`, `add_layer`, `switch_layer`, `set_layer_ui_config`, `get_oc`, `get_ocmd`, `set_ocmd` | same | ✅ Implemented (read + add/toggle/bind + layer-object ops; render & text honour the active layer view) |
 | OCR | `get_textpage_ocr`, `pdfocr_save` / `pdfocr_tobytes` | + `engine="paddle"` (default, pure-Rust PaddleOCR) or `"tesseract"` | ✅ Implemented |
 | xref read | `xref_object`, `xref_stream`, `xref_get_key`, … | same | ✅ Implemented |
 
@@ -140,11 +140,8 @@ also sequences, so `r[0]`, `tuple(r)`, and unpacking all behave like PyMuPDF.
 ## What is not yet implemented
 
 These are *deferred* (planned) — they raise `PdfUnsupportedError` today (the
-16 deferred symbols in `COMPAT.toml`):
+9 deferred symbols in `COMPAT.toml`):
 
-- OCG layer-object ops: `add_layer`, `get_layers`, `switch_layer`,
-  `set_layer_ui_config`, `get_oc`, `get_ocmd`, `set_ocmd` (post-v1; the
-  read / add / toggle / bind surface above is implemented).
 - `Page.insert_font` (M4), `Annot.get_textbox` (M4), `Pixmap.warp` (M5).
 - Device-callback replay: `Page.run`, `Page.extend_textpage`,
   `DisplayList.run`, `DisplayList.get_textpage` (M6; `get_pixmap` covers the

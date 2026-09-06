@@ -200,7 +200,7 @@ doc.bake(*, annots=True, widgets=True, **_) -> None   # 把注释/控件烘焙�
 doc.subset_fonts(*args, **kwargs) -> int
 ```
 
-### OCG / 图层（已实现部分）
+### OCG / 图层
 ```python
 doc.get_ocgs() -> dict[int, dict]            # 别名 getOCGs
 doc.layer_ui_configs() -> list[dict]
@@ -209,8 +209,15 @@ doc.get_layer(config=0) -> dict[str, list[int]]
 doc.set_layer(config=0, *, on=None, off=None, locked=None, **_) -> None
 doc.add_ocg(name, config=None, *, on=True, intent="View", usage=None, **_) -> int
 doc.set_oc(xref, ocg) -> None
+doc.get_layers() -> list[dict]                             # /Configs 里的备选配置（不含默认 /D）
+doc.add_layer(name, creator=None, on=None) -> None         # 追加一个 /Configs 配置
+doc.switch_layer(config, as_default=0) -> None             # 选中配置 config（as_default 会重写 /D）
+doc.set_layer_ui_config(number, action=0) -> None          # 设置(0)/切换(1)/清除(2)某一行
+doc.get_oc(xref) -> int                                    # 图像/表单 XObject 的 /OC xref
+doc.get_ocmd(xref) -> dict                                 # {"xref","ocgs","policy","ve"}
+doc.set_ocmd(xref=0, ocgs=None, policy=None, ve=None) -> int   # 创建/整体替换一个 OCMD，返回其 xref
 ```
-> deferred（调用抛 `PdfUnsupportedError`）：`add_layer` / `get_layers` / `get_oc` / `get_ocmd` / `set_ocmd` / `set_layer_ui_config` / `switch_layer`。
+> 内存中的"图层视图"（选中配置 + 面板覆盖）会影响渲染与文本抽取：隐藏的 XObject `/OC` 及 `/OC …BDC/EMC` 段落不产出内容，OCMD 按 `/P` 策略与 `/VE` 求值；`get_ocgs()` / `layer_ui_configs()` / `ocg_state()` 反映当前活动视图。局限：`Page.insert_text(oc=)` / `insert_image(oc=)` / Shape `oc=` 尚未写入 `BDC/EMC` 包裹（仅 XObject 的 `set_oc` 可把内容绑定到图层）。
 
 ### Journalling（撤销/重做）
 ```python

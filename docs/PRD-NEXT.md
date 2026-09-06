@@ -52,7 +52,7 @@
    preallocation items listed in the rawdict record.
 3. **cargo-vet supply-chain audit sprint.** Blocked on a maintainer decision about
    `cargo vet trust`, `cargo vet import`, and exemption regeneration.
-4. **Continue the existing roadmap** (Type0/Type3, device-replay, layers, and the
+4. **Continue the existing roadmap** (Type0/Type3, device-replay, and the
    other deferred work below). The accepted reading-order tradeoff is unchanged.
 
 ### Completed 2026-09-05: offline wheel smoke (queue item 1)
@@ -195,9 +195,9 @@
   trusted-publishing `release.yml`. (The only local failures — 3 Rust + 7 pytest OCR tests — stem from a
   broken local tesseract/leptonica install, an env defect, not code; a clean machine still meets the
   1349/593 floors.)
-- **API parity (current):** **687 / 769 implemented (89.3%)** — consistent across `COMPAT.toml`, README, and
-  PARITY.md. 16 deferred · 66 out-of-scope. The remaining deferred symbols are the long tail (OCG layers,
-  device-replay, and a few Type0/Type3 edges).
+- **API parity (current):** **694 / 769 implemented (90.2%)** — consistent across `COMPAT.toml`, README, and
+  PARITY.md. 9 deferred · 66 out-of-scope. The remaining deferred symbols are the long tail (device-replay,
+  and a few Type0/Type3 edges).
 - **Text extraction:** at fitz parity for **single-column AND multi-column**. The multi-column engine landed
   (06-16 PM) and **P3-2 verified it** (2026-06-20, fresh GT): PMC order **0.965 / 0.995** vs fitz 0.975/0.997,
   born-digital **0.996** vs 1.000 — within 0.000–0.009 per column doc (PMC212687 0.083→0.996, born 2col
@@ -385,9 +385,16 @@ oracle-cross-checked against real PyMuPDF 1.24.14 (`.venv-oracle`) with zero reg
   `Rc/Arc<Mask>` on `Canvas::save` to avoid q/Q clones; per-page rayon is unnecessary — `get_pixmap`
   already releases the GIL so cross-page threading works today.)
 - **ICC-accurate colorspace transform:** large pure-Rust undertaking, marginal SSIM gain — documented deviation.
-- **OCMD/layers (7), `Page.run`/`DisplayList.run`/`get_textpage` (device-callback replay),
+- **OCMD/layers (7) — ✅ DONE (2026-09-05; this batch):** `add_layer` / `get_layers` / `switch_layer` /
+  `set_layer_ui_config` / `get_oc` / `get_ocmd` / `set_ocmd` land with an in-memory layer view that
+  rendering AND text extraction honour (hidden XObject `/OC`, `/OC …BDC/EMC` sections, and OCMD `/P`
+  policies + `/VE` are evaluated). **Follow-up (small):** `Page.insert_text(oc=)` / `insert_image(oc=)` /
+  Shape `oc=` still do not write the `BDC/EMC` marked-content wrapper or the `/Properties` resource (only
+  `set_oc` on XObjects binds content to a layer), and hidden `/Usage` (`/ViewState /OFF`) + config `/AS`
+  usage-application dictionaries are not evaluated.
+- **`Page.run`/`DisplayList.run`/`get_textpage` (device-callback replay),
   `Page.remove_rotation`, `Annot.get_textbox`, `convert_to_pdf` non-image:** genuinely blocked (need
-  `/OCProperties`+OCMD plumbing, a device-replay engine, content-stream rewriting, annot-appearance textpage).
+  a device-replay engine, content-stream rewriting, annot-appearance textpage).
   Keep deferred; documenting prevents wasted effort.
 - **Splitting the `lib.rs` (4711 lines) / `document.py` (3738 lines) monoliths:** real friction, zero
   correctness impact, churn risk — well after release.

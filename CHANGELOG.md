@@ -11,6 +11,42 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
+### Added
+
+- **Optional-content (OCG) layer-object surface on `Document`.** Seven
+  PyMuPDF-compatible methods land: `get_layers()` (the alternate `/OCProperties
+  /Configs` configurations, excluding the default `/D`), `add_layer(name,
+  creator=None, on=None)` (append a `/Configs` entry with `/BaseState /OFF` +
+  the given `/ON` OCGs), `switch_layer(config, as_default=0)` (select a
+  configuration for rendering / text extraction in memory, or rewrite `/D` and
+  drop `/Configs` when `as_default` is set), `set_layer_ui_config(number,
+  action=0)` (set / toggle / clear a `layer_ui_configs()` row in memory,
+  honouring `/RBGroups` radio siblings), `get_oc(xref)` (the `/OC` xref of an
+  image / form XObject), `get_ocmd(xref)` (`{"xref", "ocgs", "policy", "ve"}`),
+  and `set_ocmd(xref=0, ocgs=None, policy=None, ve=None)` (create or fully
+  replace an OCMD, returning its xref).
+- **Rendering and text extraction now honour optional content.** The shared
+  content interpreter keeps an in-memory layer view (selected configuration +
+  panel overrides) and applies it to both paths: XObjects whose `/OC` is hidden
+  are skipped, and `/OC /name BDC … EMC` marked-content sections that are hidden
+  emit no glyphs / images / paths / shadings. OCMDs are evaluated per ISO
+  32000-1 (`/OCGs` + `/P` policies AnyOn / AllOn / AnyOff / AllOff, with `/VE`
+  expressions taking precedence when present).
+- This moves the `Document` group to **136 / 150** implemented and lifts overall
+  PyMuPDF-symbol coverage from **687 → 694** of **769** (deferred 16 → 9).
+
+### Changed
+
+- **`get_ocgs()` / `layer_ui_configs()` / `ocg_state()` now report the active
+  layer view** — the in-memory selected configuration + panel overrides —
+  matching PyMuPDF's in-memory state, instead of only the on-disk default.
+
+### Fixed
+
+- **`layer_ui_configs()` parity fixes:** each row now carries `number` = its row
+  index (PyMuPDF semantics), `/RBGroups` members report a `"radiobox"` type, and
+  label rows report `locked: True`.
+
 ## [0.7.1] — 2026-09-05
 
 ### Changed
