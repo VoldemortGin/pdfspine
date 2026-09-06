@@ -2249,6 +2249,10 @@ Tests live in `crates/pdf-edit/tests/{redact_e2e.rs,drawings_e2e.rs}`.
 | `REDACT-TEXT-007` | full text-state operator set (`Tc`/`Tw`/`Tz`/`TL`/`Ts`/`Td`/`TD`/`T*`/`'`/`"`) + repeat `Tf`; a middle line redacted, the rest survive | PRD §8.8 | green |
 | `REDACT-TEXT-008` | `Tj` literal with no/missing font re-emitted verbatim; every string escape (`\\ ( ) \n \r \t`) round-trips through `escape_show` | PRD §8.8 | green |
 | `REDACT-TEXT-009` | page whose `/Contents` is an array of two streams: concatenated, redacted across, and every old content object freed | PRD §8.8 | green |
+| `REDACT-TEXT-010` | `'` lines: the implicit line advance is re-emitted as an explicit `T*` before the rewritten `TJ`; survivors on the clipped line and every later line keep their baselines | PRD §8.8 | green |
+| `REDACT-TEXT-011` | `"` lines: `aw` / `ac` re-emitted as `Tw` / `Tc` before the `T*`, so the following `'` line inherits the spacing and every survivor keeps its origin | PRD §8.8 | green |
+| `REDACT-TEXT-012` | mixed `Tj` / `'` / `"` with an entirely dropped `'` line: the bare `T*` still carries the advance, untouched `'` / `"` runs are preserved, later lines unshifted | PRD §8.8 | green |
+| `REDACT-TEXT-013` | `'` / `"` under an unmappable font take the verbatim `Tj` path with the `T*` / `Tw` / `Tc` expansion kept | PRD §8.8 | green |
 
 ### Image redaction — `REDACT-IMAGE-*`
 
@@ -2393,6 +2397,7 @@ Tests live in `python/tests/test_m4.py`.
 |---|---|---|---|
 | `PYM4-REDACT-001` | `add_redact_annot` over a secret → `apply_redactions()` → save to tmp → reopen → `get_text()` lacks the secret; neighbouring text intact | PRD §12 M4 | green |
 | `PYM4-REDACT-002` | `apply_redactions` on a page with no redaction annots → returns 0 (no-op) | PRD §8.8 | green |
+| `PYM4-REDACT-003` | real-PyMuPDF oracle (skipped when absent): a page typeset with `Tj` / `'` / `"` redacted by both engines → the survivors' `get_text("words")` boxes agree within 0.5 pt and the renders' SSIM ≥ 0.99 | PRD §8.8 | green |
 
 ### Forms / Widget — `PYM4-WIDGET-*`
 
