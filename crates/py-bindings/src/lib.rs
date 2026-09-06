@@ -4232,12 +4232,16 @@ fn image_to_pdf<'py>(py: Python<'py>, data: &[u8]) -> PyResult<Bound<'py, PyByte
 /// body/heading faces with a user TTF; `cjk_font` is a per-character fallback
 /// TTF (CJK Option A — unset, unencodable characters degrade to missing
 /// glyphs). Images resolve from `base_dir`-relative / absolute paths and
-/// `data:` URIs only (no network). Parse + layout run with the GIL released
-/// (PRD §9.4).
+/// `data:` URIs only (no network). `links` writes `/Link` annotations for
+/// Markdown links (URI actions; `#anchor` links become GoTo destinations at
+/// the target heading) and `toc` writes the heading hierarchy as the
+/// `/Outlines` tree — both default on. Parse + layout run with the GIL
+/// released (PRD §9.4).
 #[pyfunction]
 #[pyo3(signature = (md, *, page_width=None, page_height=None, margin_top=None,
     margin_right=None, margin_bottom=None, margin_left=None,
-    body_font_size=None, font=None, cjk_font=None, base_dir=None))]
+    body_font_size=None, font=None, cjk_font=None, base_dir=None,
+    links=true, toc=true))]
 #[allow(clippy::too_many_arguments)]
 fn markdown_to_pdf<'py>(
     py: Python<'py>,
@@ -4252,8 +4256,12 @@ fn markdown_to_pdf<'py>(
     font: Option<Vec<u8>>,
     cjk_font: Option<Vec<u8>>,
     base_dir: Option<String>,
+    links: bool,
+    toc: bool,
 ) -> PyResult<Bound<'py, PyBytes>> {
     let mut opts = pdf_api::MarkdownOptions::new();
+    opts.links = links;
+    opts.toc = toc;
     if let Some(v) = page_width {
         opts.page_width = v;
     }

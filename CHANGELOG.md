@@ -11,6 +11,20 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
+### Added
+
+- `markdown_to_pdf()` now writes clickable **link annotations** (`links=True`,
+  default): `[text](https://…)`, `<autolinks>` and `<user@host>` become `/Link`
+  annotations with a URI action; `[text](#anchor)` becomes a GoTo destination
+  at the target heading's page and top edge (GitHub-style heading slugs,
+  `{#id}` heading attributes, percent-encoded fragments; unresolved anchors
+  get no annotation).
+- `markdown_to_pdf()` now writes the heading hierarchy as the PDF **outline**
+  (`toc=True`, default): `Document.get_toc()` reads it back; level jumps such
+  as `#` → `###` are normalized to one step per nesting. Both passes reuse the
+  `pdf-edit` `insert_link` / `set_toc` writers; a document without links or
+  headings (or with both switches off) produces byte-identical output.
+
 ## [0.7.1] — 2026-09-05
 
 ### Changed

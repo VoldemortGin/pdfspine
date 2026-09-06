@@ -64,8 +64,11 @@ const TABLE_BORDER_COLOR: Rgb = Rgb(0.45, 0.45, 0.45);
 const TABLE_HEAD_BG: Rgb = Rgb(0.92, 0.92, 0.92);
 /// Narrowest a table column may shrink, in points.
 const MIN_COL_WIDTH: f64 = 24.0;
-/// Link text color (v1 renders links as colored text, no annotation).
+/// Link text color (links also get a `/Link` annotation over their text).
 const LINK_COLOR: Rgb = Rgb(0.05, 0.25, 0.7);
+/// Link-annotation box: descent below the baseline, × font size (the top is
+/// the line-box top, [`BASELINE_FACTOR`] above the baseline).
+const LINK_DESCENT_EM: f64 = 0.25;
 /// Default text color.
 const BLACK: Rgb = Rgb(0.0, 0.0, 0.0);
 /// Horizontal-rule color / stroke width / block height, in points.
@@ -138,9 +141,37 @@ pub(crate) enum Op {
     },
 }
 
-/// The draw ops of one output page, in paint order.
+/// The draw ops of one output page, in paint order, plus its link boxes.
 pub(crate) struct PageOps {
     pub(crate) ops: Vec<Op>,
+    /// Link-annotation boxes (one per contiguous same-destination run per
+    /// line), in emission order.
+    pub(crate) links: Vec<LinkBox>,
+}
+
+/// The source rectangle of one link annotation, in top-left page coordinates
+/// (`y` is the top edge). `href` indexes the document's link table.
+pub(crate) struct LinkBox {
+    pub(crate) x: f64,
+    pub(crate) y: f64,
+    pub(crate) w: f64,
+    pub(crate) h: f64,
+    pub(crate) href: u32,
+}
+
+/// Where a heading landed: its page and the top edge of its first line, in
+/// top-left page coordinates (the `/XYZ` destination for anchors + outline).
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub(crate) struct HeadingPos {
+    pub(crate) page: usize,
+    pub(crate) y: f64,
+}
+
+/// The layouter's output: the positioned pages and every heading's position
+/// (document order, aligned with [`crate::nav::collect_headings`]).
+pub(crate) struct Layout {
+    pub(crate) pages: Vec<PageOps>,
+    pub(crate) headings: Vec<HeadingPos>,
 }
 
 // --- text fragments / tokens ------------------------------------------------
@@ -153,6 +184,8 @@ struct Frag {
     width: f64,
     color: Rgb,
     strike: bool,
+    /// The enclosing link's destination (index into the link table), if any.
+    href: Option<u32>,
 }
 
 /// One wrapped output line.
@@ -183,10 +216,19 @@ fn is_cjk(ch: char) -> bool {
         || (0x20000..=0x3FFFF).contains(&cp) // extension planes
 }
 
-/// Appends `text` to `frags`, merging with the tail when face/decoration match.
-fn push_frag(frags: &mut Vec<Frag>, face: Face, text: &str, width: f64, color: Rgb, strike: bool) {
+/// Appends `text` to `frags`, merging with the tail when face/decoration/link
+/// match.
+fn push_frag(
+    frags: &mut Vec<Frag>,
+    face: Face,
+    text: &str,
+    width: f64,
+    color: Rgb,
+    strike: bool,
+    href: Option<u32>,
+) {
     if let Some(last) = frags.last_mut() {
-        if last.face == face && last.color == color && last.strike == strike {
+        if last.face == face && last.color == color && last.strike == strike && last.href == href {
             last.text.push_str(text);
             last.width += width;
             return;
@@ -198,6 +240,7 @@ fn push_frag(frags: &mut Vec<Frag>, face: Face, text: &str, width: f64, color: R
         width,
         color,
         strike,
+        href,
     });
 }
 
@@ -222,6 +265,7 @@ fn tokens(fonts: &FontSet, inlines: &[Inline], size: f64, force_bold: bool) -> V
                 let pref = fonts.face_for(style);
                 let color = if style.link { LINK_COLOR } else { BLACK };
                 let strike = style.strike;
+                let href = style.href;
                 let (space_face, space_ch) = fonts.resolve(pref, ' ');
                 let space_w = fonts.advance(space_face, space_ch, size);
 
@@ -240,6 +284,7 @@ fn tokens(fonts: &FontSet, inlines: &[Inline], size: f64, force_bold: bool) -> V
                                     width: space_w,
                                     color,
                                     strike,
+                                    href,
                                 },
                             });
                         }
@@ -256,6 +301,7 @@ fn tokens(fonts: &FontSet, inlines: &[Inline], size: f64, force_bold: bool) -> V
                                 width: w,
                                 color,
                                 strike,
+                                href,
                             }],
                             width: w,
                         });
@@ -267,6 +313,7 @@ fn tokens(fonts: &FontSet, inlines: &[Inline], size: f64, force_bold: bool) -> V
                             w,
                             color,
                             strike,
+                            href,
                         );
                         word_w += w;
                     }
@@ -346,6 +393,7 @@ fn wrap(fonts: &FontSet, toks: &[Tok], width: f64, size: f64) -> Vec<LineOut> {
                         frag.width,
                         frag.color,
                         frag.strike,
+                        frag.href,
                     );
                     cur_w += frag.width;
                 }
@@ -369,6 +417,7 @@ fn wrap(fonts: &FontSet, toks: &[Tok], width: f64, size: f64) -> Vec<LineOut> {
                                 cw,
                                 frag.color,
                                 frag.strike,
+                                frag.href,
                             );
                             cur_w += cw;
                         }
@@ -382,6 +431,7 @@ fn wrap(fonts: &FontSet, toks: &[Tok], width: f64, size: f64) -> Vec<LineOut> {
                             frag.width,
                             frag.color,
                             frag.strike,
+                            frag.href,
                         );
                     }
                     cur_w += w;
@@ -415,6 +465,8 @@ struct Ctx<'a> {
     page: usize,
     y: f64,
     pending: f64,
+    /// Heading positions in document order.
+    headings: Vec<HeadingPos>,
 }
 
 impl Ctx<'_> {
@@ -432,7 +484,10 @@ impl Ctx<'_> {
     }
 
     fn new_page(&mut self) {
-        self.pages.push(PageOps { ops: Vec::new() });
+        self.pages.push(PageOps {
+            ops: Vec::new(),
+            links: Vec::new(),
+        });
         self.page = self.pages.len() - 1;
         self.y = self.top();
         self.pending = 0.0;
@@ -478,12 +533,46 @@ impl Ctx<'_> {
             let lh = size * line_factor;
             self.ensure(lh);
             let baseline = self.y + size * BASELINE_FACTOR;
-            let mut x = left + align_offset(align, width, line.width);
-            for frag in &line.frags {
-                self.emit_frag(frag, size, x, baseline);
-                x += frag.width;
-            }
+            let x = left + align_offset(align, width, line.width);
+            self.emit_frags(&line.frags, size, x, baseline);
             self.y += lh;
+        }
+    }
+
+    /// Emits one line's fragments left-to-right from `x`, recording one link
+    /// box per contiguous run of fragments sharing a destination.
+    fn emit_frags(&mut self, frags: &[Frag], size: f64, x: f64, baseline: f64) {
+        let mut x = x;
+        let mut run: Option<(u32, f64, f64)> = None; // (href, x0, x1)
+        for frag in frags {
+            self.emit_frag(frag, size, x, baseline);
+            let x1 = x + frag.width;
+            match (frag.href, run) {
+                (Some(h), Some((rh, x0, _))) if h == rh => run = Some((h, x0, x1)),
+                (href, prev) => {
+                    self.close_link_run(prev, size, baseline);
+                    run = href.map(|h| (h, x, x1));
+                }
+            }
+            x = x1;
+        }
+        self.close_link_run(run, size, baseline);
+    }
+
+    /// Records the link box of a finished same-destination run (if any).
+    fn close_link_run(&mut self, run: Option<(u32, f64, f64)>, size: f64, baseline: f64) {
+        if let Some((href, x0, x1)) = run {
+            if x1 - x0 > EPS {
+                let top = baseline - size * BASELINE_FACTOR;
+                let bottom = baseline + size * LINK_DESCENT_EM;
+                self.pages[self.page].links.push(LinkBox {
+                    x: x0,
+                    y: top,
+                    w: x1 - x0,
+                    h: bottom - top,
+                    href,
+                });
+            }
         }
     }
 
@@ -523,25 +612,33 @@ fn align_offset(align: CellAlign, width: f64, line_w: f64) -> f64 {
 
 // --- block layout -------------------------------------------------------------
 
-/// Lays out `blocks` and returns the positioned pages (always ≥ 1).
+/// Lays out `blocks` and returns the positioned pages (always ≥ 1) plus the
+/// heading positions.
 pub(crate) fn layout(
     blocks: &[Block],
     images: &[PreparedImage],
     fonts: &FontSet,
     opts: &Options,
-) -> Vec<PageOps> {
+) -> Layout {
     let mut ctx = Ctx {
         fonts,
         opts,
         images,
-        pages: vec![PageOps { ops: Vec::new() }],
+        pages: vec![PageOps {
+            ops: Vec::new(),
+            links: Vec::new(),
+        }],
         page: 0,
         y: opts.margin_top,
         pending: 0.0,
+        headings: Vec::new(),
     };
     let (left, right) = (ctx.left(), ctx.right());
     layout_blocks(&mut ctx, blocks, left, right);
-    ctx.pages
+    Layout {
+        pages: ctx.pages,
+        headings: ctx.headings,
+    }
 }
 
 /// Lays out sibling blocks between the absolute x bounds `left..right`.
@@ -549,13 +646,23 @@ fn layout_blocks(ctx: &mut Ctx, blocks: &[Block], left: f64, right: f64) {
     let body = ctx.opts.body_font_size;
     for block in blocks {
         match block {
-            Block::Heading { level, inlines } => {
+            Block::Heading { level, inlines, .. } => {
                 let idx = usize::from(level.saturating_sub(1)).min(5);
                 let size = body * HEADING_SCALE[idx];
                 ctx.gap(size * HEADING_GAP_BEFORE_EM);
                 ctx.flush_gap();
                 let toks = tokens(ctx.fonts, inlines, size, true);
                 let lines = wrap(ctx.fonts, &toks, right - left, size);
+                // Settle the page before recording the anchor: `emit_lines`
+                // re-checks the same height for the first line, so this never
+                // moves the text (and an empty heading stays put).
+                if !lines.is_empty() {
+                    ctx.ensure(size * HEADING_LINE_FACTOR);
+                }
+                ctx.headings.push(HeadingPos {
+                    page: ctx.page,
+                    y: ctx.y,
+                });
                 ctx.emit_lines(
                     &lines,
                     size,
@@ -640,6 +747,7 @@ fn layout_code(ctx: &mut Ctx, text: &str, left: f64, right: f64) {
                 w,
                 BLACK,
                 false,
+                None,
             );
             cur_w += w;
         }
@@ -757,6 +865,7 @@ fn layout_list(
                     cw,
                     BLACK,
                     false,
+                    None,
                 );
             }
             let mut x = content_left - LIST_MARKER_GAP - w;
@@ -931,11 +1040,8 @@ fn layout_table(
             let mut yy = y0 + TABLE_PAD;
             for line in lines {
                 let baseline = yy + body * BASELINE_FACTOR;
-                let mut fx = x + TABLE_PAD + align_offset(aligns[c], inner_w, line.width);
-                for frag in &line.frags {
-                    ctx.emit_frag(frag, body, fx, baseline);
-                    fx += frag.width;
-                }
+                let fx = x + TABLE_PAD + align_offset(aligns[c], inner_w, line.width);
+                ctx.emit_frags(&line.frags, body, fx, baseline);
                 yy += lh;
             }
             x += widths[c];

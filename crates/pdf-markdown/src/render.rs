@@ -13,29 +13,49 @@
 //! Output is deterministic: object allocation follows a fixed order, all maps
 //! are ordered, and [`pdf_core::SaveOptions::default`] is the deterministic
 //! table-xref baseline (no timestamps, content-hash `/ID`).
+//!
+//! Navigation is written **after** the page tree through the `pdf-edit`
+//! paths — [`pdf_edit::insert_link`] for `/Link` annotations (URI actions for
+//! external destinations, `/XYZ` GoTo destinations for `#anchor` links) and
+//! [`pdf_edit::set_toc`] for the `/Outlines` tree — then each GoTo / outline
+//! destination is pinned to the heading's top edge. A document without links
+//! / headings (or with `links` / `toc` switched off) touches neither path, so
+//! its bytes are unchanged.
 
 use std::collections::BTreeMap;
 
-use pdf_core::error::Result;
+use pdf_core::error::{Error, Result};
 use pdf_core::filters::flate;
+use pdf_core::geom::Rect;
 use pdf_core::object::{Dict, Name, ObjRef, Object, StreamObj};
 use pdf_core::{DocumentStore, Limits, SaveOptions, XrefStyle};
+use pdf_edit::{LinkKind, TocEntry};
 
 use crate::fonts::{winansi_byte, Face, FontSet};
 use crate::images::PreparedImage;
-use crate::layout::{Op, PageOps, Rgb};
+use crate::layout::{HeadingPos, Layout, Op, PageOps, Rgb};
+use crate::nav::{self, HeadingMeta};
 use crate::Options;
+
+/// Navigation inputs for the annotation / outline pass: the interned link
+/// destinations (`Style::href` indexes) and the headings in document order.
+pub(crate) struct Nav<'a> {
+    pub(crate) links: &'a [String],
+    pub(crate) headings: &'a [HeadingMeta],
+}
 
 /// The cubic-Bézier circle constant κ = 4/3·(√2 − 1) (same as `pdf-edit`).
 const KAPPA: f64 = 0.552_284_749_830_793_4;
 
 /// Assembles the final PDF from the laid-out pages.
 pub(crate) fn build_pdf(
-    pages: &[PageOps],
+    layout: &Layout,
     images: &[PreparedImage],
     fonts: &FontSet,
     opts: &Options,
+    nav: &Nav,
 ) -> Result<Vec<u8>> {
+    let pages = &layout.pages;
     // Pass 1 — per-page face usage + whole-document used-glyph accumulation
     // for the embedded fonts (PRD §9: parse once, write_type0 once).
     let mut face_used = vec![[false; 7]; pages.len()];
@@ -151,8 +171,130 @@ pub(crate) fn build_pdf(
     pages_dict.insert(Name::new("Kids"), Object::Array(kids));
     doc.update_object(pages_ref, Object::Dictionary(pages_dict))?;
 
+    // Pass 3 — navigation (only touches the document when there is any).
+    if opts.links {
+        write_links(&doc, pages, &layout.headings, nav, opts)?;
+    }
+    if opts.toc {
+        write_outline(&doc, &layout.headings, nav, opts)?;
+    }
+
     let opts = SaveOptions::default().with_xref_style(XrefStyle::Table);
     doc.save_to_vec(&opts)
+}
+
+/// Writes one `/Link` annotation per link box: `/A /URI` for external
+/// destinations, a `/XYZ` GoTo to the target heading's page + top edge for
+/// `#anchor` links (unresolvable anchors get no annotation).
+fn write_links(
+    doc: &DocumentStore,
+    pages: &[PageOps],
+    positions: &[HeadingPos],
+    nav: &Nav,
+    opts: &Options,
+) -> Result<()> {
+    if pages.iter().all(|p| p.links.is_empty()) {
+        return Ok(());
+    }
+    let ph = opts.page_height;
+    let page_refs = pdf_core::pagetree::page_refs(doc);
+    for (pi, page) in pages.iter().enumerate() {
+        for lb in &page.links {
+            let Some(url) = nav.links.get(lb.href as usize) else {
+                continue;
+            };
+            let rect = Rect::new(lb.x, ph - lb.y - lb.h, lb.x + lb.w, ph - lb.y);
+            if let Some(fragment) = url.strip_prefix('#') {
+                let Some(target) = nav::resolve_anchor(fragment, nav.headings) else {
+                    continue;
+                };
+                let Some(pos) = positions.get(target) else {
+                    continue;
+                };
+                let Some(&target_ref) = page_refs.get(pos.page) else {
+                    continue;
+                };
+                let kind = LinkKind::Goto(pos.page as i32);
+                let annot = pdf_edit::insert_link(doc, pi, &rect, &kind)?;
+                set_dest_top(doc, annot, target_ref, ph - pos.y)?;
+            } else {
+                let kind = LinkKind::Uri(url.clone());
+                pdf_edit::insert_link(doc, pi, &rect, &kind)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Builds the `/Outlines` tree from the headings (levels normalized so
+/// `set_toc` never sees a jump) and pins every item to its heading's top edge.
+fn write_outline(
+    doc: &DocumentStore,
+    positions: &[HeadingPos],
+    nav: &Nav,
+    opts: &Options,
+) -> Result<()> {
+    if nav.headings.is_empty() {
+        return Ok(());
+    }
+    let levels = nav::outline_levels(nav.headings);
+    let entries: Vec<TocEntry> = nav
+        .headings
+        .iter()
+        .zip(&levels)
+        .enumerate()
+        .map(|(i, (h, &level))| TocEntry {
+            level,
+            title: h.title.clone(),
+            page: positions.get(i).map_or(-1, |p| p.page as i32),
+        })
+        .collect();
+    pdf_edit::set_toc(doc, &entries)?;
+
+    // `get_outline_xrefs` walks First-then-Next (pre-order) — the flat entry
+    // order — so item *i* is heading *i*.
+    let page_refs = pdf_core::pagetree::page_refs(doc);
+    let xrefs = pdf_edit::get_outline_xrefs(doc);
+    if xrefs.len() != entries.len() {
+        return Err(Error::InvalidArgument(
+            "markdown_to_pdf: outline item count mismatch",
+        ));
+    }
+    for (xref, pos) in xrefs.iter().zip(positions) {
+        if let Some(&page_ref) = page_refs.get(pos.page) {
+            set_dest_top(
+                doc,
+                ObjRef::new(*xref, 0),
+                page_ref,
+                opts.page_height - pos.y,
+            )?;
+        }
+    }
+    Ok(())
+}
+
+/// Replaces `obj`'s `/Dest` with `[page /XYZ null top null]` (keep the
+/// horizontal position and zoom, scroll `top` to the window top).
+fn set_dest_top(doc: &DocumentStore, obj: ObjRef, page: ObjRef, top: f64) -> Result<()> {
+    let mut d = doc
+        .resolve(obj)?
+        .as_dict()
+        .cloned()
+        .ok_or(Error::InvalidArgument(
+            "markdown_to_pdf: destination holder is not a dictionary",
+        ))?;
+    let top = (top * 100.0).round() / 100.0;
+    d.insert(
+        Name::new("Dest"),
+        Object::Array(vec![
+            Object::Reference(page),
+            Object::Name(Name::new("XYZ")),
+            Object::Null,
+            Object::Real(top),
+            Object::Null,
+        ]),
+    );
+    doc.update_object(obj, Object::Dictionary(d))
 }
 
 /// A minimal, openable zero-page seed PDF (catalog + empty page tree), mirroring

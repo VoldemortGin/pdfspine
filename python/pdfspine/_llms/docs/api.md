@@ -47,12 +47,17 @@ pdfspine.markdown_to_pdf(
     page_height: float | None = None,     # 默认 841.92 pt
     margins: float | tuple[float, float, float, float] | None = None,  # 单值或 (top,right,bottom,left)，默认 72
     body_font_size: float | None = None,  # 默认 11；标题按比例缩放
+    links: bool = True,                   # 链接写成可点击的 /Link 注解（外链 URI、#锚点 GoTo）
+    toc: bool = True,                     # 标题层级写成 PDF 书签树（/Outlines，get_toc() 可读回）
 ) -> Document
 ```
 
 契约（核对自 `document.py::markdown_to_pdf`，实跑验证）：
 - **pdfspine 原创扩展**，不属于 PyMuPDF 表面（不是 `Story`/`insert_htmlbox`，`COMPAT.toml` 不收录）。
-- 范围：CommonMark + GFM 表格/删除线/任务列表。H1–H6、段落、行内 bold/italic/inline-code/链接（蓝字，v1 无 link annotation）、有序/无序/嵌套/任务列表、嵌套引用块、代码块（灰底 Courier）、水平线、GFM 表格（边框 + 表头加粗 + 按内容测列宽 + 跨页逐行分页）、图片。
+- 范围：CommonMark + GFM 表格/删除线/任务列表。H1–H6、段落、行内 bold/italic/inline-code/链接（蓝字 + 可点击 `/Link` 注解）、有序/无序/嵌套/任务列表、嵌套引用块、代码块（灰底 Courier）、水平线、GFM 表格（边框 + 表头加粗 + 按内容测列宽 + 跨页逐行分页）、图片。
+- 链接（`links=True`）：`[text](https://…)` / `<autolink>` / `<user@host>` 写成 `/A /URI` 注解（邮箱自动补 `mailto:`）；`[text](#anchor)` 写成 GoTo 到目标标题所在页 + 顶边的 `/XYZ` 目标，`page.get_links()` 读回 `kind=1/page` 与 `kind=2/uri`。锚点按 GitHub 风格 slug 匹配（小写、空格→`-`、标点丢弃、重名加 `-1`/`-2`…；先精确匹配百分号解码后的片段，再对其重新 slug 化），或标题的显式 `{#id}` 属性；匹配不到 / 空目标 `[x]()` 不写注解。图片链接、跨行链接每行一个注解。
+- 书签（`toc=True`）：全部标题（含引用块 / 列表内）按文档顺序写成 `/Outlines`，`doc.get_toc()` 读回 `[level, title, page]`（标题取纯文本，加粗/代码扁平化）。层级跳跃（`#` → `###`）归一化为逐级嵌套：每个标题挂在其最近的更浅标题之下，因此 `## → #### → ###` 得 1 → 2 → 2。
+- 两个开关都关、或文档本身没有链接和标题时，输出字节与旧版完全一致。
 - `md_or_path`：仅当它是**现存文件**且后缀 ∈ {"", ".md", ".markdown", ".txt"} 时按 UTF-8 读文件（此时 `base_dir` 默认取其父目录）；其余一律当作 Markdown 文本字面量（含不存在的路径）。
 - 图片（`![alt](src)`）只接受本地路径和 `data:` URI（JPEG 直通，PNG/BMP/GIF/WEBP/TIFF 解码后嵌入，等比缩放）；远程 URL 被拒，**绝不发网络请求**。相对路径按 `base_dir` 解析；无 `base_dir` 且输入是文本时只接受绝对路径 / `data:` URI。
 - 默认字体 Base-14（Helvetica 正文/标题、Courier 代码，零嵌入）→ **默认没有 CJK 字形，中文渲染成 `?`**（不报错）；传 `cjk_font=`（TTF/OTF/TTC 路径或字节）才能出中文，见 gotchas。

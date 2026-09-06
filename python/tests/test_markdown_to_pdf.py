@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import pathlib
 import struct
+import sys
+import types
 import zlib
 
 import pdfspine
@@ -51,6 +53,31 @@ def _png(w: int, h: int, rgb: tuple[int, int, int] = (255, 0, 0)) -> bytes:
 
 def _full_text(doc: pdfspine.Document) -> str:
     return "".join(page.get_text() for page in doc)
+
+
+def _real_pymupdf() -> types.ModuleType | None:
+    """The real PyMuPDF module, or ``None`` when it is not importable.
+
+    ``conftest.py`` registers the pdfspine shim under ``pymupdf`` first, so a
+    real PyMuPDF only wins when it was imported before the session started
+    (``pytest -p pymupdf``) — otherwise the cross-check is skipped."""
+    mod = sys.modules.get("pymupdf")
+    if mod is None:
+        try:
+            import pymupdf as mod
+        except Exception:  # ImportError, or an import-time warning under -W error
+            return None
+    # The shim is the `pdfspine.pymupdf` module registered under the name.
+    return mod if getattr(mod, "__name__", "") == "pymupdf" else None
+
+
+_requires_real_pymupdf = pytest.mark.skipif(
+    _real_pymupdf() is None,
+    reason="real PyMuPDF not importable (install it and run `pytest -p pymupdf`)",
+)
+
+# Enough short paragraphs to push the following heading onto a later page.
+_FILLER = "Lorem ipsum dolor sit amet, consectetur adipiscing elit.\n\n" * 120
 
 
 # --- MARKDOWN-TO-PDF-001: text input → opened Document, text round-trips ---
@@ -220,3 +247,117 @@ def test_markdown_to_pdf_010_relative_image_base_dir(tmp_path):
     # ...and without one they are a typed error, not a crash.
     with pytest.raises(pdfspine.PdfError):
         pdfspine.markdown_to_pdf("![p](pic.png)")
+
+
+# --- MARKDOWN-TO-PDF-011: links → /Link annotations (URI + #anchor GoTo) ----
+
+
+def test_markdown_to_pdf_011_links_uri_and_anchor_goto():
+    md = (
+        "# One\n\nSee [docs](https://example.com/x?y=1) and <me@example.com>, "
+        "then [Two](#two).\n\n" + _FILLER + "## Two\n\nend"
+    )
+    doc = pdfspine.markdown_to_pdf(md)
+    assert doc.page_count >= 2
+    links = doc[0].get_links()
+    assert [(lk["kind"], lk.get("uri"), lk.get("page")) for lk in links] == [
+        (2, "https://example.com/x?y=1", None),
+        (2, "mailto:me@example.com", None),
+        (1, None, doc.get_toc()[1][2] - 1),  # get_toc pages are 1-based
+    ]
+    assert links[2]["page"] >= 1, "the anchor target sits on a later page"
+    width, height = doc[0].rect.width, doc[0].rect.height
+    for lk in links:
+        rect = lk["from"]
+        assert isinstance(rect, pdfspine.Rect)
+        assert 72 < rect.x0 < rect.x1 < width - 72
+        assert 0 < rect.y0 < rect.y1 < height
+        assert rect.height < 20  # one text line
+    # Left-to-right on the first line, in source order.
+    assert links[0]["from"].x1 <= links[1]["from"].x0 <= links[2]["from"].x0
+    # Anchors resolve GitHub-style slugs, explicit ids and percent-encoding;
+    # an unknown anchor or an empty destination simply gets no annotation.
+    doc = pdfspine.markdown_to_pdf(
+        "# My Heading\n\n# My Heading\n\n# Custom {#cid}\n\n# 中文\n\n"
+        "[a](#my-heading-1) [b](#cid) [c](#My%20Heading) [d](#%E4%B8%AD%E6%96%87) "
+        "[x](#nope) [y]()"
+    )
+    assert [lk["kind"] for lk in doc[0].get_links()] == [1, 1, 1, 1]
+    assert "{#cid}" not in _full_text(doc)
+
+
+# --- MARKDOWN-TO-PDF-012: heading hierarchy → /Outlines (get_toc) ----------
+
+
+def test_markdown_to_pdf_012_toc_outline_hierarchy():
+    doc = pdfspine.markdown_to_pdf(
+        "# A\n\n## B\n\n### C\n\n## D\n\n# 中文 **E**\n\n#### Deep\n"
+    )
+    assert doc.get_toc() == [
+        [1, "A", 1],
+        [2, "B", 1],
+        [3, "C", 1],
+        [2, "D", 1],
+        [1, "中文 E", 1],
+        [2, "Deep", 1],  # `#` → `####` is normalized to one step
+    ]
+    # Shallower headings keep their relative depth (`## → #### → ###`).
+    doc = pdfspine.markdown_to_pdf("## S\n\n#### T\n\n### U\n\n> ## Q\n")
+    assert [row[0] for row in doc.get_toc()] == [1, 2, 2, 1]
+    # A later page is reported 1-based.
+    doc = pdfspine.markdown_to_pdf("# First\n\n" + _FILLER + "# Later\n")
+    toc = doc.get_toc()
+    assert toc[0] == [1, "First", 1]
+    assert toc[1][1] == "Later" and toc[1][2] == doc.page_count
+
+
+# --- MARKDOWN-TO-PDF-013: links= / toc= switches; byte-stable without them --
+
+
+def test_markdown_to_pdf_013_links_toc_switches_and_byte_stability():
+    md = "# H\n\n[x](https://x.test) [h](#h)"
+    doc = pdfspine.markdown_to_pdf(md, links=False)
+    assert doc[0].get_links() == []
+    assert doc.get_toc() == [[1, "H", 1]]
+    doc = pdfspine.markdown_to_pdf(md, toc=False)
+    assert len(doc[0].get_links()) == 2
+    assert doc.get_toc() == []
+    doc = pdfspine.markdown_to_pdf(md, links=False, toc=False)
+    assert doc[0].get_links() == [] and doc.get_toc() == []
+    # Annotations and bookmarks never change what is painted.
+    painted = pdfspine.markdown_to_pdf(md)[0].get_pixmap(dpi=72).samples
+    assert painted == doc[0].get_pixmap(dpi=72).samples
+    # A document without links or headings is byte-identical either way.
+    from pdfspine import _core
+
+    plain = "Just **text** — no links, no headings.\n\n- item\n"
+    assert _core.markdown_to_pdf(plain) == _core.markdown_to_pdf(
+        plain, links=False, toc=False
+    )
+
+
+# --- MARKDOWN-TO-PDF-014: PyMuPDF reads the links + outline back (oracle) ---
+
+
+@_requires_real_pymupdf
+def test_markdown_to_pdf_014_pymupdf_reads_links_and_toc_back():
+    pymupdf = _real_pymupdf()
+    assert pymupdf is not None
+    md = (
+        "# Intro\n\nGo to [Usage](#usage) or [site](https://example.com).\n\n"
+        + _FILLER
+        + "## Usage\n\nend"
+    )
+    doc = pdfspine.markdown_to_pdf(md)
+    ref = pymupdf.open(stream=doc.tobytes(), filetype="pdf")
+    assert ref.get_toc() == doc.get_toc()
+    links = ref[0].get_links()
+    assert [lk["kind"] for lk in links] == [pymupdf.LINK_GOTO, pymupdf.LINK_URI]
+    assert links[0]["page"] == doc.get_toc()[1][2] - 1
+    assert links[1]["uri"] == "https://example.com"
+    # The GoTo carries a /XYZ point (the heading's top edge) inside the page.
+    target = ref[links[0]["page"]]
+    assert 0 <= links[0]["to"].y <= target.rect.height
+    for lk in links:
+        assert ref[0].rect.contains(lk["from"])
+    assert links[0]["from"].x1 <= links[1]["from"].x0
