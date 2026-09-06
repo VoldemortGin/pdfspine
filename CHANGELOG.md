@@ -90,6 +90,17 @@ feature-complete, but the public API and on-disk formats may still change.
 - **`get_ocgs()` / `layer_ui_configs()` / `ocg_state()` now report the active
   layer view** — the in-memory selected configuration + panel overrides —
   matching PyMuPDF's in-memory state, instead of only the on-disk default.
+- **Conformance: the frozen 300-document corpus-diff manifest is usable again.**
+  `32e6232` rewrote `fixtures/typeset/typeset-lo-slide.pdf`, so
+  `conformance/corpus-diff/build_corpus.py --manifest` hard-failed on its stale
+  sha256/size (1/300). `build_corpus.py` gained an explicit
+  `--manifest OLD --refresh-stale --freeze NEW` path that re-hashes only the
+  stale entries, keeps their old values as `previous_sha256` / `previous_size`,
+  and writes a superseding manifest whose top-level `supersedes` names the old
+  file and fingerprint. `glyph-geometry-2026-09-05b-manifest.json` is that
+  derivative (fingerprint `6c7126de…`, 299 entries byte-identical); the original
+  `…-2026-09-05-manifest.json` (fingerprint `87804b5a…`) is kept verbatim as the
+  corpus the committed summary and the C–G reports refer to.
 
 
 ## [0.7.1] — 2026-09-05
