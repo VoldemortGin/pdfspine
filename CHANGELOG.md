@@ -72,6 +72,15 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ### Fixed
 
+- **`apply_redactions()` kept the `'` and `"` operator semantics.** The content
+  rewriter re-emitted both text-showing operators as a bare `TJ`, dropping the
+  implicit `T*` line advance and, for `"`, the `aw` / `ac` word- and
+  char-spacing operands, so on a page typeset with them every surviving line
+  after the first `'` / `"` was drawn on the previous baseline with the wrong
+  spacing (a fidelity defect, not a leak). Each `'` now expands to an explicit
+  `T*` and each `"` to `aw Tw ac Tc T*` ahead of the rewritten (or dropped)
+  show, on the mapped and the verbatim-font paths alike; surviving words match
+  real PyMuPDF's redaction within 0.5 pt.
 - **PaddleOCR Latin accuracy 0.839 → 0.990** (CJK 0.989 → 0.993, speed unchanged)
   on the 16-scan CJK+Latin benchmark (`docs/BENCHMARKS.md` §6) by pinning
   `ocrspine` `e810a9c`: the recognizer right-padded each height-48 crop to its
