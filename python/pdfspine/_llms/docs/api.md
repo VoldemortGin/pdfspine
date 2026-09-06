@@ -103,6 +103,9 @@ doc.search_page_for(pno, text, **kw) -> list
 doc.extract_image(xref) -> dict[str, Any]   # {"image": bytes, "ext": str, "width", "height", ...}; 别名 extractImage
 doc.to_html() -> str                        # 全部页面组成完整 HTML5 文档；标题来自元数据/文件名
 doc.save_html(path: str | os.PathLike[str]) -> None  # UTF-8 写入；I/O 错误直接抛出
+doc.to_markdown(pages=None, *, page_separator="\n\n-----\n\n", ...同 page.to_markdown 的关键字...) -> str
+#   全部页面（或给定 pages，按其顺序）合成一份 Markdown；标题标度跨全部选中页统一计算；空页跳过
+doc.save_markdown(path, pages=None, *, ...同上...) -> None   # 写入 to_markdown 结果；UTF-8、"\n" 换行
 ```
 
 ### 保存 / 序列化
@@ -260,7 +263,10 @@ page.set_mediabox/set_cropbox/set_artbox/set_bleedbox/set_trimbox(rect) -> None
 ### 文本抽取
 ```python
 page.get_text(option="text", *, clip=None, flags=None, textpage=None, sort=False) -> str | list | dict
-#   option ∈ {"text","words","blocks","dict","rawdict","json","rawjson","html","xhtml","xml"}
+#   option ∈ {"text","words","blocks","dict","rawdict","json","rawjson","html","xhtml","xml","layout"}
+#   "layout" 为 pdfspine 扩展（带 y 容差的版面保持文本，sort 被忽略）
+page.get_text_layout(*, clip=None, flags=None, textpage=None, y_tolerance=3.0, char_width=None) -> str
+#   pdfspine 扩展；等价于 get_text("layout")，可调 y 容差与列网格
 page.get_text_words(*, clip=None, flags=None, sort=False) -> list[tuple]
 page.get_text_blocks(*, clip=None, flags=None, sort=False) -> list[tuple]
 page.get_textbox(rect, *, textpage=None) -> str
@@ -273,6 +279,11 @@ page.get_texttrace() -> list[dict]
 - `words` 每条 = `(x0, y0, x1, y1, word, block_no, line_no, word_no)`（已运行核对）。
 - `dict` 顶层键 = `{"blocks", "width", "height"}`（已运行核对）。
 - `flags` 取 `TEXT_*` / `TEXTFLAGS_*` 常量位掩码。
+- `get_text_layout` / `get_text("layout")`：把 `get_text("words")` 按视觉行重组
+  （词的垂直中心落在行锚点 `y_tolerance` 点内即并入该行；锚点取行首词中心，避免
+  亚点级基线抖动把一行拆成两行），行内按 x0、行间自上而下，再落到字符网格
+  （`char_width`，`None` = 页面字形宽度中位数）使列以空格对齐（`pdftotext -layout` 风格）；
+  大垂直间隙产生空行；`clip` 按 bbox 相交过滤；每行以 `"\n"` 结尾，无词页返回 `""`。
 
 #### 字形几何（pdfspine 扩展：dict / rawdict / json / rawjson 的新键）
 
@@ -470,6 +481,31 @@ page.filled_rectangles(*, include_white=False) -> tuple[FilledRectangle, ...]
 - `filled_rectangles`：基于 `get_drawings()`，只取 fill 类（type ∈ {"f","fs"}）且 items 全为
   `("re", Rect)` 的绘制，逐矩形返回；默认剔除白色填充（各分量与 1.0 相差 ≤ 1e-3），
   `include_white=True` 保留。
+
+### Markdown 导出（pdfspine 原创扩展，非 PyMuPDF 表面）
+```python
+page.to_markdown(*, clip=None, tables=True, table_strategy="lines",
+                 heading_levels=3, heading_ratio=1.15, bold_headings=True,
+                 emphasis=True, images=False) -> str
+```
+契约（核对自 `document.py` / `_markdown.py`）：PDF → Markdown 方向（`markdown_to_pdf` 是反向）。
+- 阅读序直接取自 `get_text("dict", sort=True)`（引擎的分栏感知顺序，本层不重排）。
+- **标题**：字号按半点聚类，字符最多的字号为**正文字号**；≥ `body_size * heading_ratio`
+  的每个字号成为一级标题（从大到小，最多 `heading_levels` 级，更深的字号共用最后一级）。
+  `bold_headings=True` 时，正文字号下前导整行加粗、≤ 2 行 / ≤ 15 词且不以 `.`/`;`/`,` 结尾的
+  block 降为下一级标题。像段落的候选（> 30 词、多行且以句号结尾、字母数字不足 3 个）
+  与目录点引导线行保持为正文。
+- **段落**：block 内各行以空格拼接（软连字符自动接合），block 之间空行。
+- **列表**：项目符号字形（`•` `◦` `▪` …）/ `-` / `*` → `- item`；`1.`/`1)` → `1. item`；
+  字母 / 罗马数字标签 → `- (a) item`；换行续行并入本项；缩进最多嵌套四级。
+- **表格**：`tables=True` 时 `find_tables(strategy=table_strategy)` 找到的每张表经
+  `Table.to_markdown()` 渲染并替换其 bbox 内的文本行；覆盖近整页、非空单元格不足两个、
+  或某单元格是大段正文（> 500 字符）的网格视为图框/页框而忽略，文字留在正文流中；
+  `tables=False` 跳过，`table_strategy="text"` 处理无边框表。
+- **行内样式**：`emphasis=True` 时加粗 → `**bold**`、斜体 → `_italic_`、等宽 → `` `code` ``；
+  整块等宽字体 → 围栏代码块。
+- **图片**：默认跳过；`images=True` 输出 `![image](page-N-image-K.ext)` 占位符（不落盘）。
+- `clip` 限定抽取矩形（便于切掉页眉页脚）。返回值：无内容返回 `""`，否则以单个换行结尾。
 
 ### 文本/图片/绘图写入
 ```python

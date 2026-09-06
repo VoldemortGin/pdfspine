@@ -20,6 +20,7 @@ returns a different native object depending on `option`:
 | `"html"` | `str` | HTML reconstruction of the page. |
 | `"xhtml"` | `str` | XHTML reconstruction. |
 | `"xml"` | `str` | Low-level XML with per-glyph geometry. |
+| `"layout"` | `str` | Layout-preserving text: lines regrouped with a y tolerance, columns kept as space padding (pdfspine extension). |
 
 ```python
 page = doc[0]
@@ -61,6 +62,101 @@ doc.save_html("document.html")  # UTF-8; accepts str and os.PathLike paths
 The document title comes from PDF metadata when available, then the input
 filename, and otherwise defaults to `PDF document`. Page HTML fragments are
 preserved in document order.
+
+### Layout-preserving text
+
+`get_text("layout")` — and its tunable form `get_text_layout(...)` — returns
+plain text that keeps the page's visual layout, `pdftotext -layout` style. The
+words from `get_text("words")` are regrouped into visual lines: a word joins a
+line when its vertical center lies within `y_tolerance` points (default 3) of
+the line's *anchor* — the center of the line's first word — so sub-point
+baseline jitter cannot chain one line into the next. Lines run top-to-bottom,
+words left-to-right, and every word is placed on a character grid whose cell is
+`char_width` points (default: the median glyph width of the page), so columns
+stay aligned as space padding. Vertical gaps wider than a normal line pitch
+become blank lines, and `clip` filters words by bbox intersection.
+
+The motivation: `sort=True` orders text by exact `(y, x)`, so a run of words
+whose baselines differ by a fraction of a point splits one visual line into
+two; layout mode absorbs that jitter inside its `y_tolerance` band.
+
+```python
+text = page.get_text("layout")               # default 3 pt tolerance
+
+# Tune the grouping band and the column grid:
+text = page.get_text_layout(y_tolerance=2.0, char_width=5.0)
+```
+
+### Markdown export
+
+`Page.to_markdown()`, `Document.to_markdown()` and `Document.save_markdown()`
+render a page — or a whole document — as Markdown for RAG / LLM pipelines. This
+is the PDF → Markdown direction; `markdown_to_pdf()` is the reverse.
+
+```python
+Page.to_markdown(*, clip=None, tables=True, table_strategy="lines",
+                 heading_levels=3, heading_ratio=1.15, bold_headings=True,
+                 emphasis=True, images=False) -> str
+Document.to_markdown(pages=None, *, page_separator="\n\n-----\n\n",
+                     <same keyword options as Page.to_markdown>) -> str
+Document.save_markdown(path, pages=None, *, <same keyword options>) -> None
+```
+
+Reading order comes straight from `get_text("dict", sort=True)` — the engine's
+column-aware order; nothing is re-ordered here. The renderer then classifies:
+
+- **Headings** — font sizes are clustered to the nearest half point and the
+  size carrying the most characters is the *body size*. Every distinct size at
+  or above `body_size * heading_ratio` becomes a heading level, largest first,
+  capped at `heading_levels` (deeper sizes share the last level). The
+  document-level export computes this scale once over all selected pages, so a
+  level means the same thing on every page. With `bold_headings`, a block whose
+  leading lines are all bold at body size — at most two lines / fifteen words
+  and not ending in `.`, `;` or `,` — becomes the next-deeper level.
+  Candidates that read like paragraphs (over thirty words, several lines
+  ending with a period, fewer than three alphanumeric characters) and
+  dotted-leader lines (tables of contents) stay body text.
+- **Paragraphs** — the lines of a block joined by spaces, soft hyphenation
+  mended, one paragraph per block.
+- **Lists** — bullet glyphs (`•` `◦` `▪` …), `-` and `*` become `- item`;
+  `1.` / `1)` become `1. item`; letter / roman labels become `- (a) item`;
+  wrapped continuation lines join their item and indentation nests up to four
+  levels.
+- **Tables** — with `tables=True`, every table found by
+  `find_tables(strategy=table_strategy)` is rendered through
+  `Table.to_markdown()` and replaces the text lines inside its bbox. Grids
+  that are not tables — covering nearly the whole page, with fewer than two
+  filled cells, or holding a cell of running prose — are ignored and their
+  text stays in the flow. Pass `tables=False` to skip detection, or
+  `table_strategy="text"` for unruled tables.
+- **Inline styles** — with `emphasis`, bold spans become `**bold**`, italic
+  `_italic_`, monospace `` `code` ``; a block set entirely in a monospace font
+  becomes a fenced code block.
+- **Images** — skipped unless `images=True`, which emits
+  `![image](page-N-image-K.ext)` placeholders (nothing is written to disk).
+
+`clip` restricts extraction to a rectangle — handy for cutting running headers
+and footers. For the document form, `pages` selects and orders the pages and
+`page_separator` (a horizontal rule by default) joins the non-empty fragments;
+empty pages contribute nothing.
+
+```python
+md = page.to_markdown()                       # one page
+
+md = doc.to_markdown()                         # every page, joined
+md = doc.to_markdown(pages=[0, 2, 5])          # a subset, in that order
+doc.save_markdown("out.md")                    # UTF-8, "\n" newlines
+```
+
+**Limitations**
+
+- Unruled tables need `table_strategy="text"` (or the TATR vision backend); the
+  default `"lines"` strategy only finds ruled tables.
+- List bullets drawn as vector graphics (not glyphs) are not detected.
+- Formulas and superscripts are emitted as plain text.
+- Images are placeholders only — no files are written.
+- Headings are heuristic (font size / bold) and can be tuned via
+  `heading_levels`, `heading_ratio` and `bold_headings`.
 
 ### Glyph geometry
 

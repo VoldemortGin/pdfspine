@@ -63,6 +63,7 @@ pdfspine is a **drop-in-shaped, permissively-licensed (Apache-2.0)** alternative
 | **Render** | `get_pixmap` (vector + text + image + shadings via a tiny-skia rasterizer), `Pixmap` (buffer-protocol/numpy), `DisplayList`, **`get_svg_image`** |
 | **Images** | open PNG/JPEG/TIFF/GIF/BMP/WEBP as documents, `convert_to_pdf`, image-XObject decode (DCT/CCITT/JBIG2/JPX), `extract_image` |
 | **Markdown** | `markdown_to_pdf()` — a **pdfspine original extension** (not a PyMuPDF API): CommonMark + GFM tables / strikethrough / task lists → PDF via a deterministic pure-Rust layout engine; local & `data:`-URI images (never the network); optional user TTF via `font=` / `cjk_font=` (CJK) |
+| **Markdown / layout export** | `Page.to_markdown()` / `Document.to_markdown()` / `save_markdown()` and `get_text("layout")` — a **pdfspine original extension** (not a PyMuPDF API): PDF → Markdown for RAG / LLM pipelines (the reverse of `markdown_to_pdf`) plus layout-preserving plain text |
 | **Layers** | Optional Content Groups read/write (`get_ocgs` / `add_ocg` / `set_layer`) |
 | **OCR** | pure-Rust PaddleOCR by default (PP-OCRv5, weights from the shared `ocrspine-models` package, stronger on CJK), with an explicit Tesseract compatibility adapter → searchable-sandwich PDF |
 | **CLI** | `pdfspine info / text / render / merge / split / pages / images / toc` |
@@ -129,6 +130,8 @@ for t in tables.tables:
 
 doc.save("output.pdf", garbage=4, deflate=True)
 doc.save_html("output.html")                 # complete UTF-8 HTML5 document
+md = doc.to_markdown()                       # PDF → Markdown (pdfspine extension)
+doc.save_markdown("output.md")               # UTF-8 Markdown for RAG / LLM
 
 # Markdown → PDF (pdfspine original extension — not part of the PyMuPDF surface)
 pdfspine.markdown_to_pdf("# Title\n\nHello **Markdown**!").save("hello.pdf")
