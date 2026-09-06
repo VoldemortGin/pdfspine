@@ -5330,15 +5330,39 @@ def markdown_to_pdf(
     page_height: float | None = None,
     margins: float | tuple[float, float, float, float] | None = None,
     body_font_size: float | None = None,
+    links: bool = True,
+    toc: bool = True,
 ) -> Document:
     """Renders Markdown to a new PDF :class:`Document` (pdfspine original
     extension — not part of the PyMuPDF surface).
 
     Supports CommonMark plus the GFM extensions: tables, strikethrough and
     task lists; headings H1–H6, nested ordered/unordered lists, blockquotes,
-    code blocks, horizontal rules, inline bold/italic/code and links (rendered
-    as blue text, no annotation). Layout is deterministic: the same input and
-    options always produce the same PDF bytes.
+    code blocks, horizontal rules, inline bold/italic/code and links (blue
+    text plus a clickable ``/Link`` annotation). Layout is deterministic: the
+    same input and options always produce the same PDF bytes.
+
+    ``links`` (default ``True``) writes a ``/Link`` annotation over every link
+    run: ``[text](https://…)`` and ``<autolinks>`` become URI actions;
+    ``[text](#anchor)`` becomes a GoTo destination at the target heading's
+    page and top edge (read back with :meth:`Page.get_links`). Anchors match
+    GitHub-style heading slugs — lower-case, spaces → ``-``, punctuation
+    dropped, duplicates suffixed ``-1``, ``-2``, … — or an explicit ``{#id}``
+    heading attribute; an anchor that matches no heading gets no annotation.
+    ``toc`` (default ``True``) writes the heading hierarchy as the PDF
+    bookmark tree (:meth:`Document.get_toc`); a level jump such as ``#`` →
+    ``###`` is normalized to one step. With both switched off — or for a
+    document without links and headings — the output bytes are unchanged.
+
+    >>> import pdfspine
+    >>> doc = pdfspine.markdown_to_pdf(
+    ...     "# Intro\\n\\nSee [Usage](#usage) or [docs](https://example.com).\\n\\n"
+    ...     "## Usage\\n"
+    ... )
+    >>> doc.get_toc()
+    [[1, 'Intro', 1], [2, 'Usage', 1]]
+    >>> [(l["kind"], l.get("uri", l.get("page"))) for l in doc[0].get_links()]
+    [(1, 0), (2, 'https://example.com')]
 
     ``md_or_path`` may be Markdown text or a file path. It is treated as a
     **file** only when, after ``os.fspath``, it names an existing regular file
@@ -5412,5 +5436,7 @@ def markdown_to_pdf(
         font=_font_bytes(font, "font"),
         cjk_font=_font_bytes(cjk_font, "cjk_font"),
         base_dir=None if base_dir is None else os.fsdecode(os.fspath(base_dir)),
+        links=bool(links),
+        toc=bool(toc),
     )
     return Document(_core.open_bytes(pdf))

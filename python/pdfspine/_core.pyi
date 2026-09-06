@@ -57,6 +57,8 @@ def markdown_to_pdf(
     font: bytes | None = ...,
     cjk_font: bytes | None = ...,
     base_dir: str | None = ...,
+    links: bool = ...,
+    toc: bool = ...,
 ) -> bytes: ...
 def image_profile(stream: bytes, keep_image: int = ...) -> dict[str, Any] | None: ...
 

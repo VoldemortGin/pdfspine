@@ -1229,4 +1229,6 @@ def markdown_to_pdf(
     page_height: float | None = ...,
     margins: float | tuple[float, float, float, float] | None = ...,
     body_font_size: float | None = ...,
+    links: bool = ...,
+    toc: bool = ...,
 ) -> Document: ...

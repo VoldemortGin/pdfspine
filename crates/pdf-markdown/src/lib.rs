@@ -12,12 +12,27 @@
 //!
 //! CommonMark + the GFM extensions locked in PRD §9: headings H1–H6,
 //! paragraphs, inline **bold** / *italic* / `code` / ~~strikethrough~~ / links
-//! (blue text, no annotation), ordered / unordered / nested / task lists
-//! (drawn checkboxes), blockquotes (left bar + indent), code blocks (Courier
-//! over a light-gray background, newlines preserved), horizontal rules, GFM
-//! tables (borders, measured column widths, in-cell wrapping), and images from
-//! local paths / `data:` URIs (**no network fetch**; JPEG passes through as
-//! DCT, other rasters decode via `pdf-image`).
+//! (blue text + a `/Link` annotation), ordered / unordered / nested / task
+//! lists (drawn checkboxes), blockquotes (left bar + indent), code blocks
+//! (Courier over a light-gray background, newlines preserved), horizontal
+//! rules, GFM tables (borders, measured column widths, in-cell wrapping), and
+//! images from local paths / `data:` URIs (**no network fetch**; JPEG passes
+//! through as DCT, other rasters decode via `pdf-image`).
+//!
+//! # Navigation
+//!
+//! [`Options::links`] (default on) writes a `/Link` annotation over every link
+//! run: `[text](https://…)` and `<autolinks>` become `/A /URI` actions;
+//! `[text](#anchor)` becomes a `/XYZ` GoTo destination at the target heading's
+//! page and top edge. Anchors resolve against GitHub-style heading slugs
+//! (lower-case, spaces → `-`, punctuation dropped, duplicates suffixed `-1`,
+//! `-2`, …) or an explicit `{#id}` heading attribute; an unresolvable anchor
+//! simply gets no annotation. [`Options::toc`] (default on) writes the heading
+//! hierarchy as the `/Outlines` bookmark tree (`Document.get_toc()` reads it
+//! back); level jumps such as `#` → `###` are normalized to one step so the
+//! tree is always well-formed. Both passes reuse the `pdf-edit` writers, and a
+//! document without links / headings produces exactly the same bytes as with
+//! them switched off.
 //!
 //! # Fonts (CJK Option A)
 //!
@@ -32,6 +47,7 @@ mod fonts;
 mod images;
 mod layout;
 mod model;
+mod nav;
 mod render;
 
 use std::path::PathBuf;
@@ -76,6 +92,13 @@ pub struct Options {
     /// Base directory for resolving *relative* image paths. Unset, only
     /// absolute paths and `data:` URIs are accepted.
     pub base_dir: Option<PathBuf>,
+    /// Write `/Link` annotations for Markdown links (default `true`): URI
+    /// actions for external destinations, GoTo destinations for `#anchor`
+    /// links to headings. Off, links are still drawn as colored text.
+    pub links: bool,
+    /// Write the heading hierarchy as the `/Outlines` bookmark tree (default
+    /// `true`).
+    pub toc: bool,
 }
 
 impl Options {
@@ -93,6 +116,8 @@ impl Options {
             font: None,
             cjk_font: None,
             base_dir: None,
+            links: true,
+            toc: true,
         }
     }
 }
@@ -117,10 +142,16 @@ impl Default for Options {
 pub fn markdown_to_pdf(markdown: &str, options: &Options) -> Result<Vec<u8>> {
     validate(options)?;
     let fonts = fonts::FontSet::new(options)?;
-    let mut blocks = model::parse_blocks(markdown);
+    let parsed = model::parse_blocks(markdown);
+    let mut blocks = parsed.blocks;
     let images = images::resolve_images(&mut blocks, options)?;
-    let pages = layout::layout(&blocks, &images, &fonts, options);
-    render::build_pdf(&pages, &images, &fonts, options)
+    let headings = nav::collect_headings(&blocks);
+    let laid = layout::layout(&blocks, &images, &fonts, options);
+    let nav = render::Nav {
+        links: &parsed.links,
+        headings: &headings,
+    };
+    render::build_pdf(&laid, &images, &fonts, options, &nav)
 }
 
 /// Validates the geometry options (typed errors, no panics downstream).

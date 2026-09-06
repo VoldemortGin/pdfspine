@@ -8,8 +8,12 @@
 //! the enclosing paragraph into `Paragraph / Image / Paragraph` blocks (images
 //! render at block level only — an image inside a heading or table cell is
 //! dropped).
+//!
+//! Link destinations are interned into a per-document table so [`Style`] stays
+//! `Copy`: a text run carries the *index* of its destination (`href`), which
+//! the layouter threads through to the annotation pass.
 
-use pulldown_cmark::{Alignment, Event, Options as CmarkOptions, Parser, Tag};
+use pulldown_cmark::{Alignment, Event, LinkType, Options as CmarkOptions, Parser, Tag};
 
 /// Inline style flags accumulated from the enclosing emphasis / code / link /
 /// strikethrough spans.
@@ -19,7 +23,11 @@ pub(crate) struct Style {
     pub(crate) italic: bool,
     pub(crate) code: bool,
     pub(crate) strike: bool,
+    /// Inside a link span (colored text), whether or not it has a destination.
     pub(crate) link: bool,
+    /// Index into [`Parsed::links`] of the enclosing link's non-empty
+    /// destination (`None` for `[text]()` or outside any link).
+    pub(crate) href: Option<u32>,
 }
 
 /// One inline element of a paragraph / heading / table cell.
@@ -49,8 +57,13 @@ pub(crate) struct ListItem {
 /// A block-level element, in document order.
 #[derive(Clone, Debug)]
 pub(crate) enum Block {
-    /// ATX / setext heading, `level` in `1..=6`.
-    Heading { level: u8, inlines: Vec<Inline> },
+    /// ATX / setext heading, `level` in `1..=6`. `id` is an explicit
+    /// `{#custom-id}` heading attribute (overrides the generated anchor slug).
+    Heading {
+        level: u8,
+        inlines: Vec<Inline>,
+        id: Option<String>,
+    },
     /// A paragraph of inline content.
     Paragraph(Vec<Inline>),
     /// A fenced / indented code block (verbatim text, newlines preserved).
@@ -76,16 +89,30 @@ pub(crate) enum Block {
     Image { src: String, id: usize },
 }
 
+/// The parsed document: the block tree plus the interned link destinations
+/// (`Style::href` indexes `links`; each distinct destination appears once, in
+/// first-use order).
+pub(crate) struct Parsed {
+    pub(crate) blocks: Vec<Block>,
+    pub(crate) links: Vec<String>,
+}
+
 /// Parses `markdown` into the block model with the GFM extensions enabled.
-pub(crate) fn parse_blocks(markdown: &str) -> Vec<Block> {
+pub(crate) fn parse_blocks(markdown: &str) -> Parsed {
     let opts = CmarkOptions::ENABLE_TABLES
         | CmarkOptions::ENABLE_STRIKETHROUGH
-        | CmarkOptions::ENABLE_TASKLISTS;
+        | CmarkOptions::ENABLE_TASKLISTS
+        | CmarkOptions::ENABLE_HEADING_ATTRIBUTES;
     let mut b = Builder {
         iter: Parser::new_ext(markdown, opts).peekable(),
         pending_task: None,
+        links: Vec::new(),
     };
-    b.blocks(None)
+    let blocks = b.blocks(None);
+    Parsed {
+        blocks,
+        links: b.links,
+    }
 }
 
 /// Whether `ev` belongs to inline (paragraph) content when seen at block level
@@ -116,6 +143,8 @@ struct Builder<'a> {
     iter: std::iter::Peekable<Parser<'a>>,
     /// The most recent `TaskListMarker` seen and not yet claimed by a list item.
     pending_task: Option<bool>,
+    /// Interned link destinations, in first-use order.
+    links: Vec<String>,
 }
 
 impl<'a> Builder<'a> {
@@ -151,12 +180,13 @@ impl<'a> Builder<'a> {
     fn block_event(&mut self, ev: Event<'a>, out: &mut Vec<Block>) {
         match ev {
             Event::Start(Tag::Paragraph) => out.extend(self.paragraph()),
-            Event::Start(Tag::Heading { level, .. }) => {
+            Event::Start(Tag::Heading { level, id, .. }) => {
                 let mut inlines = Vec::new();
                 self.inlines(Style::default(), &mut inlines, None);
                 out.push(Block::Heading {
                     level: level as u8,
                     inlines,
+                    id: id.map(|s| s.to_string()),
                 });
             }
             Event::Start(Tag::BlockQuote(_)) => {
@@ -272,9 +302,22 @@ impl<'a> Builder<'a> {
                 st.strike = true;
                 self.inlines(st, out, sink);
             }
-            Event::Start(Tag::Link { .. }) => {
+            Event::Start(Tag::Link {
+                link_type,
+                dest_url,
+                ..
+            }) => {
                 let mut st = style;
                 st.link = true;
+                if !dest_url.is_empty() {
+                    // `<user@host>` autolinks arrive as a bare address.
+                    let url = if link_type == LinkType::Email {
+                        format!("mailto:{dest_url}")
+                    } else {
+                        dest_url.to_string()
+                    };
+                    st.href = Some(self.intern_link(&url));
+                }
                 self.inlines(st, out, sink);
             }
             Event::Start(Tag::Image { dest_url, .. }) => {
@@ -290,6 +333,15 @@ impl<'a> Builder<'a> {
             Event::Start(_) => self.skip_container(), // stray nested block
             Event::End(_) | Event::Rule => {}
         }
+    }
+
+    /// Returns the table index of `url`, interning it on first use.
+    fn intern_link(&mut self, url: &str) -> u32 {
+        if let Some(i) = self.links.iter().position(|u| u == url) {
+            return i as u32;
+        }
+        self.links.push(url.to_string());
+        (self.links.len() - 1) as u32
     }
 
     /// Collects the verbatim text of a code block until its `End`.
