@@ -42,10 +42,10 @@ pub use model::{
 pub use renderops::{ImageOp, RenderOp, RenderSink, ShadingOp, TextRun};
 pub use search::{search, SearchOptions};
 pub use serialize::{
-    defaults, dict_blocks, extract_selection, get_textbox, textflags, to_blocks, to_dict,
-    to_dict_with_images, to_html, to_json, to_json_with_images, to_text, to_words, to_xhtml,
-    to_xml, BlockTuple, DictBlock, DictBlockRef, DictChar, DictImageBlock, DictLine, DictSpan,
-    DictTextBlock, ImageResolver, ResolvedImage, TextDict, WordTuple,
+    clip_textpage, defaults, dict_blocks, extract_selection, get_textbox, textflags, to_blocks,
+    to_dict, to_dict_with_images, to_html, to_json, to_json_with_images, to_text, to_words,
+    to_xhtml, to_xml, BlockTuple, DictBlock, DictBlockRef, DictChar, DictImageBlock, DictLine,
+    DictSpan, DictTextBlock, ImageResolver, ResolvedImage, TextDict, WordTuple,
 };
 pub use texttrace::{get_bboxlog, get_texttrace, BBoxLogEntry, TraceChar, TraceSpan};
 pub use words::words;
