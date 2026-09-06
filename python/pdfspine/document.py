@@ -13,13 +13,20 @@ import builtins
 import html
 import math
 import os
-from typing import Iterator, Mapping
+from typing import Iterator, Mapping, Sequence
 
 from . import _core
 from ._compat_deferred import DEFERRED as _DEFERRED_SYMBOLS
 from ._core import PdfError, PdfUnsupportedError
 from ._layout import layout_text as _layout_text
-from .constants import CS_CMYK, CS_GRAY, CS_RGB
+from ._markdown import (
+    MarkdownOptions,
+    TableRegion,
+    compute_heading_scale,
+    render_page,
+    table_is_plausible,
+)
+from .constants import CS_CMYK, CS_GRAY, CS_RGB, TEXT_PRESERVE_IMAGES, TEXTFLAGS_DICT
 
 # Back-compat re-exports: these constants historically lived in this module; keep
 # them importable as ``pdfspine.document.PDF_ENCRYPT_*`` (canonical home is now
@@ -2504,6 +2511,120 @@ class Page:
                 )
         return tuple(blocks)
 
+    def _markdown_source(
+        self, clip, options: MarkdownOptions
+    ) -> tuple[dict, list[TableRegion]]:
+        """The ``dict`` data (reading order) and detected tables feeding
+        :meth:`to_markdown`. Image payloads are dropped to keep the data
+        light; image blocks themselves are kept only when placeholders are
+        requested."""
+        flags = TEXTFLAGS_DICT
+        if not options.images:
+            flags &= ~TEXT_PRESERVE_IMAGES
+        data = self.get_text("dict", clip=clip, flags=flags, sort=True)
+        cr = _rt(clip) if clip is not None else None
+        blocks = []
+        for block in data.get("blocks", ()):
+            if cr is not None and not _intersects(_rt(block["bbox"]), cr):
+                continue
+            if block.get("type") == 1:
+                block["image"] = None
+            elif cr is not None:
+                block["lines"] = [
+                    line
+                    for line in block.get("lines", ())
+                    if _intersects(_rt(line["bbox"]), cr)
+                ]
+            blocks.append(block)
+        data["blocks"] = blocks
+        regions: list[TableRegion] = []
+        if options.tables:
+            px0, py0, px1, py1 = cr if cr is not None else _rt(self.rect)
+            page_area = abs(px1 - px0) * abs(py1 - py0)
+            for table in self.find_tables(strategy=options.table_strategy, clip=clip):
+                bbox = _rt(table.bbox)
+                if table_is_plausible(bbox, table.extract(), page_area):
+                    regions.append(TableRegion(bbox, table.to_markdown()))
+        return data, regions
+
+    def to_markdown(
+        self,
+        *,
+        clip=None,
+        tables: bool = True,
+        table_strategy: str = "lines",
+        heading_levels: int = 3,
+        heading_ratio: float = 1.15,
+        bold_headings: bool = True,
+        emphasis: bool = True,
+        images: bool = False,
+    ) -> str:
+        """The page as Markdown for RAG / LLM pipelines (pdfspine-original
+        extension).
+
+        Walks ``get_text("dict", sort=True)`` in the engine's reading order
+        (column-aware; nothing is re-ordered here) and renders:
+
+        * **Headings** — font sizes are clustered to the nearest half point;
+          the class carrying the most characters is the *body size*. Every
+          distinct size at or above ``body_size * heading_ratio`` becomes a
+          heading level, largest first, capped at ``heading_levels`` (deeper
+          sizes share the last level). With ``bold_headings``, a block whose
+          leading lines are all bold at body size, at most two lines / fifteen
+          words and not ending in ``.``/``;``/``,`` becomes the next-deeper
+          level. Heading candidates that read like paragraphs — over thirty
+          words, several lines ending with a period, or fewer than three
+          alphanumeric characters — stay body text.
+        * **Paragraphs** — the lines of a block joined by spaces (soft
+          hyphenation mended), one paragraph per line of output, blank lines
+          between blocks. Lines opening with a Markdown block marker are
+          escaped.
+        * **Lists** — lines starting with a bullet glyph (``•`` ``◦`` ``▪``
+          ``–`` ``-`` ``*`` …) become ``- item``, ``1.``/``1)`` become
+          ``1. item``, letter/roman labels become ``- (a) item``; wrapped
+          continuation lines join their item and indentation (relative to the
+          first item, in steps of 1.5 × body size) nests up to four levels.
+        * **Tables** — with ``tables=True`` every table found by
+          :meth:`find_tables` (``table_strategy``; ``"lines"`` by default) is
+          rendered through :meth:`Table.to_markdown` and replaces the text
+          lines inside its bbox at the point of the first such line. Grids
+          that are not tables — covering nearly the whole page, with fewer
+          than two filled cells, or holding a cell of running prose (over 500
+          characters) — are ignored and their text stays in the flow.
+        * **Inline styles** — with ``emphasis``, bold spans become
+          ``**bold**``, italic ``_italic_``, monospace ```code```; a block
+          set entirely in a monospace font becomes a fenced code block.
+        * **Images** — skipped unless ``images=True``, which emits
+          ``![image](page-N-image-K.ext)`` placeholders (nothing is written to
+          disk).
+
+        ``clip`` restricts extraction to a rectangle (handy for cutting running
+        headers and footers). Returns ``""`` for a page without content;
+        otherwise the text ends with a single newline.
+
+        >>> import pdfspine
+        >>> page = pdfspine.open().new_page(width=300, height=200)
+        >>> n = page.insert_text((20, 40), "Title", fontname="hebo", fontsize=18)
+        >>> n = page.insert_text((20, 70), "Body text.", fontsize=11)
+        >>> print(page.to_markdown())
+        # Title
+        <BLANKLINE>
+        Body text.
+        <BLANKLINE>
+        """
+        options = MarkdownOptions(
+            tables=tables,
+            table_strategy=table_strategy,
+            heading_levels=heading_levels,
+            heading_ratio=heading_ratio,
+            bold_headings=bold_headings,
+            emphasis=emphasis,
+            images=images,
+        )
+        data, regions = self._markdown_source(clip, options)
+        scale = compute_heading_scale([data], options)
+        return render_page(data, regions, scale, options, page_number=self.number)
+
     def link_annotations(self) -> tuple[LinkAnnotation, ...]:
         """The page's external-URI links, typed (pdfspine-original extension).
 
@@ -4389,6 +4510,88 @@ class Document:
             os.fspath(path), "w", encoding="utf-8", newline="\n"
         ) as output:
             output.write(self.to_html())
+
+    def to_markdown(
+        self,
+        pages: Sequence[int] | None = None,
+        *,
+        page_separator: str = "\n\n-----\n\n",
+        clip=None,
+        tables: bool = True,
+        table_strategy: str = "lines",
+        heading_levels: int = 3,
+        heading_ratio: float = 1.15,
+        bold_headings: bool = True,
+        emphasis: bool = True,
+        images: bool = False,
+    ) -> str:
+        """The document (or the 0-based ``pages`` given, in that order) as one
+        Markdown string (pdfspine-original extension).
+
+        Renders every page like :meth:`Page.to_markdown` with the same
+        options, except that the heading scale — body size and the
+        size → level mapping — is computed once over all selected pages, so
+        a level means the same thing on every page. Non-empty page fragments
+        are joined with ``page_separator`` (a horizontal rule by default);
+        empty pages contribute nothing. Returns ``""`` when no page has
+        content, otherwise text ending with a single newline.
+        """
+        options = MarkdownOptions(
+            tables=tables,
+            table_strategy=table_strategy,
+            heading_levels=heading_levels,
+            heading_ratio=heading_ratio,
+            bold_headings=bold_headings,
+            emphasis=emphasis,
+            images=images,
+        )
+        indices = range(len(self)) if pages is None else [int(p) for p in pages]
+        sources = []
+        for index in indices:
+            page = self[index]
+            data, regions = page._markdown_source(clip, options)
+            sources.append((page.number, data, regions))
+        scale = compute_heading_scale((data for _, data, _ in sources), options)
+        fragments = [
+            render_page(data, regions, scale, options, page_number=number).strip()
+            for number, data, regions in sources
+        ]
+        body = page_separator.join(fragment for fragment in fragments if fragment)
+        return f"{body}\n" if body else ""
+
+    def save_markdown(
+        self,
+        path: str | os.PathLike[str],
+        pages: Sequence[int] | None = None,
+        *,
+        page_separator: str = "\n\n-----\n\n",
+        clip=None,
+        tables: bool = True,
+        table_strategy: str = "lines",
+        heading_levels: int = 3,
+        heading_ratio: float = 1.15,
+        bold_headings: bool = True,
+        emphasis: bool = True,
+        images: bool = False,
+    ) -> None:
+        """Writes :meth:`to_markdown` (same arguments) to ``path`` using
+        UTF-8 and ``\\n`` newlines; I/O errors propagate."""
+        markdown = self.to_markdown(
+            pages,
+            page_separator=page_separator,
+            clip=clip,
+            tables=tables,
+            table_strategy=table_strategy,
+            heading_levels=heading_levels,
+            heading_ratio=heading_ratio,
+            bold_headings=bold_headings,
+            emphasis=emphasis,
+            images=images,
+        )
+        with builtins.open(
+            os.fspath(path), "w", encoding="utf-8", newline="\n"
+        ) as output:
+            output.write(markdown)
 
     def extractImage(self, xref: int) -> dict:  # noqa: N802
         return self.extract_image(xref)
