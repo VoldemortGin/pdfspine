@@ -18,6 +18,7 @@ from typing import Iterator, Mapping
 from . import _core
 from ._compat_deferred import DEFERRED as _DEFERRED_SYMBOLS
 from ._core import PdfError, PdfUnsupportedError
+from ._layout import layout_text as _layout_text
 from .constants import CS_CMYK, CS_GRAY, CS_RGB
 
 # Back-compat re-exports: these constants historically lived in this module; keep
@@ -1913,11 +1914,60 @@ class Page:
         ``list[tuple]`` for ``blocks``/``words``; ``dict`` for
         ``dict``/``rawdict``. Reuses ``textpage`` when given; ``sort`` orders
         blocks by ``(y, x)``.
+
+        ``option="layout"`` (pdfspine-original extension) returns
+        layout-preserving text with default tolerances — see
+        :meth:`get_text_layout` for the tunable form; ``sort`` is ignored
+        because the output is always in visual order.
         """
+        if option == "layout":
+            return self.get_text_layout(clip=clip, flags=flags, textpage=textpage)
         tp = textpage._tp if textpage is not None else None
         return self._page.get_text(
             option, clip=_as_clip(clip), flags=flags, textpage=tp, sort=sort
         )
+
+    def get_text_layout(
+        self,
+        *,
+        clip=None,
+        flags: int | None = None,
+        textpage: TextPage | None = None,
+        y_tolerance: float = 3.0,
+        char_width: float | None = None,
+    ) -> str:
+        """Layout-preserving plain text (pdfspine-original extension; also
+        reachable as ``get_text("layout")``).
+
+        Words (``get_text("words")``) are regrouped into visual lines with a
+        *y tolerance*: a word joins the current line when its vertical center
+        lies within ``y_tolerance`` points of the line's anchor, so the
+        sub-point baseline jitter that makes an exact ``(y, x)`` sort split one
+        visual line in two is absorbed. Lines are ordered top-to-bottom, words
+        left-to-right, and each word is placed on a character grid whose cell
+        is ``char_width`` points (``None`` = the median glyph width of the
+        page), so columns stay aligned as space padding, like
+        ``pdftotext -layout``. Vertical gaps wider than a typical line pitch
+        become blank lines (at most two). Every line ends with ``"\\n"``; a page
+        without words yields ``""``. ``clip`` limits the words to a rectangle
+        (bbox intersection); ``flags``/``textpage`` are passed through.
+
+        >>> import pdfspine
+        >>> page = pdfspine.open().new_page(width=300, height=200)
+        >>> n = page.insert_text((20, 50), "Item", fontsize=10)
+        >>> n = page.insert_text((150, 50.4), "Price", fontsize=10)
+        >>> text = page.get_text("layout")
+        >>> text.count("\\n"), text.index("Price") > 20
+        (1, True)
+        """
+        tp = textpage._tp if textpage is not None else None
+        words = self._page.get_text(
+            "words", clip=None, flags=flags, textpage=tp, sort=False
+        )
+        if clip is not None:
+            cr = _rt(clip)
+            words = [w for w in words if _intersects((w[0], w[1], w[2], w[3]), cr)]
+        return _layout_text(words, y_tolerance=y_tolerance, char_width=char_width)
 
     def get_text_words(
         self, *, clip=None, flags: int | None = None, sort: bool = False

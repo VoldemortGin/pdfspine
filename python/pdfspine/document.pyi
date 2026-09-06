@@ -542,6 +542,15 @@ class Page:
         textpage: TextPage | None = ...,
         sort: bool = ...,
     ) -> str | list[Any] | dict[str, Any]: ...
+    def get_text_layout(
+        self,
+        *,
+        clip: _Rect | None = ...,
+        flags: int | None = ...,
+        textpage: TextPage | None = ...,
+        y_tolerance: float = ...,
+        char_width: float | None = ...,
+    ) -> str: ...
     def get_text_words(
         self, *, clip: _Rect | None = ..., flags: int | None = ..., sort: bool = ...
     ) -> list[tuple[Any, ...]]: ...
