@@ -516,7 +516,7 @@ to the existing pdf→md extraction (`Table.to_markdown`) and image→pdf (`conv
 - **Defaults (all options-configurable):** A4 595×842pt + 72pt margins; body Helvetica / heading
   Helvetica-Bold / code Courier (Base-14, zero embedding); images from local path + `data:` URI only
   (**no remote-URL fetch** — keeps the no-network property); links rendered as blue text, no link
-  annotation in v1.
+  annotation in v1 (superseded 2026-09-05 — see the §9 addendum below).
 
 **✅ CJK DECISION — RESOLVED (2026-07-02, user chose Option A).** Don't bundle a font; expose `font=` /
 `cjk_font=` to pass a TTF path (PingFang / Noto Sans CJK) for Chinese; unset → CJK renders as missing
@@ -602,9 +602,27 @@ via `EmbeddedFont::char_advance`; `cjk_font` acts as a per-char fallback for cod
   `../PARITY.md` (→ GitHub blob URL per license.md precedent).
 
 **Resume pointer.** MD-0..MD-4 are **all complete (2026-07-02)** and verified via the full §8 suite; the
-feature lives in the working tree pending commit. Nothing left in §9 — future markdown work (link
-annotations, bold/italic user-font variants, row-splitting tables, HTML passthrough) would be a new PRD
-section, not a resumption of this one.
+feature lives in the working tree pending commit. Nothing left in §9 — future markdown work (bold/italic
+user-font variants, row-splitting tables, HTML passthrough) would be a new PRD section, not a resumption
+of this one.
+
+**Addendum — MD-5 · link annotations + outline — ✅ DONE (2026-09-05).** The two v1 exclusions are
+closed: `Options::links` / `Options::toc` (Python `links=True, toc=True`) on `markdown_to_pdf`.
+- Links: the layouter records one box per contiguous same-destination run per line
+  (`layout::LinkBox`, top = line-box top, bottom = baseline + 0.25 em); `render.rs` writes them through
+  `pdf_edit::insert_link` — `/A /URI` for external destinations (`<user@host>` gets `mailto:`),
+  `LinkKind::Goto` + a `/XYZ null top null` `/Dest` patch for `#anchor` links. Anchors resolve against
+  GitHub-style slugs (`nav.rs`: lower-case, spaces → `-`, punctuation dropped, `-1`/`-2` duplicates) or an
+  explicit `{#id}` attribute (`ENABLE_HEADING_ATTRIBUTES` is now on); percent-decoded first, then
+  re-slugified. Unresolved anchors / empty destinations get no annotation; image links are not boxed.
+- Outline: every heading in document order (blockquote / list children included), title = flattened
+  inline text, written via `pdf_edit::set_toc` after `nav::outline_levels` nests each heading under its
+  nearest shallower predecessor (never a level jump), then each item's `/Dest` is pinned to the
+  heading's top edge (`get_outline_xrefs` pre-order == flat order).
+- Byte stability: a document without links / headings, or with both switches off, produces exactly the
+  pre-MD-5 bytes (neither `pdf-edit` path is touched). Tests: `crates/pdf-markdown/tests/links_outline.rs`
+  (14) + `nav.rs` unit tests (5) + `MARKDOWN-TO-PDF-011..014` (014 = real-PyMuPDF oracle, skipped unless
+  `pytest -p pymupdf` with PyMuPDF installed).
 
 ## 10. Shared typesetting engine `pdf-typeset` — Phase A of docspine/pptspine faithful PDF export
 

@@ -2653,6 +2653,10 @@ network.
 | `MARKDOWN-TO-PDF-008` | `margins=` scalar + 4-tuple; `page_width`/`page_height` land in the page rect | PRD-NEXT §9 | green |
 | `MARKDOWN-TO-PDF-009` | bad inputs → typed `TypeError`/`ValueError`/`OSError`/`PdfError`, never a panic | PRD-NEXT §9 | green |
 | `MARKDOWN-TO-PDF-010` | relative images: file input defaults `base_dir` to the file's parent; explicit `base_dir=`; none → typed error | PRD-NEXT §9 | green |
+| `MARKDOWN-TO-PDF-011` | links → `/Link` annotations: external / autolink / `mailto:` URIs, `#anchor` GoTo to the heading's page; slug / `{#id}` / percent-encoded anchors; unresolved → none | PRD-NEXT §9 addendum | green |
+| `MARKDOWN-TO-PDF-012` | heading hierarchy → `/Outlines`: `get_toc()` levels / titles / 1-based pages; level jumps normalized; quoted headings included | PRD-NEXT §9 addendum | green |
+| `MARKDOWN-TO-PDF-013` | `links=` / `toc=` switches are independent; a document without links or headings is byte-identical either way | PRD-NEXT §9 addendum | green |
+| `MARKDOWN-TO-PDF-014` | real-PyMuPDF oracle reads the same `get_toc()`, `LINK_GOTO`/`LINK_URI` kinds, target page and `/XYZ` point back (skipped without PyMuPDF) | PRD-NEXT §9 addendum | green |
 
 ---
 
