@@ -1,8 +1,8 @@
 {
   "summary": {
     "n_docs": 16,
-    "paddle_cjk_acc": 1.0,
-    "paddle_latin_acc": 0.8672,
+    "paddle_cjk_acc": 0.989,
+    "paddle_latin_acc": 0.8387,
     "tesseract_cjk_acc": 0.0,
     "tesseract_latin_acc": 0.9877,
     "tesseract_lang": "eng (fitz default; no CJK model loaded)"
@@ -11,114 +11,560 @@
     {
       "image": "images/scan_00.png",
       "paddle_cjk_acc": 1.0,
-      "paddle_latin_acc": 1.0,
+      "paddle_latin_acc": 0.9556,
+      "paddle_text": "纯Rust实现的文字识别引擎\npdfspine OCR 2026\n中文与拉丁混排的扫描文档\ninvoice no.A19w\n发票金额合计为壹万贰仟元\ntotal USD 12000\n",
+      "paddle_latin_misses": [
+        {
+          "truth": "a1938",
+          "best": "a19w",
+          "sim": 0.6
+        }
+      ],
       "tesseract_cjk_acc": 0.0,
-      "tesseract_latin_acc": 0.9861
+      "tesseract_latin_acc": 0.9861,
+      "tesseract_text": "ZH\nRUSTSCEM\nASCH\nIR\nFI\n5|S\n—\npafspine\nOCR\n2026\nmyc\nSAT\nBEN\nfat\ninvoice\nno.\nA1938\nRZEMETASARATTZ\ntotal\nUSD\n12000\n",
+      "tesseract_latin_misses": [
+        {
+          "truth": "pdfspine",
+          "best": "pafspine",
+          "sim": 0.875
+        }
+      ]
     },
     {
       "image": "images/scan_01.png",
       "paddle_cjk_acc": 1.0,
-      "paddle_latin_acc": 0.5617,
+      "paddle_latin_acc": 0.8968,
+      "paddle_text": "北京市海淀区中关村大街\nBaneing 1000b\n机器学习与深度神经网络\nPaddleOCR v4 model\n光学字符识别准确率评测\naccuracy 0.97 score\n",
+      "paddle_latin_misses": [
+        {
+          "truth": "beijing",
+          "best": "baneing",
+          "sim": 0.571
+        },
+        {
+          "truth": "100190",
+          "best": "1000b",
+          "sim": 0.5
+        }
+      ],
       "tesseract_cjk_acc": 0.0,
-      "tesseract_latin_acc": 1.0
+      "tesseract_latin_acc": 1.0,
+      "tesseract_text": "ACR\npie\nK\nRANA\nBeijing\n100190\nMAF\n>DSREPAMA\nPaddleOCR\nv4\nmodel\n>\n+\nFFIR\nral\nHE\nFEE\nMl\naccuracy\n0.97\nscore\n",
+      "tesseract_latin_misses": []
     },
     {
       "image": "images/scan_02.png",
       "paddle_cjk_acc": 1.0,
-      "paddle_latin_acc": 0.9615,
+      "paddle_latin_acc": 0.5577,
+      "paddle_text": "这是一段用于测试的中文文本\nSample line 4b\n人工智能正在改变世界格局\ncanangnnelwb\n软件工程实践与质量保证\nbuild passed 100%\n数据库索引优化技术要点\n",
+      "paddle_latin_misses": [
+        {
+          "truth": "4827",
+          "best": "4b",
+          "sim": 0.25
+        },
+        {
+          "truth": "ai",
+          "best": "line",
+          "sim": 0.25
+        },
+        {
+          "truth": "changes",
+          "best": "canangnnelwb",
+          "sim": 0.417
+        },
+        {
+          "truth": "world",
+          "best": "build",
+          "sim": 0.4
+        },
+        {
+          "truth": "index",
+          "best": "line",
+          "sim": 0.4
+        },
+        {
+          "truth": "speed",
+          "best": "sample",
+          "sim": 0.333
+        },
+        {
+          "truth": "up",
+          "best": "build",
+          "sim": 0.2
+        },
+        {
+          "truth": "3x",
+          "best": "",
+          "sim": 0.0
+        }
+      ],
       "tesseract_cjk_acc": 0.0,
-      "tesseract_latin_acc": 0.9615
+      "tesseract_latin_acc": 0.9615,
+      "tesseract_text": "ie\n—\nEFA\nit\nHY\n_\nSC\nMAK\nsample\nline\n4827\nALF\noe\nJE\nEe\nSe\nte\nFRA\nAl\nchanges\nworld\nERA\nTEL\nRS\nERIE\nbuild\npassed\n100%\nBi\nHE\nER\n5\nMt\n{LIRR\nindex\nspeed\nup\n3x\n",
+      "tesseract_latin_misses": [
+        {
+          "truth": "ai",
+          "best": "al",
+          "sim": 0.5
+        }
+      ]
     },
     {
       "image": "images/scan_03.png",
       "paddle_cjk_acc": 1.0,
-      "paddle_latin_acc": 0.8431,
+      "paddle_latin_acc": 0.7778,
+      "paddle_text": "跨平台桌面应用程序开发\ncross-platform app\n自然语言处理前沿研究综述\nNLP survey 202d\n分布式系统的一致性算法\nraft consensus v2\n高性能计算与并行编程模型\n",
+      "paddle_latin_misses": [
+        {
+          "truth": "2025",
+          "best": "202d",
+          "sim": 0.75
+        },
+        {
+          "truth": "hpc",
+          "best": "app",
+          "sim": 0.333
+        },
+        {
+          "truth": "parallel",
+          "best": "survey",
+          "sim": 0.25
+        },
+        {
+          "truth": "64",
+          "best": "",
+          "sim": 0.0
+        }
+      ],
       "tesseract_cjk_acc": 0.0,
-      "tesseract_latin_acc": 1.0
+      "tesseract_latin_acc": 1.0,
+      "tesseract_text": "BFA\nRANARFFAR\ncross-platform\napp\nAAs\nSs\nMMEBRT\nHAS\nNLP\nsurvey\n2025\nSAA\nARAN\n—\nMERA\nraft\nconsensus\nv2\nra\nEneit\nA\nSHAT\nSaFetR!\nHPC\nparallel\n64\n",
+      "tesseract_latin_misses": []
     },
     {
       "image": "images/scan_04.png",
       "paddle_cjk_acc": 1.0,
-      "paddle_latin_acc": 0.9333,
+      "paddle_latin_acc": 1.0,
+      "paddle_text": "图像分割与目标检测网络\ndetect 30 objects\n操作系统内核调度策略分析\nkernel sched fair\n纯Rust实现的文字识别引擎\npdfspine OCR 2026\n中文与拉丁混排的扫描文档\ninvoice no. A1938\n发票金额合计为壹万贰仟元\ntotal USD 12000\n",
+      "paddle_latin_misses": [],
       "tesseract_cjk_acc": 0.0,
-      "tesseract_latin_acc": 0.9917
+      "tesseract_latin_acc": 0.9917,
+      "tesseract_text": "ARABS\n=P\nyl\nNZS\ndetect\n30\nobjects\nPRERAA\nZI\nRE\nAT\nkernel\nsched\nfair\n24\nRUSTSEERAY\nSCF\nIRI\n5|2\n—\npafspine\nOCR\n2026\nAM\nShi\nJ\nBER\nFAHBXCH\ninvoice\nno.\nA1938\nARREMAUASAALTIC\ntotal\nUSD\n12000\n",
+      "tesseract_latin_misses": [
+        {
+          "truth": "pdfspine",
+          "best": "pafspine",
+          "sim": 0.875
+        }
+      ]
     },
     {
       "image": "images/scan_05.png",
-      "paddle_cjk_acc": 1.0,
-      "paddle_latin_acc": 0.7,
+      "paddle_cjk_acc": 0.9655,
+      "paddle_latin_acc": 0.7722,
+      "paddle_text": "北京市海淀区中关村大街\nBeijing 100b\n机器学习与深度神经络\nPaddleOCRv4 modelb\n光学字符识别准确率评测\naccuracy 0.97 score\n这是一段用于测试的中文文本\ncsammple ine wb\n人智能正在改变世界格局\nAl changes world\n",
+      "paddle_latin_misses": [
+        {
+          "truth": "100190",
+          "best": "100b",
+          "sim": 0.5
+        },
+        {
+          "truth": "paddleocr",
+          "best": "paddleocrv4",
+          "sim": 0.818
+        },
+        {
+          "truth": "v4",
+          "best": "paddleocrv4",
+          "sim": 0.182
+        },
+        {
+          "truth": "model",
+          "best": "modelb",
+          "sim": 0.833
+        },
+        {
+          "truth": "sample",
+          "best": "csammple",
+          "sim": 0.75
+        },
+        {
+          "truth": "line",
+          "best": "ine",
+          "sim": 0.75
+        },
+        {
+          "truth": "4827",
+          "best": "97",
+          "sim": 0.25
+        },
+        {
+          "truth": "ai",
+          "best": "al",
+          "sim": 0.5
+        }
+      ],
       "tesseract_cjk_acc": 0.0,
-      "tesseract_latin_acc": 0.9667
+      "tesseract_latin_acc": 0.9667,
+      "tesseract_text": "ACR\nBie\nKPRANAE\nBeijing\n100190\nNae\n+s\nSARABAMZ\nPaddleOCR\nv4\nmodel\nSEA\nFFA\nSl\nESE\naccuracy\n0.97\nscore\nXE\n—\nER\nAF\nMAY\nASCSCAK\nsample\nline\n4827\nALSACE\nEH\nAREA\nAl\nchanges\nworld\n",
+      "tesseract_latin_misses": [
+        {
+          "truth": "ai",
+          "best": "af",
+          "sim": 0.5
+        }
+      ]
     },
     {
       "image": "images/scan_06.png",
       "paddle_cjk_acc": 1.0,
-      "paddle_latin_acc": 1.0,
+      "paddle_latin_acc": 0.8825,
+      "paddle_text": "软件工程实践与质量保证\nbuild passed 100%\n数据库索引优化技术要点\nindex sepeed upb\n跨平台桌面应用程序开发\ncross-platform app\n自然语言处理前沿研究综述\nNLP survey 2025\n分布式系统的一致性算法\nraft consensusvl\n高性能计算与并行编程模型\nHPC parallel 64\n",
+      "paddle_latin_misses": [
+        {
+          "truth": "speed",
+          "best": "sepeed",
+          "sim": 0.833
+        },
+        {
+          "truth": "up",
+          "best": "upb",
+          "sim": 0.667
+        },
+        {
+          "truth": "3x",
+          "best": "index",
+          "sim": 0.2
+        },
+        {
+          "truth": "consensus",
+          "best": "consensusvl",
+          "sim": 0.818
+        },
+        {
+          "truth": "v2",
+          "best": "2025",
+          "sim": 0.25
+        }
+      ],
       "tesseract_cjk_acc": 0.0,
-      "tesseract_latin_acc": 1.0
+      "tesseract_latin_acc": 1.0,
+      "tesseract_text": "A\nLER\nRSS\ntri\nbuild\npassed\n100%\nEEA\nSIMICRARER\nBLSRAN\nABFA\nBASS\nDa\nARS\na}\ntpl\nRA\n—\nBE\nBK\naac\nindex\nspeed\nup\n3x\ncross-platform\napp\nNLP\nsurvey\n2025\nraft\nconsensus\nv2\nme\nMERE\nITS\nSH\naaFeIR\nHPC\nparallel\n64\n",
+      "tesseract_latin_misses": []
     },
     {
       "image": "images/scan_07.png",
-      "paddle_cjk_acc": 1.0,
-      "paddle_latin_acc": 0.78,
+      "paddle_cjk_acc": 0.9118,
+      "paddle_latin_acc": 0.9147,
+      "paddle_text": "图像分割与标检测络detect 30 objects\n操作系统内核调度策略分析\nkernel sehedaib\n纯Rust实现的字识别引擎\npdfspine OCR 2026\n中与拉丁混排的扫描档\ninvoice no. A1938\n发票金额合计为壹万贰仟元\ntatal USD 12000\n北京市海淀区中关村街Beijing 100190\n",
+      "paddle_latin_misses": [
+        {
+          "truth": "sched",
+          "best": "sehedaib",
+          "sim": 0.5
+        },
+        {
+          "truth": "fair",
+          "best": "sehedaib",
+          "sim": 0.25
+        },
+        {
+          "truth": "total",
+          "best": "tatal",
+          "sim": 0.8
+        }
+      ],
       "tesseract_cjk_acc": 0.0,
-      "tesseract_latin_acc": 1.0
+      "tesseract_latin_acc": 1.0,
+      "tesseract_text": "ABaAIS\n=\na\n7\nTl\nZS\ndetect\n30\nobjects\nFRIFRAA\nVE\nSREB\nOT\nkernel\nsched\nfair\n2\nRUSTSCEM\nASC\nFIR\nFI\nS5|S£\n—\npdfspine\nOCR\n2026\nFASC\nSALT\nBEAN\nFAFASCHY\n©\ninvoice\nno.\nA1938\nAREMAHASHARATFIC\ntotal\nUSD\n12000\nACR\nTh\naie\nK\nPAN\nAE\nBeijing\n100190\n",
+      "tesseract_latin_misses": []
     },
     {
       "image": "images/scan_08.png",
       "paddle_cjk_acc": 1.0,
-      "paddle_latin_acc": 1.0,
+      "paddle_latin_acc": 0.975,
+      "paddle_text": "机器学习与深度神经网络\nPaddleOCR v4 model\n光学字符识别准确率评测\naccuracy 0.97 score\n这是一段用于测试的中文文本\nsample line 482b\n",
+      "paddle_latin_misses": [
+        {
+          "truth": "4827",
+          "best": "482b",
+          "sim": 0.75
+        }
+      ],
       "tesseract_cjk_acc": 0.0,
-      "tesseract_latin_acc": 1.0
+      "tesseract_latin_acc": 1.0,
+      "tesseract_text": "Nas\n>\nSURE\nHA\nINZS\n~~\npaddleOcr\nv4\nmodel\nSCF\nSRR\nAil\nHE\nFf\nTE\nMl\naccuracy\n0.97\nscore\n=\n—\nEX\nFAFA\nA\nSCSCAK\nsample\nline\n4827\n",
+      "tesseract_latin_misses": []
     },
     {
       "image": "images/scan_09.png",
       "paddle_cjk_acc": 1.0,
-      "paddle_latin_acc": 0.9615,
+      "paddle_latin_acc": 0.7436,
+      "paddle_text": "人工智能正在改变世界格局\nAal changes wlb\n软件工程实践与质量保证\nbuild passed 100%\n数据库索引优化技术要点\nindea seeed b\n跨平台桌面应用程序开发\ncross-platform app\n",
+      "paddle_latin_misses": [
+        {
+          "truth": "ai",
+          "best": "aal",
+          "sim": 0.333
+        },
+        {
+          "truth": "world",
+          "best": "wlb",
+          "sim": 0.4
+        },
+        {
+          "truth": "index",
+          "best": "indea",
+          "sim": 0.8
+        },
+        {
+          "truth": "speed",
+          "best": "seeed",
+          "sim": 0.8
+        },
+        {
+          "truth": "up",
+          "best": "app",
+          "sim": 0.333
+        },
+        {
+          "truth": "3x",
+          "best": "",
+          "sim": 0.0
+        }
+      ],
       "tesseract_cjk_acc": 0.0,
-      "tesseract_latin_acc": 0.9615
+      "tesseract_latin_acc": 0.9615,
+      "tesseract_text": "AL\nSBE\nIE\nFER\nETE\nFR\nAl\nchanges\nworld\nER\nLAE\nRS\nMERU\nbuild\npassed\n100%\nPTE\nER\n5\n{CIRARE\nEA\nindex\nspeed\nup\n3x\nSG\n52\nAREA\ncross-platform\napp\n",
+      "tesseract_latin_misses": [
+        {
+          "truth": "ai",
+          "best": "al",
+          "sim": 0.5
+        }
+      ]
     },
     {
       "image": "images/scan_10.png",
       "paddle_cjk_acc": 1.0,
-      "paddle_latin_acc": 0.9379,
+      "paddle_latin_acc": 0.8924,
+      "paddle_text": "自然语言处理前沿研究综述\nNLP survey 2025\n分布式系统的一致性算法\ncraf censennuslb\n高性能计算与并行编程模型\nHPC parallel 64\n图像分割与目标检测网络\ndetect 30 objects\n操作系统内核调度策略分析\nkernel sched fair\n",
+      "paddle_latin_misses": [
+        {
+          "truth": "raft",
+          "best": "craf",
+          "sim": 0.5
+        },
+        {
+          "truth": "consensus",
+          "best": "censennuslb",
+          "sim": 0.636
+        },
+        {
+          "truth": "v2",
+          "best": "2025",
+          "sim": 0.25
+        }
+      ],
       "tesseract_cjk_acc": 0.0,
-      "tesseract_latin_acc": 1.0
+      "tesseract_latin_acc": 1.0,
+      "tesseract_text": "A\nAia\nSAMBA\nAAS\nNLP\nsurvey\n2025\n4p\nASA\n—RAERIZ\nraft\nconsensus\nv2\nmtthett\nSa\nSH\naaFetR!\nHPC\nparallel\n64\n{5}\n25\n=\nLo\nrv)\npoy\na\ndetect\n30\nobjects\nPRIERAA\nVA\nSREB\nAT\nkernel\nsched\nfair\n",
+      "tesseract_latin_misses": []
     },
     {
       "image": "images/scan_11.png",
       "paddle_cjk_acc": 1.0,
-      "paddle_latin_acc": 0.7917,
+      "paddle_latin_acc": 0.7706,
+      "paddle_text": "纯Rust实现的文字识别引擎\n中文与拉丁混排的扫描文档\ninvoice no. A1938\n发票金额合计为壹万贰仟元\ntotal USD 12000\n",
+      "paddle_latin_misses": [
+        {
+          "truth": "pdfspine",
+          "best": "invoice",
+          "sim": 0.25
+        },
+        {
+          "truth": "ocr",
+          "best": "invoice",
+          "sim": 0.286
+        },
+        {
+          "truth": "2026",
+          "best": "12000",
+          "sim": 0.4
+        }
+      ],
       "tesseract_cjk_acc": 0.0,
-      "tesseract_latin_acc": 0.9861
+      "tesseract_latin_acc": 0.9861,
+      "tesseract_text": "4H\nRUStSLIPAISC\nFIRS\n5|H\n—\npafspine\nOCR\n2026\nAx\nSHIT\nHER\nFata\nSTH\ninvoice\nno.\nA1938\nRAEMAHASAATFI\ntotal\nusd\n12000\n",
+      "tesseract_latin_misses": [
+        {
+          "truth": "pdfspine",
+          "best": "pafspine",
+          "sim": 0.875
+        }
+      ]
     },
     {
       "image": "images/scan_12.png",
       "paddle_cjk_acc": 1.0,
-      "paddle_latin_acc": 0.8333,
+      "paddle_latin_acc": 0.9395,
+      "paddle_text": "北京市海淀区中关村大街\nBeijng 1001l\n机器学习与深度神经网络\nPaddleOCR v4 model\n光学字符识别准确率评测\naccuracy 0.97 score\n这是一段用于测试的中文文本\nSample line 482w\n",
+      "paddle_latin_misses": [
+        {
+          "truth": "beijing",
+          "best": "beijng",
+          "sim": 0.857
+        },
+        {
+          "truth": "100190",
+          "best": "1001l",
+          "sim": 0.667
+        },
+        {
+          "truth": "4827",
+          "best": "482w",
+          "sim": 0.75
+        }
+      ],
       "tesseract_cjk_acc": 0.0,
-      "tesseract_latin_acc": 1.0
+      "tesseract_latin_acc": 1.0,
+      "tesseract_text": "ACR\nTp\nie\nK\nRANA\nBeijing\n100190\nNaF\n>DSARE\nAMZ\nPaddleOCR\nv4\nmodel\nJEFF\nFIA\nmall\nYe\nABA\nMl\naccuracy\n0.97\nscore\n3X\nfe\n—\nPR\nFAFA\nA\nSCSCAR\nsample\nline\n4827\n",
+      "tesseract_latin_misses": []
     },
     {
       "image": "images/scan_13.png",
-      "paddle_cjk_acc": 1.0,
-      "paddle_latin_acc": 0.9688,
+      "paddle_cjk_acc": 0.9474,
+      "paddle_latin_acc": 0.6114,
+      "paddle_text": "人智能正在改变世界格局\ncacnangeneelwb\n软件工程实践与质量保证\nbuild passed 100%\n数据库索引优化技术要点\n跨平台桌面应用程序开发\ncross-platr rmallbl\n然语处理前沿研究综述\nNLP survey 2025\n",
+      "paddle_latin_misses": [
+        {
+          "truth": "ai",
+          "best": "build",
+          "sim": 0.2
+        },
+        {
+          "truth": "changes",
+          "best": "cacnangeneelwb",
+          "sim": 0.357
+        },
+        {
+          "truth": "world",
+          "best": "build",
+          "sim": 0.4
+        },
+        {
+          "truth": "index",
+          "best": "nlp",
+          "sim": 0.2
+        },
+        {
+          "truth": "speed",
+          "best": "passed",
+          "sim": 0.333
+        },
+        {
+          "truth": "up",
+          "best": "nlp",
+          "sim": 0.333
+        },
+        {
+          "truth": "3x",
+          "best": "",
+          "sim": 0.0
+        },
+        {
+          "truth": "platform",
+          "best": "platr",
+          "sim": 0.625
+        },
+        {
+          "truth": "app",
+          "best": "nlp",
+          "sim": 0.333
+        }
+      ],
       "tesseract_cjk_acc": 0.0,
-      "tesseract_latin_acc": 0.9688
+      "tesseract_latin_acc": 0.9688,
+      "tesseract_text": "ALBRIEAMSHARB\nI\nAl\nchanges\nworld\nERE\nLER\nSERIE\nbuild\npassed\n100%\nPEE\nASM\nEIR7-KER\nindex\nspeed\nup\n3x\nFARE\nMAEHHA\ncross-platform\napp\nBia\n&\nUBB\nSLR\nNLP\nsurvey\n2025\n",
+      "tesseract_latin_misses": [
+        {
+          "truth": "ai",
+          "best": "i",
+          "sim": 0.5
+        }
+      ]
     },
     {
       "image": "images/scan_14.png",
       "paddle_cjk_acc": 1.0,
-      "paddle_latin_acc": 0.6861,
+      "paddle_latin_acc": 0.7286,
+      "paddle_text": "分布式系统的一致性算法\nraft conensuslwb\n高性能计算与并行编程模型\nHPC parallb\n图像分割与目标检测网络\ndetect 30 objects\n操作系统内核调度策略分析\nkernel sched fair\n纯Rust实现的文字识别引擎\n中文与拉丁混排的扫描文档\ninvoice no.A193w\n",
+      "paddle_latin_misses": [
+        {
+          "truth": "consensus",
+          "best": "conensuslwb",
+          "sim": 0.636
+        },
+        {
+          "truth": "v2",
+          "best": "invoice",
+          "sim": 0.143
+        },
+        {
+          "truth": "parallel",
+          "best": "parallb",
+          "sim": 0.75
+        },
+        {
+          "truth": "64",
+          "best": "",
+          "sim": 0.0
+        },
+        {
+          "truth": "pdfspine",
+          "best": "fair",
+          "sim": 0.25
+        },
+        {
+          "truth": "ocr",
+          "best": "objects",
+          "sim": 0.286
+        },
+        {
+          "truth": "2026",
+          "best": "30",
+          "sim": 0.25
+        },
+        {
+          "truth": "a1938",
+          "best": "a193w",
+          "sim": 0.8
+        }
+      ],
       "tesseract_cjk_acc": 0.0,
-      "tesseract_latin_acc": 0.9815
+      "tesseract_latin_acc": 0.9815,
+      "tesseract_text": "SARARAN—BWEB\nI\nraft\nconsensus\nv2\nme\nttReit\n3\nSH\neth!\nPc\nparallel\n64\nA\n{R5}\n&|\n58\nPRK\nml\nhy\n2%\ndetect\n30\nobjects\nPRIEAAA\nKE\nRR\nAT\nkernel\nsched\nfair\nZt\nRUStSLER\nAIST\nFIR\nFI\n5|S\n—\npdfspine\nocR\n2026\nAX\nSiu\nT\nHEA\nFAB\ninvoice\nno.\nA1938\n",
+      "tesseract_latin_misses": [
+        {
+          "truth": "hpc",
+          "best": "pc",
+          "sim": 0.667
+        }
+      ]
     },
     {
       "image": "images/scan_15.png",
       "paddle_cjk_acc": 1.0,
-      "paddle_latin_acc": 0.9167,
+      "paddle_latin_acc": 1.0,
+      "paddle_text": "发票金额合计为壹万贰仟元\ntotal USD 12000\n北京市海淀区中关村大街\nBeijing 100190\n机器学习与深度神经网络\nPaddleOCR v4 model\n光学字符识别准确率评测\naccuracy 0.97 score\n",
+      "paddle_latin_misses": [],
       "tesseract_cjk_acc": 0.0,
-      "tesseract_latin_acc": 1.0
+      "tesseract_latin_acc": 1.0,
+      "tesseract_text": "RZEMAGIASAATFIC\ntotal\nUSD\n12000\nACER\nThE\nK\nPRA\nA\nBeijing\n100190\nNes\nFJ\nSRE\nAMZ\nPaddleOCR\nv4\nmodel\nSCRA\nRHR\nFall\nEE\nFf\nTF\nMl\naccuracy\n0.97\nscore\n",
+      "tesseract_latin_misses": []
     }
   ]
 }
