@@ -71,6 +71,12 @@ pub struct DocumentStore {
     /// so metadata-write / encryption-write survive a full save (PRD §8.7/§8.9).
     /// `Object::Null` for a key means "remove that trailer key".
     trailer_overrides: RwLock<Dict>,
+    /// The in-memory optional-content view state (the selected layer
+    /// configuration plus layer-panel overrides) consulted by the content
+    /// interpreter (ISO 32000-1 §8.11; PyMuPDF `switch_layer` /
+    /// `set_layer_ui_config`). Not persisted by a save; reset by the OCG
+    /// writers.
+    layer_view: RwLock<crate::ocg::LayerView>,
     /// The Standard Security Handler, present iff the trailer has `/Encrypt`
     /// (PRD §8.4). `None` for an unencrypted document. Behind the `encryption`
     /// feature so the default build does not depend on `pdf-crypto` (PRD §9.1).
@@ -313,6 +319,7 @@ impl DocumentStore {
             arena: RwLock::new(HashMap::new()),
             changes: RwLock::new(ChangeSet::new()),
             trailer_overrides: RwLock::new(Dict::new()),
+            layer_view: RwLock::new(crate::ocg::LayerView::default()),
             #[cfg(feature = "encryption")]
             decryptor: RwLock::new(decryptor),
             #[cfg(feature = "encryption")]
@@ -1086,6 +1093,25 @@ impl DocumentStore {
     #[must_use]
     pub fn is_dirty(&self) -> bool {
         self.changes.read().map(|c| c.is_dirty()).unwrap_or(false)
+    }
+
+    /// The current in-memory optional-content view (selected layer
+    /// configuration + layer-panel overrides). See [`crate::ocg::LayerView`].
+    #[must_use]
+    pub fn layer_view(&self) -> crate::ocg::LayerView {
+        self.layer_view
+            .read()
+            .map(|v| v.clone())
+            .unwrap_or_default()
+    }
+
+    /// Replaces the in-memory optional-content view (PyMuPDF `switch_layer` /
+    /// `set_layer_ui_config`). Affects rendering and text extraction only; a
+    /// save does not persist it.
+    pub fn set_layer_view(&self, view: crate::ocg::LayerView) {
+        if let Ok(mut slot) = self.layer_view.write() {
+            *slot = view;
+        }
     }
 
     /// Creates a new indirect object, allocating a fresh object number past the

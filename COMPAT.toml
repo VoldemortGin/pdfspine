@@ -29,10 +29,10 @@
 baseline = "1.24.x"
 baseline_detail = "PyMuPDF 1.24.14 / MuPDF 1.24.11"
 total = 769
-implemented = 687
-deferred = 16
+implemented = 694
+deferred = 9
 out_of_scope = 66
-coverage_pct = 89.3
+coverage_pct = 90.2
 
 # ── Matrix ──
 [[symbol]]
@@ -1860,51 +1860,51 @@ note = "OCG read + add/toggle/bind (M7)"
 [[symbol]]
 name = "Document.add_layer"
 group = "Document"
-disposition = "deferred"
-milestone = "post-v1"
-note = "OCMD / layer-config nesting deferred (PRD §3.2 #5)"
+disposition = "implemented"
+milestone = "M7"
+note = "OCG layer configs (/Configs) + OCMD + in-memory layer view (M7 follow-up)"
 
 [[symbol]]
 name = "Document.get_layers"
 group = "Document"
-disposition = "deferred"
-milestone = "post-v1"
-note = "OCMD / layer-config nesting deferred (PRD §3.2 #5)"
+disposition = "implemented"
+milestone = "M7"
+note = "OCG layer configs (/Configs) + OCMD + in-memory layer view (M7 follow-up)"
 
 [[symbol]]
 name = "Document.switch_layer"
 group = "Document"
-disposition = "deferred"
-milestone = "post-v1"
-note = "OCMD / layer-config nesting deferred (PRD §3.2 #5)"
+disposition = "implemented"
+milestone = "M7"
+note = "OCG layer configs (/Configs) + OCMD + in-memory layer view (M7 follow-up)"
 
 [[symbol]]
 name = "Document.set_layer_ui_config"
 group = "Document"
-disposition = "deferred"
-milestone = "post-v1"
-note = "OCMD / layer-config nesting deferred (PRD §3.2 #5)"
+disposition = "implemented"
+milestone = "M7"
+note = "OCG layer configs (/Configs) + OCMD + in-memory layer view (M7 follow-up)"
 
 [[symbol]]
 name = "Document.get_oc"
 group = "Document"
-disposition = "deferred"
-milestone = "post-v1"
-note = "OCMD / layer-config nesting deferred (PRD §3.2 #5)"
+disposition = "implemented"
+milestone = "M7"
+note = "OCG layer configs (/Configs) + OCMD + in-memory layer view (M7 follow-up)"
 
 [[symbol]]
 name = "Document.get_ocmd"
 group = "Document"
-disposition = "deferred"
-milestone = "post-v1"
-note = "OCMD / layer-config nesting deferred (PRD §3.2 #5)"
+disposition = "implemented"
+milestone = "M7"
+note = "OCG layer configs (/Configs) + OCMD + in-memory layer view (M7 follow-up)"
 
 [[symbol]]
 name = "Document.set_ocmd"
 group = "Document"
-disposition = "deferred"
-milestone = "post-v1"
-note = "OCMD / layer-config nesting deferred (PRD §3.2 #5)"
+disposition = "implemented"
+milestone = "M7"
+note = "OCG layer configs (/Configs) + OCMD + in-memory layer view (M7 follow-up)"
 
 [[symbol]]
 name = "Document.get_page_labels"

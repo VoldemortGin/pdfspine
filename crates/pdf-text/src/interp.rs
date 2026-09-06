@@ -9,6 +9,16 @@
 //! form-XObject recursion (depth-capped + cycle-guarded), and inline images
 //! (skipped, captured into the inventory).
 //!
+//! ## Optional content (ISO 32000-1 §8.11)
+//!
+//! The interpreter snapshots the document's hidden-OCG set
+//! ([`OcVisibility`], driven by the store's in-memory layer view) once per
+//! run. An XObject whose `/OC` resolves to a hidden OCG / OCMD is skipped
+//! entirely, and a `/OC … BDC … EMC` marked-content section whose property
+//! is hidden suppresses every glyph, image, path paint and shading inside it
+//! (the text matrix still advances, clips still apply — the MuPDF
+//! `pr->super.hidden` semantics), for both text extraction and rendering.
+//!
 //! ## Text rendering matrix (PRD §8.6.1, row-vector convention)
 //!
 //! ```text
@@ -28,6 +38,7 @@ use std::sync::Arc;
 
 use pdf_core::colorspace::ColorSpace;
 use pdf_core::geom::{Matrix, Point, Rect};
+use pdf_core::ocg::OcVisibility;
 use pdf_core::{Dict, DocumentStore, Name, Object};
 use pdf_fonts::FontMapper;
 use smol_str::SmolStr;
@@ -213,6 +224,11 @@ pub struct ContentInterpreter<'a> {
     /// [`RenderOp`] stream (document order, for M6 rendering / `DisplayList`).
     /// `None` for the M2 text-extraction path (zero overhead, identical output).
     render_ops: Option<Vec<RenderOp>>,
+    /// The hidden-OCG oracle snapshotted at construction (optional content).
+    oc: OcVisibility,
+    /// The number of enclosing hidden marked-content sections; while non-zero
+    /// nothing is painted (glyphs, images, paths, shadings).
+    hidden_depth: u32,
 }
 
 impl<'a> ContentInterpreter<'a> {
@@ -224,6 +240,8 @@ impl<'a> ContentInterpreter<'a> {
             doc,
             out: InterpretResult::default(),
             render_ops: None,
+            oc: OcVisibility::read(doc),
+            hidden_depth: 0,
         }
     }
 
@@ -236,6 +254,8 @@ impl<'a> ContentInterpreter<'a> {
             doc,
             out: InterpretResult::default(),
             render_ops: Some(Vec::new()),
+            oc: OcVisibility::read(doc),
+            hidden_depth: 0,
         }
     }
 
@@ -249,6 +269,12 @@ impl<'a> ContentInterpreter<'a> {
         if let Some(ops) = self.render_ops.as_mut() {
             ops.push(op);
         }
+    }
+
+    /// Whether painting is currently suppressed by a hidden optional-content
+    /// section.
+    fn hidden(&self) -> bool {
+        self.hidden_depth > 0
     }
 
     /// Runs a page dictionary in **recording** mode, returning the ordered
@@ -408,6 +434,11 @@ impl<'a> ContentInterpreter<'a> {
         // The in-progress vector path (path-construction → paint, PRD §8.8).
         let mut path = CurrentPath::default();
 
+        // Open marked-content sections (`BMC`/`BDC` … `EMC`) of *this* content
+        // buffer: `true` for a hidden `/OC` section. Local to the buffer so an
+        // unbalanced `EMC` inside a form cannot pop the caller's sections.
+        let mut mc_stack: Vec<bool> = Vec::new();
+
         for ev in events {
             match ev {
                 Event::Operand(o) => ops.push(o),
@@ -425,6 +456,7 @@ impl<'a> ContentInterpreter<'a> {
                         &mut tm,
                         &mut tlm,
                         &mut path,
+                        &mut mc_stack,
                         resources,
                         &mut font_cache,
                         depth,
@@ -434,6 +466,12 @@ impl<'a> ContentInterpreter<'a> {
                 }
             }
         }
+
+        // Unwind sections left open by the buffer (missing `EMC`).
+        let open_hidden = mc_stack.iter().filter(|&&h| h).count();
+        self.hidden_depth = self
+            .hidden_depth
+            .saturating_sub(u32::try_from(open_hidden).unwrap_or(u32::MAX));
     }
 
     /// Applies a single operator with its accumulated operands.
@@ -448,12 +486,28 @@ impl<'a> ContentInterpreter<'a> {
         tm: &mut Matrix,
         tlm: &mut Matrix,
         path: &mut CurrentPath,
+        mc_stack: &mut Vec<bool>,
         resources: &Dict,
         font_cache: &mut std::collections::HashMap<SmolStr, Option<CachedFont>>,
         depth: u32,
         visited: &mut HashSet<u32>,
     ) {
         match name {
+            // --- marked content (optional-content visibility) -------------
+            b"BDC" => {
+                let hidden = self.bdc_hidden(ops, resources);
+                if hidden {
+                    self.hidden_depth += 1;
+                }
+                mc_stack.push(hidden);
+            }
+            b"BMC" => mc_stack.push(false),
+            b"EMC" => {
+                if mc_stack.pop() == Some(true) {
+                    self.hidden_depth = self.hidden_depth.saturating_sub(1);
+                }
+            }
+
             // --- graphics state ------------------------------------------
             b"q" => {
                 stack.push(gs.clone());
@@ -865,6 +919,12 @@ impl<'a> ContentInterpreter<'a> {
             }
         }
 
+        if self.hidden() {
+            // Hidden optional content: the text matrix advanced, nothing paints.
+            self.out.glyphs.truncate(start);
+            return;
+        }
+
         if recording {
             // The glyphs' `origin`/`bbox` already carry the full CTM
             // (Trm = params·Tm·CTM); `trms` additionally carries the linear part
@@ -1076,10 +1136,47 @@ impl<'a> ContentInterpreter<'a> {
             .and_then(|o| o.as_dict().cloned())
     }
 
+    // --- optional content -------------------------------------------------
+
+    /// Whether a `BDC` opens a hidden optional-content section: the tag must be
+    /// `/OC` and its property (a `/Resources /Properties` name or an inline
+    /// dict) must resolve to a hidden OCG / OCMD.
+    fn bdc_hidden(&self, ops: &[Object], resources: &Dict) -> bool {
+        if !self.oc.hides_anything() {
+            return false;
+        }
+        let Some(tag) = ops.first().and_then(Object::as_name) else {
+            return false;
+        };
+        if tag.as_bytes() != b"OC" {
+            return false;
+        }
+        match ops.get(1) {
+            Some(Object::Name(pname)) => {
+                let Some(props) = self
+                    .doc
+                    .resolve_dict_key(resources, &Name::new("Properties"))
+                    .ok()
+                    .flatten()
+                else {
+                    return false;
+                };
+                // Keep the raw entry: an indirect reference identifies the OCG.
+                props
+                    .as_dict()
+                    .and_then(|d| d.get(pname))
+                    .is_some_and(|oc| self.oc.is_hidden(self.doc, oc))
+            }
+            Some(inline @ Object::Dictionary(_)) => self.oc.is_hidden(self.doc, inline),
+            _ => false,
+        }
+    }
+
     // --- XObjects ---------------------------------------------------------
 
     /// Handles `Do`: a Form XObject recurses (with its `/Matrix` and own
-    /// `/Resources`); an Image XObject is recorded in the inventory.
+    /// `/Resources`); an Image XObject is recorded in the inventory. Skipped
+    /// inside a hidden section or when the XObject's own `/OC` is hidden.
     fn do_xobject(
         &mut self,
         xname: &str,
@@ -1116,6 +1213,14 @@ impl<'a> ContentInterpreter<'a> {
         let Some(stream) = xobj.as_stream() else {
             return;
         };
+        if self.hidden()
+            || stream
+                .dict
+                .get(&Name::new("OC"))
+                .is_some_and(|oc| self.oc.is_hidden(self.doc, oc))
+        {
+            return;
+        }
         let subtype = stream
             .dict
             .get(&Name::new("Subtype"))
@@ -1240,6 +1345,20 @@ impl<'a> ContentInterpreter<'a> {
     ) {
         let pending_clip = path.clip_pending.take();
         let rectangular_clip = pending_clip.and_then(|_| path.single_rect());
+        if !path.items.is_empty() && self.hidden() {
+            // Hidden optional content: no paint, but a pending clip still applies.
+            if let Some(clip_eo) = pending_clip {
+                if self.recording() {
+                    self.emit(RenderOp::Clip {
+                        items: path.items.clone(),
+                        even_odd: clip_eo,
+                    });
+                }
+                apply_rectangular_clip(gs, rectangular_clip);
+            }
+            path.reset();
+            return;
+        }
         if !path.items.is_empty() {
             let (color, fill) = match kind {
                 PaintKind::Stroke => (Some(gs.stroke_color), None),
@@ -1297,6 +1416,9 @@ impl<'a> ContentInterpreter<'a> {
 
     /// Records an inline image (`BI…ID…EI`) into the inventory.
     fn record_inline_image(&mut self, params: &Object, data: Vec<u8>, gs: &GraphicsState) {
+        if self.hidden() {
+            return;
+        }
         let d = params.as_dict();
         let getint = |keys: &[&str]| -> Option<u32> {
             let d = d?;
@@ -1371,6 +1493,9 @@ impl<'a> ContentInterpreter<'a> {
     /// Handles `sh`: resolves `/Resources /Shading /<name>` and emits a
     /// [`RenderOp::Shading`] carrying the shading dict for the renderer to parse.
     fn do_shading(&mut self, sname: &str, gs: &GraphicsState, resources: &Dict) {
+        if self.hidden() {
+            return;
+        }
         let Some(shadings) = self
             .doc
             .resolve_dict_key(resources, &Name::new("Shading"))

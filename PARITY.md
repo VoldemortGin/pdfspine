@@ -34,15 +34,15 @@
 
 > **Current snapshot.** Numbers below are recomputed from the
 > live `COMPAT.toml` per-symbol dispositions. `COMPAT.toml [meta]` is always the authoritative live figure;
-> the current remaining-work list (the 16 deferred symbols, grouped + prioritized) lives in
+> the current remaining-work list (the 9 deferred symbols, grouped + prioritized) lives in
 > [`docs/PRD-NEXT.md`](docs/PRD-NEXT.md) §3.B.
 
-**Overall: 687 / 769 implemented (89.3% coverage).**
+**Overall: 694 / 769 implemented (90.2% coverage).**
 
 | Disposition | Count | Share |
 |---|---:|---:|
-| **implemented** | **687** | **89.3%** |
-| deferred (planned, later milestone / post-v1) | 16 | 2.1% |
+| **implemented** | **694** | **90.2%** |
+| deferred (planned, later milestone / post-v1) | 9 | 1.2% |
 | out-of-scope (raises `PdfUnsupportedError`) | 66 | 8.6% |
 | **Total catalogued symbols** | **769** | 100% |
 
@@ -59,7 +59,7 @@
 | `Rect` | 45 | 45 | 0 | 0 | 100% |
 | `IRect` | 25 | 25 | 0 | 0 | 100% |
 | `Quad` | 17 | 17 | 0 | 0 | 100% |
-| `Document` | 150 | 129 | 7 | 14 | 86% |
+| `Document` | 150 | 136 | 0 | 14 | 91% |
 | `Page` | 117 | 112 | 3 | 2 | 96% |
 | `TextPage` | 17 | 17 | 0 | 0 | 100% |
 | `Pixmap` | 43 | 42 | 1 | 0 | 98% |
@@ -79,7 +79,7 @@
 | Module-level functions | 32 | 29 | 0 | 3 | 91% |
 | `Tools` / `TOOLS` | 22 | 13 | 2 | 7 | 59% |
 | `exceptions` | 10 | 10 | 0 | 0 | 100% |
-| **Total** | **769** | **687** | **16** | **66** | **89.3%** |
+| **Total** | **769** | **694** | **9** | **66** | **90.2%** |
 
 ### Per-milestone breakdown
 
@@ -87,7 +87,7 @@
 > per-symbol `milestone` field, so it cannot be recomputed mechanically. Use the **per-class table
 > above** (recomputed from the live `COMPAT.toml`) + `docs/PRD-NEXT.md` §3.B for current status. By
 > milestone, all of M0–M8's headline paths are landed (geometry, parsing, text, edit/save, annot/forms,
-> image-docs/Pixmap, rendering near-parity, SVG/tables/OCG, OCR-via-Tesseract); the 16 deferred are the
+> image-docs/Pixmap, rendering near-parity, SVG/tables/OCG, OCR-via-Tesseract); the 9 deferred are the
 > long tails and the 66 out-of-scope are the HTML/CSS story engine + render-era knobs.
 
 ---
@@ -130,7 +130,7 @@ per-symbol truth (every name, disposition, milestone, note) is in [`COMPAT.toml`
   the rotation matrices, `get_contents`/`set_contents`/`read_contents`, page labels (`get_label`),
   `language`/`set_language`, `is_wrapped`, `write_text`, `remove_rotation`, `refresh`. Gaps: `insert_font`,
   device-replay (`run`/`extend_textpage`).
-- [x] **`Document` (129/150)** — open/lifecycle, save family (`save`/`ez_save`/`save_incremental`/`write`/
+- [x] **`Document` (136/150)** — open/lifecycle, save family (`save`/`ez_save`/`save_incremental`/`write`/
   `tobytes`/`convert_to_pdf`/`subset`), page ops (`new_page`/`insert_pdf`/`delete_page`/`select`/`fullcopy_page`/`reload_page`/
   `page_xref`/`page_cropbox`), metadata + XMP read/write, TOC get/set + node edits
   (`set_toc_item`/`del_toc_item`/`get_outline_xrefs`), `extract_font`, `version_count`, encryption read
@@ -139,8 +139,12 @@ per-symbol truth (every name, disposition, milestone, note) is in [`COMPAT.toml`
   (`update_object`/`update_stream`/`get_new_xref`/`pdf_catalog`/`pdf_trailer`/`xref_get_keys`/…) +
   state/meta (`pagelayout`/`pagemode`/`markinfo`/`language`/`need_appearances`/`get_sigflags`/`name`/…),
   embedded files (`embfile_*` incl. `embfile_upd`), `insert_file`, `FormFonts`, `bake`/`scrub`/`resolve_link`,
-  forms, OCG read/add/toggle/bind (M7), journalling undo/redo (M3), page-label write, OCR export. Gaps: OCG
-  layer object ops (`add_layer`/`get_layers`/`get_oc`/`get_ocmd`/`set_ocmd`/`set_layer_ui_config`/`switch_layer`).
+  forms, OCG read/add/toggle/bind + the full layer-object surface
+  (`add_layer`/`get_layers`/`switch_layer`/`set_layer_ui_config`/`get_oc`/`get_ocmd`/`set_ocmd`) — the in-memory
+  layer view is now honoured by BOTH rendering and text extraction (hidden XObject `/OC`, `/OC …BDC/EMC`
+  sections, and OCMD `/P` policies + `/VE` are evaluated) (M7), journalling undo/redo (M3), page-label write,
+  OCR export. No gaps remain; known limitation: `Page.insert_text(oc=)` / `insert_image(oc=)` / Shape `oc=`
+  still don't emit the `BDC/EMC` marked-content wrapper (only `set_oc` on XObjects binds content to a layer).
 - [x] **`Annot` (46/51)** — `update`, all geometry/colors/opacity/border/flags/info getters+setters,
   `type`/`rect`/`xref`/`vertices`/`has_ap`, line-ends/blendmode/name/open, rotation/popup/apn/file-attach;
   only `get_textbox` deferred (+ 4 out-of-scope).
@@ -179,10 +183,9 @@ per-symbol truth (every name, disposition, milestone, note) is in [`COMPAT.toml`
 
 ## Remaining work
 
-The authoritative, prioritised list of the **16 deferred** symbols (grouped, with quick-wins flagged)
+The authoritative, prioritised list of the **9 deferred** symbols (grouped, with quick-wins flagged)
 now lives in **[`docs/PRD-NEXT.md`](docs/PRD-NEXT.md) §3.B** — kept there to avoid two divergent lists.
-In brief the deferred set is: **Document (7)** OCG layer object ops
-(`add_layer`/`get_layers`/`get_oc`/`get_ocmd`/`set_ocmd`/`set_layer_ui_config`/`switch_layer`);
+In brief the deferred set is:
 **Page (3)** `insert_font` + device-replay (`run`/`extend_textpage`); **DisplayList (2)** `run`/`get_textpage`
 (device-callback replay); **Tools (2)** `set_annot_stem`/`set_subset_fontnames`;
 **Annot (1)** `get_textbox`; **Pixmap (1)** `warp`.

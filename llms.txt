@@ -1,6 +1,6 @@
 # pdfspine
 
-> 纯 Rust 实现的 PyMuPDF(fitz) 重实现，通过 PyO3 暴露 Python API。不依赖 MuPDF/pdfium 等 C 库，自包含 abi3 wheel，许可证 Apache-2.0（PyMuPDF 是 AGPL-3.0）。目标：与 PyMuPDF 1.24.x 符号级对齐（当前 89.3%，687/769）。
+> 纯 Rust 实现的 PyMuPDF(fitz) 重实现，通过 PyO3 暴露 Python API。不依赖 MuPDF/pdfium 等 C 库，自包含 abi3 wheel，许可证 Apache-2.0（PyMuPDF 是 AGPL-3.0）。目标：与 PyMuPDF 1.24.x 符号级对齐（当前 90.2%，694/769）。
 
 - pip 安装名: `pdfspine`（裸安装自动带上共享 `ocrspine-models` 数据包；`[ocr]`/`[all]` 是兼容性空壳）
 - import 名: `import pdfspine`

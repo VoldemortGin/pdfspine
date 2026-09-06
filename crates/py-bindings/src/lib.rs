@@ -35,6 +35,57 @@ use pyo3::types::{PyBytes, PyDict, PyFloat, PyList, PyTuple};
 /// The package version (mirrors the Rust workspace version).
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
+/// Maps an argument-validation failure to `ValueError` (the PyMuPDF
+/// convention for bad xrefs / layer numbers).
+fn value_err(e: ApiError) -> PyErr {
+    PyValueError::new_err(e.to_string())
+}
+
+/// A `/VE` visibility expression as PyMuPDF's nested list (`["and", 5,
+/// ["not", 6]]`: lower-case operators, OCG xrefs as ints).
+fn ve_to_py<'py>(py: Python<'py>, ve: &pdf_api::VeExpr) -> PyResult<Bound<'py, PyAny>> {
+    match ve {
+        pdf_api::VeExpr::Ocg(num) => Ok(num.into_pyobject(py)?.into_any()),
+        pdf_api::VeExpr::Op { op, args } => {
+            let list = PyList::empty(py);
+            list.append(op.to_ascii_lowercase())?;
+            for arg in args {
+                list.append(ve_to_py(py, arg)?)?;
+            }
+            Ok(list.into_any())
+        }
+    }
+}
+
+/// Parses PyMuPDF's nested `[op, operand, …]` list into a visibility
+/// expression (operators title-cased for the `/VE` names).
+fn ve_from_py(obj: &Bound<'_, PyAny>) -> PyResult<pdf_api::VeExpr> {
+    if let Ok(num) = obj.extract::<u32>() {
+        return Ok(pdf_api::VeExpr::Ocg(num));
+    }
+    let items: Vec<Bound<'_, PyAny>> = obj
+        .try_iter()
+        .and_then(|it| it.collect())
+        .map_err(|_| PyValueError::new_err(format!("bad 've' format: {obj}")))?;
+    let Some(op) = items.first().and_then(|o| o.extract::<String>().ok()) else {
+        return Err(PyValueError::new_err(format!("bad 've' format: {obj}")));
+    };
+    let op = match op.to_ascii_lowercase().as_str() {
+        "and" => "And",
+        "or" => "Or",
+        "not" => "Not",
+        _ => return Err(PyValueError::new_err(format!("bad operand: {op}"))),
+    };
+    let args = items[1..]
+        .iter()
+        .map(ve_from_py)
+        .collect::<PyResult<Vec<_>>>()?;
+    Ok(pdf_api::VeExpr::Op {
+        op: op.to_string(),
+        args,
+    })
+}
+
 // --- exception hierarchy (PRD §9.3) ---------------------------------------
 
 create_exception!(_core, PdfError, pyo3::exceptions::PyException);
@@ -4274,6 +4325,91 @@ impl PyDocument {
     /// `Document.set_oc`).
     fn set_oc(&self, xref: u32, ocg: u32) -> PyResult<()> {
         self.doc.set_oc(xref, ocg).map_err(map_err)
+    }
+
+    /// The alternate layer configurations (PyMuPDF `Document.get_layers`):
+    /// dicts with `number`, `name`, `creator` (`""` when absent).
+    fn get_layers<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
+        let list = PyList::empty(py);
+        for c in self.doc.get_layers() {
+            let d = PyDict::new(py);
+            d.set_item("number", c.number)?;
+            d.set_item("name", c.name.unwrap_or_default())?;
+            d.set_item("creator", c.creator.unwrap_or_default())?;
+            list.append(d)?;
+        }
+        Ok(list)
+    }
+
+    /// The number of alternate layer configurations (valid `switch_layer`
+    /// numbers).
+    fn layer_config_count(&self) -> usize {
+        self.doc.layer_config_count()
+    }
+
+    /// Selects layer configuration `number` (`None` = the default `/D`) for
+    /// rendering / extraction, in memory only (PyMuPDF `Document.switch_layer`).
+    #[pyo3(signature = (number))]
+    fn switch_layer(&self, number: Option<usize>) -> PyResult<()> {
+        self.doc.select_layer_config(number).map_err(value_err)
+    }
+
+    /// Makes the selected configuration the document default and drops
+    /// `/Configs` (PyMuPDF `switch_layer(..., as_default=True)`).
+    fn set_layer_config_as_default(&self) -> PyResult<()> {
+        self.doc.set_layer_config_as_default().map_err(map_err)
+    }
+
+    /// Sets (`action` 0) / toggles (1) / clears (2) layer-panel row `number`
+    /// in memory (PyMuPDF `Document.set_layer_ui_config`).
+    #[pyo3(signature = (number, action=0))]
+    fn set_layer_ui_config(&self, number: usize, action: u8) -> PyResult<()> {
+        self.doc
+            .set_layer_ui_config(number, action)
+            .map_err(value_err)
+    }
+
+    /// Appends an alternate layer configuration (PyMuPDF `Document.add_layer`).
+    #[pyo3(signature = (name, *, creator=None, on=Vec::new()))]
+    fn add_layer(&self, name: &str, creator: Option<&str>, on: Vec<u32>) -> PyResult<()> {
+        self.doc.add_layer(name, creator, &on).map_err(map_err)
+    }
+
+    /// The `/OC` xref of image / form XObject `xref`, or 0 (PyMuPDF
+    /// `Document.get_oc`).
+    fn get_oc(&self, xref: u32) -> PyResult<u32> {
+        self.doc.get_oc(xref).map_err(value_err)
+    }
+
+    /// The OCMD `xref` as a dict with `xref`, `ocgs`, `policy`, `ve` (PyMuPDF
+    /// `Document.get_ocmd`).
+    fn get_ocmd<'py>(&self, py: Python<'py>, xref: u32) -> PyResult<Bound<'py, PyDict>> {
+        let info = self.doc.get_ocmd(xref).map_err(value_err)?;
+        let d = PyDict::new(py);
+        d.set_item("xref", info.xref)?;
+        d.set_item("ocgs", info.ocgs)?;
+        d.set_item("policy", info.policy)?;
+        match info.ve {
+            Some(ve) => d.set_item("ve", ve_to_py(py, &ve)?)?,
+            None => d.set_item("ve", py.None())?,
+        }
+        Ok(d)
+    }
+
+    /// Creates (`xref == 0`) or replaces an OCMD, returning its xref (PyMuPDF
+    /// `Document.set_ocmd`). `ve` is a nested `[op, operand, …]` list.
+    #[pyo3(signature = (xref=0, *, ocgs=None, policy=None, ve=None))]
+    fn set_ocmd(
+        &self,
+        xref: u32,
+        ocgs: Option<Vec<u32>>,
+        policy: Option<&str>,
+        ve: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<u32> {
+        let ve = ve.map(ve_from_py).transpose()?;
+        self.doc
+            .set_ocmd(xref, ocgs.as_deref(), policy, ve.as_ref())
+            .map_err(value_err)
     }
 
     fn __repr__(&self) -> String {
