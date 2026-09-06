@@ -5,6 +5,8 @@
 //! ([`crate::vector`], [`crate::text`], [`crate::image`] all take `&mut Canvas`);
 //! M6a fills in the bodies. See `ARCHITECTURE.md`.
 
+use std::sync::Arc;
+
 use tiny_skia::{Mask, Pixmap as SkPixmap, Transform};
 
 use pdf_core::geom::Matrix;
@@ -34,9 +36,13 @@ pub struct Canvas {
     /// The current clip mask (an 8-bit coverage mask in device pixels), or
     /// `None` for an unclipped canvas. Intersected by [`crate::vector::set_clip`]
     /// and snapshotted by [`Canvas::save`] / [`Canvas::restore`] (PDF `q`/`Q`).
-    clip: Option<Mask>,
+    ///
+    /// Held behind an [`Arc`] so `save` snapshots the mask by a cheap refcount
+    /// bump instead of deep-copying the device-size buffer; a later
+    /// `intersect_clip` copies on write only if a snapshot still shares it.
+    clip: Option<Arc<Mask>>,
     /// The saved graphics-state clip snapshots (the `q`/`Q` clip stack).
-    clip_stack: Vec<Option<Mask>>,
+    clip_stack: Vec<Option<Arc<Mask>>>,
 }
 
 impl Canvas {
@@ -125,14 +131,14 @@ impl Canvas {
     /// canvas unit tests — hence `allow(dead_code)` for the lib build.
     #[allow(dead_code)]
     pub(crate) fn clip(&self) -> Option<&Mask> {
-        self.clip.as_ref()
+        self.clip.as_deref()
     }
 
     /// Mutable pixmap **and** a shared borrow of the clip together (disjoint
     /// fields), so a fill/stroke can pass the clip straight to tiny-skia without
     /// cloning the whole device-size mask on every paint op.
     pub(crate) fn pixmap_and_clip_mut(&mut self) -> (&mut SkPixmap, Option<&Mask>) {
-        (&mut self.pixmap, self.clip.as_ref())
+        (&mut self.pixmap, self.clip.as_deref())
     }
 
     /// Composes a PDF user-space CTM with the canvas base transform and converts
@@ -155,12 +161,15 @@ impl Canvas {
     pub(crate) fn intersect_clip(&mut self, mask: Mask) {
         match &mut self.clip {
             Some(existing) => {
+                // Copy-on-write: `make_mut` clones the mask data only if a `save`
+                // snapshot still shares this `Arc`; otherwise it mutates in place.
+                let existing = Arc::make_mut(existing);
                 for (a, b) in existing.data_mut().iter_mut().zip(mask.data().iter()) {
                     // Premultiply-style coverage intersection: a·b / 255.
                     *a = ((u16::from(*a) * u16::from(*b) + 127) / 255) as u8;
                 }
             }
-            None => self.clip = Some(mask),
+            None => self.clip = Some(Arc::new(mask)),
         }
     }
 

@@ -39,6 +39,7 @@ use ttf_parser::{Face, GlyphId, OutlineBuilder};
 
 use crate::canvas::Canvas;
 use crate::error::{Error, Result};
+use crate::glyph_cache::GlyphMaskCache;
 use crate::vector::{Paint, StrokeStyle};
 
 /// A parsed embedded font program: sfnt-wrapped, bare CFF, or Adobe Type1.
@@ -404,6 +405,8 @@ pub fn draw_glyph_with_font(
         stroke_paint,
         stroke,
         &mut scratch,
+        None,
+        (0, 0),
     );
     Ok(())
 }
@@ -418,6 +421,13 @@ pub fn draw_glyph_with_font(
 /// `scratch` is a reusable [`SkPaint`] the caller keeps across glyphs so each
 /// glyph does not allocate a fresh paint/shader; only its color is updated here.
 /// The render-mode logic mirrors [`draw_glyph_with_font`].
+///
+/// `mask_cache` is the page driver's per-render glyph coverage cache: when
+/// present the fill is served through it ([`GlyphMaskCache::fill_glyph`], keyed
+/// by `glyph_key = (font entry index, glyph id)`), which reproduces
+/// `Pixmap::fill_path` byte-for-byte to within the sub-pixel phase rounding. The
+/// frozen (font-less) callers pass `None` to keep the direct fill.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn draw_glyph_path(
     canvas: &mut Canvas,
     glyph: &PositionedGlyph,
@@ -426,6 +436,8 @@ pub(crate) fn draw_glyph_path(
     stroke_paint: Paint,
     stroke: &StrokeStyle,
     scratch: &mut SkPaint<'static>,
+    mask_cache: Option<&mut GlyphMaskCache>,
+    glyph_key: (usize, u16),
 ) {
     let mode = glyph.render_mode;
     if mode == 3 {
@@ -441,9 +453,14 @@ pub(crate) fn draw_glyph_path(
     scratch.anti_alias = true;
 
     if do_fill {
-        let [r, g, b] = unpack_rgb(glyph.color);
-        scratch.set_color_rgba8(r, g, b, 0xFF);
-        pixmap.fill_path(path, scratch, FillRule::Winding, transform, clip);
+        let rgb = unpack_rgb(glyph.color);
+        match mask_cache {
+            Some(cache) => cache.fill_glyph(pixmap, clip, path, transform, glyph_key, rgb),
+            None => {
+                scratch.set_color_rgba8(rgb[0], rgb[1], rgb[2], 0xFF);
+                pixmap.fill_path(path, scratch, FillRule::Winding, transform, clip);
+            }
+        }
     }
 
     if do_stroke {

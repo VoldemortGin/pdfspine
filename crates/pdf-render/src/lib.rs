@@ -32,6 +32,7 @@
 
 pub mod canvas;
 pub mod error;
+mod glyph_cache;
 pub mod image;
 pub mod render;
 pub mod svg;
