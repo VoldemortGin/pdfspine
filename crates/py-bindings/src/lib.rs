@@ -25,7 +25,7 @@ use pdf_api::{
 };
 use pyo3::create_exception;
 use pyo3::exceptions::{
-    PyAttributeError, PyFileNotFoundError, PyIndexError, PyOSError, PyValueError,
+    PyAttributeError, PyFileNotFoundError, PyIndexError, PyOSError, PyRuntimeError, PyValueError,
 };
 use pyo3::ffi;
 use pyo3::intern;
@@ -506,6 +506,19 @@ fn text_output_to_py(
         return Ok(text.into_pyobject(py)?.into_any().unbind());
     }
 
+    // dict/rawdict are built straight from the TextPage model, skipping the
+    // owned `TextDict` copy of every character `get_text` would make first.
+    let raw = match opt {
+        "dict" => Some(false),
+        "rawdict" => Some(true),
+        _ => None,
+    };
+    if let Some(raw) = raw {
+        return Ok(dict_to_py(py, page, flags, tp, raw, sort)?
+            .into_any()
+            .unbind());
+    }
+
     // Heavy: build-or-reuse the model + serialize, GIL released (PRD §9.4).
     let out = py.detach(|| pdf_api::get_text(page, opt, flags, tp));
     // Only the final Python-object construction holds the GIL.
@@ -534,70 +547,106 @@ fn text_output_to_py(
             }
             Ok(list.into_any().unbind())
         }
-        TextOutput::Dict(d) => Ok(textdict_to_py(py, &d, sort)?.into_any().unbind()),
+        // `dict`/`rawdict` were dispatched above; `get_text` yields `Dict` for
+        // no other option.
+        TextOutput::Dict(_) => Err(PyRuntimeError::new_err(
+            "dict output is built from the TextPage directly",
+        )),
     }
 }
 
-/// Converts a neutral [`pdf_api::TextDict`] into the real PyMuPDF-shaped Python
-/// `dict`: tuples for bbox/origin/dir, `int` color, `str` text, `bytes` image
-/// (empty until M5), nested `list`s of blocks/lines/spans/chars (PRD §9.4).
-fn textdict_to_py<'py>(
+/// Builds the PyMuPDF-shaped `dict`/`rawdict` straight from the [`pdf_api::TextPage`]
+/// model: tuples for bbox/origin/dir, `int` color, `str` text, `bytes` image,
+/// nested `list`s of blocks/lines/spans/chars (PRD §9.4). Walking the model
+/// skips the owned [`pdf_api::TextDict`] `get_text` would build first — and
+/// with it a second copy of every character's geometry plus a `String` per
+/// character. The field mapping mirrors `pdf_text::to_dict`: normalized
+/// bboxes, `i32` casts, `size` published as the rendered size.
+fn dict_to_py<'py>(
     py: Python<'py>,
-    d: &pdf_api::TextDict,
+    page: &pdf_api::Page,
+    flags: Option<u32>,
+    tp: Option<&pdf_api::TextPage>,
+    raw: bool,
     sort: bool,
 ) -> PyResult<Bound<'py, PyDict>> {
+    // Heavy: build-or-reuse the model and resolve the image blocks, GIL
+    // released (PRD §9.4). As in `get_text`, a missing TextPage is built with
+    // the caller's flags (0 when unset) and serialized with the option's default.
+    let owned;
+    let tp = match tp {
+        Some(tp) => tp,
+        None => {
+            owned = py.detach(|| pdf_api::textpage(page, flags.unwrap_or(0), None));
+            &owned
+        }
+    };
+    let flags = flags.unwrap_or(if raw {
+        pdf_api::defaults::RAWDICT
+    } else {
+        pdf_api::defaults::DICT
+    });
+    let blocks = py.detach(|| pdf_api::dict_blocks(page, tp, flags));
+
+    // Only the final Python-object construction holds the GIL.
     let root = PyDict::new(py);
-    root.set_item(intern!(py, "width"), d.width)?;
-    root.set_item(intern!(py, "height"), d.height)?;
+    root.set_item(intern!(py, "width"), tp.width)?;
+    root.set_item(intern!(py, "height"), tp.height)?;
 
     // Block order (optionally sorted by (y0, x0) of the block bbox).
-    let mut order: Vec<usize> = (0..d.blocks.len()).collect();
+    let mut order: Vec<usize> = (0..blocks.len()).collect();
     if sort {
         order.sort_by(|&i, &j| {
-            let bi = block_bbox(&d.blocks[i]);
-            let bj = block_bbox(&d.blocks[j]);
+            let bi = block_bbox(&blocks[i]);
+            let bj = block_bbox(&blocks[j]);
             bi.1.total_cmp(&bj.1).then(bi.0.total_cmp(&bj.0))
         });
     }
 
-    let blocks = PyList::empty(py);
+    let list = PyList::empty(py);
     for &i in &order {
-        blocks.append(dict_block_to_py(py, &d.blocks[i])?)?;
+        list.append(dict_block_to_py(py, &blocks[i], raw)?)?;
     }
-    root.set_item(intern!(py, "blocks"), blocks)?;
+    root.set_item(intern!(py, "blocks"), list)?;
     Ok(root)
 }
 
+/// A `Rect` as the normalized `(x0, y0, x1, y1)` tuple the dict tree publishes.
+fn dict_bbox(r: Rect) -> (f64, f64, f64, f64) {
+    rect_tuple(r.normalize())
+}
+
 /// The bbox of a dict block (text or image).
-fn block_bbox(b: &pdf_api::DictBlock) -> (f64, f64, f64, f64) {
+fn block_bbox(b: &pdf_api::DictBlockRef<'_>) -> (f64, f64, f64, f64) {
     match b {
-        pdf_api::DictBlock::Text(t) => t.bbox,
-        pdf_api::DictBlock::Image(im) => im.bbox,
+        pdf_api::DictBlockRef::Text(t) => dict_bbox(t.bbox),
+        pdf_api::DictBlockRef::Image(im) => im.bbox,
     }
 }
 
 fn dict_block_to_py<'py>(
     py: Python<'py>,
-    block: &pdf_api::DictBlock,
+    block: &pdf_api::DictBlockRef<'_>,
+    raw: bool,
 ) -> PyResult<Bound<'py, PyDict>> {
     let d = PyDict::new(py);
     match block {
-        pdf_api::DictBlock::Text(b) => {
-            d.set_item(intern!(py, "number"), b.number)?;
+        pdf_api::DictBlockRef::Text(b) => {
+            d.set_item(intern!(py, "number"), b.number as i32)?;
             d.set_item(intern!(py, "type"), 0i32)?;
-            d.set_item(intern!(py, "bbox"), b.bbox)?;
+            d.set_item(intern!(py, "bbox"), untracked_tuple(py, dict_bbox(b.bbox))?)?;
             // Painting order (content-stream), as opposed to `number`'s reading order.
             d.set_item(intern!(py, "seq"), b.seq)?;
             let lines = PyList::empty(py);
             for line in &b.lines {
-                lines.append(dict_line_to_py(py, line)?)?;
+                lines.append(dict_line_to_py(py, line, raw)?)?;
             }
             d.set_item(intern!(py, "lines"), lines)?;
         }
-        pdf_api::DictBlock::Image(b) => {
+        pdf_api::DictBlockRef::Image(b) => {
             d.set_item(intern!(py, "number"), b.number)?;
             d.set_item(intern!(py, "type"), 1i32)?;
-            d.set_item(intern!(py, "bbox"), b.bbox)?;
+            d.set_item(intern!(py, "bbox"), untracked_tuple(py, b.bbox)?)?;
             d.set_item(intern!(py, "width"), b.width)?;
             d.set_item(intern!(py, "height"), b.height)?;
             d.set_item(intern!(py, "ext"), &b.ext)?;
@@ -605,7 +654,7 @@ fn dict_block_to_py<'py>(
             d.set_item(intern!(py, "xres"), b.xres)?;
             d.set_item(intern!(py, "yres"), b.yres)?;
             d.set_item(intern!(py, "bpc"), b.bpc)?;
-            d.set_item(intern!(py, "transform"), b.transform)?;
+            d.set_item(intern!(py, "transform"), untracked_tuple(py, b.transform)?)?;
             d.set_item(intern!(py, "size"), b.size)?;
             // Encoded image bytes (same payload as `Document.extract_image`);
             // empty only for an unresolvable/inline image.
@@ -615,18 +664,25 @@ fn dict_block_to_py<'py>(
     Ok(d)
 }
 
-fn dict_line_to_py<'py>(py: Python<'py>, line: &pdf_api::DictLine) -> PyResult<Bound<'py, PyDict>> {
+fn dict_line_to_py<'py>(
+    py: Python<'py>,
+    line: &pdf_api::Line,
+    raw: bool,
+) -> PyResult<Bound<'py, PyDict>> {
     let d = PyDict::new(py);
     d.set_item(intern!(py, "spans"), {
         let spans = PyList::empty(py);
         for span in &line.spans {
-            spans.append(dict_span_to_py(py, span)?)?;
+            spans.append(dict_span_to_py(py, span, raw)?)?;
         }
         spans
     })?;
-    d.set_item(intern!(py, "wmode"), line.wmode)?;
-    d.set_item(intern!(py, "dir"), line.dir)?;
-    d.set_item(intern!(py, "bbox"), line.bbox)?;
+    d.set_item(intern!(py, "wmode"), i32::from(line.wmode))?;
+    d.set_item(intern!(py, "dir"), untracked_tuple(py, line.dir)?)?;
+    d.set_item(
+        intern!(py, "bbox"),
+        untracked_tuple(py, dict_bbox(line.bbox))?,
+    )?;
     // Reading-order index within the page, and the painting-order key.
     d.set_item(intern!(py, "number"), line.number)?;
     d.set_item(intern!(py, "seq"), line.seq)?;
@@ -698,37 +754,96 @@ impl<'py> SpanGeometryFloats<'py> {
     }
 
     fn tuple<const N: usize>(&mut self, values: [f64; N]) -> PyResult<Bound<'py, PyTuple>> {
-        PyTuple::new(self.py, values.map(|value| self.float(value)))
+        let tuple = PyTuple::new(self.py, values.map(|value| self.float(value)))?;
+        untrack_float_tuple(&tuple);
+        Ok(tuple)
     }
 }
 
-fn dict_span_to_py<'py>(py: Python<'py>, span: &pdf_api::DictSpan) -> PyResult<Bound<'py, PyDict>> {
+/// Takes a freshly built tuple of floats off the cyclic collector's tracking
+/// list.
+///
+/// A tuple of plain floats can never take part in a reference cycle, which is
+/// why CPython's own collector untracks such tuples the first time it visits
+/// them — but only after paying to traverse them. rawdict builds millions of
+/// these per document, and while they stay tracked every young-generation
+/// collection walks the whole page's geometry. Untracking them up front also
+/// keeps each character/span dict untracked (a dict is only tracked once it
+/// holds a tracked value), so the collector never visits the per-character
+/// objects at all. Only the collector's bookkeeping changes: the tuple's
+/// contents, type and identity are untouched.
+fn untrack_float_tuple(tuple: &Bound<'_, PyTuple>) {
+    // SAFETY: `tuple` is a live tuple this call site has just created and
+    // holds only floats, so it can never be part of a cycle; untracking a
+    // tuple is what CPython's collector does itself in that case, and
+    // untracking an already-untracked object is a no-op.
+    unsafe { ffi::PyObject_GC_UnTrack(tuple.as_ptr().cast()) };
+}
+
+/// Converts a Rust tuple of floats into an untracked Python tuple (see
+/// [`untrack_float_tuple`]).
+fn untracked_tuple<'py, T>(py: Python<'py>, value: T) -> PyResult<Bound<'py, PyTuple>>
+where
+    T: IntoPyObject<'py, Target = PyTuple, Output = Bound<'py, PyTuple>>,
+{
+    let tuple = value.into_pyobject(py).map_err(Into::into)?;
+    untrack_float_tuple(&tuple);
+    Ok(tuple)
+}
+
+fn dict_span_to_py<'py>(
+    py: Python<'py>,
+    span: &pdf_api::Span,
+    raw: bool,
+) -> PyResult<Bound<'py, PyDict>> {
     let d = PyDict::new(py);
     // `intern!` reuses one process-interned Python string per key across every
     // span dict and every call, instead of allocating fresh key strings.
-    d.set_item(intern!(py, "size"), span.size)?;
-    d.set_item(intern!(py, "flags"), span.flags)?;
-    d.set_item(intern!(py, "font"), &span.font)?;
-    d.set_item(intern!(py, "color"), span.color)?;
+    d.set_item(intern!(py, "size"), span.rendered_size)?;
+    d.set_item(intern!(py, "flags"), span.flags as i32)?;
+    d.set_item(intern!(py, "font"), span.font.as_str())?;
+    d.set_item(intern!(py, "color"), span.color as i32)?;
     d.set_item(intern!(py, "ascender"), span.ascender)?;
     d.set_item(intern!(py, "descender"), span.descender)?;
-    d.set_item(intern!(py, "origin"), span.origin)?;
-    d.set_item(intern!(py, "bbox"), span.bbox)?;
+    d.set_item(
+        intern!(py, "origin"),
+        untracked_tuple(py, point_tuple(span.origin))?,
+    )?;
+    d.set_item(
+        intern!(py, "bbox"),
+        untracked_tuple(py, dict_bbox(span.bbox))?,
+    )?;
     // Full glyph geometry (pdfspine extension over the fitz key set): the
     // declared vs. rendered font size, the device-space render matrix and the
     // raw user-space `Tm`/CTM it was composed from, the baseline direction, the
     // rotation-aware envelope and the painting-order key.
-    d.set_item(intern!(py, "declared_size"), span.declared_size)?;
+    d.set_item(intern!(py, "declared_size"), span.size)?;
     d.set_item(intern!(py, "rendered_size"), span.rendered_size)?;
-    d.set_item(intern!(py, "matrix"), span.matrix)?;
-    d.set_item(intern!(py, "text_matrix"), span.text_matrix)?;
-    d.set_item(intern!(py, "ctm"), span.ctm)?;
-    d.set_item(intern!(py, "dir"), span.dir)?;
-    d.set_item(intern!(py, "quad"), span.quad)?;
+    d.set_item(
+        intern!(py, "matrix"),
+        untracked_tuple(py, matrix_tuple(span.matrix))?,
+    )?;
+    d.set_item(
+        intern!(py, "text_matrix"),
+        untracked_tuple(py, matrix_tuple(span.text_matrix))?,
+    )?;
+    d.set_item(
+        intern!(py, "ctm"),
+        untracked_tuple(py, matrix_tuple(span.ctm))?,
+    )?;
+    d.set_item(intern!(py, "dir"), untracked_tuple(py, span.dir)?)?;
+    d.set_item(
+        intern!(py, "quad"),
+        untracked_tuple(py, quad_tuple(&span.quad))?,
+    )?;
     d.set_item(intern!(py, "seq"), span.seq)?;
-    // dict mode carries `text`; rawdict mode carries `chars`.
-    if span.chars.is_empty() {
-        d.set_item(intern!(py, "text"), &span.text)?;
+    // dict mode carries `text`; rawdict mode carries `chars` (a rawdict span
+    // without chars falls back to an empty `text`, as `to_dict` publishes it).
+    if !raw || span.chars.is_empty() {
+        d.set_item(
+            intern!(py, "text"),
+            if raw { "" } else { span.text.as_str() },
+        )?;
     } else {
         let chars = PyList::empty(py);
         // Every character dict shares the same eight keys; `intern!` reuses one
@@ -741,29 +856,24 @@ fn dict_span_to_py<'py>(py: Python<'py>, span: &pdf_api::DictSpan) -> PyResult<B
             let c = PyDict::new(py);
             c.set_item(
                 intern!(py, "origin"),
-                floats.tuple([ch.origin.0, ch.origin.1])?,
+                floats.tuple([ch.origin.x, ch.origin.y])?,
             )?;
+            let bbox = ch.bbox.normalize();
             c.set_item(
                 intern!(py, "bbox"),
-                floats.tuple([ch.bbox.0, ch.bbox.1, ch.bbox.2, ch.bbox.3])?,
+                floats.tuple([bbox.x0, bbox.y0, bbox.x1, bbox.y1])?,
             )?;
-            c.set_item(intern!(py, "c"), &ch.c)?;
+            c.set_item(intern!(py, "c"), ch.c)?;
+            let m = &ch.matrix;
             c.set_item(
                 intern!(py, "matrix"),
-                floats.tuple([
-                    ch.matrix.0,
-                    ch.matrix.1,
-                    ch.matrix.2,
-                    ch.matrix.3,
-                    ch.matrix.4,
-                    ch.matrix.5,
-                ])?,
+                floats.tuple([m.a, m.b, m.c, m.d, m.e, m.f])?,
             )?;
+            let q = &ch.quad;
             c.set_item(
                 intern!(py, "quad"),
                 floats.tuple([
-                    ch.quad.0, ch.quad.1, ch.quad.2, ch.quad.3, ch.quad.4, ch.quad.5, ch.quad.6,
-                    ch.quad.7,
+                    q.ul.x, q.ul.y, q.ur.x, q.ur.y, q.ll.x, q.ll.y, q.lr.x, q.lr.y,
                 ])?,
             )?;
             c.set_item(intern!(py, "rendered_size"), floats.float(ch.rendered_size))?;

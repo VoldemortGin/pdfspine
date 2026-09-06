@@ -1584,6 +1584,7 @@ fn build_line(glyphs: &[&DevGlyph], seq: usize, inhibit_spaces: bool) -> Line {
         });
         // A glyph may carry several Unicode scalars (a ligature); each becomes a
         // `Char` sharing the glyph cell geometry, so no text is dropped.
+        let glyph_rendered_size = rendered_font_size(&g.render_matrix);
         if !can_merge {
             spans.push(Span {
                 bbox: g.bbox,
@@ -1598,7 +1599,7 @@ fn build_line(glyphs: &[&DevGlyph], seq: usize, inhibit_spaces: bool) -> Line {
                 text: String::new(),
                 // Glyph geometry is taken from the span's *first* glyph, which is
                 // also where `origin` comes from — so `(0,0)·matrix == origin`.
-                rendered_size: rendered_font_size(&g.render_matrix),
+                rendered_size: glyph_rendered_size,
                 matrix: g.render_matrix,
                 text_matrix: g.text_matrix,
                 ctm: g.ctm,
@@ -1610,7 +1611,6 @@ fn build_line(glyphs: &[&DevGlyph], seq: usize, inhibit_spaces: bool) -> Line {
         }
         let si = spans.len() - 1;
         span_envs[si].add(&g.quad);
-        let glyph_rendered_size = rendered_font_size(&g.render_matrix);
         let target = &mut spans[si];
 
         // Synthesize an inter-word space from a spatial gap wider than the

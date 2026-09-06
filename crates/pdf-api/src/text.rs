@@ -20,7 +20,7 @@ use pdf_core::page::Page;
 use pdf_core::{DocumentStore, Limits};
 
 use pdf_image::getpixmap;
-use pdf_text::{defaults, ImageResolver, ResolvedImage, TextDict, TextPage};
+use pdf_text::{defaults, DictBlockRef, ImageResolver, ResolvedImage, TextDict, TextPage};
 
 // === inventory structs (Tier-A tuple shapes, PRD §7) ======================
 
@@ -898,6 +898,16 @@ pub fn get_text(page: &Page, opt: &str, flags: Option<u32>, tp: Option<&TextPage
         // "text" and any unknown option → plain text.
         _ => TextOutput::Text(pdf_text::to_text(tp, flags.unwrap_or(defaults::TEXT))),
     }
+}
+
+/// The `dict`/`rawdict` blocks of a pre-built `tp` under `flags`, with image
+/// bytes resolved through `page` exactly as [`get_text`] does — see
+/// [`pdf_text::dict_blocks`]. Text blocks borrow the model, so a caller that
+/// builds its own output (the Python bridge) pays for no [`TextDict`] copy.
+#[must_use]
+pub fn dict_blocks<'a>(page: &Page, tp: &'a TextPage, flags: u32) -> Vec<DictBlockRef<'a>> {
+    let img_resolver = PageImageResolver::new(page);
+    pdf_text::dict_blocks(tp, flags, Some(&img_resolver))
 }
 
 /// Resolves a `get_text("dict"/"json")` image block's encoded bytes + raster

@@ -683,24 +683,53 @@ pub fn to_dict_with_images(
     to_dict_impl(tp, raw, flags, Some(resolver))
 }
 
+/// One block of the dict/rawdict tree with the text model **borrowed** rather
+/// than copied: a text block is the layout [`Block`] itself, an image block is
+/// its resolved [`DictImageBlock`]. [`dict_blocks`] yields these so a consumer
+/// that walks the model directly (the Python bridge) skips the per-character
+/// [`DictChar`] copy an owned [`TextDict`] carries.
+#[derive(Clone, Debug, PartialEq)]
+pub enum DictBlockRef<'a> {
+    /// A text block (`type` 0), borrowed from the [`TextPage`].
+    Text(&'a Block),
+    /// An image block (`type` 1), resolved as [`to_dict_with_images`] does.
+    Image(DictImageBlock),
+}
+
+/// The blocks [`to_dict_with_images`] publishes for `tp` under `flags`, in page
+/// order: every text block, plus the image blocks when `PRESERVE_IMAGES` is set
+/// (resolved through `resolver` when given). Text blocks borrow the model; see
+/// [`DictBlockRef`].
+#[must_use]
+pub fn dict_blocks<'a>(
+    tp: &'a TextPage,
+    flags: u32,
+    resolver: Option<&dyn ImageResolver>,
+) -> Vec<DictBlockRef<'a>> {
+    let images = flags & textflags::PRESERVE_IMAGES != 0;
+    tp.blocks
+        .iter()
+        .filter_map(|block| match block.kind {
+            BlockKind::Text => Some(DictBlockRef::Text(block)),
+            BlockKind::Image if images => Some(DictBlockRef::Image(image_block(block, resolver))),
+            BlockKind::Image => None,
+        })
+        .collect()
+}
+
 fn to_dict_impl(
     tp: &TextPage,
     raw: bool,
     flags: u32,
     resolver: Option<&dyn ImageResolver>,
 ) -> TextDict {
-    let images = flags & textflags::PRESERVE_IMAGES != 0;
-    let mut blocks = Vec::new();
-    for block in &tp.blocks {
-        match block.kind {
-            BlockKind::Text => blocks.push(DictBlock::Text(text_block(block, raw))),
-            BlockKind::Image => {
-                if images {
-                    blocks.push(DictBlock::Image(image_block(block, resolver)));
-                }
-            }
-        }
-    }
+    let blocks = dict_blocks(tp, flags, resolver)
+        .into_iter()
+        .map(|block| match block {
+            DictBlockRef::Text(block) => DictBlock::Text(text_block(block, raw)),
+            DictBlockRef::Image(image) => DictBlock::Image(image),
+        })
+        .collect();
     TextDict {
         width: tp.width,
         height: tp.height,
