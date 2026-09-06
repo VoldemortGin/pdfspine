@@ -19,8 +19,9 @@
 > (climbing), with **1,702 Rust tests + 814 Python tests** passing in the 0.7.0
 > release gate. In the dated 58-document benchmark, its aggregate mean text scores
 > trail fitz by 0.2–1.4 percentage points (and it beats fitz on Arabic / RTL); rendering
-> is at/near parity (SSIM 0.984 mean, 2026-06-21) though ~2× slower than fitz
-> (2026-06-16 bench), and the pure-Rust PaddleOCR engine beats fitz on CJK scans
+> is at/near parity (SSIM 0.984 mean, 2026-06-21) though about 1.3× slower than fitz
+> (11.40 vs 8.93 ms, `conformance/BENCH.md`, 2026-09-05), and the pure-Rust PaddleOCR
+> engine beats fitz on CJK scans
 > (see [Accuracy](#accuracy)).
 > Now on PyPI: `pip install pdfspine` (see [Install](#install)); or
 > [build from source](#build--install).
@@ -177,9 +178,9 @@ committed). See [`docs/BENCHMARKS.md`](https://github.com/VoldemortGin/pdfspine/
   **beats fitz on Arabic / RTL** (correct bidi reordering).
 - **Rendering is at/near parity** with fitz (page-image SSIM **0.984** mean /
   **0.989** median over a 46-document sample, 2026-06-21). Speed, per the dated
-  2026-06-16 [`conformance/BENCH.md`](https://github.com/VoldemortGin/pdfspine/blob/main/conformance/BENCH.md):
-  open **1.4×** and text extraction **2.7×** faster than fitz; rendering about
-  **2× slower** (the from-scratch Rust rasterizer is still young).
+  2026-09-05 [`conformance/BENCH.md`](https://github.com/VoldemortGin/pdfspine/blob/main/conformance/BENCH.md):
+  open **1.3×** and text extraction **2.3×** faster than fitz; rendering about
+  **1.3× slower** (11.40 vs 8.93 ms per page at 150 dpi).
 - **OCR beats fitz on CJK scans**: the pure-Rust PaddleOCR engine (PP-OCRv5, with
   weights from the shared `ocrspine-models` package) outperforms fitz's OCR path
   on Chinese/Japanese/Korean documents.

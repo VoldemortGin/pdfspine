@@ -1,162 +1,235 @@
 # PRD-NEXT — Remaining Work Roadmap (live restart entry)
 
 > **Use this file first when resuming pdfspine.** This top section is the current
-> checkpoint as of the evening of 2026-09-05; it supersedes the morning checkpoint
-> that previously occupied it. Older dated snapshots and completed phase records
-> remain below for history; they do not override this queue.
+> checkpoint as of late 2026-09-05 (fan-out checkpoint); it supersedes the morning
+> and evening checkpoints that previously occupied it. Older dated snapshots and
+> completed phase records remain below for history; they do not override this queue.
 
-## 0. Restart here (2026-09-05, evening checkpoint)
+## 0. Restart here (late 2026-09-05, fan-out checkpoint)
 
 ### Repository and release checkpoint
 
 - Repository: `/Users/linhan/startup/spine/pdfspine`. The published release is still
   `v0.7.1` at `9da7ca6` (annotated tag, GitHub Release, PyPI wheels and sdist all
-  unchanged since the morning checkpoint).
-- Local `main` after `9da7ca6`: `e8afdef` docs → `1f82655` fix(ci) wheel smoke →
-  `55c661c` ci(coverage) → `13c25f2` perf(py-bindings) → `18b7afc` ci(coverage)
-  `maturin develop` → `fad0bf0` docs anchoring experiment. `origin/main` reached `18b7afc`
-  (CI run 33975022511 green); `fad0bf0` and this PRD update are pushed together
-  after it (the pre-push gate runs the full sdist build and is slow). Verify with `git status -sb` and
-  `git log origin/main -1` before trusting any of this.
-- Local branches: `glyph-geometry-continue`, `glyph-geometry-pre-sync-3de8240` (its 9
-  commits are all patch-equivalent to commits on `main`), and the two agent worktree
-  branches were deleted. Remaining: `main` and `glyph-span-size-experiment` (every
-  commit already on `main`, but its worktree at `/private/tmp/pdfspine-glyph-G` still
-  holds 22 uncommitted files, not yet triaged). The stale remote branch
-  `origin/worktree-agent-ab0626e7f9bd0c95d` was not deleted.
-- Environment: the internal disk filled up once. `target/` is now a symlink to
-  `/Volumes/Cargo/target/pdfspine` and `.gitignore` gained `/target`. The pre-push
-  gate needs `PATH="$PWD/.venv/bin:$PATH"`; the Homebrew python3.14 on `PATH` has no
-  `ruff`.
+  unchanged; `git describe --tags main` reads `v0.7.1-49-g64ea53d`).
+- Local `main` is `64ea53d`: twelve branches merged on top of `a45b66d` (the evening
+  checkpoint) in the order recorded by the "Completed 2026-09-05" sections below
+  (`git log --oneline a45b66d..64ea53d`). `origin/main` reached `f31a118` (OCG);
+  `64ea53d` (render performance) and this PRD update are pushed after it. Verify with
+  `git status -sb` and `git log origin/main -1` before trusting any of this.
+- Local branches: only `main`; zero worktrees. Every fan-out agent worktree and its
+  branch was deleted after its merge, and `glyph-span-size-experiment` with its
+  `/private/tmp/pdfspine-glyph-G` worktree is gone. The stale remote branch
+  `origin/worktree-agent-ab0626e7f9bd0c95d` was still not deleted.
+- `.venv` extension rule: the pre-push gate does not rebuild the extension. After
+  merging any Rust change into `main`, run `maturin develop --release` (with
+  `PATH="$PWD/.venv/bin:$PATH"`) before `git push`, or pytest runs against the previous
+  `.so`.
+- Environment: `target/` is a symlink to `/Volumes/Cargo/target/pdfspine` (`/target`
+  is in `.gitignore`); the Homebrew python3.14 on `PATH` has no `ruff`. LibreOffice
+  26.8.0.3 (brew cask) was reinstalled today for the typeset oracle.
 
 ### Read in this order
 
 1. This section: the next-task queue, then the completion records below it.
-2. `HANDOFF-glyph-geometry.md` top checkpoint and §12 for the completed A–G evidence.
-3. `conformance/COVERAGE-REPORT.md`, in particular its "Combined Rust+Python profile"
-   section, and the focused `conformance/GLYPH-GEOMETRY-*-REPORT.md` reports. Raw
-   coverage JSON/LCOV is not in the repository; the CI `coverage-reports` artifact
-   (90-day retention) is the durable copy.
-4. `conformance/GLYPH-GEOMETRY-ANCHORING-EXPERIMENT.md` before touching span
+2. `docs/reading-order-root-cause.md`, section "2026-09-05 修复记录" (what changed,
+   the baseline reproduction, the 300-document attribution, the variant table and the
+   stage 2 black-box conclusion) before touching reading order.
+3. `conformance/COVERAGE-REPORT.md` (the `2b7df16` record and "Combined Rust+Python
+   profile"), `conformance/BENCH.md` with `conformance/gt/RENDER-REPORT.md` (the
+   2026-09-05 render numbers), and `docs/BENCHMARKS.md` §6 (OCR re-measurement and
+   the Latin root cause).
+4. `HANDOFF-glyph-geometry.md` top checkpoint and §12 for the completed A–G evidence,
+   and `conformance/GLYPH-GEOMETRY-ANCHORING-EXPERIMENT.md` before touching span
    anchoring or the F thresholds.
 5. The older phase plan below only when taking one of its still-open items.
 
 ### Next task queue
 
-1. **Add targeted tests from the combined profile** (the top-5 Rust and Python lists
-   in the coverage record below), raising `fail_under` in `pyproject.toml` after each
-   batch lands.
-2. **Remaining rawdict cost.** Construct Python objects directly instead of through
-   the `DictChar` intermediate copy in `pdf-text/src/serialize.rs` (cross-crate, may
-   change output, needs the same 300-document digest gate), plus the two cheap
-   preallocation items listed in the rawdict record.
-3. **cargo-vet supply-chain audit sprint.** Blocked on a maintainer decision about
-   `cargo vet trust`, `cargo vet import`, and exemption regeneration.
-4. **Continue the existing roadmap** (Type0/Type3, device-replay, and the
-   other deferred work below). The accepted reading-order tradeoff is unchanged.
+1. **Fix the three pre-existing bugs found today.** The Rust side of
+   `get_text(clip=)` does not clip in the text/dict modes (the Python layer filters
+   by bbox itself); `Page.remove_rotation()` raises `PdfUnsupportedError` on a rotated
+   page that has widgets (`document.py` around L3428); `redact.rs` rewrites the `'`
+   and `"` operators as a bare `TJ` and drops their spacing arguments (around
+   L363–385).
+2. **Re-freeze or exclude `typeset-lo-slide.pdf`** in
+   `conformance/corpus-diff/baselines/glyph-geometry-2026-09-05-manifest.json` (its
+   sha256/size went stale with `32e6232`, 1/300); `conformance/corpus-diff/build_corpus.py`
+   hard-fails until then.
+3. **Reading order stages 3/4** per `docs/reading-order-root-cause.md`: the geometric
+   band → column → y discriminant and geometric line order inside regions, plus FR
+   running-header fragmentation (appendix D4) and Y-root pages that are still in
+   paint order.
+4. **Render, remaining cost:** first-seen glyph rasterization (~30%), `into_pixmap`
+   (~10%), J2K decoding on image pages; root cause of the govdocs1-00074 near-blank
+   page (SSIM 0.2654).
+5. **Coverage ratchet** (`fail_under` is 96) and Rust branch coverage (needs nightly).
+6. **OCG gaps:** `insert_text` / `insert_image` / `Shape` with `oc=` should emit
+   BDC/EMC; `/Usage /ViewState` and `/AS`.
+7. **The 9 remaining deferred symbols:** device-replay (4), `Page.insert_font`,
+   `Pixmap.warp`, `Annot.get_textbox`, Tools (2).
+8. **typeset next increment:** docx paragraph borders/shading, `RunStyle`
+   superscript/subscript and character spacing, docx lineGap placement.
+9. **ocrspine:** the 5 pre-existing `cargo fmt --check` violations; the remaining
+   `AI → Al` homoglyph in the OCR Latin benchmark.
+10. **cargo-vet trust entries expire 2027-09-05**; otherwise continue the existing
+    roadmap (§4–§6 below).
 
-### Completed 2026-09-05: offline wheel smoke (queue item 1)
+### Completed 2026-09-05: offline wheel smoke
 
-- Root cause: under `--no-index`, pip could not resolve the hard dependency
-  `ocrspine-models` (CI log:
-  `No matching distribution found for ocrspine-models<0.1,>=0.0.1`).
-- Fix `1f82655`: `pip install ocrspine-models` first, then
-  `--no-index --find-links dist pdfspine`, and assert that the installed version equals
-  the version in the wheel filename.
-- Evidence: runs 33970659588 and 33972346887 are green for the wheels on all three
-  platforms; the log shows `wheel=0.7.1 installed=0.7.1`.
+- `1f82655`: under `--no-index` pip could not resolve `ocrspine-models`; the job now
+  installs it first, then `--no-index --find-links dist pdfspine`, and asserts the
+  installed version equals the wheel filename. Runs 33970659588 and 33972346887 are
+  green on all three platforms.
 
-### Investigated 2026-09-05: cargo-vet (nothing changed)
+### Completed 2026-09-05: durable combined coverage
 
-- 187 unvetted crates (`Vetting Failed! 187 unvetted dependencies`, backlog about
-  2.64M lines). `supply-chain/audits.toml` is empty and there are only 4 exemptions;
-  `imports.lock` fetches normally (123 trusted audits). The check has failed since
-  the first commit `342dd63`, so this is not a regression. `cargo vet --locked`
-  reproduces the same 187 locally.
-- Decisions left to the maintainer: `cargo vet trust`, `cargo vet import isrg`, and
-  `cargo vet regenerate exemptions`. Keep `continue-on-error: true` until then.
+- `55c661c` + `18b7afc`: the coverage job is a combined Rust+Python profile
+  (`maturin develop` debug build, merged lcov, `coverage-reports` artifact kept 90
+  days, awk guard on the `py-bindings` LH total). Run 33975022511 is green with
+  `py-bindings` 2,888/3,468. Codecov was activated on 2026-09-05; run 33975717510
+  uploaded both the `rust` and `python` flags. The coverage numbers were superseded
+  by the targeted-tests record below.
 
-### Completed 2026-09-05: durable combined coverage (queue item 2)
+### Completed 2026-09-05: rawdict geometry cost, Python-object pass
 
-- `55c661c`: the coverage job is now a combined profile (show-env → `cargo test` →
-  instrumented extension build → `coverage run` pytest → merged lcov); the
-  `coverage-reports` artifact is retained 90 days; Codecov moved to
-  `codecov-action@v5` with `use_oidc: true` (job `permissions: id-token: write`);
-  `pyproject.toml` gained `[tool.coverage]` with `fail_under = 77`. With
-  `branch = true`, coverage.py compares the combined statement+branch figure
-  (78.03%), not the 82.04% line figure; `fail_under = 81` makes `report`, `xml`, and
-  `json` all exit 2.
-- Local combined profile at `1f82655`: workspace lines 36,446/41,883 (**87.02%**;
-  cargo-only was 72.58%); `py-bindings` 2,908/3,465 (**83.92%**, previously 0);
-  `pdf-api` 2,408/3,215 (**74.90%**, previously 21.80%); `pdf-edit` 87.66%. Python is
-  unchanged at 82.04% lines / 63.75% branches / 78.03% combined. Details are in the
-  "Combined Rust+Python profile" section of `conformance/COVERAGE-REPORT.md`.
-- First CI run 33972346887: every step green, artifact retained, OIDC token obtained,
-  ratchet 78% ≥ 77 passed, pytest 804 passed / 73 skipped (the runner has no
-  tesseract and similar), **but** the lcov degraded to cargo-only (`py-bindings`
-  0/3,465). Root cause confirmed locally: `pip install -e .` builds the extension in
-  release mode under `release/`, `cargo llvm-cov report` only scans debug objects, so
-  pytest's profraw was discarded. `18b7afc` switches to an in-job venv with
-  `maturin develop` (debug), writes show-env to a file before sourcing it, and adds
-  an awk guard (exit 1 when the `py-bindings` LH total is 0). The same recipe gives
-  `py-bindings` 2,910 lines locally.
-- CI verification of `18b7afc`: run 33975022511 is green. The awk guard printed
-  `py-bindings covered lines (LH sum) = 2888`, and the `coverage-reports` artifact
-  lcov reads `py-bindings` 2,888/3,468 (83.28%), `pdf-api` 2,408/3,215 (74.90%),
-  workspace 36,405/41,886 (86.91%); pytest 804 passed / 73 skipped, ratchet 78% ≥ 77.
-- **Codecov is live.** Runs up to 33975022511 were rejected with
-  `{"message":"Repository not found"}` because the repository had never been
-  activated on codecov.io; the maintainer activated it on 2026-09-05. A rerun of the
-  coverage job on run 33975717510 (`56dc463`) uploaded both the `rust` and `python`
-  flags (`Upload queued for processing complete`); results are at
-  <https://app.codecov.io/github/voldemortgin/pdfspine/commit/56dc463ea5c4ea2195ab36afd72a615b3e4cc3f8>.
-- Test candidates that remain low under the combined profile. Rust:
-  `pdf-api/src/lib.rs` 561 uncovered lines, `py-bindings/src/lib.rs` 557,
-  `pdf-render/src/type1.rs` 310, `pdf-edit/src/redact.rs` 265,
-  `pdf-render/src/render.rs` 242. Python: `document.py` 395, `_tatr.py` 196,
-  `_tatr_postprocess.py` 130, `geometry.py` 116, `helpers.py` 76. Rust branch
-  coverage is still not enabled (needs nightly).
+- `13c25f2`: per-span shared geometry floats and interned dict keys; on the 118-page
+  EUR-Lex `32006L0112_EN.pdf` retained rawdict RSS 430.7 → 331.5 MiB and streamed
+  time 336.3 → 292.4 ms. Superseded by the Rust-side record below.
 
-### Completed 2026-09-05: rawdict geometry cost (queue item 3)
+### Completed 2026-09-05: span anchoring experiment; keep first-glyph
 
-- `13c25f2`, `crates/py-bindings/src/lib.rs` only: geometry float objects are shared
-  per span (8.86 → 1.30 distinct floats per character, about 2.8M fewer `PyFloat`
-  objects) and every constant dict key is `intern!`ed (the span/line/block keys were
-  previously created on every call, 12.0 MiB).
-- 118-page EUR-Lex `32006L0112_EN.pdf`, median of 7 runs: retained rawdict RSS
-  430.7 → 331.5 MiB (+49.0% → **+14.7%** versus pre-geometry); streamed rawdict time
-  336.3 → 292.4 ms (+66% → **+45%**); retained rawdict time 389.8 → 340.5 ms
-  (+67% → +45.8%).
-- The frozen 300-document manifest shows 0 differences in the bit-level
-  text/dict/rawdict digests. 1,702 Rust tests, 811 pytest (66 skipped), clippy
-  `-D warnings`, and fmt are all green.
-- Remaining: 45–48% of in-function time is on the Rust side. The next lever is
-  constructing Python objects directly instead of through the `DictChar`
-  intermediate copy in `pdf-text/src/serialize.rs` (cross-crate, may change output,
-  needs the same 300-document digest gate). Two cheap items were not done:
-  `Vec::with_capacity`/`PyList` preallocation, and the duplicated
-  `rendered_font_size` computation around `layout.rs` L1591/L1603. The per-character
-  `matrix`/`quad` tuples (about 80 MiB) cannot be reduced further under the dict API.
+- `fad0bf0` adds `conformance/GLYPH-GEOMETRY-ANCHORING-EXPERIMENT.md`: the 315
+  worsening characters are all multi-size spans in two scanned documents; `mode` is
+  the only alternative worth revisiting (145 worsened, no metric regresses). No
+  product code changed.
 
-### Completed 2026-09-05: span anchoring experiment (queue item 4); keep first-glyph
+### Completed 2026-09-05: docs freshness (`55f4329`, merge `d65b61c`)
 
-- `fad0bf0` adds `conformance/GLYPH-GEOMETRY-ANCHORING-EXPERIMENT.md`. The 315
-  worsening characters reproduce exactly across two independent runs: two scanned OCR
-  documents (govdocs1-00018: 126 characters / 30 spans; govdocs1-00053: 189
-  characters / 11 spans), Times-Roman 36 + Helvetica 5, zero leader-dot spans,
-  in-span size spread median 0.247 pt / max 0.700 pt.
-- Alternatives over the 300 documents (improved / unchanged / worsened): first_glyph
-  (current) 5,495,174 / 308,367 / 315; mode 5,495,331 / 308,380 / 145 (+1,288
-  characters move inside the strict tolerance, no metric regresses); median 159
-  worsened; mean 150 worsened but tolerance coverage −4,566; first_nonws 311
-  worsened. On the independent 25-document corpus (7 PMC + 18 fintabnet held-out)
-  every alternative is identical with 0 worsened, because no span there mixes sizes.
-- Every difference comes from multi-size spans produced by F's accumulated
-  adjacent-tolerance merging; the F thresholds were not changed; word/text
-  projections are unaffected. Recommendation: keep first-glyph. If the count must be
-  reduced, `mode` is the only candidate and needs validation on an independent
-  scanned corpus first. No product code changed. The harness and JSON live in
-  `/Volumes/ExternalSSD/pdfspine-archive/anchor-experiment/`.
+- README, `docs/BENCHMARKS.md`, `PARITY.md`, the migration guide, `docs/cli.md` and
+  the `_llms` docs no longer carry stale numbers: render SSIM 0.945 → 0.984, the
+  "1.74× faster" wording, PARITY body 21 → 16 deferred, the migration guide's
+  not-yet-implemented list, and OCR is no longer described as out-of-scope.
+
+### Completed 2026-09-05: cargo-vet converged (`1a85845`; CI blocking in `8badb4d`)
+
+- `1a85845`: 187 → 0 unvetted crates. `cargo vet import` isrg (−24) and zcash (−7);
+  `cargo vet trust` for 13 publishers, 51 entries, all already trusted by
+  mozilla/bytecodealliance, expiring 2027-09-05; `regenerate exemptions` left 105
+  exemptions over 102 crates. Everything lives in `supply-chain/`.
+- `8badb4d` makes the CI job blocking; run 34000786220 is the first green run of it.
+- Rule: a PR that changes `Cargo.lock` must run `cargo vet` locally and commit
+  `supply-chain/`.
+
+### Completed 2026-09-05: markdown_to_pdf links and outline (`be90043`, `1a5a9e7`, merge `8bb7d8a`)
+
+- `links=True` / `toc=True` keywords: URI and mailto link annotations, in-document
+  anchors as GoTo (`/XYZ` top), headings → `/Outlines`. A document with no links and
+  no headings produces byte-identical output.
+- 14 Rust + 4 Python tests (MARKDOWN-TO-PDF-011..014; 014 needs `pytest -p pymupdf`).
+
+### Completed 2026-09-05: RAG export (`5708858`, `df4f08c`, `8ca8f14`, merge `e228833`)
+
+- `Page.get_text("layout")` / `get_text_layout(y_tolerance=3.0)`, `Page.to_markdown()`,
+  `Document.to_markdown()` / `save_markdown()` (font-size-clustered headings, lists,
+  GFM tables, emphasis, image placeholders). Pure Python (`_layout.py`,
+  `_markdown.py`), 51 tests.
+- Pre-existing bug found: the Rust side of `get_text(clip=)` does not clip in the
+  text/dict modes; the Python layer filters by bbox itself. Queue item 1.
+
+### Completed 2026-09-05: targeted tests from the combined profile (`4149071`, `2b7df16`, `d3ed6fa`, merge `2b316bf`; fmt `84b4974`)
+
+- 295 new tests (Rust 72, Python 223). Combined profile: Rust workspace lines
+  86.95% → 90.85%; Python lines 82.04% → 98.71%, branches 63.75% → 95.26%, combined
+  78.03% → 97.95%; `fail_under` 77 → 96 (`d3ed6fa`).
+- Top-5 files now: `pdf-api/src/lib.rs` 97.21%, `py-bindings/src/lib.rs` 92.30%,
+  `type1.rs` 94.96%, `redact.rs` 96.77%, `render.rs` 87.87%.
+- Two pre-existing bugs found: `Page.remove_rotation()` raises `PdfUnsupportedError`
+  on a rotated page that has widgets (`document.py` around L3428); `redact.rs`
+  rewrites the `'` and `"` operators as a bare `TJ`, losing the implicit newline and
+  spacing (around L363–385). Queue item 1.
+
+### Completed 2026-09-05: reading order stages 1 + 1.5 (`948ebd1`, merge `cc3ebbc`); P3-1r resolved
+
+- Variant (e): stage 1 spanning partition plus stage 1.5 (geometric DFS over the
+  regions of X-root pages, regions atomic; Y-root pages byte-identical).
+- PMC 7 clean documents: order 0.9391 → **0.9600** (fitz 0.9605), lev 0.7243 →
+  0.7439 (fitz 0.7445); PMC212689 order 0.5994 → **0.7456** (fitz 0.7492). govinfo
+  FR running-header misplacement 850/2492 pages (34.1%) → **64 (2.6%)**, fitz
+  64/2517. EUR-Lex 40: 0.9371/0.9772 → 0.9372/0.9773 (no regression); born 6:
+  bit-identical. Frozen 300-document manifest: 42 documents / 285 pages change, 284
+  of them pure block permutations plus one footnote band.
+- Stage 2, nine black-box probes: PyMuPDF's default `get_text` block order is paint
+  order with no geometric reordering, so premise B1 of the root-cause document does
+  not hold.
+- The "accepted won't-fix" on P3-1r (§4 and §6 below) rested on PMC212688 / PMC176547
+  regressing; both are mis-paired corpus entries, so that reasoning is withdrawn.
+  P3-1r is resolved by `948ebd1`; the remaining stages 3/4 are queue item 3.
+
+### Completed 2026-09-05: OCR Latin gap root-caused (`14eb86b`, `dd71582`, `0dde2e2`, merge `46ae765`; rev bump `942d3bf`, merge `f3641c9`; ocrspine `e810a9c`)
+
+- Root cause: the ocrspine recognizer padded crops on the right with black
+  (normalized −1.0, read as ink). With mid-gray padding Latin goes 0.839 → **0.990**
+  (Tesseract 0.988) and CJK 0.989 → **0.993**, speed unchanged. `942d3bf` picks up
+  the ocrspine rev; `cargo vet` needed no change.
+- The old 0.867 Latin figure in `docs/BENCHMARKS.md` §6 was a PP-OCRv4-era number;
+  §6 is re-measured. `test_paddle_clean_scan_latin_is_exact` is now a regression
+  assertion; `14eb86b` records raw text and per-token Latin misses in the benchmark.
+- Left alone: 5 pre-existing `cargo fmt --check` violations across the ocrspine
+  crates (queue item 9). `9f8f60d` formats the new pytest file.
+
+### Completed 2026-09-05: rawdict cost, Rust side (`ef8c3f9`, `7ced70a`, `63c0cf5`, merge `4c6c6fe`)
+
+- The real hot spot was CPython's cyclic GC tracking 4 tuples + 1 dict per glyph
+  (16.7% of time) → `PyObject_GC_UnTrack` (`ef8c3f9`). The `DictChar` copy was only
+  3–4%, so dict/rawdict now build from the TextPage model directly (`7ced70a`); the
+  `rendered_font_size` de-duplication (`63c0cf5`) is below noise.
+- Same 118-page document: streamed rawdict 311.4 → 249.5 ms (−19.9%), retained
+  378.3 → 265.0 ms (−29.9%). Versus pre-geometry: streamed +45% → **+12.3%**,
+  retained +45.8% → **+1.2%**; retained RSS stays +14.0% (structural). 300-document
+  digests: 0 differences.
+- Rejected: `PyList` preallocation (2–4% slower) and template dicts (slower).
+
+### Completed 2026-09-05: typeset TS-12 line-height rule (`32e6232`, merge `00c94b2`)
+
+- `LineHeightRule::{FontMetrics, FontIndependent}`; the pptx path uses the
+  PowerPoint/Impress rule. pptx SSIM against the LibreOffice 26.8 oracle 0.9228 →
+  **0.9777**, docx 0.9815 unchanged; the default path is byte-identical; 149
+  pdf-typeset tests.
+- Side effect: `typeset-lo-slide.pdf` changed, so its sha256/size in the frozen
+  300-document manifest is stale (1/300) and `build_corpus.py` hard-fails. Queue
+  item 2.
+
+### Completed 2026-09-05: OCG layers (`18c17fb`, `d5699d7`, `b2153a4`, merge `f31a118`)
+
+- All 7 symbols implemented: `get_layers` / `add_layer` / `switch_layer` /
+  `set_layer_ui_config` / `get_oc` / `get_ocmd` / `set_ocmd`. Rendering and text
+  extraction honour `/OC` on XObjects and BDC/EMC marked-content sections. OCMDs are
+  evaluated per ISO 32000-1 (MuPDF 1.28 ignores `/VE` and has AllOn/AnyOff bugs).
+- COMPAT: **694/769 = 90.2%**, deferred 16 → 9. `layer_ui_configs()` `number` is now
+  the row index (parity fix).
+- Known gap: `insert_text` / `insert_image` / `Shape` with `oc=` still do not emit
+  BDC/EMC. Queue item 6.
+
+### Completed 2026-09-05: render performance (`23429fd`, `af728f0`, `2909490`, merge `64ea53d`)
+
+- Per-glyph coverage-mask cache (4×4 sub-pixel phases, `pdf-render/src/glyph_cache.rs`)
+  and an `Arc<Mask>` copy-on-write clip. Corpus median 18.0–19.2 ms → 10.9–11.0 ms;
+  relative to fitz 1.92–2.00× slower → **1.21–1.28×** (`conformance/BENCH.md`:
+  11.40 vs 8.93 ms = 1.28×, M4 Max, fitz 1.28.2); 26/26 documents faster.
+- SSIM mean 0.9471 / median 0.9879 bit-identical before and after; per-page within
+  ±0.001 (govdocs1-00056 −0.0012 is phase-quantization noise); PNG differences only
+  on glyph AA edges. An `into_pixmap` fast path measured slower and was rejected.
+- The bench corpus fetched 27/30 (three CDC MMWR files return 403). Pre-existing and
+  untouched: govdocs1-00074 renders near-blank (SSIM 0.2654). Queue item 4.
+
+### Coordination notes (2026-09-05)
+
+- The CI coverage job runs `maturin develop` (debug) and the combined lcov is correct
+  (run 33975022511: `py-bindings` 2,888/3,468). Codecov is active and ingests both
+  the `rust` and `python` flags.
+- The `.venv` extension on `main` must be rebuilt with `maturin develop --release`
+  after merging Rust changes and before pushing; the gate does not rebuild it.
 
 ### Glyph geometry A–G: complete, do not restart
 

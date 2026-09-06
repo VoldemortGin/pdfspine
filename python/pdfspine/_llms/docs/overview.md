@@ -76,7 +76,7 @@ pdfspine 自带 PyMuPDF 兼容 shim，让大量现有 `import fitz` 代码**几�
 - **表格**：`find_tables`（含合并单元格）→ `extract()` / `to_markdown()` / `to_html()`。
 - **编辑/保存**：完整保存 + 字节级增量保存、垃圾回收、页插入/删除/复制/移动/select、`insert_pdf` 合并、metadata/XMP、TOC、链接、写入加密。
 - **注释/表单/redaction**：常见注释类型（带 `/AP` 外观流）、AcroForm 读/填/flatten + `Widget`、**破坏性** redaction（真正删除内容）。
-- **渲染**：`get_pixmap`（矢量+文本+图片+渐变，tiny-skia 光栅化）、`Pixmap`（buffer-protocol/numpy 零拷贝）、`DisplayList`、`get_svg_image`。与 fitz at/near parity（SSIM 0.984，2026-06-21 实测）；渲染速度约为 fitz 的一半（2026-06-16 基准；open / 文本抽取则分别快 1.4× / 2.7×）。
+- **渲染**：`get_pixmap`（矢量+文本+图片+渐变，tiny-skia 光栅化）、`Pixmap`（buffer-protocol/numpy 零拷贝）、`DisplayList`、`get_svg_image`。与 fitz at/near parity（SSIM 0.984，2026-06-21 实测）；渲染比 fitz 慢约 1.3×（11.40 vs 8.93 ms，`conformance/BENCH.md`，2026-09-05 基准；open / 文本抽取则分别快 1.3× / 2.3×）。
 - **图片**：把 PNG/JPEG/TIFF/GIF/BMP/WEBP 当文档打开、`convert_to_pdf`、图片 XObject 解码、`extract_image`。
 - **Markdown → PDF（pdfspine 原创扩展，非 PyMuPDF API）**：`pdfspine.markdown_to_pdf()` 把 CommonMark + GFM（表格/删除线/任务列表）渲染成新 PDF——纯 Rust 确定性排版引擎；图片仅本地路径/`data:` URI（不发网络）；**中文必须传 `cjk_font=`**（否则渲染成 `?`，见 gotchas）。
 - **图层**：OCG 读写（`get_ocgs` / `add_ocg` / `set_layer`）。
