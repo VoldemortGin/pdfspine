@@ -107,15 +107,6 @@ def test_paddle_clean_scan_cjk_is_exact():
 
 
 @_requires_paddle
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "ocrspine 732975f right-pads recognition crops with BLACK (-1.0 after "
-        "normalization) instead of PaddleOCR's 0.0 (mid-gray); the black pad reads "
-        "as ink and garbles the tail of Latin lines (docs/BENCHMARKS.md §6). Drop "
-        "this marker once pdf-ocr pins an ocrspine rev with a gray pad."
-    ),
-)
 def test_paddle_clean_scan_latin_is_exact():
     bench = _bench()
     text = _paddle_text_for_clean_scan(bench)

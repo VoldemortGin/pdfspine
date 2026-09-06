@@ -38,6 +38,18 @@ feature-complete, but the public API and on-disk formats may still change.
   unchanged); this is the PDF → Markdown direction, the reverse of the existing
   `markdown_to_pdf`.
 
+### Fixed
+
+- **PaddleOCR Latin accuracy 0.839 → 0.990** (CJK 0.989 → 0.993, speed unchanged)
+  on the 16-scan CJK+Latin benchmark (`docs/BENCHMARKS.md` §6) by pinning
+  `ocrspine` `e810a9c`: the recognizer right-padded each height-48 crop to its
+  64 px width bucket with black, which normalizes to `-1.0` and reads as ink to
+  the CRNN (the BiLSTM then garbled the tail of Latin lines: `A1938` → `A19w`);
+  it now pads with mid-gray (≈`0.0` after normalization, as PaddleOCR's
+  `resize_norm_img` does). pdfspine only bridges `Pixmap → ocrspine`, so the
+  change is the `rev` bump in `crates/pdf-ocr/Cargo.toml`; the clean-scan Latin
+  test that was a strict `xfail` is now a plain regression assertion.
+
 ## [0.7.1] — 2026-09-05
 
 ### Changed

@@ -189,17 +189,20 @@ ASCII garbage for Chinese glyphs is *not* charged against its Latin score. Tesse
 
 | engine | CJK char-acc | Latin token-acc |
 |---|---:|---:|
-| **pdfspine PaddleOCR** (`engine="paddle"`, PP-OCRv5 via `ocrspine` `732975f`) | **0.989** | 0.839 |
+| **pdfspine PaddleOCR** (`engine="paddle"`, PP-OCRv5 via `ocrspine` `e810a9c`) | **0.993** | **0.990** |
 | Tesseract (`engine="tesseract"`, `eng`) = **fitz's OCR** | **0.000** | 0.988 |
-| *PaddleOCR + the one-line `ocrspine` pad fix (measured, not yet shipped — see below)* | *0.993* | *0.990* |
+| *PaddleOCR before the `ocrspine` pad fix (`732975f`, black right-pad — see below)* | *0.989* | *0.839* |
 
-**The win: PaddleOCR scores 0.989 on Chinese vs Tesseract's 0.000.** With only the default English
-model — which is all fitz's OCR offers out of the box — Tesseract cannot read a single Chinese
-character (it emits ASCII noise like `RUSTSCEM`, `RZEMETASARATTZ`), so its CJK accuracy is a flat zero
-across all 16 scans. PaddleOCR recovers the Chinese nearly perfectly (13/16 images at 1.000; the rest
-drop 1–4 characters on the noisiest scans) with no external binary and no model download. On Latin
-Tesseract is ahead (0.988 vs 0.839); the gap is a single, root-caused bug in the shared `ocrspine`
-recognizer (below), not a model limitation — with the fix PaddleOCR reaches 0.990 on Latin too.
+**The win: PaddleOCR scores 0.993 on Chinese vs Tesseract's 0.000, and matches it on Latin (0.990 vs
+0.988).** With only the default English model — which is all fitz's OCR offers out of the box —
+Tesseract cannot read a single Chinese character (it emits ASCII noise like `RUSTSCEM`,
+`RZEMETASARATTZ`), so its CJK accuracy is a flat zero across all 16 scans. PaddleOCR recovers the
+Chinese nearly perfectly (13/16 images at 1.000; the rest drop 1–4 characters on the noise-4/6/8
+scans) with no external binary and no model download. On Latin only 5 of the 214 ground-truth tokens
+remain imperfect: `AI` → `Al` (4×, Arial's `I`/`l` are the same glyph — Tesseract makes the identical
+error) and `parallel` → `parall` on the 0.8 px-blur scan. The 0.839 Latin score of the previously
+pinned `ocrspine` `732975f` was a single, root-caused bug in the shared recognizer (below), not a model
+limitation.
 
 > The 2026-06-19 numbers (CJK 1.000 / Latin 0.867) were measured on the original **PP-OCRv4**
 > in-crate engine and were never re-run after the PP-OCRv5 upgrade (`a71b8c9`) and the move to
@@ -211,10 +214,10 @@ Per-image numbers, the raw recognized text per engine, and every Latin token tha
 corpus is regenerable and the scoring is deterministic and **identical for both engines**
 (`python/tests/test_ocr_bench_latin.py` pins the scoring contract).
 
-### Latin gap root cause — `ocrspine` pads recognition crops with black (2026-09-05)
+### Latin gap root cause — `ocrspine` padded recognition crops with black (found and fixed 2026-09-05)
 
-Per-token diagnosis of the 214 ground-truth Latin tokens under the shipped engine (150 dpi, same
-pipeline as the table):
+Per-token diagnosis of the 214 ground-truth Latin tokens under the previously pinned engine (`ocrspine`
+`732975f`, 150 dpi, same pipeline as the table):
 
 | error class | tokens | share | example (truth → emitted) |
 |---|---:|---:|---|
@@ -226,7 +229,7 @@ pipeline as the table):
 
 The corruption sits at the **right end** of Latin lines and appears only on boxes whose recognition
 crop gets a large right pad. `ocrspine`'s `recognize.rs` resizes each crop to height 48, buckets the
-width up to a multiple of 64 px, and right-pads the canvas with **black** pixels, which normalize to
+width up to a multiple of 64 px, and right-padded the canvas with **black** pixels, which normalize to
 `-1.0` — but the PP-OCR reference (`resize_norm_img` in PaddleOCR / RapidOCR) pads with `0.0` *after*
 normalization, i.e. mid-gray. A black block after dark-on-light text reads as ink to the CRNN, and the
 BiLSTM context lets it garble the rest of the line. Render DPI (72–300: Latin 0.81–0.84), image
@@ -236,20 +239,21 @@ avg 17–29 on 16 cores):
 
 | `ocrspine` recognizer variant | Latin | CJK | s/page |
 |---|---:|---:|---:|
-| shipped: black pad, 64 px width bucket | 0.839 | 0.989 | 1.01 |
+| `732975f`: black pad, 64 px width bucket | 0.839 | 0.989 | 1.01 |
 | black pad, 32 px bucket (the pre-tuning value) | 0.970 | 0.989 | 1.13 |
 | **gray pad (`0.0` normalized), 64 px bucket** | **0.990** | **0.993** | 1.08 |
 | gray pad, 32 px bucket | 0.991 | 0.993 | 0.90 |
 
 With the gray pad only 5 Latin tokens remain imperfect: `AI` → `Al` (4×, Arial's `I`/`l` are the same
 glyph — Tesseract makes the identical error) and `parallel` → `parall` on the 0.8 px-blur scan; the
-CJK drops are confined to the noise-4/6/8 scans. The fix is a one-liner in `ocrspine`
-(`src/paddle/recognize.rs`: build the padded canvas from mid-gray, or pad the normalized tensor with
-`0.0`; keep the 64 px bucket — 32 px buys nothing once the pad is gray). pdfspine only bridges
-`Pixmap → ocrspine`, so it ships the fix by bumping the `ocrspine` `rev` in `crates/pdf-ocr/Cargo.toml`;
-`python/tests/test_ocr_bench_latin.py::test_paddle_clean_scan_latin_is_exact` is a strict `xfail`
-that flips to a failure the moment a pinned rev fixes it, so the marker (and this note) get removed
-with the bump.
+CJK drops are confined to the noise-4/6/8 scans. The fix landed in `ocrspine` `e810a9c`
+(`src/paddle/recognize.rs`: the padded canvas is now built from mid-gray, `PAD_GRAY = 127`, ≈`0.0`
+after normalization, with a unit test on the pad region; the 64 px bucket stays — 32 px buys nothing
+once the pad is gray). pdfspine only bridges `Pixmap → ocrspine`, so it ships the fix by pinning that
+`rev` in `crates/pdf-ocr/Cargo.toml`; the benchmark re-run on the pinned rev reproduces the experiment
+exactly (Latin 0.990 / CJK 0.993, the table at the top of this section), and
+`python/tests/test_ocr_bench_latin.py::test_paddle_clean_scan_latin_is_exact` — a strict `xfail` until
+the bump — is now a plain regression assertion (no Latin misses on the clean scan).
 
 ### OCR speed (PaddleOCR, CPU, single-thread) (2026-06-19)
 
@@ -271,11 +275,11 @@ instance and persists across pages, and the whole-document path (`pdfocr_save` /
 **Tuning applied:** the recognition width bucket was coarsened from 32 px to **64 px**
 (`crates/pdf-ocr/src/paddle/recognize.rs`). On this page that cuts distinct recognition shapes from 9 to 6,
 shrinking the COLD penalty (and improving cross-page cache hits). The "no accuracy change" recorded at
-the time (CJK 1.000 / Latin 0.867 unchanged) was a PP-OCRv4 measurement; on the shipped PP-OCRv5 engine
-the extra ≤63 px right-pad is **not** neutral because it is padded black, not gray — Latin drops from
-0.970 (32 px) to 0.839 (64 px). With the gray pad the bucket size no longer matters (0.991 vs 0.990; see
-"Latin gap root cause" above), so the 64 px bucket stays. Reproduce the timing with
-`cargo test -p pdf-ocr --release --test paddle_prof -- --nocapture --ignored`.
+the time (CJK 1.000 / Latin 0.867 unchanged) was a PP-OCRv4 measurement; on PP-OCRv5 the extra ≤63 px
+right-pad was **not** neutral while `ocrspine` `732975f` padded it black rather than gray — Latin dropped
+from 0.970 (32 px) to 0.839 (64 px). With the gray pad now pinned (`e810a9c`) the bucket size no longer
+matters (0.991 vs 0.990; see "Latin gap root cause" above), so the 64 px bucket stays. Reproduce the
+timing with `cargo test -p pdf-ocr --release --test paddle_prof -- --nocapture --ignored`.
 
 ### OCR speed — rayon parallelism (2026-06-21)
 
