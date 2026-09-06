@@ -13,8 +13,14 @@ url = "https://raw.githubusercontent.com/EmbarkStudios/rust-ecosystem/main/audit
 [imports.google]
 url = "https://raw.githubusercontent.com/google/supply-chain/main/audits.toml"
 
+[imports.isrg]
+url = "https://raw.githubusercontent.com/divviup/libprio-rs/main/supply-chain/audits.toml"
+
 [imports.mozilla]
 url = "https://raw.githubusercontent.com/mozilla/supply-chain/main/audits.toml"
+
+[imports.zcash]
+url = "https://raw.githubusercontent.com/zcash/rust-ecosystem/main/supply-chain/audits.toml"
 
 [policy.pdf-api]
 audit-as-crates-io = false
@@ -52,6 +58,106 @@ audit-as-crates-io = false
 [policy.py-bindings]
 audit-as-crates-io = false
 
+[[exemptions.aes]]
+version = "0.7.5"
+criteria = "safe-to-deploy"
+
+[[exemptions.ahash]]
+version = "0.8.12"
+criteria = "safe-to-deploy"
+
+[[exemptions.anymap2]]
+version = "0.13.0"
+criteria = "safe-to-deploy"
+
+[[exemptions.anymap3]]
+version = "1.1.0"
+criteria = "safe-to-deploy"
+
+[[exemptions.bitflags]]
+version = "2.13.0"
+criteria = "safe-to-deploy"
+
+[[exemptions.block-padding]]
+version = "0.3.3"
+criteria = "safe-to-deploy"
+
+[[exemptions.borsh]]
+version = "1.6.1"
+criteria = "safe-to-deploy"
+
+[[exemptions.bytemuck]]
+version = "1.25.0"
+criteria = "safe-to-deploy"
+
+[[exemptions.byteorder-lite]]
+version = "0.1.0"
+criteria = "safe-to-deploy"
+
+[[exemptions.cbc]]
+version = "0.1.2"
+criteria = "safe-to-deploy"
+
+[[exemptions.cc]]
+version = "1.2.64"
+criteria = "safe-to-deploy"
+
+[[exemptions.cpufeatures]]
+version = "0.2.2"
+criteria = "safe-to-deploy"
+
+[[exemptions.crc32fast]]
+version = "1.5.0"
+criteria = "safe-to-deploy"
+
+[[exemptions.criterion]]
+version = "0.3.5"
+criteria = "safe-to-run"
+
+[[exemptions.crossbeam-deque]]
+version = "0.8.6"
+criteria = "safe-to-deploy"
+
+[[exemptions.crossbeam-epoch]]
+version = "0.9.8"
+criteria = "safe-to-deploy"
+
+[[exemptions.crossbeam-utils]]
+version = "0.8.8"
+criteria = "safe-to-deploy"
+
+[[exemptions.crypto-common]]
+version = "0.1.7"
+criteria = "safe-to-deploy"
+
+[[exemptions.digest]]
+version = "0.9.0"
+criteria = "safe-to-deploy"
+
+[[exemptions.doc-comment]]
+version = "0.3.4"
+criteria = "safe-to-deploy"
+
+[[exemptions.downcast-rs]]
+version = "1.2.1"
+criteria = "safe-to-deploy"
+
+[[exemptions.fastrand]]
+version = "2.4.1"
+criteria = "safe-to-run"
+
+[[exemptions.fax]]
+version = "0.2.7"
+criteria = "safe-to-deploy"
+
+[[exemptions.fearless_simd]]
+version = "0.4.1"
+criteria = "safe-to-deploy"
+
+[[exemptions.find-msvc-tools]]
+version = "0.1.9"
+criteria = "safe-to-deploy"
+
 [[exemptions.fontconfig-parser]]
 version = "0.5.8"
 criteria = "safe-to-deploy"
@@ -62,12 +168,316 @@ version = "0.23.0"
 criteria = "safe-to-deploy"
 notes = "TS-2 (PRD §10 locked decision): system-font database, pinned exactly (=0.23.0, vendoring is the exit strategy). MIT, pure Rust. No audit in any imported trusted set (checked 2026-07-02)."
 
+[[exemptions.generic-array]]
+version = "0.14.5"
+criteria = "safe-to-deploy"
+
+[[exemptions.getrandom]]
+version = "0.2.17"
+criteria = "safe-to-deploy"
+
+[[exemptions.gif]]
+version = "0.14.2"
+criteria = "safe-to-deploy"
+
+[[exemptions.half]]
+version = "2.4.1"
+criteria = "safe-to-deploy"
+
+[[exemptions.hayro-ccitt]]
+version = "0.3.0"
+criteria = "safe-to-deploy"
+
+[[exemptions.hayro-jbig2]]
+version = "0.3.0"
+criteria = "safe-to-deploy"
+
+[[exemptions.hayro-jpeg2000]]
+version = "0.4.0"
+criteria = "safe-to-deploy"
+
+[[exemptions.image]]
+version = "0.25.10"
+criteria = "safe-to-deploy"
+
+[[exemptions.image-webp]]
+version = "0.2.4"
+criteria = "safe-to-deploy"
+
+[[exemptions.itertools]]
+version = "0.10.3"
+criteria = "safe-to-deploy"
+
+[[exemptions.itertools]]
+version = "0.13.0"
+criteria = "safe-to-deploy"
+
+[[exemptions.jpeg-decoder]]
+version = "0.3.2"
+criteria = "safe-to-deploy"
+
+[[exemptions.log]]
+version = "0.4.32"
+criteria = "safe-to-deploy"
+
+[[exemptions.maplit]]
+version = "1.0.2"
+criteria = "safe-to-deploy"
+
+[[exemptions.matrixmultiply]]
+version = "0.3.10"
+criteria = "safe-to-deploy"
+
+[[exemptions.md-5]]
+version = "0.10.6"
+criteria = "safe-to-deploy"
+
+[[exemptions.memmap2]]
+version = "0.9.10"
+criteria = "safe-to-deploy"
+
+[[exemptions.minimal-lexical]]
+version = "0.2.1"
+criteria = "safe-to-deploy"
+
+[[exemptions.moxcms]]
+version = "0.8.1"
+criteria = "safe-to-deploy"
+
+[[exemptions.ndarray]]
+version = "0.16.1"
+criteria = "safe-to-deploy"
+
+[[exemptions.once_cell]]
+version = "1.12.0"
+criteria = "safe-to-deploy"
+
+[[exemptions.pest]]
+version = "2.8.6"
+criteria = "safe-to-deploy"
+
+[[exemptions.pest_derive]]
+version = "2.8.6"
+criteria = "safe-to-deploy"
+
+[[exemptions.pest_generator]]
+version = "2.8.6"
+criteria = "safe-to-deploy"
+
+[[exemptions.pest_meta]]
+version = "2.8.6"
+criteria = "safe-to-deploy"
+
+[[exemptions.png]]
+version = "0.18.1"
+criteria = "safe-to-deploy"
+
+[[exemptions.portable-atomic]]
+version = "1.13.1"
+criteria = "safe-to-deploy"
+
+[[exemptions.portable-atomic-util]]
+version = "0.2.7"
+criteria = "safe-to-deploy"
+
+[[exemptions.ppv-lite86]]
+version = "0.2.21"
+criteria = "safe-to-deploy"
+
+[[exemptions.proptest]]
+version = "1.11.0"
+criteria = "safe-to-run"
+
+[[exemptions.prost]]
+version = "0.8.0"
+criteria = "safe-to-deploy"
+
+[[exemptions.prost-derive]]
+version = "0.8.0"
+criteria = "safe-to-deploy"
+
+[[exemptions.pulldown-cmark]]
+version = "0.12.2"
+criteria = "safe-to-deploy"
+
+[[exemptions.pxfm]]
+version = "0.1.29"
+criteria = "safe-to-deploy"
+
+[[exemptions.pyo3]]
+version = "0.29.0"
+criteria = "safe-to-deploy"
+
+[[exemptions.pyo3-build-config]]
+version = "0.29.0"
+criteria = "safe-to-deploy"
+
+[[exemptions.pyo3-ffi]]
+version = "0.29.0"
+criteria = "safe-to-deploy"
+
+[[exemptions.pyo3-macros]]
+version = "0.29.0"
+criteria = "safe-to-deploy"
+
+[[exemptions.pyo3-macros-backend]]
+version = "0.29.0"
+criteria = "safe-to-deploy"
+
+[[exemptions.quick-error]]
+version = "2.0.1"
+criteria = "safe-to-deploy"
+
+[[exemptions.r-efi]]
+version = "5.2.0"
+criteria = "safe-to-run"
+
+[[exemptions.r-efi]]
+version = "6.0.0"
+criteria = "safe-to-run"
+
+[[exemptions.rawpointer]]
+version = "0.2.1"
+criteria = "safe-to-deploy"
+
+[[exemptions.redox_syscall]]
+version = "0.5.18"
+criteria = "safe-to-deploy"
+
 [[exemptions.roxmltree]]
 version = "0.20.0"
 criteria = "safe-to-deploy"
 notes = "TS-2: fontconfig-parser's XML reader (same author as fontdb/ttf-parser). MIT OR Apache-2.0. No audit in any imported trusted set (checked 2026-07-02)."
 
+[[exemptions.rustfft]]
+version = "6.4.1"
+criteria = "safe-to-deploy"
+
+[[exemptions.rusty-fork]]
+version = "0.3.1"
+criteria = "safe-to-run"
+
+[[exemptions.shlex]]
+version = "2.0.1"
+criteria = "safe-to-deploy"
+
+[[exemptions.simd-adler32]]
+version = "0.3.9"
+criteria = "safe-to-deploy"
+
 [[exemptions.slotmap]]
 version = "1.1.1"
 criteria = "safe-to-deploy"
 notes = "TS-2: fontdb's ID arena. Zlib. Only a google ub-risk-2 audit of 1.0.6 exists (wrong criteria + version, checked 2026-07-02); replace with a local audit when reviewed."
+
+[[exemptions.smol_str]]
+version = "0.3.6"
+criteria = "safe-to-deploy"
+
+[[exemptions.strength_reduce]]
+version = "0.2.4"
+criteria = "safe-to-deploy"
+
+[[exemptions.strict-num]]
+version = "0.1.1"
+criteria = "safe-to-deploy"
+
+[[exemptions.string-interner]]
+version = "0.15.0"
+criteria = "safe-to-deploy"
+
+[[exemptions.tiff]]
+version = "0.11.3"
+criteria = "safe-to-deploy"
+
+[[exemptions.time]]
+version = "0.1.44"
+criteria = "safe-to-deploy"
+
+[[exemptions.tiny-skia]]
+version = "0.11.4"
+criteria = "safe-to-deploy"
+
+[[exemptions.tiny-skia-path]]
+version = "0.11.4"
+criteria = "safe-to-deploy"
+
+[[exemptions.tinyvec]]
+version = "1.11.0"
+criteria = "safe-to-deploy"
+
+[[exemptions.tract-core]]
+version = "0.21.17"
+criteria = "safe-to-deploy"
+
+[[exemptions.tract-data]]
+version = "0.21.17"
+criteria = "safe-to-deploy"
+
+[[exemptions.tract-hir]]
+version = "0.21.17"
+criteria = "safe-to-deploy"
+
+[[exemptions.tract-linalg]]
+version = "0.21.17"
+criteria = "safe-to-deploy"
+
+[[exemptions.tract-nnef]]
+version = "0.21.17"
+criteria = "safe-to-deploy"
+
+[[exemptions.tract-onnx]]
+version = "0.21.17"
+criteria = "safe-to-deploy"
+
+[[exemptions.tract-onnx-opl]]
+version = "0.21.17"
+criteria = "safe-to-deploy"
+
+[[exemptions.transpose]]
+version = "0.2.3"
+criteria = "safe-to-deploy"
+
+[[exemptions.ttf-parser]]
+version = "0.25.1"
+criteria = "safe-to-deploy"
+
+[[exemptions.typenum]]
+version = "1.20.1"
+criteria = "safe-to-deploy"
+
+[[exemptions.version_check]]
+version = "0.9.5"
+criteria = "safe-to-deploy"
+
+[[exemptions.weezl]]
+version = "0.1.12"
+criteria = "safe-to-deploy"
+
+[[exemptions.weezl]]
+version = "0.2.1"
+criteria = "safe-to-deploy"
+
+[[exemptions.winapi-i686-pc-windows-gnu]]
+version = "0.4.0"
+criteria = "safe-to-run"
+
+[[exemptions.winapi-x86_64-pc-windows-gnu]]
+version = "0.4.0"
+criteria = "safe-to-run"
+
+[[exemptions.zerocopy]]
+version = "0.8.52"
+criteria = "safe-to-deploy"
+
+[[exemptions.zerocopy-derive]]
+version = "0.8.52"
+criteria = "safe-to-deploy"
+
+[[exemptions.zune-core]]
+version = "0.5.1"
+criteria = "safe-to-deploy"
+
+[[exemptions.zune-jpeg]]
+version = "0.5.15"
+criteria = "safe-to-deploy"

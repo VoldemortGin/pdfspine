@@ -2,3 +2,360 @@
 # cargo-vet audits file
 
 [audits]
+
+[[trusted.aho-corasick]]
+criteria = "safe-to-deploy"
+user-id = 189 # Andrew Gallant (BurntSushi)
+start = "2019-03-28"
+end = "2027-09-05"
+notes = "Trusted publisher: already trusted for safe-to-deploy by both the mozilla and bytecodealliance audit sets (cargo vet suggest NOTE, 2026-09-05)."
+
+[[trusted.anstyle]]
+criteria = "safe-to-deploy"
+user-id = 6743 # Ed Page (epage)
+start = "2022-05-18"
+end = "2027-09-05"
+notes = "Trusted publisher: already trusted for safe-to-deploy by both the mozilla and bytecodealliance audit sets (cargo vet suggest NOTE, 2026-09-05)."
+
+[[trusted.anyhow]]
+criteria = "safe-to-deploy"
+user-id = 3618 # David Tolnay (dtolnay)
+start = "2019-10-05"
+end = "2027-09-05"
+notes = "Trusted publisher: already trusted for safe-to-deploy by both the mozilla and bytecodealliance audit sets (cargo vet suggest NOTE, 2026-09-05)."
+
+[[trusted.autocfg]]
+criteria = "safe-to-deploy"
+user-id = 539 # Josh Stone (cuviper)
+start = "2019-05-22"
+end = "2027-09-05"
+notes = "Trusted publisher: already trusted for safe-to-deploy by both the mozilla and bytecodealliance audit sets (cargo vet suggest NOTE, 2026-09-05)."
+
+[[trusted.bytes]]
+criteria = "safe-to-deploy"
+user-id = 6741 # Alice Ryhl (Darksonn)
+start = "2021-01-11"
+end = "2027-09-05"
+notes = "Trusted publisher: already trusted for safe-to-deploy by both the mozilla and bytecodealliance audit sets (cargo vet suggest NOTE, 2026-09-05)."
+
+[[trusted.clap]]
+criteria = "safe-to-deploy"
+user-id = 6743 # Ed Page (epage)
+start = "2021-12-08"
+end = "2027-09-05"
+notes = "Trusted publisher: already trusted for safe-to-deploy by both the mozilla and bytecodealliance audit sets (cargo vet suggest NOTE, 2026-09-05)."
+
+[[trusted.clap_builder]]
+criteria = "safe-to-deploy"
+user-id = 6743 # Ed Page (epage)
+start = "2023-03-28"
+end = "2027-09-05"
+notes = "Trusted publisher: already trusted for safe-to-deploy by both the mozilla and bytecodealliance audit sets (cargo vet suggest NOTE, 2026-09-05)."
+
+[[trusted.clap_lex]]
+criteria = "safe-to-deploy"
+user-id = 6743 # Ed Page (epage)
+start = "2022-04-15"
+end = "2027-09-05"
+notes = "Trusted publisher: already trusted for safe-to-deploy by both the mozilla and bytecodealliance audit sets (cargo vet suggest NOTE, 2026-09-05)."
+
+[[trusted.dyn-clone]]
+criteria = "safe-to-deploy"
+user-id = 3618 # David Tolnay (dtolnay)
+start = "2019-12-23"
+end = "2027-09-05"
+notes = "Trusted publisher: already trusted for safe-to-deploy by both the mozilla and bytecodealliance audit sets (cargo vet suggest NOTE, 2026-09-05)."
+
+[[trusted.dyn-hash]]
+criteria = "safe-to-deploy"
+user-id = 3618 # David Tolnay (dtolnay)
+start = "2023-11-03"
+end = "2027-09-05"
+notes = "Trusted publisher: already trusted for safe-to-deploy by both the mozilla and bytecodealliance audit sets (cargo vet suggest NOTE, 2026-09-05)."
+
+[[trusted.filetime]]
+criteria = "safe-to-deploy"
+user-id = 1 # Alex Crichton (alexcrichton)
+start = "2019-04-23"
+end = "2027-09-05"
+notes = "Trusted publisher: already trusted for safe-to-deploy by both the mozilla and bytecodealliance audit sets (cargo vet suggest NOTE, 2026-09-05)."
+
+[[trusted.flate2]]
+criteria = "safe-to-deploy"
+user-id = 980 # Sebastian Thiel (Byron)
+start = "2023-08-15"
+end = "2027-09-05"
+notes = "Trusted publisher: already trusted for safe-to-deploy by the mozilla audit set (cargo vet suggest NOTE, 2026-09-05)."
+
+[[trusted.hashbrown]]
+criteria = "safe-to-deploy"
+user-id = 2915 # Amanieu d'Antras (Amanieu)
+start = "2019-04-02"
+end = "2027-09-05"
+notes = "Trusted publisher: already trusted for safe-to-deploy by both the mozilla and bytecodealliance audit sets (cargo vet suggest NOTE, 2026-09-05)."
+
+[[trusted.id-arena]]
+criteria = "safe-to-deploy"
+user-id = 696 # Nick Fitzgerald (fitzgen)
+start = "2026-01-14"
+end = "2027-09-05"
+notes = "Trusted publisher: already trusted for safe-to-deploy by the bytecodealliance audit set (cargo vet suggest NOTE, 2026-09-05)."
+
+[[trusted.itoa]]
+criteria = "safe-to-deploy"
+user-id = 3618 # David Tolnay (dtolnay)
+start = "2019-05-02"
+end = "2027-09-05"
+notes = "Trusted publisher: already trusted for safe-to-deploy by both the mozilla and bytecodealliance audit sets (cargo vet suggest NOTE, 2026-09-05)."
+
+[[trusted.kstring]]
+criteria = "safe-to-deploy"
+user-id = 6743 # Ed Page (epage)
+start = "2020-03-16"
+end = "2027-09-05"
+notes = "Trusted publisher: already trusted for safe-to-deploy by both the mozilla and bytecodealliance audit sets (cargo vet suggest NOTE, 2026-09-05)."
+
+[[trusted.libc]]
+criteria = "safe-to-deploy"
+user-id = 55123 # rust-lang-owner
+start = "2024-08-15"
+end = "2027-09-05"
+notes = "Trusted publisher: already trusted for safe-to-deploy by both the mozilla and bytecodealliance audit sets (cargo vet suggest NOTE, 2026-09-05)."
+
+[[trusted.libm]]
+criteria = "safe-to-deploy"
+user-id = 2915 # Amanieu d'Antras (Amanieu)
+start = "2022-02-06"
+end = "2027-09-05"
+notes = "Trusted publisher: already trusted for safe-to-deploy by both the mozilla and bytecodealliance audit sets (cargo vet suggest NOTE, 2026-09-05)."
+
+[[trusted.linux-raw-sys]]
+criteria = "safe-to-deploy"
+user-id = 6825 # Dan Gohman (sunfishcode)
+start = "2021-06-12"
+end = "2027-09-05"
+notes = "Trusted publisher: already trusted for safe-to-deploy by both the mozilla and bytecodealliance audit sets (cargo vet suggest NOTE, 2026-09-05)."
+
+[[trusted.liquid]]
+criteria = "safe-to-deploy"
+user-id = 6743 # Ed Page (epage)
+start = "2019-07-05"
+end = "2027-09-05"
+notes = "Trusted publisher: already trusted for safe-to-deploy by both the mozilla and bytecodealliance audit sets (cargo vet suggest NOTE, 2026-09-05)."
+
+[[trusted.liquid-core]]
+criteria = "safe-to-deploy"
+user-id = 6743 # Ed Page (epage)
+start = "2020-03-16"
+end = "2027-09-05"
+notes = "Trusted publisher: already trusted for safe-to-deploy by both the mozilla and bytecodealliance audit sets (cargo vet suggest NOTE, 2026-09-05)."
+
+[[trusted.liquid-derive]]
+criteria = "safe-to-deploy"
+user-id = 6743 # Ed Page (epage)
+start = "2019-07-05"
+end = "2027-09-05"
+notes = "Trusted publisher: already trusted for safe-to-deploy by both the mozilla and bytecodealliance audit sets (cargo vet suggest NOTE, 2026-09-05)."
+
+[[trusted.liquid-lib]]
+criteria = "safe-to-deploy"
+user-id = 6743 # Ed Page (epage)
+start = "2020-03-16"
+end = "2027-09-05"
+notes = "Trusted publisher: already trusted for safe-to-deploy by both the mozilla and bytecodealliance audit sets (cargo vet suggest NOTE, 2026-09-05)."
+
+[[trusted.lock_api]]
+criteria = "safe-to-deploy"
+user-id = 2915 # Amanieu d'Antras (Amanieu)
+start = "2019-05-04"
+end = "2027-09-05"
+notes = "Trusted publisher: already trusted for safe-to-deploy by both the mozilla and bytecodealliance audit sets (cargo vet suggest NOTE, 2026-09-05)."
+
+[[trusted.memchr]]
+criteria = "safe-to-deploy"
+user-id = 189 # Andrew Gallant (BurntSushi)
+start = "2019-07-07"
+end = "2027-09-05"
+notes = "Trusted publisher: already trusted for safe-to-deploy by both the mozilla and bytecodealliance audit sets (cargo vet suggest NOTE, 2026-09-05)."
+
+[[trusted.num-complex]]
+criteria = "safe-to-deploy"
+user-id = 539 # Josh Stone (cuviper)
+start = "2019-06-10"
+end = "2027-09-05"
+notes = "Trusted publisher: already trusted for safe-to-deploy by both the mozilla and bytecodealliance audit sets (cargo vet suggest NOTE, 2026-09-05)."
+
+[[trusted.parking_lot]]
+criteria = "safe-to-deploy"
+user-id = 2915 # Amanieu d'Antras (Amanieu)
+start = "2019-05-04"
+end = "2027-09-05"
+notes = "Trusted publisher: already trusted for safe-to-deploy by both the mozilla and bytecodealliance audit sets (cargo vet suggest NOTE, 2026-09-05)."
+
+[[trusted.parking_lot_core]]
+criteria = "safe-to-deploy"
+user-id = 2915 # Amanieu d'Antras (Amanieu)
+start = "2019-05-04"
+end = "2027-09-05"
+notes = "Trusted publisher: already trusted for safe-to-deploy by both the mozilla and bytecodealliance audit sets (cargo vet suggest NOTE, 2026-09-05)."
+
+[[trusted.paste]]
+criteria = "safe-to-deploy"
+user-id = 3618 # David Tolnay (dtolnay)
+start = "2019-03-19"
+end = "2027-09-05"
+notes = "Trusted publisher: already trusted for safe-to-deploy by both the mozilla and bytecodealliance audit sets (cargo vet suggest NOTE, 2026-09-05)."
+
+[[trusted.prettyplease]]
+criteria = "safe-to-deploy"
+user-id = 3618 # David Tolnay (dtolnay)
+start = "2022-01-04"
+end = "2027-09-05"
+notes = "Trusted publisher: already trusted for safe-to-deploy by both the mozilla and bytecodealliance audit sets (cargo vet suggest NOTE, 2026-09-05)."
+
+[[trusted.primal-check]]
+criteria = "safe-to-deploy"
+user-id = 539 # Josh Stone (cuviper)
+start = "2020-06-18"
+end = "2027-09-05"
+notes = "Trusted publisher: already trusted for safe-to-deploy by both the mozilla and bytecodealliance audit sets (cargo vet suggest NOTE, 2026-09-05)."
+
+[[trusted.rayon]]
+criteria = "safe-to-deploy"
+user-id = 539 # Josh Stone (cuviper)
+start = "2019-06-13"
+end = "2027-09-05"
+notes = "Trusted publisher: already trusted for safe-to-deploy by both the mozilla and bytecodealliance audit sets (cargo vet suggest NOTE, 2026-09-05)."
+
+[[trusted.regex]]
+criteria = "safe-to-deploy"
+user-id = 189 # Andrew Gallant (BurntSushi)
+start = "2019-02-27"
+end = "2027-09-05"
+notes = "Trusted publisher: already trusted for safe-to-deploy by both the mozilla and bytecodealliance audit sets (cargo vet suggest NOTE, 2026-09-05)."
+
+[[trusted.regex-automata]]
+criteria = "safe-to-deploy"
+user-id = 189 # Andrew Gallant (BurntSushi)
+start = "2019-02-25"
+end = "2027-09-05"
+notes = "Trusted publisher: already trusted for safe-to-deploy by both the mozilla and bytecodealliance audit sets (cargo vet suggest NOTE, 2026-09-05)."
+
+[[trusted.regex-syntax]]
+criteria = "safe-to-deploy"
+user-id = 189 # Andrew Gallant (BurntSushi)
+start = "2019-03-30"
+end = "2027-09-05"
+notes = "Trusted publisher: already trusted for safe-to-deploy by both the mozilla and bytecodealliance audit sets (cargo vet suggest NOTE, 2026-09-05)."
+
+[[trusted.rustix]]
+criteria = "safe-to-deploy"
+user-id = 6825 # Dan Gohman (sunfishcode)
+start = "2021-10-29"
+end = "2027-09-05"
+notes = "Trusted publisher: already trusted for safe-to-deploy by both the mozilla and bytecodealliance audit sets (cargo vet suggest NOTE, 2026-09-05)."
+
+[[trusted.same-file]]
+criteria = "safe-to-deploy"
+user-id = 189 # Andrew Gallant (BurntSushi)
+start = "2019-07-16"
+end = "2027-09-05"
+notes = "Trusted publisher: already trusted for safe-to-deploy by both the mozilla and bytecodealliance audit sets (cargo vet suggest NOTE, 2026-09-05)."
+
+[[trusted.scopeguard]]
+criteria = "safe-to-deploy"
+user-id = 2915 # Amanieu d'Antras (Amanieu)
+start = "2020-02-16"
+end = "2027-09-05"
+notes = "Trusted publisher: already trusted for safe-to-deploy by both the mozilla and bytecodealliance audit sets (cargo vet suggest NOTE, 2026-09-05)."
+
+[[trusted.serde_json]]
+criteria = "safe-to-deploy"
+user-id = 3618 # David Tolnay (dtolnay)
+start = "2019-02-28"
+end = "2027-09-05"
+notes = "Trusted publisher: already trusted for safe-to-deploy by both the mozilla and bytecodealliance audit sets (cargo vet suggest NOTE, 2026-09-05)."
+
+[[trusted.syn]]
+criteria = "safe-to-deploy"
+user-id = 3618 # David Tolnay (dtolnay)
+start = "2019-03-01"
+end = "2027-09-05"
+notes = "Trusted publisher: already trusted for safe-to-deploy by both the mozilla and bytecodealliance audit sets (cargo vet suggest NOTE, 2026-09-05)."
+
+[[trusted.tar]]
+criteria = "safe-to-deploy"
+user-id = 1 # Alex Crichton (alexcrichton)
+start = "2019-03-04"
+end = "2027-09-05"
+notes = "Trusted publisher: already trusted for safe-to-deploy by both the mozilla and bytecodealliance audit sets (cargo vet suggest NOTE, 2026-09-05)."
+
+[[trusted.target-lexicon]]
+criteria = "safe-to-deploy"
+user-id = 6825 # Dan Gohman (sunfishcode)
+start = "2019-03-06"
+end = "2027-09-05"
+notes = "Trusted publisher: already trusted for safe-to-deploy by both the mozilla and bytecodealliance audit sets (cargo vet suggest NOTE, 2026-09-05)."
+
+[[trusted.thiserror]]
+criteria = "safe-to-deploy"
+user-id = 3618 # David Tolnay (dtolnay)
+start = "2019-10-09"
+end = "2027-09-05"
+notes = "Trusted publisher: already trusted for safe-to-deploy by both the mozilla and bytecodealliance audit sets (cargo vet suggest NOTE, 2026-09-05)."
+
+[[trusted.thiserror-impl]]
+criteria = "safe-to-deploy"
+user-id = 3618 # David Tolnay (dtolnay)
+start = "2019-10-09"
+end = "2027-09-05"
+notes = "Trusted publisher: already trusted for safe-to-deploy by both the mozilla and bytecodealliance audit sets (cargo vet suggest NOTE, 2026-09-05)."
+
+[[trusted.ucd-trie]]
+criteria = "safe-to-deploy"
+user-id = 189 # Andrew Gallant (BurntSushi)
+start = "2019-07-21"
+end = "2027-09-05"
+notes = "Trusted publisher: already trusted for safe-to-deploy by both the mozilla and bytecodealliance audit sets (cargo vet suggest NOTE, 2026-09-05)."
+
+[[trusted.unicase]]
+criteria = "safe-to-deploy"
+user-id = 359 # Sean McArthur (seanmonstar)
+start = "2019-03-05"
+end = "2027-09-05"
+notes = "Trusted publisher: already trusted for safe-to-deploy by both the mozilla and bytecodealliance audit sets (cargo vet suggest NOTE, 2026-09-05)."
+
+[[trusted.unicode-ident]]
+criteria = "safe-to-deploy"
+user-id = 3618 # David Tolnay (dtolnay)
+start = "2021-10-02"
+end = "2027-09-05"
+notes = "Trusted publisher: already trusted for safe-to-deploy by both the mozilla and bytecodealliance audit sets (cargo vet suggest NOTE, 2026-09-05)."
+
+[[trusted.walkdir]]
+criteria = "safe-to-deploy"
+user-id = 189 # Andrew Gallant (BurntSushi)
+start = "2019-06-09"
+end = "2027-09-05"
+notes = "Trusted publisher: already trusted for safe-to-deploy by both the mozilla and bytecodealliance audit sets (cargo vet suggest NOTE, 2026-09-05)."
+
+[[trusted.wasi]]
+criteria = "safe-to-deploy"
+user-id = 1 # Alex Crichton (alexcrichton)
+start = "2020-06-03"
+end = "2027-09-05"
+notes = "Trusted publisher: already trusted for safe-to-deploy by both the mozilla and bytecodealliance audit sets (cargo vet suggest NOTE, 2026-09-05)."
+
+[[trusted.winapi-util]]
+criteria = "safe-to-deploy"
+user-id = 189 # Andrew Gallant (BurntSushi)
+start = "2020-01-11"
+end = "2027-09-05"
+notes = "Trusted publisher: already trusted for safe-to-deploy by both the mozilla and bytecodealliance audit sets (cargo vet suggest NOTE, 2026-09-05)."
+
+[[trusted.windows-sys]]
+criteria = "safe-to-deploy"
+user-id = 64539 # Kenny Kerr (kennykerr)
+start = "2021-11-15"
+end = "2027-09-05"
+notes = "Trusted publisher: already trusted for safe-to-deploy by both the mozilla and bytecodealliance audit sets (cargo vet suggest NOTE, 2026-09-05)."
