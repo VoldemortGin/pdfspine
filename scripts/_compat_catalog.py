@@ -619,8 +619,8 @@ add_many(
 )
 add_many(
     "Document",
-    DEFERRED,
-    "post-v1",
+    IMPLEMENTED,
+    "M7",
     [
         "add_layer",
         "get_layers",
@@ -630,7 +630,7 @@ add_many(
         "get_ocmd",
         "set_ocmd",
     ],
-    "OCMD / layer-config nesting deferred (PRD §3.2 #5)",
+    "OCG layer configs (/Configs) + OCMD + in-memory layer view (M7 follow-up)",
 )
 # Page labels
 add_many(

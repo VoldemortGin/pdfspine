@@ -2539,7 +2539,7 @@ deterministic model-output fixtures.
 | `TATR-020` | optional-dependency markers encode Python 3.12–3.14 plus the supported Linux/macOS/Windows CPU matrix without restricting the base wheel; musl is documented separately | packaging support contract | green |
 | `TATR-021` | matching native vector-line geometry or model edge evidence may enlarge only the structure-recognition crop; metadata preserves detector/crop provenance, and both guidance controls are independently disableable | pdfspine evidence-fusion contract | green |
 
-### M7 — optional content (`pdf_core::ocg` / `pdf_edit::ocg`) — `OCG-READ-*` / `OCG-ADD-*` / `OCG-TOGGLE-*` / `OCG-BIND-*`
+### M7 — optional content (`pdf_core::ocg` / `pdf_edit::ocg`) — `OCG-READ-*` / `OCG-ADD-*` / `OCG-TOGGLE-*` / `OCG-BIND-*` / `OCG-VIS-*` / `OCG-LAYER-*` / `OCG-DEFAULT-*` / `OCG-OCMD-SET-*`
 
 Tests live in `crates/pdf-core/tests/ocg_unit.rs` (read) and
 `crates/pdf-edit/tests/ocg_e2e.rs` (write round-trip).
@@ -2568,6 +2568,56 @@ Tests live in `crates/pdf-core/tests/ocg_unit.rs` (read) and
 | `OCG-BIND-XOBJECT` | `set_oc` binds an XObject stream | PRD §7 | green |
 | `OCG-BIND-DICT` | `set_oc` binds a dictionary object | PRD §7 | green |
 | `OCG-NOOP` | `set_layer` on a non-layered doc is a no-op | PRD §7 | green |
+| `OCG-READ-LAYERS` | `get_layers` lists `/Configs` by array index with `/Name` / `/Creator`; `/D` never listed; `layer_config_count` matches | PRD §7 | green |
+| `OCG-READ-LAYERS-NONE` | no `/OCProperties` or no `/Configs` → empty list / count 0 | PRD §7 | green |
+| `OCG-READ-LAYERS-NAMES` | config without `/Creator` / `/Name` → `None` fields | PRD §7 | green |
+| `OCG-READ-CONFIG-SELECT` | `select_layer_config(Some(n))` flips `get_ocgs` / `ocg_state` / `OcVisibility`; no write (`is_dirty` false); `None` restores `/D` | PRD §7 | green |
+| `OCG-READ-CONFIG-BAD` | `select_layer_config(Some(n ≥ count))` → `InvalidArgument("Illegal Layer config")` | PRD §7 | green |
+| `OCG-READ-CONFIG-FALLBACK` | alternate config without `/Order` inherits `/D /Order` in `layer_ui_configs` | PRD §7 | green |
+| `OCG-READ-UI-NUMBER` | UI rows carry a 0-based `number` (row index) plus the `ocg` xref | PRD §7 | green |
+| `OCG-READ-UI-LABEL-LOCKED` | label rows are `kind "label"`, `ocg 0`, locked; `/Locked` OCGs report `locked` | PRD §7 | green |
+| `OCG-READ-UI-RADIO` | `/RBGroups` members report `kind "radiobox"` | PRD §7 | green |
+| `OCG-READ-UI-SELECT` | `set_layer_ui_config` action 0/1/2 by row; out of range → error; label/locked no-op; radio ON clears its group; no write | PRD §7 | green |
+| `OCG-READ-OC` | `get_oc` returns the `/OC` reference of an image / form XObject, 0 when absent | PRD §7 | green |
+| `OCG-READ-OC-BADTYPE` | `get_oc` on catalog / page / OCG / font → `InvalidArgument` | PRD §7 | green |
+| `OCG-READ-OCMD` | `get_ocmd` reads array and single-reference `/OCGs`, absent → `None`, and the `/P` policy | PRD §7 | green |
+| `OCG-READ-OCMD-VE` | nested `/VE` parses into a `VeExpr::Op` tree with `Ocg` leaves | PRD §7 | green |
+| `OCG-READ-OCMD-BADTYPE` | `get_ocmd` on a non-OCMD → `InvalidArgument` | PRD §7 | green |
+| `OCG-VIS-OCG` | `OcVisibility`: an OCG reference is hidden iff that OCG is OFF | PRD §7 | green |
+| `OCG-VIS-UNKNOWN` | undeclared / dangling `/OC` references stay visible, no panic | PRD §7 | green |
+| `OCG-VIS-OCMD-POLICIES` | OCMD `/P` AnyOn / AllOn / AnyOff / AllOff over `[A on, B off]` + empty `/OCGs` per ISO 32000-1 | PRD §7 | green |
+| `OCG-VIS-OCMD-VE` | `/VE` And / Or / Not (nested) evaluated; `/VE` takes precedence over `/OCGs` + `/P` | PRD §7 | green |
+| `OCG-VIS-VIEW` | panel override and switched configuration both reflected in `OcVisibility` without a write | PRD §7 | green |
+| `OCG-LAYER-ADD` | `add_layer` appends a direct `/OCConfig` (`/BaseState /OFF`, `/ON`) to `/Configs`; visible via `get_layers` | PRD §7 | green |
+| `OCG-LAYER-ADD-CREATES-OCPROPS` | `add_layer` creates `/OCProperties` and the catalog entry when absent | PRD §7 | green |
+| `OCG-LAYER-ADD-DROPS-UNKNOWN` | `on` xrefs not declared in `/OCGs` are dropped | PRD §7 | green |
+| `OCG-LAYER-ADD-ROUNDTRIP` | an added configuration survives save → reopen | PRD §7 | green |
+| `OCG-DEFAULT-SET` | `set_layer_config_as_default` rewrites `/D` (`/BaseState /OFF`, `/ON`, `/Intent /View`), deletes `/Configs`, resets the view; round-trips | PRD §7 | green |
+| `OCG-DEFAULT-NOOP` | `set_layer_config_as_default` without `/OCProperties` creates nothing | PRD §7 | green |
+| `OCG-OCMD-SET-NEW` | `set_ocmd(0, …)` creates an OCMD; `get_ocmd` round-trips `/OCGs` + `/P` | PRD §7 | green |
+| `OCG-OCMD-SET-VE` | `set_ocmd` with a `VeExpr` round-trips (no `/OCGs`) | PRD §7 | green |
+| `OCG-OCMD-SET-REPLACE` | replacing writes the whole dictionary (previous `/OCGs` / `/P` dropped) | PRD §7 | green |
+| `OCG-OCMD-SET-BAD-XREF` | `set_ocmd` on a non-OCMD xref → `InvalidArgument("bad xref or not an OCMD")` | PRD §7 | green |
+| `OCG-TOGGLE-RESETS-VIEW` | `set_layer` after `select_layer_config(Some(0))` resets the view to `/D` | PRD §7 | green |
+
+### M7 follow-up — optional content in the interpreter (`pdf_text::interp`) — `OCG-INTERP-*`
+
+Tests live in `crates/pdf-text/tests/interp_ocg.rs` (byte-level layered pages: `/OC … BDC/EMC`
+sections, XObject `/OC`, OCMDs, driven through the store's in-memory layer view).
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `OCG-INTERP-TEXT` | hidden `/OC … BDC … EMC` suppresses glyphs; panel toggles reveal / hide per layer | PRD §8.6 | green |
+| `OCG-INTERP-IMAGE` | image XObject with a hidden `/OC` is not inventoried and emits no `RenderOp::Image`; reappears when ON | PRD §8.6 | green |
+| `OCG-INTERP-FORM` | form XObject `/OC` ON renders its glyphs; OFF is skipped entirely | PRD §8.6 | green |
+| `OCG-INTERP-OCMD-POLICY` | OCMD `/OCGs [A B] /P /AllOn` hidden while B OFF, visible once B ON | PRD §8.6 | green |
+| `OCG-INTERP-OCMD-VE` | OCMD `/VE [/Not B]` visible while B OFF | PRD §8.6 | green |
+| `OCG-INTERP-PATH` | hidden `re f` yields no drawing / no `RenderOp::Fill`; visible fills unaffected | PRD §8.6 | green |
+| `OCG-INTERP-TM` | a hidden `Tj` still advances the text matrix (next visible glyph origin is past it) | PRD §8.6 | green |
+| `OCG-INTERP-NESTED` | a visible-tag inner section inside a hidden outer section stays hidden | PRD §8.6 | green |
+| `OCG-INTERP-UNBALANCED-EMC` | a stray `EMC` inside a form neither underflows nor unhides the page's later section | PRD §8.6 | green |
+| `OCG-INTERP-NON-OC-BDC` | a non-`/OC` `BDC` (`/Span <</MCID 0>>`) hides nothing | PRD §8.6 | green |
+| `OCG-INTERP-RENDER` | the ordered render-op stream honours OC (hidden text → no `RenderOp::Text`; toggle brings it back) | PRD §8.6 | green |
 
 ### M7 — SVG export (`pdf_render::svg`) — `SVG-BASIC-*` / `SVG-EMPTY-*` / `SVG-ESCAPE-*` / `SVG-PROP-*` / `SVGTRM-*`
 
@@ -2603,6 +2653,10 @@ Tests live in `crates/pdf-api/tests/m7_facade.rs`.
 | `TABLES-API-003` | `strategy_from_str` maps lines/lines_strict/text (lenient) | PRD §9.1 | green |
 | `OCG-API-001` | `Document` add → save → reopen → `get_ocgs` / `layer_ui_configs` round-trip | PRD §9.1 | green |
 | `OCG-API-002` | `set_layer` / `set_layer_state` toggle reflected in `ocg_state` | PRD §9.1 | green |
+| `OCG-API-003` | `Document::{add_layer, get_layers, layer_config_count}` + save / reopen round-trip | PRD §9.1 | green |
+| `OCG-API-004` | `select_layer_config` reflected in `get_ocgs` / `ocg_state`; illegal index errors; `set_layer_config_as_default` drops `/Configs` | PRD §9.1 | green |
+| `OCG-API-005` | `set_layer_ui_config` ON / OFF by row + out-of-range error | PRD §9.1 | green |
+| `OCG-API-006` | `set_ocmd` / `get_ocmd` / `get_oc` via `set_oc` on a form XObject + `/VE` replace round-trip | PRD §9.1 | green |
 | `SVG-API-001` | `page_get_svg_image` → well-formed SVG string | PRD §9.1 | green |
 
 ### M7 — Python `find_tables` / OCG / `get_svg_image` + `fitz` parity — `PYTABLE-*` / `PYOCG-*` / `PYSVG-*` / `PYFITZ-M7-*`
@@ -2627,6 +2681,53 @@ Tests live in `python/tests/test_m7.py`.
 | `PYFITZ-M7-002` | `fitz` `get_svg_image`/`getSVGimage` parity | PRD §9.5 | green |
 | `PYFITZ-M7-003` | `fitz` `addOCG`/`getOCGs`/`layerUIConfigs`/`setLayer` aliases | PRD §9.5 | green |
 | `PYFITZ-M7-004` | `pymupdf.open(...).find_tables().tables[0].to_markdown()` works | PRD §9.5 | green |
+
+### M7 follow-up — Python OCG layer configurations / OCMD / hidden content — `PYOCG-004`…`PYOCG-038`
+
+Tests live in `python/tests/test_ocg_layers.py`. Expected values are hard-coded from a real
+PyMuPDF 1.28.2 oracle; `PYOCG-037`/`038` additionally run real PyMuPDF in a subprocess
+(skipped when it is not importable there) for a bidirectional parity check.
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `PYOCG-004` | fresh document: `get_layers() == []`; `switch_layer(0)` / `switch_layer(-1)` return `None` | PRD §9.5 | green |
+| `PYOCG-005` | no configurations: `switch_layer(1)` → `ValueError("bad layer number")` | PRD §9.5 | green |
+| `PYOCG-006` | OCGs without `/Configs`: `get_layers() == []` (the default `/D` is never listed) | PRD §9.5 | green |
+| `PYOCG-007` | three `add_layer` calls (creator, bogus `on` xref dropped) → the three `{number, name, creator}` dicts | PRD §9.5 | green |
+| `PYOCG-008` | `/Configs` entries are direct dicts with `/Name` / `/Creator` / `/BaseState /OFF` / `/ON` | PRD §9.5 | green |
+| `PYOCG-009` | `switch_layer(n)` drives `layer_ui_configs` / `get_ocgs` ON states per configuration (×3) | PRD §9.5 | green |
+| `PYOCG-010` | `switch_layer(5)` → `ValueError("Illegal Layer config")` | PRD §9.5 | green |
+| `PYOCG-011` | switching is in-memory only: save → reopen leaves `/D` and `get_layers` unchanged | PRD §9.5 | green |
+| `PYOCG-012` | `switch_layer(0, as_default=True)` rewrites `/D` (BaseState OFF / ON / Intent, no OFF) and drops `/Configs` | PRD §9.5 | green |
+| `PYOCG-013` | `set_layer_ui_config` action 2 clears / 0 sets / 1 toggles a row | PRD §9.5 | green |
+| `PYOCG-014` | `set_layer_ui_config("A", …)` selects the row by its text | PRD §9.5 | green |
+| `PYOCG-015` | panel overrides are in-memory only: persisted `/D` unchanged | PRD §9.5 | green |
+| `PYOCG-016` | out-of-range row → `ValueError`; unknown text → `ValueError("bad OCG 'nosuch'.")` | PRD §9.5 | green |
+| `PYOCG-017` | nested `/Order [A [B C]]` → depths 0/1/1, sequential `number`, `checkbox` rows | PRD §9.5 | green |
+| `PYOCG-018` | leading label string in `/Order` → locked `label` row, members at depth+1 | PRD §9.5 | green |
+| `PYOCG-019` | `/RBGroups` members report type `radiobox`; `number` is the row index | PRD §9.5 | green |
+| `PYOCG-020` | image / form XObject without `/OC` → `get_oc() == 0` | PRD §9.5 | green |
+| `PYOCG-021` | `set_oc` to an OCG then an OCMD → `get_oc` follows; `get_ocgs` keys exclude the OCMD | PRD §9.5 | green |
+| `PYOCG-022` | `get_oc` on catalog / page / OCG → `ValueError("bad object type at xref N")` | PRD §9.5 | green |
+| `PYOCG-023` | `get_oc(0)` / `get_oc(xref_length())` → `ValueError("bad xref")` | PRD §9.5 | green |
+| `PYOCG-024` | `set_ocmd` policy normalisation round-trips (`AnyOn`, `alloff` → `AllOff`, `None`) | PRD §9.5 | green |
+| `PYOCG-025` | `set_ocmd(ve=…)` `not` / nested `and`+`not` / `or` round-trip through `get_ocmd` | PRD §9.5 | green |
+| `PYOCG-026` | `ocgs` + `policy` + `ve` coexist in one OCMD | PRD §9.5 | green |
+| `PYOCG-027` | replacing rewrites the whole dict; `set_ocmd()` is empty; int `ocgs` silently ignored | PRD §9.5 | green |
+| `PYOCG-028` | `set_ocmd` bad policy / bad OCGs / bad `ve` format / bad operand / bad OCG in `ve` → `ValueError` (×5) | PRD §9.5 | green |
+| `PYOCG-028b` | `set_ocmd(xref=<non-OCMD>)` → `ValueError("bad xref or not an OCMD")` | PRD §9.5 | green |
+| `PYOCG-029` | `get_ocmd` on catalog / OCG → `ValueError("bad object type")` | PRD §9.5 | green |
+| `PYOCG-029b` | `get_ocmd(999999)` → `ValueError("bad xref")` | PRD §9.5 | green |
+| `PYOCG-030` | closed document → `ValueError("document closed")` for the six layer / OCMD methods | PRD §9.5 | green |
+| `PYOCG-030b` | closed document → `get_oc` raises PyMuPDF's `"document close or encrypted"` | PRD §9.5 | green |
+| `PYOCG-031` | hand-built layered page, default `/D`: hidden `BDC` text / XObject `/OC` / OCMD `AllOn` / hidden path are absent from `get_text` / dict image blocks / `get_drawings` | PRD §9.5 | green |
+| `PYOCG-032` | `set_layer_ui_config` turning B ON reveals all six words, the image block, the drawing, and more non-white pixels | PRD §9.5 | green |
+| `PYOCG-033` | A OFF + B ON → only the B-governed text and the unconditional text remain | PRD §9.5 | green |
+| `PYOCG-034` | `switch_layer(0)` (`only B` config) → `BBBB`/`EEEE`; `switch_layer(-1)` is a no-op | PRD §9.5 | green |
+| `PYOCG-035` | `set_layer(-1, on=[B], off=[A])` writes `/D` and resets the view → `BBBB`/`EEEE` | PRD §9.5 | green |
+| `PYOCG-036` | `get_oc(image)` / `get_oc(form)` / `get_ocmd(AllOn)` / `get_ocmd(VE)` on the layered page | PRD §9.5 | green |
+| `PYOCG-037` | live oracle: pdfspine-authored file read by real PyMuPDF → identical `get_layers` / `get_ocmd` / UI ON states + `get_layer(n)` | PRD §9.5 | green |
+| `PYOCG-038` | live oracle: PyMuPDF-authored `/OC … BDC` file → identical `get_layers` / `get_ocmd` / `get_text` under default, panel toggle and `switch_layer` | PRD §9.5 | green |
 
 ---
 

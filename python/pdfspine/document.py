@@ -5131,6 +5131,172 @@ class Document:
         ``doc.set_oc``)."""
         self._doc.set_oc(int(xref), int(ocg))
 
+    # --- optional content: layer configurations / OCMDs ---
+    def _require_open_for_layers(self) -> None:
+        if self._closed:
+            raise ValueError("document closed")
+
+    def get_layers(self) -> list[dict]:
+        """The alternate layer configurations in ``/OCProperties /Configs``
+        (PyMuPDF ``doc.get_layers``).
+
+        Each entry is a dict with ``number`` (the ``switch_layer`` argument),
+        ``name`` and ``creator`` (``""`` when absent). The default
+        configuration ``/D`` is not listed; a document without configurations
+        yields ``[]``.
+        """
+        self._require_open_for_layers()
+        return self._doc.get_layers()
+
+    def add_layer(
+        self, name: str, creator: str | None = None, on: list[int] | None = None
+    ) -> None:
+        """Appends an alternate layer configuration (PyMuPDF ``doc.add_layer``).
+
+        The configuration gets ``/BaseState /OFF`` and turns ON only the OCG
+        xrefs in ``on`` that exist in ``/OCGs`` (unknown xrefs are dropped).
+        """
+        self._require_open_for_layers()
+        on_xrefs = [int(x) for x in on] if on else []
+        self._doc.add_layer(
+            str(name),
+            creator=None if creator is None else str(creator),
+            on=on_xrefs,
+        )
+
+    def switch_layer(self, config: int, as_default: int | bool = 0) -> None:
+        """Activates layer configuration ``config`` (a ``get_layers`` number)
+        for rendering / text extraction (PyMuPDF ``doc.switch_layer``).
+
+        In-memory only unless ``as_default`` is truthy, which rewrites ``/D``
+        from that configuration and deletes ``/Configs``. A negative ``config``
+        is a no-op; with no configurations, ``config >= 1`` raises
+        ``ValueError``.
+        """
+        self._require_open_for_layers()
+        config = int(config)
+        count = self._doc.layer_config_count()
+        if count == 0:
+            if config < 1:
+                return
+            raise ValueError("bad layer number")
+        if config < 0:
+            return
+        if config >= count:
+            raise ValueError("Illegal Layer config")
+        self._doc.switch_layer(config)
+        if as_default:
+            self._doc.set_layer_config_as_default()
+
+    def set_layer_ui_config(self, number: int | str, action: int = 0) -> None:
+        """Sets (``action`` 0), toggles (1) or clears (2) the layer-panel row
+        ``number`` of ``layer_ui_configs()`` — an index or a row ``text`` —
+        in memory only (PyMuPDF ``doc.set_layer_ui_config``).
+
+        Label rows and locked rows are ignored; switching a radio-box row ON
+        clears its ``/RBGroups`` siblings.
+        """
+        self._require_open_for_layers()
+        if isinstance(number, str):
+            select = [
+                ui["number"] for ui in self.layer_ui_configs() if ui["text"] == number
+            ]
+            if not select:
+                raise ValueError(f"bad OCG '{number}'.")
+            number = select[0]
+        try:
+            self._doc.set_layer_ui_config(int(number), int(action))
+        except ValueError:
+            raise ValueError("Out of range UI entry selected") from None
+
+    def get_oc(self, xref: int) -> int:
+        """The ``/OC`` (OCG or OCMD) xref of image / form XObject ``xref``, or
+        0 when it has none (PyMuPDF ``doc.get_oc``)."""
+        if self._closed or self.is_encrypted:
+            raise ValueError("document close or encrypted")
+        xref = int(xref)
+        if not 0 < xref < self.xref_length():
+            raise ValueError("bad xref")
+        try:
+            return self._doc.get_oc(xref)
+        except ValueError:
+            raise ValueError(f"bad object type at xref {xref}") from None
+
+    def get_ocmd(self, xref: int) -> dict:
+        """The definition of the OCMD ``xref`` (PyMuPDF ``doc.get_ocmd``): a
+        dict with ``xref``, ``ocgs`` (xref list or ``None``), ``policy``
+        (``"AnyOn"`` … or ``None``) and ``ve`` (a nested ``["and", 5, ["not",
+        6]]`` list or ``None``)."""
+        self._require_open_for_layers()
+        xref = int(xref)
+        if not 0 < xref < self.xref_length():
+            raise ValueError("bad xref")
+        try:
+            return self._doc.get_ocmd(xref)
+        except ValueError:
+            raise ValueError("bad object type") from None
+
+    def set_ocmd(
+        self,
+        xref: int = 0,
+        ocgs: list[int] | None = None,
+        policy: str | None = None,
+        ve: list | None = None,
+    ) -> int:
+        """Creates (``xref == 0``) or replaces an Optional Content Membership
+        Dictionary and returns its xref (PyMuPDF ``doc.set_ocmd``).
+
+        ``ocgs`` lists OCG xrefs, ``policy`` is ``"AnyOn"`` (default) /
+        ``"AllOn"`` / ``"AnyOff"`` / ``"AllOff"``, and ``ve`` is a visibility
+        expression such as ``["and", 5, ["not", 6]]``. A replace writes the
+        whole dictionary (omitted entries are dropped).
+        """
+        self._require_open_for_layers()
+        all_ocgs = set(self.get_ocgs().keys())
+
+        def ve_maker(expr: object) -> list:
+            if not isinstance(expr, (list, tuple)) or len(expr) < 2:
+                raise ValueError(f"bad 've' format: {expr}")
+            head = expr[0]
+            op = head.lower() if isinstance(head, str) else ""
+            if op not in ("and", "or", "not"):
+                raise ValueError(f"bad operand: {head}")
+            if op == "not" and len(expr) != 2:
+                raise ValueError(f"bad 've' format: {expr}")
+            out: list = [op]
+            for x in expr[1:]:
+                if type(x) is int:
+                    if x not in all_ocgs:
+                        raise ValueError(f"bad OCG {x}")
+                    out.append(x)
+                else:
+                    out.append(ve_maker(x))
+            return out
+
+        ocg_list: list[int] | None = None
+        if ocgs and isinstance(ocgs, (list, tuple)):
+            bad = set(ocgs).difference(all_ocgs)
+            if bad:
+                raise ValueError(f"bad OCGs: {bad}")
+            ocg_list = [int(x) for x in ocgs]
+        pol: str | None = None
+        if policy:
+            key = str(policy).lower()
+            pols = {
+                "anyon": "AnyOn",
+                "allon": "AllOn",
+                "anyoff": "AnyOff",
+                "alloff": "AllOff",
+            }
+            if key not in pols:
+                raise ValueError(f"bad policy: {key}")
+            pol = pols[key]
+        ve_norm = ve_maker(ve) if ve else None
+        try:
+            return self._doc.set_ocmd(int(xref), ocgs=ocg_list, policy=pol, ve=ve_norm)
+        except ValueError:
+            raise ValueError("bad xref or not an OCMD") from None
+
     # --- PyMuPDF deprecated camelCase aliases (OCG) ---
     def getOCGs(self) -> dict[int, dict]:  # noqa: N802
         return self.get_ocgs()
