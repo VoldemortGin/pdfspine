@@ -266,6 +266,122 @@ fn readorder_005_no_spurious_blank_lines() {
     );
 }
 
+// === READORDER: paint order must not decide column order ==================
+
+/// Three columns whose content stream paints the *right* column first (the
+/// PMC212689 shape) still read left → middle → right, each column whole.
+#[test]
+fn readorder_006_three_columns_painted_right_to_left() {
+    let size = 10.0;
+    let columns = [
+        (
+            50.0,
+            [
+                "A1 first column line one",
+                "A2 first column line two",
+                "A3 first column line thr",
+            ],
+        ),
+        (
+            230.0,
+            [
+                "B1 second column line on",
+                "B2 second column line tw",
+                "B3 second column line th",
+            ],
+        ),
+        (
+            410.0,
+            [
+                "C1 third column line one",
+                "C2 third column line two",
+                "C3 third column line thr",
+            ],
+        ),
+    ];
+    let mut gs = Vec::new();
+    for (x, rows) in columns.iter().rev() {
+        for (i, w) in rows.iter().enumerate() {
+            lay_word_line(&mut gs, w, *x, 700.0 - 14.0 * i as f64, size);
+        }
+    }
+
+    let lines = extract(&gs);
+    let joined = lines.join("|");
+    let at = |needle: &str| joined.find(needle).unwrap();
+    assert!(at("A1") < at("A3") && at("A3") < at("B1"), "got {lines:?}");
+    assert!(at("B1") < at("B3") && at("B3") < at("C1"), "got {lines:?}");
+    assert!(at("C1") < at("C3"), "got {lines:?}");
+}
+
+/// A running header and a footer that both span a two-column body are painted
+/// *after* the body (right column, left column, footer, header): the header
+/// must still come first and the footer last, with whole columns in between.
+#[test]
+fn readorder_007_spanning_header_and_footer_paint_order_independent() {
+    let size = 10.0;
+    let mut gs = Vec::new();
+    let body = |gs: &mut Vec<PositionedGlyph>, tag: &str, x: f64| {
+        for i in 0..10 {
+            let text = format!("{tag}{i} column body line of prose that is wide");
+            lay_word_line(gs, &text, x, 700.0 - 14.0 * i as f64, size);
+        }
+    };
+    body(&mut gs, "R", 320.0);
+    body(&mut gs, "L", 60.0);
+    lay_word_line(
+        &mut gs,
+        "FOOTER spanning both columns of the page",
+        200.0,
+        545.0,
+        size,
+    );
+    lay_word_line(
+        &mut gs,
+        "HEADER spanning both columns of the page",
+        200.0,
+        730.0,
+        size,
+    );
+
+    let lines = extract(&gs);
+    let joined = lines.join("|");
+    let at = |needle: &str| joined.find(needle).unwrap();
+    assert!(at("HEADER") < at("L0"), "header not first: {lines:?}");
+    assert!(at("L9") < at("R0"), "columns interleaved: {lines:?}");
+    assert!(at("R9") < at("FOOTER"), "footer not last: {lines:?}");
+}
+
+/// A two-column page whose paragraph gap is wider than the column gutter is
+/// split into horizontal bands first. Painted in reading order, each column
+/// must still read whole (the band cut must not interleave the columns).
+#[test]
+fn readorder_008_root_band_cut_keeps_columns_contiguous() {
+    let size = 10.0;
+    let mut gs = Vec::new();
+    // Lines are ≈187 pt wide, so the gutter (x 247..320) is 73 pt; the gap
+    // between the paragraphs (y ≈ 577..670 in user space) is 93 pt and wins.
+    let paragraph = |gs: &mut Vec<PositionedGlyph>, tag: &str, x: f64, top: f64| {
+        for i in 0..3 {
+            let text = format!("{tag}{i} column paragraph line of prose");
+            lay_word_line(gs, &text, x, top - 14.0 * i as f64, size);
+        }
+    };
+    paragraph(&mut gs, "LA", 60.0, 700.0);
+    paragraph(&mut gs, "LB", 60.0, 570.0);
+    paragraph(&mut gs, "RA", 320.0, 700.0);
+    paragraph(&mut gs, "RB", 320.0, 570.0);
+
+    let lines = extract(&gs);
+    let joined = lines.join("|");
+    let at = |needle: &str| joined.find(needle).unwrap();
+    assert!(
+        at("LA0") < at("LB0") && at("LB2") < at("RA0"),
+        "got {lines:?}"
+    );
+    assert!(at("RA0") < at("RB0"), "got {lines:?}");
+}
+
 // === CROPCLIP: CropBox clipping ===========================================
 
 /// A glyph string whose origin is outside the CropBox is excluded from

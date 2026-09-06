@@ -411,3 +411,150 @@ return matched / shared                                     # 任一为空或 sh
 - `span/xycut.py` —— `cut_lines` 全家的 Python 逐行移植（`mode="buggy"` / `"fixed"`）
 - `ord/*.sidebyside.txt` —— 双引擎块序并排
 - `source_fitz_stext-{device,para,output}.c`、`stext-device-1.27.2.c` —— 阶段 2 调研用的 MuPDF 源码
+
+## 2026-09-05 修复记录（阶段 1 + 阶段 1.5 落地，阶段 2 黑盒结论）
+
+代码基线 `a45b66d`（main，含 09-03 之后落地的 `aaee2a9` 两列对照表逐行读取）· oracle PyMuPDF 1.28.2 ·
+机器与 5 个并行 agent 共享 CPU（本节数字全部是确定性的抽取/打分结果，不含时间基准）。
+提交的是下文的**变体 e**；变体 a–d 的数据保留在"变体对比"一节供后续阶段使用。
+
+### 改了什么（`crates/pdf-text/src/layout.rs`，`+151/−26`）
+
+1. **阶段 1 · `spanning` 分区**：`cut_lines` / `cut_column_subtree` 共用新的 `emit_column_cut`，
+   把一次 column cut 的 spanning 行按几何拆成 `above / middle / below`（`partition_spanning`），
+   `above` 排在两栏之前、`below` 排在两栏之后。判据：spanning 行的 `y1 ≤ 栏体顶 + 半行` 为 `above`、
+   `y0 ≥ 栏体底 − 半行` 为 `below`，其余 `middle`。"栏体"的上下界只由两类过滤后的栏行决定：
+   - 只数**宽度 ≥ 所在栏 50%** 的栏行（`SPANNING_COLUMN_LINE_MIN_WIDTH_FRAC`）。OJ 首页左上角的页码
+     "PL / L 304/64" 与右上角的日期都落在栏内、位于居中标题之上；若把它们算作栏体，`32011L0083_PL p0`
+     的标题块会被判成 `middle` 而排到整个左栏之后（变体 b 实测该篇 lev/order 各 −0.010）。
+     FR 的竖排边注（x 18–23、高 130pt）同理会阻止页脚成为 `below`。
+   - **不计入含 spanning 行的"页眉/页脚行"**（高度 ≤ 2 个典型行高的 band，`SPANNING_MARGIN_ROW_MAX_HEIGHT`）。
+     FR 的页眉被行级 `split_on_gutter` 切成逐栏碎片（附录 D4），落在栏内的宽碎片
+     "Friday, January 2, 2026 / Contents" 会把栏体顶抬到页眉自己的行，使跨栏的另一半碎片变成
+     `middle`（变体 d 实测 FR 误排 331/2492，变体 b/e 为 64）。
+   - 反过来不能用"没有栏行在其上方"这种逐行判据（变体 b/c）：`column_gutter` 的 tol 会把 OJ 右栏首行的
+     序号 "(32)" 当作跨栏行，它与正文首行同高，逐行判据把它判成 `above` 而排到左栏之前（`32011L0083_PL p4`）。
+2. **阶段 1.5 · 止血补丁**：`cut_lines` 返回根节点是否做了 column cut；`group_blocks_columned`
+   在**根为 X-cut** 的页上按 region 下标（几何 DFS 序）排序且每个 region 原子；**其余页保持
+   `b6c027a` 的原逻辑逐字节不变**（side-by-side region 原子按 `min(seq)`，其它 region 逐块按 `seq`）。
+   与本文 (e) 阶段 1.5 的描述有一处**有意偏离**：没有采用"所有 region 一律原子"。实测该变体（变体 a）
+   在根为 Y-cut 的页上把混栏叶子 region 整体搬动：`32011L0083_EL p10` 中 region
+   {ιβ), εμπορικών, β), τη γεωγραφική} 横跨两栏（band 内 column cut 失败），原子化后右栏的 `β)…` 两块被
+   拖到左栏 `ιγ)…` 之前；逐块 `seq` 排序恰好在修复这类叶子。EUR-Lex 上变体 a 的
+   `32019R0881_{BG,DE,EL,PL}` order 各 −0.013~−0.016、`32011L0083_PL` −0.010，均由此机制造成。
+3. 文档修正：`order_blocks` / `Block::seq` 的 doc comment 不再声称图像块参与排序；`cut_lines` 的
+   doc comment 不再说"最终顺序由 seq 决定"。
+4. 新增合成 fixture 测试（`crates/pdf-text/tests/reading_order_round1.rs`）：
+   `readorder_006`（三栏、先画第三栏 → A→B→C，锁 PMC212689 形态）、
+   `readorder_007`（通栏页眉+两栏+通栏页脚、页眉页脚最后画 → header→左→右→footer，锁 spanning 分区）、
+   `readorder_008`（段落间距 > 栏间距的根 Y-cut 双栏页、按阅读序绘制 → 整栏连续，锁"Y-root 保留 seq"这条取舍）。
+   `LAYOUT-ORDER-002`、`PYTEXT-010`、`compat_block_*` 全部原样通过。
+
+### 基线复现（修复前，worktree `a45b66d`）
+
+| 语料 | 本次复现（pdfspine） | 09-03 报告 | 一致？ |
+|---|---|---|---|
+| PMC 干净 7 篇 | lev 0.7243 / f1 0.7808 / jaccard 0.6101 / order 0.9391；PMC212689 lev 0.5630 / order 0.5994 | 0.724 / 0.781 / 0.610 / 0.939；0.563 / 0.599 | 逐位一致（磁盘上的 `corpus-pmc/manifest.json` 已只含干净 7 篇，即阶段 0 已在语料侧完成） |
+| born 6 篇 | 0.9803 / 0.9803 / 0.9652 / 1.000 | 同 | 逐位一致 |
+| EUR-Lex 40 篇 | lev 0.9371 / f1 0.9706 / jaccard 0.9293 / order 0.9772（fitz 0.9396 / 0.9704 / 0.9284 / 0.9800） | `GT-REPORT.md` 中 9 篇不同 | **不一致，已解释**：`32011L0083_*`、`32014R0596_*` 8 篇在 09-03 之后被 `aaee2a9`（两列对照表逐行读取，即附录 D1）抬高；`32006L0112_BG` 仅 pdfminer 末位 ±0.001。本文 (a)/A4 引用的 "0.9248 / 0.9771" 来自诊断时的 scratch 打分口径，与 `run_gt.py` 的 40 篇均值不可直接比较。 |
+| govinfo FR | 12 期（2026-01-02…01-20，`fetch_govinfo.py --collections FR --per 12`），2492 个带 running header 的页：**850 页（34.1%）**把页眉排进正文之后；fitz 64/2517（2.5%） | 39/166（23%）；fitz 0/166 | 样本不同（本文诊断时的 166 页语料未保留），比例同量级 |
+
+FR 的页眉判定：`get_text("blocks")` 中 `y0 < 60` 且匹配 `Federal Register|Vol\. \d+, No\. \d+ /` 的**第一个**块；
+"误排" = 有正文块（`y0 ≥ 页眉 y1`）排在它前面。pdfspine 会把页眉沿栏切割线切成 2~4 块（附录 D4：
+530/2492 页碎片化，fitz 0），因此按碎片匹配，否则 pdfspine 侧漏检 400+ 页。
+
+### 修复后（变体 e，同一套脚本、同一 oracle）
+
+| | 修复前 | **修复后** | fitz |
+|---|---|---|---|
+| PMC 7 篇 mean lev / f1 / jaccard / order | 0.7243 / 0.7808 / 0.6101 / 0.9391 | **0.7439 / 0.7808 / 0.6101 / 0.9600** | 0.7445 / 0.7809 / 0.6125 / 0.9605 |
+| PMC212689 lev / order | 0.5630 / 0.5994 | **0.7003 / 0.7456** | 0.7050 / 0.7492 |
+| PMC 其余 6 篇 | — | 四位小数逐篇不变 | — |
+| born 6 篇 | 0.9803 / 0.9803 / 0.9652 / 1.000 | 逐位不变 | 同 |
+| EUR-Lex 40 篇 mean lev / f1 / jaccard / order | 0.9371 / 0.9706 / 0.9293 / 0.9772 | **0.9372 / 0.9706 / 0.9293 / 0.9773** | 0.9396 / 0.9704 / 0.9284 / 0.9800 |
+| 　EUR-Lex 单篇变化 | — | `32006L0112_BG` lev +0.0046 / order +0.0047；`32011L0083_PL` +0.0002；其余 7 篇 ±0.0003 以内 | — |
+| govinfo FR 页眉误排页数 | 850 / 2492（34.1%） | **64 / 2492（2.6%）** | 64 / 2517（2.5%） |
+
+FR 剩余 64 页与 fitz 的 64 页几乎重合：各期 p1（"The FEDERAL REGISTER (ISSN…)" 信息页）与 p4/p5（Contents / CFR
+Parts 页）等根为 Y-cut 的页，本补丁不触碰。页眉碎片化（530 页）未变，属附录 D4。
+已知残余：OJ 右栏的序号列 "(32) (33) (34)…" 被 `column_gutter` 的 tol 判成跨栏行，作为 `middle` region 整体排在
+左栏之后、右栏正文之前，序号与其段落分离（基线按块 seq 时是交错正确的）；只影响单 token，阶段 3 的 band 交错应一并处理。
+
+### 300 文档冻结清单（`corpus-diff/baselines/glyph-geometry-2026-09-05-manifest.json`，SHA-256 逐一校验，每篇前 20 页，共 1887 页）
+
+text / dict / rawdict 三种投影的逐页 SHA-256：**42/300 篇、285/1887 页变化**（三种投影同页同变）。按目录：EUR-Lex 17 篇、
+robustness(govdocs1) 23 篇、`fixtures/corpus/usgs-fs20183024` 1 篇、fintabnet 1 篇。归因用了**第三个诊断构建**
+（"仅 region 原子、不改序、不分区"，即变体 a 减去几何序）做三方对照：
+
+| 机制 | 页数 | 说明 |
+|---|---|---|
+| 根 X-cut 页：region 序由 `min(seq)` 改为几何 DFS 序 + spanning 分区 | 285 | 283 页在"仅原子"构建上与基线逐字节相同（不是原子化引起），2 页两者皆变；Y-root 页的排序代码路径未变 |
+| 　其中纯块置换（块集合不变，只换顺序） | 284 | EUR-Lex：OJ 的 running header（最后绘制）从页尾移到页首（如 `32006L0112_BG p1-3`），首页标题块在页眉之后、正文之前；govdocs1：NTSB 表单、USGS 地图标注等"绘制序与几何无关"的页按栏几何序输出（`govdocs1-00007 p6`、`-00012 p0`） |
+| 　其中块集合变化（同一行集被切成不同块） | 1 | `32013R0575_DE p16`：两条脚注原为 1 块，现为 2 块（text 也变）。原因：`cut_spanning` 现在分别作用于 above/middle/below 子集，子集各自计算 `typical_line_height` 与 band 阈值 |
+| 与变体 b 的差异 | 47 页 | 全部来自分区判据的改进（标题块/页眉碎片的归属），241 页与变体 b 相同 |
+
+### 变体对比（后续阶段的数据）
+
+| 变体 | 内容 | PMC mean order（fitz 0.9605） | PMC212689 lev / order（fitz 0.7050 / 0.7492） | FR 误排（fitz 64/2517） | EUR-Lex 40 篇 mean lev / order（基线 0.9371 / 0.9772，fitz 0.9396 / 0.9800） | 300 文档变化 |
+|---|---|---|---|---|---|---|
+| a | 本文 (e) 原版阶段 1.5：所有 region 原子 + X-root 几何序 + 逐行 spanning 分区 | 0.9596 | 0.6982 / 0.7434 | 64 / 2492 | 0.9355 / 0.9755（`32019R0881_*` −0.013~−0.016，`32011L0083_PL` −0.010） | 83 篇 / 519 页（231 页仅由原子化引起，全是 Y-root 页） |
+| b | a 去掉 Y-root 页的原子化 | 0.9596 | 0.6982 / 0.7434 | 64 / 2492 | 0.9369 / 0.9770（`32011L0083_PL` −0.010：首页标题块排到左栏之后） | 41 篇 / 287 页 |
+| c | b + 逐行判据只数宽栏行 | 未跑完 | — | — | `32011L0083_PL p4` 的 "(32)" 排到左栏之前，判据作废 | — |
+| d | b + 栏体上下界（宽栏行） | 0.9600 | 0.7003 / 0.7456 | **331 / 2492**（页眉碎片抬高栏体顶） | 未跑 | 42 篇 / 285 页 |
+| **e（提交）** | d + 含 spanning 行的页眉/页脚行不计入栏体 | **0.9600** | **0.7003 / 0.7456** | **64 / 2492** | **0.9372 / 0.9773** | 42 篇 / 285 页 |
+
+### 阶段 2 · 黑盒探针结论（未读 MuPDF 源码，与 README 的 clean-room 声明一致）
+
+用 `PYTEXT-010` 的 `_raw_content_pdf` 手法合成 9 个已知绘制序的单页 PDF，在 oracle（PyMuPDF 1.28.2）上跑
+`get_text("text")`（默认 flags，`sort=False`）：
+
+| 探针 | 绘制序 | fitz 输出 |
+|---|---|---|
+| 两栏、先画右栏 | R0..R7 L0..L7 | **R0..R7 L0..L7**（不重排） |
+| 两栏 + 通栏页眉最后画 | L R H | L R **H**（页眉留在最后） |
+| 通栏页脚最先画 | F L R | **F** L R |
+| 三栏按 3,2,1 画 | C B A | **C B A** |
+| 单栏两段、先画下段 | B A | **B A** |
+| 两栏按行主序画（同基线） | L0 R0 L1 R1… | L0 R0 L1 R1…（且合成 1 个 block） |
+| 两栏行主序 + 宽段落间距 | LA0 RA0 … | 行主序不变 |
+| `PYTEXT-010` 形态 | BB RR LL | BB RR LL |
+| 两栏各 2 行、先画右栏 | R L | R L |
+
+**PyMuPDF 默认路径没有任何几何重排：块序 = 绘制序**（同基线片段合并进同一 block）。本文 (b)/B1 的
+"fitz 做了几何重排"推断来自 `PMC176547`——一篇已被隔离的错配语料，不成立。1.28 提供 opt-in 的
+`TEXT_SEGMENT`：探针 6（行主序）在该 flag 下变为整栏连续，但探针 1（先画右栏）仍输出 R 先于 L——
+即使开启分段，栏与栏之间仍按绘制序。
+
+**PMC212689 的真实机制**：p0 绘制序最前的 glyph 是右下角的 running footer
+"Volume 1 | Issue 1 | Page 015"（x 455–558，落在右栏 region 内）。fitz 只把这一小块排到最前、其后按绘制序
+（= 阅读序）输出三栏；`b6c027a` 用 region 级 `min(seq)` 把**整个右栏**带到最前——是 region 级 `min(seq)`
+对单个早绘制 glyph run 的放大，不是"内容流整栏逆序"。
+
+**对 (c)/C2 三选项的影响**：选项 1"复刻 MuPDF 的 segmentation"在默认路径上就是复刻绘制序，等于回到
+`b6c027a` 的语义（只是粒度从 region 降到 block），无法解决行主序/翻转 CTM 的页；本次修复实际走的是选项 2
+（自研几何序，限于 X-root 页）并已把与 fitz 的边界差异记录在上表。阶段 3 若推进，建议明确以"几何阅读序"为
+目标语义，`PYTEXT-010` 收窄为"无可辨识栏结构的页保留绘制序"。
+
+### 本次改变 / 未改变的取舍
+
+- **改变**：`PRD-NEXT.md` P3-1r 的 "accepted won't-fix" 依据（"任何帮助 PMC212689 的改动都会回退 PMC212688 −0.19
+  与 PMC176547 −0.02"）中的两篇正是阶段 0 隔离的错配语料；干净 7 篇上本次 PMC212689 +0.146 order、其余 6 篇
+  四位不变。该标注的前提已不成立（由协调者改 PRD）。
+- **未改变**：Y-root 页仍是 `b6c027a` 的绘制序语义（`PYTEXT-010` 原样通过，`readorder_008` 锁住）；region 内行序仍按
+  `seq`（阶段 4）；页眉碎片化（D4）、首字下沉交织（D3）、两列对照表（D1，`aaee2a9` 已部分处理）均未触碰。
+- **失效条件（止血补丁的自知之明）**：判别式是"根节点选了 X 轴"。`prefer_x = xg >= yg` 一旦改动（阶段 3 的 X/Y
+  优先级），哪些页走几何序就会变，`readorder_006/007` 只锁 X-root 形态、`readorder_008` 只锁 Y-root 形态，
+  两者之间的迁移没有测试覆盖。阶段 3 落地时应删除该判别式而不是叠加条件。spanning 分区的三条过滤规则各自
+  对应一个语料形态（OJ 首页、OJ 序号列、FR 页眉碎片），没有统一原理，阶段 3 的 band 交错应取代它们。
+
+### 门禁
+
+`cargo fmt --check` ✓ · `cargo clippy --workspace --all-features -- -D warnings` ✓ · `cargo test --workspace --all-features`
+1705 passed / 0 failed · `pytest -W error --doctest-modules python/pdfspine python/tests` 811 passed / 66 skipped。
+
+### 复现资产（`/Volumes/ExternalSSD/tmp/readorder/`，不入库）
+
+`ro_digest.py`（三投影逐页摘要）、`ro_compare.py` / `ro_threeway.py` / `ro_overlap_e.py`（差分与三方归因）、
+`ro_fr_header.py`（FR 页眉秩）、`ro_probe.py` / `ro_probe2.py`（阶段 2 探针）、`gt-*-{before,after,b,d,e}.json`、
+`compare-{after,b,d,e}.json`、`fr-header-{base,after,b,d,e,fitz}.json`、`govinfo-fr/`（12 期 FR PDF + manifest）。
+逐页摘要目录与各变体 wheel 已按任务要求删除。
