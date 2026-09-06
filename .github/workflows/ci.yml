@@ -297,8 +297,9 @@ jobs:
   supply-chain:
     name: supply-chain (cargo-vet)
     runs-on: ubuntu-latest
-    # Non-blocking in M0 (bootstrap importing trusted audit sets).
-    continue-on-error: true
+    # Blocking since 2026-09-05: the store was converged to 0 unvetted crates
+    # (imports isrg/zcash, 51 trust entries expiring 2027-09-05, 105 exemptions).
+    # A Cargo.lock change must run `cargo vet` locally and commit supply-chain/.
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.96.0
