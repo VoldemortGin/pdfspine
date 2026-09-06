@@ -163,9 +163,10 @@ source = ["python/pdfspine"]
 
 [tool.coverage.report]
 # Only-up ratchet. coverage.py's fail_under compares the COMBINED
-# statement+branch total that `coverage report` prints (78.03% at 1f82655 with
-# branch = true), not the 82.04% line figure — a line-based value would exit(2)
-# on every run (report/xml/json all enforce it). This is floor(combined) - 1;
-# raise it as coverage climbs.
-fail_under = 77
+# statement+branch total that `coverage report` prints (97.95% after the
+# targeted-test batch that followed 1f82655, with branch = true), not the
+# 98.71% line figure — a line-based value would exit(2) on every run
+# (report/xml/json all enforce it). This is floor(combined) - 1; raise it as
+# coverage climbs.
+fail_under = 96
 show_missing = false

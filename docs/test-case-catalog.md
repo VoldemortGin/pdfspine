@@ -791,6 +791,42 @@ Spec source: PRD §7 (M1 rows), §8.6.1 (rotation), §9.2 (`Page` shape), §9.4
 | `DOC-CRYPT-003` | user-password doc, wrong password → `authenticate` false, still `needs_pass`, no panic | PRD §8.4 | green |
 | `DOC-CRYPT-004` | successful auth refreshes page order after encrypted ObjStm fallback | compatibility findings P0 | green |
 
+### Font extraction facade — `DOC-FONT-*` (`pdf-api`)
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `DOC-FONT-001` | `extract_font` returns `(basefont, ext, type, buffer)` for TrueType/Type0/OpenType/Type1 embedded programs; `info_only` suppresses the buffer | PRD §8.6 | green |
+| `DOC-FONT-002` | `extract_font` on a non-embedded font / descriptor-without-`/FontFile*` → `"n/a"`; non-font / missing xref → all-empty | PRD §8.6 | green |
+| `DOC-FONT-003` | `subset_fonts` counts every font object carrying an embedded program (top-level or descendant), non-mutating | PRD §8.6 | green |
+| `DOC-FONT-004` | `get_char_widths` resolves an indirect `/Widths` array scaled by 1/1000; missing / non-dict xref → empty | PRD §8.6 | green |
+
+### Page edit / draw / annotation facade — `DOC-EDIT-*` / `DOC-ANNOT-*` (`pdf-api`)
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `DOC-EDIT-001` | every `page_draw_*` free function appends drawing operators to the page content; drawings survive save+reopen | PRD §8.8 | green |
+| `DOC-EDIT-002` | `ShapeHandle` records primitives, `finish` flushes a styled block, an unfinished trailing block gets the default black stroke at `commit` | PRD §8.8 | green |
+| `DOC-EDIT-003` | committing an empty `ShapeHandle` is a clean no-op | PRD §8.8 | green |
+| `DOC-EDIT-004` | Document + page link insert / list / delete | PRD §8.9 | green |
+| `DOC-EDIT-005` | `add_widget` builds an `/AcroForm`; `form_field_names`/`form_fill`; `WidgetHandle` field facts | PRD §8.8 | green |
+| `DOC-EDIT-006` | `form_flatten` bakes widgets into content and clears the interactive form | PRD §8.8 | green |
+| `DOC-EDIT-007` | `pdf_trailer`/`is_stream`/`xref_stream_raw`/`xref_get_keys`/`xref_is_xobject` read helpers | PRD §7 | green |
+| `DOC-EDIT-008` | `update_object` replaces a stream dict (body preserved) / rejects garbage; `update_stream` create/replace/error branches | PRD §7 | green |
+| `DOC-EDIT-009` | embedded-file add/get/names/count/info/upd/del + not-found errors | PRD §8.8 | green |
+| `DOC-EDIT-010` | `add_ocg` then `set_oc` writes an `/OC` entry onto the target object | PRD §7 | green |
+| `DOC-EDIT-011` | journal enable → checkpoint → undo → redo cycle reverts/reapplies a structural edit | PRD §8.7 | green |
+| `DOC-EDIT-012` | undo/redo on a disabled journal report `false`; `journal_save_state` is inert | PRD §8.7 | green |
+| `DOC-EDIT-013` | `is_dirty`/`is_fast_webaccess`/`can_save_incrementally`/`authenticate`(plain)/`set_page_rotation`/`set_mark_info`/`bake`/`fullcopy_page_to` | PRD §8.7 | green |
+| `DOC-EDIT-014` | `page_get_contents` lists array members; `page_read_contents` joins streams with a newline separator | PRD §7 | green |
+| `DOC-EDIT-015` | `page_get_xobjects`/`get_image_rects`/`get_image_info`/`get_image_bbox`/`get_cdrawings`/`delete_image` wrappers | PRD §7 | green |
+| `DOC-EDIT-016` | `page_set_language`/`page_language` round-trip; empty tag removes `/Lang` | PRD §7 | green |
+| `DOC-EDIT-017` | link insert on out-of-range page / `update_stream` on missing object / named-dest miss → typed error or `None` | PRD §8.9 | green |
+| `DOC-EDIT-018` | `/Name` or absent `/Contents` → empty xref list and empty bytes (no panic) | PRD §7 | green |
+| `DOC-EDIT-019` | UTF-8 BOM `/Info` string decodes to text | PRD §8.7 | green |
+| `DOC-ANNOT-001` | markup + shape annotation constructors produce the right `/Subtype`; annots are discoverable via `page_annot_count`/`page_first_annot` | PRD §8.8 | green |
+| `DOC-ANNOT-002` | FreeText/Polygon/PolyLine/Ink/Stamp/FileAttachment constructors; attachment reads back bytes + metadata | PRD §8.8 | green |
+| `DOC-ANNOT-003` | `AnnotHandle` getters + setters (`set_info`/`set_flags`/`set_opacity`) round-trip through a re-read handle | PRD §8.8 | green |
+
 ### Python wheel (`pdfspine` / `fitz`) — `PYDOC-*` / `PYFITZ-*`
 
 | ID | feature | spec ref | status |
@@ -802,6 +838,55 @@ Spec source: PRD §7 (M1 rows), §8.6.1 (rotation), §9.2 (`Page` shape), §9.4
 | `PYFITZ-001` | `fitz.open(...)`: `page_count`/`doc[n]`/`metadata`/geometry | PRD §9.5 | green |
 | `PYFITZ-002` | encrypted: `needs_pass`→`authenticate`→pages (fitz names) | PRD §8.4 | green |
 | `PYFITZ-003` | `fitz.Rect`/`Matrix` value types match PyMuPDF arithmetic | PRD §9.5 | green |
+
+#### `document.py` long-tail branch coverage — `DOCPY-*`
+
+`python/tests/test_document_branches.py` (document surface) and
+`python/tests/test_page_edit_branches.py` (page/annot/widget/shape surface)
+drive the seldom-used parameters, error branches and camelCase aliases of the
+`pdfspine.document` wrappers (and, through them, the matching
+`crates/py-bindings` PyO3 methods).
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `DOCPY-001` | `_is_content_wrapped` / `Page.is_wrapped` q…Q balance scan | PRD §9.4 | green |
+| `DOCPY-002` | `_ensure_ocr_models_env` broken-package `except` tiers | PRD §9.4 | green |
+| `DOCPY-003` | `_font_name` / `_text_width` metrics + fallback | PRD §9.4 | green |
+| `DOCPY-004` | `Colorspace` repr / hash / eq / bad type | PRD §9.5 | green |
+| `DOCPY-005` | `tobytes` / `convert_to_pdf` / `save` / `ez_save` / `saveIncr` | PRD §8.7 | green |
+| `DOCPY-006` | document facts (`is_dirty`/`is_closed`/…) + `__repr__` | PRD §9.5 | green |
+| `DOCPY-007` | xref stream + classification plumbing (`xref_is_xobject`/…) | PRD §8.9 | green |
+| `DOCPY-008` | page ops: negative index, `delete_pages`, `insert_page`, `insert_file`, copy/move | PRD §8.7 | green |
+| `DOCPY-009` | `set_toc_item` / `del_toc_item` / `_dest_action` kinds + errors | PRD §8.9 | green |
+| `DOCPY-010` | `set_metadata` / `markinfo` / `need_appearances` | PRD §8.9 | green |
+| `DOCPY-011` | embedded-file add/get/info/upd/del lifecycle | PRD §8.9 | green |
+| `DOCPY-012` | AcroForm `form_field_names`/`form_fill`/`form_flatten`/`bake` | PRD §8.8 | green |
+| `DOCPY-013` | OCG / layers (`add_ocg`/`get_layer`/`set_layer`/`set_oc`) | PRD §7 | green |
+| `DOCPY-014` | undo/redo journal enable/save/can_do | PRD §8.8 | green |
+| `DOCPY-015` | `scrub` removes links + metadata | PRD §8.8 | green |
+| `DOCPY-016` | `to_html` title falls back to file basename | PRD §9.5 | green |
+| `DOCPY-017` | `extract_font` named-dict form + alias | PRD §8.5 | green |
+| `DOCPY-018` | `Document` camelCase aliases behave like snake methods | PRD §9.5 | green |
+| `DOCPY-019` | `TextWriter` render / append / appendv / fill overflow | PRD §8.8 | green |
+| `DOCPY-020` | `linkDest` / `Outline` / `Link` reprs + link setters | PRD §8.9 | green |
+| `DOCPY-021` | `TextPage` extract* aliases + rect/repr | PRD §9.4 | green |
+| `DOCPY-030` | `Annot` getters/setters + camelCase aliases | PRD §8.8 | green |
+| `DOCPY-031` | `Widget` authoring (new) + existing read-only guards | PRD §8.8 | green |
+| `DOCPY-032` | `add_widget` value coercion + rect requirement | PRD §8.8 | green |
+| `DOCPY-033` | `load_annot` / `load_widget` / `delete_widget` + errors | PRD §8.8 | green |
+| `DOCPY-034` | `Shape` curve/oval/sector/squiggle/zigzag/angle/text | PRD §8.8 | green |
+| `DOCPY-035` | `Page` draw + annotation camelCase aliases | PRD §9.5 | green |
+| `DOCPY-036` | `cluster_drawings` neighbor-join + clip/drawings args | PRD §8.6 | green |
+| `DOCPY-037` | `remove_rotation` rewrites links (90/180/270 + identity) | PRD §8.9 | green |
+| `DOCPY-038` | `write_text` composed multi-writer / rotate path | PRD §8.8 | green |
+| `DOCPY-039` | `text_in_rect` / `content_blocks` / `filled_rectangles` / `link_annotations` | PRD §7 | green |
+| `DOCPY-040` | `get_text_blocks`/`get_textbox`/`get_text_selection` clipping | PRD §9.4 | green |
+| `DOCPY-041` | `Link` value class + `update_link`/`delete_link` | PRD §8.9 | green |
+| `DOCPY-042` | native `find_tables` surface + strategy kwargs/errors | PRD §7 | green |
+| `DOCPY-043` | `insert_image` pixmap / no-source / filename branches | PRD §8.8 | green |
+| `DOCPY-044` | `get_pixmap`/`get_svg_image`/`get_image_bbox` arg branches | PRD §8.10 | green |
+| `DOCPY-045` | parentless `Page`: `refresh` no-op + `first_annot` None | PRD §9.2 | green |
+| `DOCPY-046` | `_color`/`_quad`/`_quads` converters + parentless `Annot` guards | PRD §9.4 | green |
 
 ---
 
@@ -1428,6 +1513,49 @@ are self-generated raw PDF bytes (PRD §10). Tests live in
 | `PYGEO-007` | json / rawjson geometry keys equal those of dict / rawdict | PRD §8.6.1 | green |
 | `PYGEO-008` | 90°-rotated run: `dir` turns with the text, `text_matrix` stays the raw user-space operand, `matrix` is the device-space (y-flipped) frame | PRD §8.6.1 | green |
 | `PYGEO-009` | 90°-rotated glyph keeps the PyMuPDF XML corner topology: corners are named in the glyph frame before transformation, rather than relabelled by final visual position | PyMuPDF 1.28.2; `conformance/probe_glyph_quad_corners.py` | green |
+
+### Python geometry algebra branches (`test_geometry_branches.py`) — `PYGEO-*`
+
+Leftover operator / constructor / predicate branches of the pure-Python
+`geometry.py` value types that the happy-path `test_geometry.py` suite skips:
+the bad-arg-count / bad-seq-len / non-invertible guards, the `__eq__`
+fall-through against foreign types, the `__repr__` / `__hash__` / `__bool__`
+dunders, the full thin `IRect` surface, the infinite/empty short-circuits of the
+set operations, the four `Point`→rectangle distance regions, and the rotated
+`Quad` convexity / rectangularity sub-checks. PyMuPDF 1.24 arithmetic is the spec.
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `PYGEO-010` | `Point` dunders + guards: `__repr__`/`__hash__`/`__neg__`, `__eq__` vs foreign type, bad arg count / seq len on init/add/sub/transform, `/` singular matrix, `abs_unit` of zero vector | PyMuPDF Point | green |
+| `PYGEO-011` | `Point.distance_to`: no-arg + bad-shape `ValueError`, and all four point→rectangle regions (corner / vertical-gap / horizontal-gap) | PyMuPDF Point.distance_to | green |
+| `PYGEO-012` | `Rect` `__contains__` with foreign / `Quad` / wrong-length args; `intersect`/`include_rect` infinite+empty short-circuits and bad-len; `|`/`&`/`+`/`-`/`/`/`transform` operand guards; infinite `morph` | PyMuPDF Rect | green |
+| `PYGEO-013` | `Matrix` `__repr__`/`__hash__`/`__bool__`, `__eq__` vs foreign, bad seq len on init/add/sub/concat, scalar and matrix `/` incl. singular `ZeroDivisionError` | PyMuPDF Matrix | green |
+| `PYGEO-014` | `IdentityMatrix` `__repr__`/`__hash__`, read-only pinning of `a`/`b`, and pass-through of a non-component attribute name | PyMuPDF Identity | green |
+| `PYGEO-015` | full `IRect` surface: getitem/hash/repr/eq, valid/infinite predicates, corners+quad, identity `irect`/`round`, contains/intersects, `|`/`&`/`+`/`-`/`*`/`/` re-rounding to `IRect` | PyMuPDF IRect | green |
+| `PYGEO-016` | `Quad` default/​bad-arg-count constructors, `__repr__`/`__hash__`, `__eq__` vs foreign, empty/non-empty `__abs__`, second convex check, second+third rectangular checks, bad-matrix-len transform, infinite `morph` | PyMuPDF Quad | green |
+| `PYGEO-017` | module helpers: infinite `_transform_rect`/`_include_point_in_rect`, `_make_rect` bad seq len / arg count, `paper_size` bare `-p` suffix, `EMPTY_IRECT`/`EMPTY_QUAD` factories | PyMuPDF geometry surface | green |
+
+### Python module-level helpers (`test_helpers.py`) — `PYHELP-*`
+
+Branch/edge coverage of the pure-Python `helpers.py` shims, extending the
+long-tail parity cases in `test_longtail11.py`: the rotated-quadrant and
+small-glyph-height paths of the `recover_*_quad` reconstruction family, the
+control-character escapes of `get_pdf_str`, both timezone signs of
+`get_pdf_now`, the XHTML `ConversionHeader`, the whole `_make_output`
+destination resolver with its logging sink, and the two failure fallbacks of
+`log`. PyMuPDF 1.27 semantics are the spec.
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `PYHELP-001` | `recover_bbox_quad` quadrant 2/3/4 corner assignments and small-glyph-height (unit `d`) path, plus `None` line-dir reading `span["dir"]` | PyMuPDF recover_bbox_quad | green |
+| `PYHELP-002` | `recover_char_quad` `None`/​bad line-dir, non-dict span, non-dict/tuple char guards | PyMuPDF recover_char_quad | green |
+| `PYHELP-003` | `recover_span_quad` `None` line-dir with chars, missing-`chars`-key `ValueError`, single-char sub-selection | PyMuPDF recover_span_quad | green |
+| `PYHELP-004` | `recover_line_quad` multi-span envelope and empty-span-list `ValueError` | PyMuPDF recover_line_quad | green |
+| `PYHELP-005` | `get_pdf_str` control-char escapes `\b`/`\f`/`\r` and the fixed `\267` fallback | PyMuPDF get_pdf_str | green |
+| `PYHELP-006` | `get_pdf_now` west-of-UTC (`-`), east-of-UTC (`+`) and UTC (no suffix) branches | PyMuPDF get_pdf_now | green |
+| `PYHELP-007` | `ConversionHeader("xhtml")` returns the XHTML preamble | PyMuPDF ConversionHeader | green |
+| `PYHELP-008` | `_make_output` fd / path / path-append / stream / default / bad-prefix and the pylogging `_Out` sink (write strips trailing newline, skips blank, flush) | PyMuPDF _make_output | green |
+| `PYHELP-009` | `log` fallbacks: `inspect.stack` `StopIteration` leaves text unprefixed; `os.path.relpath` failure falls back to the absolute filename | PyMuPDF log | green |
 
 ### M2 accuracy exit gate (`test_text.py`) — `ACCURACY-GT-*`
 
@@ -2116,6 +2244,11 @@ Tests live in `crates/pdf-edit/tests/{redact_e2e.rs,drawings_e2e.rs}`.
 | `REDACT-TEXT-002` | multiple redaction rects on one page each remove their glyphs | PRD §8.8 | green |
 | `REDACT-TEXT-003` | glyph drawn via a Form XObject under the rect is removed from the saved bytes | PRD §8.8 | green |
 | `REDACT-TEXT-004` | redaction count / changed-status reported; non-overlapping text fully preserved | PRD §8.8 | green |
+| `REDACT-TEXT-005` | `TJ` array with numeric adjustments: secret run dropped, dropped advance folded into surrounding adjustments, kept runs survive | PRD §8.8 | green |
+| `REDACT-TEXT-006` | `TJ` array shown with no font / a font missing from resources → re-emitted verbatim (unmappable text preserved) | PRD §8.8 | green |
+| `REDACT-TEXT-007` | full text-state operator set (`Tc`/`Tw`/`Tz`/`TL`/`Ts`/`Td`/`TD`/`T*`/`'`/`"`) + repeat `Tf`; a middle line redacted, the rest survive | PRD §8.8 | green |
+| `REDACT-TEXT-008` | `Tj` literal with no/missing font re-emitted verbatim; every string escape (`\\ ( ) \n \r \t`) round-trips through `escape_show` | PRD §8.8 | green |
+| `REDACT-TEXT-009` | page whose `/Contents` is an array of two streams: concatenated, redacted across, and every old content object freed | PRD §8.8 | green |
 
 ### Image redaction — `REDACT-IMAGE-*`
 
@@ -2124,6 +2257,9 @@ Tests live in `crates/pdf-edit/tests/{redact_e2e.rs,drawings_e2e.rs}`.
 | `REDACT-IMAGE-001` | fully-covered image XObject `Do` removed from content; cover box drawn | PRD §8.8 | green |
 | `REDACT-IMAGE-002` | raw Flate RGB image partially covered → covered pixels zeroed + re-encoded (decode & verify) | PRD §8.8 | green |
 | `REDACT-IMAGE-003` | undecodable (DCT/JBIG2/JPX) image under the rect → fail-closed `Error::Redaction` | PRD §8.8 | green |
+| `REDACT-IMAGE-004` | partial coverage of a raw (no `/Filter`) and a `/Filter`-array RGB image: covered columns zeroed, rest preserved | PRD §8.8 | green |
+| `REDACT-IMAGE-005` | image not overlapping any rect left intact; a fully-covered image's `Do` dropped from content | PRD §8.8 | green |
+| `REDACT-IMAGE-006` | partial-coverage pixel-blank fail-closed paths: non-8-bit, unsupported color space, and short pixel buffer each `Error::Redaction` | PRD §8.8 | green |
 
 ### Cover + annot cleanup — `REDACT-COVER-*`
 
@@ -2131,6 +2267,14 @@ Tests live in `crates/pdf-edit/tests/{redact_e2e.rs,drawings_e2e.rs}`.
 |---|---|---|---|
 | `REDACT-COVER-001` | redaction fill box (default black) drawn over each region in page content | PRD §8.8 | green |
 | `REDACT-COVER-002` | `/Redact` annotations removed after apply; reopen has none | PRD §8.8 | green |
+| `REDACT-COVER-003` | multiple hand-authored `/Redact` annots with a 1-element gray `/IC` and an invalid-length `/IC` (→ black); both applied, both secrets removed, a cover box per region | PRD §8.8 | green |
+
+### Form-XObject recursion + `Do` edges — `REDACT-FORM-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `REDACT-FORM-001` | Form XObject with an explicit `/Matrix` array whose text is under the rect is rewritten in place; secret scrubbed from the form body | PRD §8.8 | green |
+| `REDACT-FORM-002` | `Do` edge cases tolerated: bare `Do` (no operand), `Do` on an absent XObject, `Do` on a non-Image/Form subtype; page text preserved | PRD §8.8 | green |
 
 ### Incremental-after-redaction — `REDACT-INCR-*`
 
@@ -2146,6 +2290,8 @@ Tests live in `crates/pdf-edit/tests/{redact_e2e.rs,drawings_e2e.rs}`.
 | `REDACT-PROP-001` | no redaction annots → `apply_redactions` is a no-op (count 0); page unchanged | PRD §8.8 | green |
 | `REDACT-PROP-002` | redacting an empty region (no overlap) preserves all glyphs | PRD §8.8 | green |
 | `REDACT-PROP-003` | degenerate inputs never panic; redacted save passes `qpdf --check` (skipped if absent) | PRD §12 M4 | green |
+| `REDACT-PROP-004` | page with no `/Contents` key: rewrite yields empty content and only the cover box is written | PRD §8.8 | green |
+| `REDACT-PROP-005` | inline image, a `BDC` with a nested dictionary operand (string/real/array/bool/null), and a malformed `cm` all re-emitted verbatim; text preserved | PRD §8.8 | green |
 
 ### Vector path extraction — `DRAWINGS-*`
 
@@ -2453,10 +2599,52 @@ dispatching to the M6a/b/c primitives, and `into_pixmap`s the result. The
 | `RENDER-PAGE-011` | `alpha=true` output carries a 4-channel transparent background | PRD §8.11 | green |
 | `RENDER-PAGE-012` | non-embedded font → no glyph pixels, but the page still renders | PRD §8.11 | green |
 | `RENDER-PAGE-PROP-001` | arbitrary page content never panics; always returns a Pixmap | PRD §8.1 | green |
+| `RENDER-PAGE-SHADE-AXIAL` | `sh` axial (type 2) DeviceRGB shading with `/Extend` paints a gradient | PRD §8.11 | green |
+| `RENDER-PAGE-SHADE-RADIAL` | `sh` radial (type 3) DeviceCMYK shading paints a dark center | PRD §8.11 | green |
+| `RENDER-PAGE-SHADE-CS-ARRAY` | shading `/ColorSpace` as an array (`[/CalGray …]`) resolves to a gray ramp | PRD §8.11 | green |
+| `RENDER-PAGE-SHADE-NOFUNC` | shading without a `/Function` is a clean no-op (deferred) | PRD §8.11 | green |
+| `RENDER-PAGE-SHADE-DEFER` | a deferred shading type (1) with a valid function paints nothing | PRD §8.11 | green |
+| `RENDER-PAGE-IMG-MASK` | a stencil `/ImageMask` paints the fill color where the bit is 0 | PRD §8.11 | green |
+| `RENDER-PAGE-IMG-MASK-DECODE` | `/Decode [1 0]` inverts the stencil sample→paint mapping | PRD §8.11 | green |
+| `RENDER-PAGE-IMG-SMASK-OPAQUE` | an `/SMask` of 255 keeps the image opaque | PRD §8.11 | green |
+| `RENDER-PAGE-IMG-SMASK-CLEAR` | an `/SMask` of 0 makes the image fully transparent | PRD §8.11 | green |
+| `RENDER-PAGE-IMG-ALPHA0` | an image under a `ca 0` ExtGState is suppressed (alpha short-circuit) | PRD §8.11 | green |
+| `RENDER-PAGE-STROKE-DASH` | a dashed stroke (`[a b] phase d`) paints a broken line | PRD §8.11 | green |
+| `RENDER-PAGE-STROKE-DASH0` | an all-zero dash array (`[0 0] d`) renders as solid | PRD §8.11 | green |
+| `RENDER-PAGE-STROKE-HAIRLINE` | a zero-width stroke renders as a 1-device-pixel hairline | PRD §8.11 | green |
+| `RENDER-PAGE-FONT-NOSUB` | a non-embedded font with no std-14 substitute → blank text, page still renders | PRD §8.11 | green |
 | `DISPLAYLIST-001` | `DisplayList::from_page` records the ordered op stream (non-empty) | PRD §8.11 | green |
 | `DISPLAYLIST-002` | `dl.get_pixmap()` == `render_page()` (pixel-equal replay) | PRD §8.11 | green |
 | `DISPLAYLIST-003` | replay at two scales yields the two correct dimensions | PRD §8.11 | green |
 | `DISPLAYLIST-004` | `dl.rect()` is the page CropBox | PRD §8.11 | green |
+
+#### Type1 (`/FontFile`) outliner — `TYPE1-*`
+
+The first-party Adobe Type1 charstring interpreter + container parser
+(`pdf_render::type1::Type1Font`) drives `parse` / `outline` through an in-code
+Type1 program generator. Tests live in `crates/pdf-render/tests/type1_font.rs`.
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `TYPE1-010` | a box glyph outlines the exact `hsbw`/`rmoveto`/`rlineto`/`closepath` sequence | PRD-NEXT P4-2 | green |
+| `TYPE1-011` | full operator repertoire (stems, hline/vline/rline, rr/vh/hv-curveto, h/v-moveto) | PRD-NEXT P4-2 | green |
+| `TYPE1-012` | a `move_to` while open closes it; end-of-charstring closed by `finish`; 255 32-bit operand | PRD-NEXT P4-2 | green |
+| `TYPE1-013` | `/Subrs` parse + `callsubr` (incl. nested `return`, empty subr) | PRD-NEXT P4-2 | green |
+| `TYPE1-014` | hint replacement (`OtherSubr 3` + `pop` + `callsubr`) | PRD-NEXT P4-2 | green |
+| `TYPE1-015` | flex via `OtherSubrs 1/2/0` + `pop` + `setcurrentpoint` emits two cubics | PRD-NEXT P4-2 | green |
+| `TYPE1-016` | `sbw`, `div`, `dotsection`, `vstem3`/`hstem3`, unknown ops tolerated | PRD-NEXT P4-2 | green |
+| `TYPE1-017` | `seac` composite closes open own/base/accent contours; accent curve offset | PRD-NEXT P4-2 | green |
+| `TYPE1-018` | `.notdef` forced to GID 0 | PRD-NEXT P4-2 | green |
+| `TYPE1-019` | PFB (`0x80`) segment framing is unwrapped | PRD-NEXT P4-2 | green |
+| `TYPE1-020` | an ASCII-hex eexec block decodes and parses | PRD-NEXT P4-2 | green |
+| `TYPE1-021` | `/FontMatrix` variants drive upem (scale, sign, missing, bracket-less, out-of-range) | PRD-NEXT P4-2 | green |
+| `TYPE1-022` | builtin `/Encoding` maps codes to non-AGL names; malformed `dup` entries skipped | PRD-NEXT P4-2 | green |
+| `TYPE1-023` | no custom `/Encoding` array → no builtin table (`glyph_for_code` None) | PRD-NEXT P4-2 | green |
+| `TYPE1-024` | `/lenIV -1` (negative) falls back to the default 4 | PRD-NEXT P4-2 | green |
+| `TYPE1-025` | `outline` for an out-of-range GID draws nothing | PRD-NEXT P4-2 | green |
+| `TYPE1-026` | failure inputs (garbage, truncated eexec, empty CharStrings) → None | PRD-NEXT P4-2 | green |
+| `TYPE1-027` | a well-formed standard `256 array … put` builtin encoding maps every code | PRD-NEXT P4-2 | green |
+| `TYPE1-028` | a degenerate flex (< 7 points, in-flex vmoveto/hmoveto) falls back to a line | PRD-NEXT P4-2 | green |
 
 ### M6d — Python `get_pixmap` on rendered pages + `get_displaylist` — `PYRENDER-*`
 
@@ -2510,8 +2698,9 @@ Tests live in `crates/pdf-text/tests/tables_{lines,text,html,none}.rs`.
 
 ### TATR vision tables — `TATR-*`
 
-Offline tests live in `python/tests/test_tatr_tables.py` and
-`python/tests/test_tatr_harness.py`; they do not install Torch, download
+Offline tests live in `python/tests/test_tatr_tables.py`,
+`python/tests/test_tatr_harness.py`, `python/tests/test_tatr_postprocess.py`,
+and `python/tests/test_tatr_units.py`; they do not install Torch, download
 checkpoints, or access the network. Microsoft post-processing is exercised with
 deterministic model-output fixtures.
 
@@ -2538,6 +2727,56 @@ deterministic model-output fixtures.
 | `TATR-019` | persistent JSONL protocol retries legal short writes instead of truncating large table payloads | benchmark runtime contract | green |
 | `TATR-020` | optional-dependency markers encode Python 3.12–3.14 plus the supported Linux/macOS/Windows CPU matrix without restricting the base wheel; musl is documented separately | packaging support contract | green |
 | `TATR-021` | matching native vector-line geometry or model edge evidence may enlarge only the structure-recognition crop; metadata preserves detector/crop provenance, and both guidance controls are independently disableable | pdfspine evidence-fusion contract | green |
+| `TATR-022` | `iou`/`iob` numeric values plus the zero-area/zero-union guarded returns | TATR postprocess parity | green |
+| `TATR-023` | `apply_class_thresholds` keeps only bboxes above their per-class score | TATR postprocess parity | green |
+| `TATR-024` | `extract_text_from_spans`: integer-superscript removal, non-integer flagging, spaceless line breaks | TATR postprocess parity | green |
+| `TATR-025` | `slot_into_containers` empty short-circuit and non-unique multi-slot assignment | TATR postprocess parity | green |
+| `TATR-026` | `nms` object1/object2/iou criteria and swallowed divide-by-zero | TATR postprocess parity | green |
+| `TATR-027` | `nms_by_containment` suppresses duplicate and content-free containers | TATR postprocess parity | green |
+| `TATR-028` | `refine_rows`/`refine_columns` fall back to NMS when there are no tokens | TATR postprocess parity | green |
+| `TATR-029` | `sort_objects_by_score` ascending order and `overlaps` zero-area predicate | TATR postprocess parity | green |
+| `TATR-030` | `remove_objects_without_content` drops objects with no overlapping text | TATR postprocess parity | green |
+| `TATR-031` | `align_rows`/`align_columns` recover from immutable bbox sequences | TATR postprocess parity | green |
+| `TATR-032` | `align_headers` prepends leading header rows and breaks at the first gap | TATR postprocess parity | green |
+| `TATR-033` | `align_supercells` forms a multi-row/multi-column data cell | TATR postprocess parity | green |
+| `TATR-034` | `align_supercells` header-boundary conflict resolution (data vs header rows) | TATR postprocess parity | green |
+| `TATR-035` | `align_supercells` span header cell propagates ancestor cells above it | TATR postprocess parity | green |
+| `TATR-036` | `align_supercells` drops cells with no anchor rows/columns and header-less spans | TATR postprocess parity | green |
+| `TATR-037` | `nms_supercells` shrinks then suppresses the lower-confidence supercell | TATR postprocess parity | green |
+| `TATR-038` | `remove_supercell_overlap` column/row max/min/interior shrink branches | TATR postprocess parity | green |
+| `TATR-039` | `header_supercell_tree` enforces a single parent per header supercell | TATR postprocess parity | green |
+| `TATR-040` | `table_structure_to_cells` with no page tokens yields a zero confidence score | TATR postprocess parity | green |
+| `TATR-041` | `objects_to_cells` end-to-end: valid grid, and empty result when no rows/columns | TATR postprocess parity | green |
+| `TATR-042` | `_rotate_box_ccw` for all four quadrants and the 360-degree wrap | TATR geometry contract | green |
+| `TATR-043` | `_normalized_box_to_display`/`_display_box_to_normalized` round-trip per rotation | TATR geometry contract | green |
+| `TATR-044` | `_page_box_to_image` derives the unrotated size when it is not stored | TATR geometry contract | green |
+| `TATR-045` | `_image_box_to_page` inverts the rotated unrotated-size derivation | TATR geometry contract | green |
+| `TATR-046` | `_grid_boundaries` empty/interior edges and `_intersects_clip` clip validation | TATR geometry contract | green |
+| `TATR-047` | `TatrOptions` validation messages for threshold/model/ocr/padding/revision | pdfspine vision extension | green |
+| `TATR-048` | `TatrOptions.from_mapping` None default and non-mapping rejection | pdfspine vision extension | green |
+| `TATR-049` | `_model_sources` resolves a `PDFSPINE_TATR_MODELS` root directory | TATR runtime contract | green |
+| `TATR-050` | `_model_kwargs` pins a revision only for non-local model references | TATR runtime contract | green |
+| `TATR-051` | `_runtime_platform_error` diagnostics for unsupported OS/arch/libc | packaging support contract | green |
+| `TATR-052` | `_missing_runtime` prefers the platform-unavailable message when applicable | packaging support contract | green |
+| `TATR-053` | `_structure_crop_edges` edge detection and `_unrotate_crop_edges` remapping | TATR evidence-fusion contract | green |
+| `TATR-054` | `_detection_expansion_limits` bounds from vertically stacked detections | TATR evidence-fusion contract | green |
+| `TATR-055` | `_expand_detection` grows every requested edge within its limits | TATR evidence-fusion contract | green |
+| `TATR-056` | `_native_line_anchors` returns vector-line boxes and swallows failures | TATR evidence-fusion contract | green |
+| `TATR-057` | `_guided_detection` snaps a detection to the best eligible vector-line anchor | TATR evidence-fusion contract | green |
+| `TATR-058` | `_native_words` falls back from native text to OCR to none | TATR runtime contract | green |
+| `TATR-059` | `_make_crop` rejects sub-pixel crops and remaps rotated-crop tokens | coordinate-basis contract | green |
+| `TATR-060` | `_render_page` handles callable cropbox/rotation and skips empty/short words | TATR rendering contract | green |
+| `TATR-061` | `_render_page` degenerate crop, non-RGB channels, and missing Pillow errors | TATR rendering contract | green |
+| `TATR-062` | `_TatrTableRecord` skips malformed cells and derives bbox from spans alone | TATR table-record contract | green |
+| `TATR-063` | `_TatrTableRecord.to_html` rowspan/empty cells and empty `to_markdown` | TATR table-record contract | green |
+| `TATR-064` | `_table_from_structure` returns None on every documented failure path | TATR table-record contract | green |
+| `TATR-065` | `_resolve_device` across auto/cpu/cuda/cuda:N/mps with fake torch | TATR runtime contract | green |
+| `TATR-066` | `_TransformersRuntime` full construct + detect/recognize with fake torch/transformers | TATR runtime contract | green |
+| `TATR-067` | `_TransformersRuntime` reports a clear `PdfUnsupportedError` on checkpoint load failure | TATR runtime contract | green |
+| `TATR-068` | `_cached_runtime` evicts the oldest entry once the cache is full | TATR runtime contract | green |
+| `TATR-069` | `find_tables` short-circuits on empty pages, non-table detections, and sub-pixel crops | TATR end-to-end contract | green |
+| `TATR-070` | `find_tables` adaptive cropping expands a truncated detection twice | TATR evidence-fusion contract | green |
+| `TATR-071` | `find_tables` vector-line guidance overrides the detector crop | TATR evidence-fusion contract | green |
 
 ### M7 — optional content (`pdf_core::ocg` / `pdf_edit::ocg`) — `OCG-READ-*` / `OCG-ADD-*` / `OCG-TOGGLE-*` / `OCG-BIND-*`
 
