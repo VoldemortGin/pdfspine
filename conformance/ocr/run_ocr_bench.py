@@ -158,19 +158,38 @@ def _latin_acc(pred_text: str, truth_text: str) -> float:
     tokens — i.e. it is the metric most FAVORABLE to Tesseract, so the remaining
     gap is real, not a scoring artifact.
     """
-    truth = _latin_tokens(truth_text)
-    if not truth:
+    matches = _latin_matches(pred_text, truth_text)
+    if not matches:
         return 1.0
+    return sum(sim for _, _, sim in matches) / len(matches)
+
+
+def _latin_matches(pred_text: str, truth_text: str) -> list[tuple[str, str, float]]:
+    """``(truth_token, best_pred_token, similarity)`` for every ground-truth
+    Latin token — the per-token detail behind :func:`_latin_acc`. With no
+    prediction tokens every truth token matches ``""`` at similarity 0.0."""
+    truth = _latin_tokens(truth_text)
     pred = _latin_tokens(pred_text)
-    if not pred:
-        return 0.0
-    total = 0.0
+    out: list[tuple[str, str, float]] = []
     for t in truth:
-        best = max(
-            (1.0 - _levenshtein(p, t) / max(len(t), len(p), 1)) for p in pred
-        )
-        total += max(0.0, best)
-    return total / len(truth)
+        best_sim, best_p = 0.0, ""
+        for p in pred:
+            sim = max(0.0, 1.0 - _levenshtein(p, t) / max(len(t), len(p), 1))
+            if sim > best_sim:
+                best_sim, best_p = sim, p
+        out.append((t, best_p, best_sim))
+    return out
+
+
+def _latin_misses(pred_text: str, truth_text: str) -> list[dict[str, str | float]]:
+    """The imperfect entries of :func:`_latin_matches` (what the engine got
+    wrong, and what it produced instead) — recorded per image so a regression
+    can be diagnosed from ``results.json`` without re-running the engines."""
+    return [
+        {"truth": t, "best": p, "sim": round(sim, 3)}
+        for t, p, sim in _latin_matches(pred_text, truth_text)
+        if sim < 1.0
+    ]
 
 
 # --- engines ----------------------------------------------------------------
@@ -218,6 +237,10 @@ def main() -> None:
             agg[engine]["latin"].append(latin_acc)
             row[f"{engine}_cjk_acc"] = round(cjk_acc, 4)
             row[f"{engine}_latin_acc"] = round(latin_acc, 4)
+            # Raw recognized text + the Latin tokens that scored < 1.0, so a
+            # per-image regression is diagnosable straight from results.json.
+            row[f"{engine}_text"] = text
+            row[f"{engine}_latin_misses"] = _latin_misses(text, entry["latin_text"])
         per_doc.append(row)
         print(
             f"{entry['image']:>22}  "
