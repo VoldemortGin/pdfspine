@@ -113,6 +113,24 @@ impl Default for LineSpacing {
     }
 }
 
+/// How a line's natural (single-spaced) height and baseline are derived from
+/// the runs on it — an application-level rule set once per export run via
+/// [`Typesetter::set_line_height_rule`](crate::Typesetter::set_line_height_rule),
+/// on top of which the paragraph's [`LineSpacing`] still applies.
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+pub enum LineHeightRule {
+    /// Word / Writer: real face metrics — the resolved faces' ascent, descent
+    /// and line gap, maxed over the line's mixed faces / sizes (default).
+    #[default]
+    FontMetrics,
+    /// PowerPoint / Impress: font-independent — line height = 1.2 × the largest
+    /// font size on the line, with the baseline 1.0 × that size below the line
+    /// top (ascent 1.0 em, descent 0.2 em), whatever the face metrics say.
+    /// LibreOffice emulates this for ppt/pptx ("font-independent line spacing",
+    /// `ImplCalculateFontIndependentLineSpacing`).
+    FontIndependent,
+}
+
 /// The final, consumer-computed label of a list paragraph (bullet glyph or
 /// formatted number — counters / `%1.%2` formats / restarts are consumer
 /// business, PRD §10).

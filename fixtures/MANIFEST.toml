@@ -112,9 +112,9 @@ notes        = "LibreOffice-oracle pair of typeset_lo_oracle.py's sample.docx; e
 path         = "typeset/typeset-lo-slide.pdf"
 source       = "self-generated"
 license      = "CC0-1.0"
-sha256       = "cb00f97d1b41007690185f0e977ba207a91f28e942636b62b025ec7eb4d14cd7"
+sha256       = "86f86ca0241ed58406ad4fdc6afa016157366331f0abe3ad92539b82cf05bec8"
 cleared_by   = "validation-harness (crates/pdf-typeset/examples/make_typeset_fixtures.rs)"
-cleared_date = "2026-07-03"
+cleared_date = "2026-09-05"
 notes        = "LibreOffice-oracle pair of typeset_lo_oracle.py's sample.pptx; embeds OFL Liberation subsets"
 
 # <<< typeset conformance fixtures <<<

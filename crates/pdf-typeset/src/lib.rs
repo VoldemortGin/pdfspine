@@ -71,8 +71,8 @@ pub use pdf_edit::Color as Rgb;
 pub use flow::{FixedPages, LineMetrics, Measurement, PageGeom, PageProvider};
 pub use fontres::{FontResolver, Platform, ResolvedFace, Substitutions};
 pub use model::{
-    Align, Block, BorderEdge, CellBorders, ColumnWidth, ImageSpec, LineSpacing, ListLabel,
-    ParaProps, Run, RunStyle, TableCell, TableRow, TableSpec, TextBoxSpec, VAnchor,
+    Align, Block, BorderEdge, CellBorders, ColumnWidth, ImageSpec, LineHeightRule, LineSpacing,
+    ListLabel, ParaProps, Run, RunStyle, TableCell, TableRow, TableSpec, TextBoxSpec, VAnchor,
 };
 pub use ops::{FaceId, Fill, LineCap, LineJoin, Op, PageOps, PathSeg, Stroke};
 pub use warn::ExportWarning;
@@ -116,6 +116,9 @@ pub struct Typesetter {
     /// Tab-stop interval in points: a `\t` advances the pen to the next
     /// multiple of this (Word's `defaultTabStop`, 0.5 inch by default).
     tab_interval: f64,
+    /// How line-box heights / baselines are derived from the runs on each line
+    /// (real face metrics vs PowerPoint's font-independent 1.2-em spacing).
+    line_rule: LineHeightRule,
 }
 
 impl Typesetter {
@@ -132,6 +135,7 @@ impl Typesetter {
             chars: HashMap::new(),
             glyph_warned: HashSet::new(),
             tab_interval: DEFAULT_TAB_INTERVAL,
+            line_rule: LineHeightRule::FontMetrics,
         }
     }
 
@@ -173,6 +177,23 @@ impl Typesetter {
     /// The current tab-stop interval in points (used by the layout core).
     pub(crate) fn tab_interval(&self) -> f64 {
         self.tab_interval
+    }
+
+    /// Sets how each line's natural height and baseline are derived from its
+    /// runs ([`LineHeightRule`]): real face metrics (Word / Writer, the
+    /// default) or PowerPoint's font-independent 1.2-em spacing (pptx /
+    /// Impress). Configure this **before** laying out; it applies engine-wide —
+    /// to flow, text boxes, table cells and the measure API — so
+    /// [`Typesetter::measure_blocks`] / [`Typesetter::measure_text_box`] and the
+    /// `layout_*` methods always agree. pptspine sets it once per render.
+    pub fn set_line_height_rule(&mut self, rule: LineHeightRule) {
+        self.line_rule = rule;
+    }
+
+    /// The current line-height rule (used by the layout core).
+    #[must_use]
+    pub fn line_height_rule(&self) -> LineHeightRule {
+        self.line_rule
     }
 
     /// The warnings accumulated so far (moved into [`ExportResult`] by

@@ -21,7 +21,8 @@
 //! * `typeset-lo-doc.pdf`   — Letter page mirroring the `sample.docx` built by
 //!   `conformance/gt/typeset_lo_oracle.py` (local-only LibreOffice oracle).
 //! * `typeset-lo-slide.pdf` — 10×7.5 in slide mirroring that script's
-//!   `sample.pptx`.
+//!   `sample.pptx`, laid out under [`LineHeightRule::FontIndependent`] so the
+//!   line pitch matches PowerPoint / Impress font-independent 1.2-em spacing.
 //!
 //! Run from the repo root:
 //!
@@ -33,8 +34,9 @@ use std::path::{Path, PathBuf};
 
 use pdf_typeset::{
     preset, Align, Block, BorderEdge, CellBorders, ColumnWidth, Fill, FixedPages, FontResolver,
-    ImageSpec, LineSpacing, ListLabel, Op, PageGeom, PageOps, ParaProps, Platform, Rect, Rgb, Run,
-    RunStyle, Stroke, TableCell, TableRow, TableSpec, TextBoxSpec, Typesetter, VAnchor,
+    ImageSpec, LineHeightRule, LineSpacing, ListLabel, Op, PageGeom, PageOps, ParaProps, Platform,
+    Rect, Rgb, Run, RunStyle, Stroke, TableCell, TableRow, TableSpec, TextBoxSpec, Typesetter,
+    VAnchor,
 };
 
 const SANS: &str = "Liberation Sans";
@@ -442,6 +444,9 @@ fn lo_doc_fixture() -> Vec<u8> {
 // --------------------------------------------------------------------------
 fn lo_slide_fixture() -> Vec<u8> {
     let mut engine = engine();
+    // Mirror PowerPoint / Impress font-independent line spacing (this fixture
+    // mirrors a pptx): 1.2-em lines with a 1.0-em baseline drop.
+    engine.set_line_height_rule(LineHeightRule::FontIndependent);
     let mut ops: Vec<Op> = Vec::new();
 
     let mut title = style(28.0);

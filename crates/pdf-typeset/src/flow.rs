@@ -11,6 +11,10 @@
 //! - fragments carry an open [`FaceId`] **and a per-frag size** — one line may
 //!   mix faces and sizes, sharing a single baseline computed from the real
 //!   font ascent/descent (the `BASELINE_FACTOR = 0.8` heuristic is retired);
+//! - the line box height / baseline follow the engine's
+//!   [`LineHeightRule`](crate::LineHeightRule): real face metrics (Word / Writer)
+//!   or PowerPoint / Impress font-independent 1.2-em spacing (decorations,
+//!   highlight and link rects always keep the real face metrics);
 //! - `Align::Justify` redistributes inter-word **space fragment widths**
 //!   (last / hard-broken lines stay left) — PDF `Tw` cannot implement justify
 //!   under Identity-H;
@@ -34,7 +38,7 @@
 use std::rc::Rc;
 
 use crate::faces::FaceRegistry;
-use crate::model::{Align, Block, ImageSpec, LineSpacing, ListLabel, Run};
+use crate::model::{Align, Block, ImageSpec, LineHeightRule, LineSpacing, ListLabel, Run};
 use crate::ops::{FaceId, Op, PageOps, PathSeg};
 use crate::warn::ExportWarning;
 use crate::{Rgb, Typesetter};
@@ -828,8 +832,9 @@ fn layout_paragraph(ctx: &mut Ctx, props: &crate::model::ParaProps, runs: &[Run]
         }
     }
 
+    let rule = ctx.ts.line_height_rule();
     for (i, line) in lines.iter().enumerate() {
-        let (asc, desc, natural) = line_metrics(ctx.ts.faces(), line, ref_frag);
+        let (asc, desc, natural) = line_metrics(ctx.ts.faces(), line, ref_frag, rule);
         let lh = match props.spacing {
             LineSpacing::Multiple(m) => natural * if m.is_finite() && m > 0.0 { m } else { 1.0 },
             LineSpacing::Exact(h) => {
@@ -900,15 +905,43 @@ fn justify_line(line: &mut LineOut, target: f64) {
     line.width = target;
 }
 
-/// The line box metrics of one wrapped line: max ascent (points above the
-/// baseline), max descent (points below) and the natural single-spaced line
-/// height, all maxed over the line's mixed faces/sizes (so mixed-size lines
-/// share one baseline). Returns `(ascent, descent, natural)`.
+// PowerPoint's font-independent line spacing (LibreOffice's
+// `ImplCalculateFontIndependentLineSpacing`): at 100% the line height is a
+// fixed 1.2 × the font size with the baseline 1.0 × the size below the line
+// top, regardless of the face's real ascent / descent — the pptx / Impress
+// rule selected by [`LineHeightRule::FontIndependent`].
+const FONT_INDEPENDENT_ASCENT: f64 = 1.0;
+const FONT_INDEPENDENT_DESCENT: f64 = 0.2;
+const FONT_INDEPENDENT_LINE: f64 = 1.2;
+
+/// The line box metrics of one wrapped line under `rule`: max ascent (points
+/// above the baseline), max descent (points below) and the natural
+/// single-spaced line height, all maxed over the line's mixed faces / sizes
+/// (so mixed-size lines share one baseline). Returns `(ascent, descent,
+/// natural)`.
+///
+/// [`LineHeightRule::FontMetrics`] uses the real face metrics; under
+/// [`LineHeightRule::FontIndependent`] the three values come from the largest
+/// font size on the line (an empty line uses `ref_frag`'s size) times the
+/// font-independent 1.0 / 0.2 / 1.2 em factors, ignoring the face metrics.
 fn line_metrics(
     faces: &FaceRegistry,
     line: &LineOut,
     ref_frag: Option<(FaceId, f64)>,
+    rule: LineHeightRule,
 ) -> (f64, f64, f64) {
+    if let LineHeightRule::FontIndependent = rule {
+        let s = if line.frags.is_empty() {
+            ref_frag.map_or(0.0, |(_, size)| size)
+        } else {
+            line.frags.iter().map(|f| f.size).fold(0.0f64, f64::max)
+        };
+        return (
+            s * FONT_INDEPENDENT_ASCENT,
+            s * FONT_INDEPENDENT_DESCENT,
+            s * FONT_INDEPENDENT_LINE,
+        );
+    }
     let mut asc = 0.0f64;
     let mut desc = 0.0f64;
     let mut natural = 0.0f64;
