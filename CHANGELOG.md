@@ -72,6 +72,16 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ### Fixed
 
+- `Page.get_text(..., clip=)` now honours `clip` in every Rust-backed mode
+  (`text`, `dict`, `rawdict`, `words`, `blocks`, `json`, `rawjson`) and so does
+  `Page.get_textpage(clip=)` / `Annot.get_text`: the `TextPage` is built clipped
+  the way PyMuPDF does it — a character is kept when its bbox overlaps the clip,
+  block / line / span geometry and numbering are rebuilt from the kept
+  characters, `width`/`height` are the clip's, image blocks are cut to the
+  overlap. As in PyMuPDF a supplied `textpage=` wins over `clip=`, `html` /
+  `xhtml` / `xml` always cover the whole page, and `search_for(clip=)` no longer
+  reports a needle that straddles the clip edge. Previously the clip was
+  ignored and running headers survived a clipped extraction.
 - **PaddleOCR Latin accuracy 0.839 → 0.990** (CJK 0.989 → 0.993, speed unchanged)
   on the 16-scan CJK+Latin benchmark (`docs/BENCHMARKS.md` §6) by pinning
   `ocrspine` `e810a9c`: the recognizer right-padded each height-48 crop to its

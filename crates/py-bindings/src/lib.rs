@@ -1990,8 +1990,10 @@ impl PyPage {
     // --- text extraction (PRD §8.6 / §9.4) -------------------------------
 
     /// Builds a reusable [`PyTextPage`] for this page (PyMuPDF
-    /// `page.get_textpage`). `flags`/`clip` are accepted for API symmetry; the
-    /// model is build-flag-agnostic (flags apply at serialization / search).
+    /// `page.get_textpage`). `clip` restricts the model to the characters
+    /// overlapping the rectangle; `flags` is accepted for API symmetry (the
+    /// model is build-flag-agnostic bar `TEXT_INHIBIT_SPACES` — flags apply at
+    /// serialization / search).
     #[pyo3(signature = (flags=None, clip=None))]
     fn get_textpage(
         &self,
@@ -2052,7 +2054,10 @@ impl PyPage {
     /// Python object per option: `str` for text/html/xhtml/xml/json/rawjson,
     /// `list[tuple]` for blocks/words, `dict` for dict/rawdict. `textpage`
     /// reuses a pre-built [`PyTextPage`]; `sort=True` orders text/blocks by
-    /// `(y, x)`.
+    /// `(y, x)`. `clip` restricts every option to the characters overlapping
+    /// the rectangle by building the [`pdf_api::TextPage`] clipped, as PyMuPDF
+    /// does — so, as there, a supplied `textpage` wins over `clip`, and
+    /// `html`/`xhtml`/`xml` always cover the whole page.
     #[pyo3(signature = (option="text", *, clip=None, flags=None, textpage=None, sort=false))]
     fn get_text(
         &self,
@@ -2063,8 +2068,20 @@ impl PyPage {
         textpage: Option<&PyTextPage>,
         sort: bool,
     ) -> PyResult<Py<PyAny>> {
-        let _ = clip; // clip-restricted extraction lands with textbox selection (M2 reserved).
-        let tp = textpage.map(|t| &t.tp);
+        let clipped;
+        let tp = match (textpage, clip) {
+            (Some(t), _) => Some(&t.tp),
+            (None, Some((x0, y0, x1, y1))) if !matches!(option, "html" | "xhtml" | "xml") => {
+                let clip = Rect::new(x0, y0, x1, y1);
+                // Heavy: interpret + layout, GIL released (PRD §9.4). The same
+                // build flags the unclipped paths use (only `TEXT_INHIBIT_SPACES`
+                // reaches the layout), so the clip is the only difference.
+                let flags = flags.unwrap_or(0);
+                clipped = py.detach(|| pdf_api::textpage(&self.page, flags, Some(clip)));
+                Some(&clipped)
+            }
+            _ => None,
+        };
         text_output_to_py(py, &self.page, option, flags, tp, sort)
     }
 

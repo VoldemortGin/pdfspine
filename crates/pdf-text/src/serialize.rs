@@ -408,6 +408,146 @@ fn char_overlaps_clip(c: &Rect, clip: &Rect) -> bool {
     c.x0 < clip.x1 && c.x1 > clip.x0 && c.y0 < clip.y1 && c.y1 > clip.y0
 }
 
+// === clip (PyMuPDF `get_textpage(clip=)`) =================================
+
+/// Restricts `tp` to the characters overlapping `clip` — the [`TextPage`] a
+/// PyMuPDF `get_textpage(clip=)` build ends up with, where the stext device only
+/// ever receives the glyphs inside the clip. Every `get_text` option then reads
+/// the clipped model, so the clip is applied once, not per serializer.
+///
+/// The per-character rule is [`get_textbox`]'s: strict bbox overlap in both X
+/// and Y, so a glyph the clip merely touches is out and a glyph it cuts through
+/// is kept whole (MuPDF tests the glyph's *ink* box; pdfspine has the glyph
+/// cell, so a cell sliver with no ink under a clip edge is the one place the two
+/// differ). Spans, lines and blocks that keep no character are dropped and the
+/// survivors are rebuilt from what they keep — `text`, bboxes, the span's
+/// first-glyph `origin` / `matrix` / `rendered_size`, painting-order `seq` and
+/// the reading-order block / line numbers, which restart at 0 exactly as a page
+/// that only ever painted those glyphs would number them. An image block stays
+/// when its bbox meets the clip, cut down to the overlap (fitz reports the
+/// intersection); one entirely outside is dropped. `width`/`height` become the
+/// clip's, matching fitz's `dict` header for a clipped TextPage.
+#[must_use]
+pub fn clip_textpage(tp: &TextPage, clip: Rect) -> TextPage {
+    let clip = clip.normalize();
+    let mut blocks: Vec<Block> = Vec::new();
+    for block in &tp.blocks {
+        let kept = match block.kind {
+            BlockKind::Text => clip_text_block(block, &clip),
+            BlockKind::Image => clip_image_block(block, &clip),
+        };
+        if let Some(mut block) = kept {
+            block.number = blocks.len();
+            blocks.push(block);
+        }
+    }
+    let mut line_no = 0usize;
+    for block in &mut blocks {
+        for line in &mut block.lines {
+            line.number = line_no;
+            line_no += 1;
+        }
+    }
+    TextPage {
+        width: clip.width(),
+        height: clip.height(),
+        blocks,
+    }
+}
+
+fn clip_text_block(block: &Block, clip: &Rect) -> Option<Block> {
+    let lines: Vec<Line> = block
+        .lines
+        .iter()
+        .filter_map(|line| clip_line(line, clip))
+        .collect();
+    let seq = lines.iter().map(|l| l.seq).min()?;
+    Some(Block {
+        bbox: union_rects(lines.iter().map(|l| l.bbox)),
+        kind: BlockKind::Text,
+        image: block.image.clone(),
+        number: block.number,
+        seq,
+        lines,
+    })
+}
+
+fn clip_image_block(block: &Block, clip: &Rect) -> Option<Block> {
+    let bbox = block.bbox.intersect(clip);
+    if bbox.is_empty() {
+        return None;
+    }
+    Some(Block {
+        bbox,
+        ..block.clone()
+    })
+}
+
+fn clip_line(line: &Line, clip: &Rect) -> Option<Line> {
+    let spans: Vec<Span> = line
+        .spans
+        .iter()
+        .filter_map(|span| clip_span(span, clip))
+        .collect();
+    let seq = spans.iter().map(|s| s.seq).min()?;
+    Some(Line {
+        bbox: union_rects(spans.iter().map(|s| s.bbox)),
+        wmode: line.wmode,
+        dir: line.dir,
+        number: line.number,
+        seq,
+        spans,
+    })
+}
+
+fn clip_span(span: &Span, clip: &Rect) -> Option<Span> {
+    let chars: Vec<Char> = span
+        .chars
+        .iter()
+        .filter(|c| char_overlaps_clip(&c.bbox.normalize(), clip))
+        .cloned()
+        .collect();
+    let first = chars.first()?;
+    // Span geometry follows layout: painted glyphs only, so a synthesized
+    // word space's seam never widens the box — unless a seam is all that is
+    // left, in which case it is the span.
+    let painted: Vec<&Char> = chars.iter().filter(|c| !c.synthetic).collect();
+    let geometry: &[&Char] = if painted.is_empty() {
+        &chars.iter().collect::<Vec<_>>()
+    } else {
+        &painted
+    };
+    let mut envelope = crate::layout::DirEnvelope::new(span.dir);
+    for c in geometry {
+        envelope.add(&c.quad);
+    }
+    Some(Span {
+        bbox: union_rects(geometry.iter().map(|c| c.bbox)),
+        font: span.font.clone(),
+        size: span.size,
+        flags: span.flags,
+        color: span.color,
+        ascender: span.ascender,
+        descender: span.descender,
+        origin: first.origin,
+        text: chars.iter().map(|c| c.c).collect(),
+        rendered_size: first.rendered_size,
+        matrix: first.matrix,
+        text_matrix: span.text_matrix,
+        ctm: span.ctm,
+        dir: span.dir,
+        quad: envelope.collapse(),
+        seq: chars.iter().map(|c| c.seq).min()?,
+        chars,
+    })
+}
+
+/// The smallest rectangle enclosing every rect of `rects` (empty when there
+/// are none).
+fn union_rects(rects: impl Iterator<Item = Rect>) -> Rect {
+    rects.fold(Rect::default(), |acc, r| acc.union(&r))
+}
+
 // === extract_selection (PRD §8.6.2) ======================================
 
 /// One flattened selection char: its bbox + a running `(block, line)` identity,

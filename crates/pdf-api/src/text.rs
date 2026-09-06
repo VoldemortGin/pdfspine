@@ -833,14 +833,20 @@ pub enum TextOutput {
 }
 
 /// Builds the [`TextPage`] model for `page` once (PRD §9.4). Most of `flags`
-/// (and all of `clip`) apply at serialization / search time, not at build time,
-/// so the model stays reusable across every output; `TEXT_INHIBIT_SPACES` is the
-/// exception, since suppressing the synthesized word spaces has to happen while
-/// the lines are built.
+/// apply at serialization / search time, not at build time, so the model stays
+/// reusable across every output; `TEXT_INHIBIT_SPACES` is the exception, since
+/// suppressing the synthesized word spaces has to happen while the lines are
+/// built. `clip` restricts the model to the characters overlapping it, the way
+/// PyMuPDF's `get_textpage(clip=)` does, so every output read off the model —
+/// and `search` — sees only that region (see [`pdf_text::clip_textpage`]).
 #[must_use]
-pub fn textpage(page: &Page, flags: u32, _clip: Option<Rect>) -> TextPage {
+pub fn textpage(page: &Page, flags: u32, clip: Option<Rect>) -> TextPage {
     let doc = page.document();
-    pdf_text::build_textpage_flagged(doc, page, &Limits::default(), flags)
+    let tp = pdf_text::build_textpage_flagged(doc, page, &Limits::default(), flags);
+    match clip {
+        Some(clip) => pdf_text::clip_textpage(&tp, clip),
+        None => tp,
+    }
 }
 
 /// Extracts text in the given PyMuPDF `opt` ("text", "html", "xhtml", "xml",
