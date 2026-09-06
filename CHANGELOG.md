@@ -24,6 +24,19 @@ feature-complete, but the public API and on-disk formats may still change.
   as `#` → `###` are normalized to one step per nesting. Both passes reuse the
   `pdf-edit` `insert_link` / `set_toc` writers; a document without links or
   headings (or with both switches off) produces byte-identical output.
+- **Layout-preserving text extraction.** `get_text("layout")` and its tunable
+  form `Page.get_text_layout()` regroup words into visual lines with a *y
+  tolerance* (jitter cannot chain lines) and paint them onto a character grid so
+  columns survive as space padding, `pdftotext -layout` style. A
+  pdfspine-original extension, outside the fitz-compat surface (`COMPAT.toml`
+  unchanged).
+- **PDF → Markdown export.** `Page.to_markdown()`, `Document.to_markdown()` and
+  `Document.save_markdown()` render a page or a whole document as Markdown for
+  RAG / LLM pipelines: headings from font-size clustering, lists, GFM tables via
+  `find_tables`, inline emphasis, and optional image placeholders. A
+  pdfspine-original extension, outside the fitz-compat surface (`COMPAT.toml`
+  unchanged); this is the PDF → Markdown direction, the reverse of the existing
+  `markdown_to_pdf`.
 
 ## [0.7.1] — 2026-09-05
 

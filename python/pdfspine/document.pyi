@@ -542,6 +542,15 @@ class Page:
         textpage: TextPage | None = ...,
         sort: bool = ...,
     ) -> str | list[Any] | dict[str, Any]: ...
+    def get_text_layout(
+        self,
+        *,
+        clip: _Rect | None = ...,
+        flags: int | None = ...,
+        textpage: TextPage | None = ...,
+        y_tolerance: float = ...,
+        char_width: float | None = ...,
+    ) -> str: ...
     def get_text_words(
         self, *, clip: _Rect | None = ..., flags: int | None = ..., sort: bool = ...
     ) -> list[tuple[Any, ...]]: ...
@@ -627,6 +636,18 @@ class Page:
     def content_blocks(
         self, sort: bool = ...
     ) -> tuple[TextBlock | ImageBlock, ...]: ...
+    def to_markdown(
+        self,
+        *,
+        clip: _Rect | None = ...,
+        tables: bool = ...,
+        table_strategy: str = ...,
+        heading_levels: int = ...,
+        heading_ratio: float = ...,
+        bold_headings: bool = ...,
+        emphasis: bool = ...,
+        images: bool = ...,
+    ) -> str: ...
     def link_annotations(self) -> tuple[LinkAnnotation, ...]: ...
     def text_in_rect(self, rect: _Rect, *, sort: str = ...) -> str: ...
     def filled_rectangles(
@@ -987,6 +1008,35 @@ class Document:
     def search_page_for(self, pno: int, text: str, **kw: Any) -> list[Any]: ...
     def to_html(self) -> str: ...
     def save_html(self, path: str | os.PathLike[str]) -> None: ...
+    def to_markdown(
+        self,
+        pages: Sequence[int] | None = ...,
+        *,
+        page_separator: str = ...,
+        clip: _Rect | None = ...,
+        tables: bool = ...,
+        table_strategy: str = ...,
+        heading_levels: int = ...,
+        heading_ratio: float = ...,
+        bold_headings: bool = ...,
+        emphasis: bool = ...,
+        images: bool = ...,
+    ) -> str: ...
+    def save_markdown(
+        self,
+        path: str | os.PathLike[str],
+        pages: Sequence[int] | None = ...,
+        *,
+        page_separator: str = ...,
+        clip: _Rect | None = ...,
+        tables: bool = ...,
+        table_strategy: str = ...,
+        heading_levels: int = ...,
+        heading_ratio: float = ...,
+        bold_headings: bool = ...,
+        emphasis: bool = ...,
+        images: bool = ...,
+    ) -> None: ...
     def save(
         self,
         filename: str | os.PathLike[str],
