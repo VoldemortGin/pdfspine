@@ -791,6 +791,42 @@ Spec source: PRD §7 (M1 rows), §8.6.1 (rotation), §9.2 (`Page` shape), §9.4
 | `DOC-CRYPT-003` | user-password doc, wrong password → `authenticate` false, still `needs_pass`, no panic | PRD §8.4 | green |
 | `DOC-CRYPT-004` | successful auth refreshes page order after encrypted ObjStm fallback | compatibility findings P0 | green |
 
+### Font extraction facade — `DOC-FONT-*` (`pdf-api`)
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `DOC-FONT-001` | `extract_font` returns `(basefont, ext, type, buffer)` for TrueType/Type0/OpenType/Type1 embedded programs; `info_only` suppresses the buffer | PRD §8.6 | green |
+| `DOC-FONT-002` | `extract_font` on a non-embedded font / descriptor-without-`/FontFile*` → `"n/a"`; non-font / missing xref → all-empty | PRD §8.6 | green |
+| `DOC-FONT-003` | `subset_fonts` counts every font object carrying an embedded program (top-level or descendant), non-mutating | PRD §8.6 | green |
+| `DOC-FONT-004` | `get_char_widths` resolves an indirect `/Widths` array scaled by 1/1000; missing / non-dict xref → empty | PRD §8.6 | green |
+
+### Page edit / draw / annotation facade — `DOC-EDIT-*` / `DOC-ANNOT-*` (`pdf-api`)
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `DOC-EDIT-001` | every `page_draw_*` free function appends drawing operators to the page content; drawings survive save+reopen | PRD §8.8 | green |
+| `DOC-EDIT-002` | `ShapeHandle` records primitives, `finish` flushes a styled block, an unfinished trailing block gets the default black stroke at `commit` | PRD §8.8 | green |
+| `DOC-EDIT-003` | committing an empty `ShapeHandle` is a clean no-op | PRD §8.8 | green |
+| `DOC-EDIT-004` | Document + page link insert / list / delete | PRD §8.9 | green |
+| `DOC-EDIT-005` | `add_widget` builds an `/AcroForm`; `form_field_names`/`form_fill`; `WidgetHandle` field facts | PRD §8.8 | green |
+| `DOC-EDIT-006` | `form_flatten` bakes widgets into content and clears the interactive form | PRD §8.8 | green |
+| `DOC-EDIT-007` | `pdf_trailer`/`is_stream`/`xref_stream_raw`/`xref_get_keys`/`xref_is_xobject` read helpers | PRD §7 | green |
+| `DOC-EDIT-008` | `update_object` replaces a stream dict (body preserved) / rejects garbage; `update_stream` create/replace/error branches | PRD §7 | green |
+| `DOC-EDIT-009` | embedded-file add/get/names/count/info/upd/del + not-found errors | PRD §8.8 | green |
+| `DOC-EDIT-010` | `add_ocg` then `set_oc` writes an `/OC` entry onto the target object | PRD §7 | green |
+| `DOC-EDIT-011` | journal enable → checkpoint → undo → redo cycle reverts/reapplies a structural edit | PRD §8.7 | green |
+| `DOC-EDIT-012` | undo/redo on a disabled journal report `false`; `journal_save_state` is inert | PRD §8.7 | green |
+| `DOC-EDIT-013` | `is_dirty`/`is_fast_webaccess`/`can_save_incrementally`/`authenticate`(plain)/`set_page_rotation`/`set_mark_info`/`bake`/`fullcopy_page_to` | PRD §8.7 | green |
+| `DOC-EDIT-014` | `page_get_contents` lists array members; `page_read_contents` joins streams with a newline separator | PRD §7 | green |
+| `DOC-EDIT-015` | `page_get_xobjects`/`get_image_rects`/`get_image_info`/`get_image_bbox`/`get_cdrawings`/`delete_image` wrappers | PRD §7 | green |
+| `DOC-EDIT-016` | `page_set_language`/`page_language` round-trip; empty tag removes `/Lang` | PRD §7 | green |
+| `DOC-EDIT-017` | link insert on out-of-range page / `update_stream` on missing object / named-dest miss → typed error or `None` | PRD §8.9 | green |
+| `DOC-EDIT-018` | `/Name` or absent `/Contents` → empty xref list and empty bytes (no panic) | PRD §7 | green |
+| `DOC-EDIT-019` | UTF-8 BOM `/Info` string decodes to text | PRD §8.7 | green |
+| `DOC-ANNOT-001` | markup + shape annotation constructors produce the right `/Subtype`; annots are discoverable via `page_annot_count`/`page_first_annot` | PRD §8.8 | green |
+| `DOC-ANNOT-002` | FreeText/Polygon/PolyLine/Ink/Stamp/FileAttachment constructors; attachment reads back bytes + metadata | PRD §8.8 | green |
+| `DOC-ANNOT-003` | `AnnotHandle` getters + setters (`set_info`/`set_flags`/`set_opacity`) round-trip through a re-read handle | PRD §8.8 | green |
+
 ### Python wheel (`pdfspine` / `fitz`) — `PYDOC-*` / `PYFITZ-*`
 
 | ID | feature | spec ref | status |
@@ -2208,6 +2244,11 @@ live in `crates/pdf-edit/tests/embfile_e2e.rs`.
 | `EMBFILE-INFO-001` | `info` reports filename/ufilename/desc/size (size == decoded length; length aliases size) | PRD §8.8 | green |
 | `EMBFILE-PERSIST-001` | add → full save → reopen → get still byte-exact; metadata preserved; del survives reopen | PRD §12 M4 | green |
 | `EMBFILE-PROP-001` | get/del/info on a non-existent name → typed `InvalidArgument`, never panics; duplicate add rejected; no-`/Names` doc enumerates empty | PRD §8.8 | green |
+| `REDACT-TEXT-005` | `TJ` array with numeric adjustments: secret run dropped, dropped advance folded into surrounding adjustments, kept runs survive | PRD §8.8 | green |
+| `REDACT-TEXT-006` | `TJ` array shown with no font / a font missing from resources → re-emitted verbatim (unmappable text preserved) | PRD §8.8 | green |
+| `REDACT-TEXT-007` | full text-state operator set (`Tc`/`Tw`/`Tz`/`TL`/`Ts`/`Td`/`TD`/`T*`/`'`/`"`) + repeat `Tf`; a middle line redacted, the rest survive | PRD §8.8 | green |
+| `REDACT-TEXT-008` | `Tj` literal with no/missing font re-emitted verbatim; every string escape (`\\ ( ) \n \r \t`) round-trips through `escape_show` | PRD §8.8 | green |
+| `REDACT-TEXT-009` | page whose `/Contents` is an array of two streams: concatenated, redacted across, and every old content object freed | PRD §8.8 | green |
 | `EMBFILE-EXISTING-TREE-001` | reading a pre-built multi-level (`/Kids`+`/Limits`) tree enumerates all keys; add collapses to flat leaf keeping every key (survives reopen) | PRD §8.8 | green |
 
 ---
@@ -2216,6 +2257,9 @@ live in `crates/pdf-edit/tests/embfile_e2e.rs`.
 
 Spec source of truth: PRD §9.4 (PyO3 handle/GIL), §9.5 (fitz shim), §8.8 (annot
 / redaction / forms / drawings / embfile / scrub), and §12 M4 exit (Python
+| `REDACT-IMAGE-004` | partial coverage of a raw (no `/Filter`) and a `/Filter`-array RGB image: covered columns zeroed, rest preserved | PRD §8.8 | green |
+| `REDACT-IMAGE-005` | image not overlapping any rect left intact; a fully-covered image's `Do` dropped from content | PRD §8.8 | green |
+| `REDACT-IMAGE-006` | partial-coverage pixel-blank fail-closed paths: non-8-bit, unsupported color space, and short pixel buffer each `Error::Redaction` | PRD §8.8 | green |
 redaction gone-after-reopen; annot `/AP` portability). These exercise the native
 `pdfspine` package and the `fitz` deprecated-alias shim end-to-end (build →
 edit → `tobytes`/`save` → reopen → assert). All fixtures self-generated in-test
@@ -2223,6 +2267,14 @@ edit → `tobytes`/`save` → reopen → assert). All fixtures self-generated in
 interpreter can measure glyph advances (same convention as the Rust harness).
 Tests live in `python/tests/test_m4.py`.
 
+| `REDACT-COVER-003` | multiple hand-authored `/Redact` annots with a 1-element gray `/IC` and an invalid-length `/IC` (→ black); both applied, both secrets removed, a cover box per region | PRD §8.8 | green |
+
+### Form-XObject recursion + `Do` edges — `REDACT-FORM-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `REDACT-FORM-001` | Form XObject with an explicit `/Matrix` array whose text is under the rect is rewritten in place; secret scrubbed from the form body | PRD §8.8 | green |
+| `REDACT-FORM-002` | `Do` edge cases tolerated: bare `Do` (no operand), `Do` on an absent XObject, `Do` on a non-Image/Form subtype; page text preserved | PRD §8.8 | green |
 ### Content insert / draw / Shape — `PYM4-INSERT-*`
 
 | ID | feature | spec ref | status |
@@ -2238,6 +2290,8 @@ Tests live in `python/tests/test_m4.py`.
 |---|---|---|---|
 | `PYM4-ANNOT-001` | `add_highlight_annot`+`add_freetext_annot` → `annots()` lists both with correct `.type`/`.rect` | PRD §8.8 | green |
 | `PYM4-ANNOT-002` | `annot.set_colors(stroke=…)` then `update()` reflects in `.colors`; reopen persists subtype + `/AP /N` | PRD §12 M4 | green |
+| `REDACT-PROP-004` | page with no `/Contents` key: rewrite yields empty content and only the cover box is written | PRD §8.8 | green |
+| `REDACT-PROP-005` | inline image, a `BDC` with a nested dictionary operand (string/real/array/bool/null), and a malformed `cm` all re-emitted verbatim; text preserved | PRD §8.8 | green |
 | `PYM4-ANNOT-003` | `delete_annot` removes it; `annot_xrefs` shrinks; reopen lacks it | PRD §8.8 | green |
 | `PYM4-ANNOT-004` | every added subtype reopens with an appearance stream (`/AP /N`) present (portability gate) | PRD §12 M4 | green |
 
@@ -2545,11 +2599,53 @@ Tests live in `crates/pdf-core/tests/ocg_unit.rs` (read) and
 `crates/pdf-edit/tests/ocg_e2e.rs` (write round-trip).
 
 | ID | feature | spec ref | status |
+| `RENDER-PAGE-SHADE-AXIAL` | `sh` axial (type 2) DeviceRGB shading with `/Extend` paints a gradient | PRD §8.11 | green |
+| `RENDER-PAGE-SHADE-RADIAL` | `sh` radial (type 3) DeviceCMYK shading paints a dark center | PRD §8.11 | green |
+| `RENDER-PAGE-SHADE-CS-ARRAY` | shading `/ColorSpace` as an array (`[/CalGray …]`) resolves to a gray ramp | PRD §8.11 | green |
+| `RENDER-PAGE-SHADE-NOFUNC` | shading without a `/Function` is a clean no-op (deferred) | PRD §8.11 | green |
+| `RENDER-PAGE-SHADE-DEFER` | a deferred shading type (1) with a valid function paints nothing | PRD §8.11 | green |
+| `RENDER-PAGE-IMG-MASK` | a stencil `/ImageMask` paints the fill color where the bit is 0 | PRD §8.11 | green |
+| `RENDER-PAGE-IMG-MASK-DECODE` | `/Decode [1 0]` inverts the stencil sample→paint mapping | PRD §8.11 | green |
+| `RENDER-PAGE-IMG-SMASK-OPAQUE` | an `/SMask` of 255 keeps the image opaque | PRD §8.11 | green |
+| `RENDER-PAGE-IMG-SMASK-CLEAR` | an `/SMask` of 0 makes the image fully transparent | PRD §8.11 | green |
+| `RENDER-PAGE-IMG-ALPHA0` | an image under a `ca 0` ExtGState is suppressed (alpha short-circuit) | PRD §8.11 | green |
+| `RENDER-PAGE-STROKE-DASH` | a dashed stroke (`[a b] phase d`) paints a broken line | PRD §8.11 | green |
+| `RENDER-PAGE-STROKE-DASH0` | an all-zero dash array (`[0 0] d`) renders as solid | PRD §8.11 | green |
+| `RENDER-PAGE-STROKE-HAIRLINE` | a zero-width stroke renders as a 1-device-pixel hairline | PRD §8.11 | green |
+| `RENDER-PAGE-FONT-NOSUB` | a non-embedded font with no std-14 substitute → blank text, page still renders | PRD §8.11 | green |
 |---|---|---|---|
 | `OCG-READ-COUNT` | `get_ocgs` counts the layers | PRD §7 | green |
 | `OCG-READ-NAME` | reads each OCG `/Name` | PRD §7 | green |
 | `OCG-READ-STATE` | reads the default ON/OFF state | PRD §7 | green |
 | `OCG-READ-LOCKED` | reads the `/Locked` flag | PRD §7 | green |
+#### Type1 (`/FontFile`) outliner — `TYPE1-*`
+
+The first-party Adobe Type1 charstring interpreter + container parser
+(`pdf_render::type1::Type1Font`) drives `parse` / `outline` through an in-code
+Type1 program generator. Tests live in `crates/pdf-render/tests/type1_font.rs`.
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `TYPE1-010` | a box glyph outlines the exact `hsbw`/`rmoveto`/`rlineto`/`closepath` sequence | PRD-NEXT P4-2 | green |
+| `TYPE1-011` | full operator repertoire (stems, hline/vline/rline, rr/vh/hv-curveto, h/v-moveto) | PRD-NEXT P4-2 | green |
+| `TYPE1-012` | a `move_to` while open closes it; end-of-charstring closed by `finish`; 255 32-bit operand | PRD-NEXT P4-2 | green |
+| `TYPE1-013` | `/Subrs` parse + `callsubr` (incl. nested `return`, empty subr) | PRD-NEXT P4-2 | green |
+| `TYPE1-014` | hint replacement (`OtherSubr 3` + `pop` + `callsubr`) | PRD-NEXT P4-2 | green |
+| `TYPE1-015` | flex via `OtherSubrs 1/2/0` + `pop` + `setcurrentpoint` emits two cubics | PRD-NEXT P4-2 | green |
+| `TYPE1-016` | `sbw`, `div`, `dotsection`, `vstem3`/`hstem3`, unknown ops tolerated | PRD-NEXT P4-2 | green |
+| `TYPE1-017` | `seac` composite closes open own/base/accent contours; accent curve offset | PRD-NEXT P4-2 | green |
+| `TYPE1-018` | `.notdef` forced to GID 0 | PRD-NEXT P4-2 | green |
+| `TYPE1-019` | PFB (`0x80`) segment framing is unwrapped | PRD-NEXT P4-2 | green |
+| `TYPE1-020` | an ASCII-hex eexec block decodes and parses | PRD-NEXT P4-2 | green |
+| `TYPE1-021` | `/FontMatrix` variants drive upem (scale, sign, missing, bracket-less, out-of-range) | PRD-NEXT P4-2 | green |
+| `TYPE1-022` | builtin `/Encoding` maps codes to non-AGL names; malformed `dup` entries skipped | PRD-NEXT P4-2 | green |
+| `TYPE1-023` | no custom `/Encoding` array → no builtin table (`glyph_for_code` None) | PRD-NEXT P4-2 | green |
+| `TYPE1-024` | `/lenIV -1` (negative) falls back to the default 4 | PRD-NEXT P4-2 | green |
+| `TYPE1-025` | `outline` for an out-of-range GID draws nothing | PRD-NEXT P4-2 | green |
+| `TYPE1-026` | failure inputs (garbage, truncated eexec, empty CharStrings) → None | PRD-NEXT P4-2 | green |
+| `TYPE1-027` | a well-formed standard `256 array … put` builtin encoding maps every code | PRD-NEXT P4-2 | green |
+| `TYPE1-028` | a degenerate flex (< 7 points, in-flex vmoveto/hmoveto) falls back to a line | PRD-NEXT P4-2 | green |
+
 | `OCG-READ-INTENT` | reads `/Intent` (defaults to View) | PRD §7 | green |
 | `OCG-READ-UI-CONFIG` | `layer_ui_configs` rows (number/text/depth/type/on/locked) | PRD §7 | green |
 | `OCG-READ-ORDER-LABEL` | `/Order` nesting-label rows | PRD §7 | green |
