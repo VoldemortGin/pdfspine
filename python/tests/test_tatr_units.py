@@ -88,11 +88,15 @@ def test_tatr_043_normalized_display_roundtrip(rotation):
 
 # --- TATR-044: page->image derives unrotated size when absent ---
 def test_tatr_044_page_box_to_image_derives_unrotated_size():
-    rotated = _rendered(page_bbox=(0.0, 0.0, 100.0, 200.0), rotation=90, unrotated_size=None)
+    rotated = _rendered(
+        page_bbox=(0.0, 0.0, 100.0, 200.0), rotation=90, unrotated_size=None
+    )
     assert _tatr._page_box_to_image((10, 20, 30, 40), rotated) == pytest.approx(
         (40.0, 140.0, 80.0, 180.0)
     )
-    upright = _rendered(page_bbox=(0.0, 0.0, 100.0, 200.0), rotation=0, unrotated_size=None)
+    upright = _rendered(
+        page_bbox=(0.0, 0.0, 100.0, 200.0), rotation=0, unrotated_size=None
+    )
     assert _tatr._page_box_to_image((10, 20, 30, 40), upright) == pytest.approx(
         (20.0, 40.0, 60.0, 80.0)
     )
@@ -100,7 +104,9 @@ def test_tatr_044_page_box_to_image_derives_unrotated_size():
 
 # --- TATR-045: image->page inverts the rotated-size derivation ---
 def test_tatr_045_image_box_to_page_rotated_size():
-    rotated = _rendered(page_bbox=(0.0, 0.0, 100.0, 200.0), rotation=90, unrotated_size=None)
+    rotated = _rendered(
+        page_bbox=(0.0, 0.0, 100.0, 200.0), rotation=90, unrotated_size=None
+    )
     assert _tatr._image_box_to_page((40, 140, 80, 180), rotated) == pytest.approx(
         (10.0, 20.0, 30.0, 40.0)
     )
@@ -183,9 +189,15 @@ def test_tatr_050_model_kwargs_revision_logic(tmp_path):
     ("kwargs", "fragment"),
     [
         ({"platform_name": "darwin", "machine": "ppc"}, "Apple Silicon"),
-        ({"platform_name": "linux", "machine": "ppc64le", "libc_name": "glibc"}, "x86-64 or ARM64"),
+        (
+            {"platform_name": "linux", "machine": "ppc64le", "libc_name": "glibc"},
+            "x86-64 or ARM64",
+        ),
         ({"platform_name": "win32", "machine": "arm64"}, "Windows require x86-64"),
-        ({"platform_name": "linux", "machine": "x86_64", "libc_name": "musl"}, "glibc-based"),
+        (
+            {"platform_name": "linux", "machine": "x86_64", "libc_name": "musl"},
+            "glibc-based",
+        ),
     ],
 )
 def test_tatr_051_runtime_platform_error_edges(kwargs, fragment):
@@ -204,7 +216,12 @@ def test_tatr_052_missing_runtime_platform_branch(monkeypatch):
 
 # --- TATR-053: crop-edge detection and rotation remapping ---
 def test_tatr_053_structure_crop_edges_and_unrotate():
-    assert _tatr._structure_crop_edges([], (100, 100)) == {"left", "top", "right", "bottom"}
+    assert _tatr._structure_crop_edges([], (100, 100)) == {
+        "left",
+        "top",
+        "right",
+        "bottom",
+    }
     edges = _tatr._structure_crop_edges(
         [{"label": "table", "score": 0.9, "bbox": [0, 0, 50, 50]}], (100, 100)
     )
@@ -264,13 +281,15 @@ def test_tatr_057_guided_detection_matches_anchor():
     )
     detection = {"label": "table", "score": 0.9, "bbox": [100, 100, 200, 200]}
     anchors = [
-        [10, 10, 10, 10],          # zero area -> skipped
-        [0, 0, 1000, 1000],        # area ratio out of range -> skipped
-        [150, 150, 260, 260],      # containment too low -> skipped
-        [95, 95, 205, 205],        # best match
+        [10, 10, 10, 10],  # zero area -> skipped
+        [0, 0, 1000, 1000],  # area ratio out of range -> skipped
+        [150, 150, 260, 260],  # containment too low -> skipped
+        [95, 95, 205, 205],  # best match
     ]
     used: set[int] = set()
-    result, page_bbox, guided = _tatr._guided_detection(detection, anchors, rendered, used)
+    result, page_bbox, guided = _tatr._guided_detection(
+        detection, anchors, rendered, used
+    )
     assert guided is True
     assert used == {3}
     assert result["bbox"] == pytest.approx((95.0, 95.0, 205.0, 205.0))
@@ -292,7 +311,9 @@ def test_tatr_058_native_words_ocr_fallback():
         def get_textpage_ocr(self, dpi, language, engine):
             return "TP"
 
-    words, source = _tatr._native_words(OcrPage(), _tatr.TatrOptions(ocr_if_no_text=True))
+    words, source = _tatr._native_words(
+        OcrPage(), _tatr.TatrOptions(ocr_if_no_text=True)
+    )
     assert source == "pdfspine-ocr" and len(words) == 1
 
     class FailingOcrPage:
@@ -309,7 +330,9 @@ def test_tatr_058_native_words_ocr_fallback():
         def get_text(self, kind, sort=False, textpage=None):
             return []
 
-    words3, source3 = _tatr._native_words(TextPage(), _tatr.TatrOptions(ocr_if_no_text=False))
+    words3, source3 = _tatr._native_words(
+        TextPage(), _tatr.TatrOptions(ocr_if_no_text=False)
+    )
     assert words3 == [] and source3 == "pdfspine-native"
 
 
@@ -380,7 +403,9 @@ def test_tatr_060_render_page_callable_metadata(monkeypatch):
                 (1,),  # too short -> skipped
             ]
 
-    rendered = _tatr._render_page(CallablePage(), _tatr.TatrOptions(ocr_if_no_text=False))
+    rendered = _tatr._render_page(
+        CallablePage(), _tatr.TatrOptions(ocr_if_no_text=False)
+    )
     assert rendered.page_bbox == (0.0, 0.0, 100.0, 50.0)
     assert rendered.rotation == 0
     assert len(rendered.tokens) == 1
@@ -425,10 +450,29 @@ def test_tatr_061_render_page_error_and_degenerate_paths(monkeypatch):
 # --- TATR-062: table record skips malformed cells and spans-only bbox ---
 def test_tatr_062_table_record_skips_and_span_bbox():
     cells = [
-        {"row_nums": [0, 2], "column_nums": [0], "bbox": [0, 0, 10, 30]},  # non-contiguous rows
-        {"row_nums": [0], "column_nums": [0, 2], "bbox": [0, 0, 30, 10]},  # non-contiguous cols
-        {"row_nums": [0], "column_nums": [0], "bbox": [0, 0, 10, 10], "cell_text": "A", "header": True},
-        {"row_nums": [0], "column_nums": [0], "bbox": [0, 0, 10, 10], "cell_text": "B"},  # overlap
+        {
+            "row_nums": [0, 2],
+            "column_nums": [0],
+            "bbox": [0, 0, 10, 30],
+        },  # non-contiguous rows
+        {
+            "row_nums": [0],
+            "column_nums": [0, 2],
+            "bbox": [0, 0, 30, 10],
+        },  # non-contiguous cols
+        {
+            "row_nums": [0],
+            "column_nums": [0],
+            "bbox": [0, 0, 10, 10],
+            "cell_text": "A",
+            "header": True,
+        },
+        {
+            "row_nums": [0],
+            "column_nums": [0],
+            "bbox": [0, 0, 10, 10],
+            "cell_text": "B",
+        },  # overlap
         {"row_nums": [1], "column_nums": [1], "bbox": [10, 10, 10, 10]},  # zero area
     ]
     row_boxes = [(0, 0, 10, 10), (0, 10, 10, 20), (0, 20, 10, 30)]
@@ -441,7 +485,14 @@ def test_tatr_062_table_record_skips_and_span_bbox():
 
     # No structural boxes -> bbox comes from the accepted span rectangles.
     span_only = _tatr._TatrTableRecord(
-        [{"row_nums": [0], "column_nums": [0], "bbox": [0, 0, 10, 10], "cell_text": "X"}],
+        [
+            {
+                "row_nums": [0],
+                "column_nums": [0],
+                "bbox": [0, 0, 10, 10],
+                "cell_text": "X",
+            }
+        ],
         [],
         [],
         0.5,
@@ -454,8 +505,18 @@ def test_tatr_062_table_record_skips_and_span_bbox():
 # --- TATR-063: HTML rowspan/empty cells and empty markdown ---
 def test_tatr_063_table_record_html_and_markdown():
     cells = [
-        {"row_nums": [0, 1], "column_nums": [0], "bbox": [0, 0, 10, 20], "cell_text": "span"},
-        {"row_nums": [0], "column_nums": [1], "bbox": [10, 0, 20, 10], "cell_text": "a"},
+        {
+            "row_nums": [0, 1],
+            "column_nums": [0],
+            "bbox": [0, 0, 10, 20],
+            "cell_text": "span",
+        },
+        {
+            "row_nums": [0],
+            "column_nums": [1],
+            "bbox": [10, 0, 20, 10],
+            "cell_text": "a",
+        },
     ]
     row_boxes = [(0, 0, 20, 10), (0, 10, 20, 20)]
     column_boxes = [(0, 0, 10, 20), (10, 0, 20, 20)]
@@ -519,7 +580,9 @@ def test_tatr_064_table_from_structure_none_paths(monkeypatch):
     )
 
     # Unknown structure labels are dropped, but a valid table still builds.
-    objects = _structure_objects() + [{"label": "garbage", "score": 0.5, "bbox": [10, 10, 20, 20]}]
+    objects = _structure_objects() + [
+        {"label": "garbage", "score": 0.5, "bbox": [10, 10, 20, 20]}
+    ]
     assert _tatr._table_from_structure(objects, crop, rendered, 0.9, {}) is not None
 
     # A post-processing exception is swallowed into None.
@@ -527,13 +590,19 @@ def test_tatr_064_table_from_structure_none_paths(monkeypatch):
         raise ValueError("post-processing failed")
 
     monkeypatch.setattr(_tatr._postprocess, "table_structure_to_cells", boom)
-    assert _tatr._table_from_structure(_structure_objects(), crop, rendered, 0.9, {}) is None
+    assert (
+        _tatr._table_from_structure(_structure_objects(), crop, rendered, 0.9, {})
+        is None
+    )
 
     # No cells produced -> None.
     monkeypatch.setattr(
         _tatr._postprocess, "table_structure_to_cells", lambda *a, **k: ([], 0.0)
     )
-    assert _tatr._table_from_structure(_structure_objects(), crop, rendered, 0.9, {}) is None
+    assert (
+        _tatr._table_from_structure(_structure_objects(), crop, rendered, 0.9, {})
+        is None
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -755,7 +824,9 @@ def test_tatr_067_runtime_reports_checkpoint_load_failure(monkeypatch):
         pdfspine.PdfUnsupportedError, match="Could not load the pinned TATR checkpoints"
     ) as excinfo:
         _tatr._TransformersRuntime(
-            _tatr.TatrOptions(device="cpu"), _tatr.DETECTION_MODEL, _tatr.STRUCTURE_MODEL
+            _tatr.TatrOptions(device="cpu"),
+            _tatr.DETECTION_MODEL,
+            _tatr.STRUCTURE_MODEL,
         )
     assert "local cache only" in str(excinfo.value)
 
@@ -807,7 +878,9 @@ def test_tatr_069_find_tables_short_circuits(monkeypatch):
     monkeypatch.setattr(_tatr, "_render_page", lambda _p, _o: render)
 
     # A non-table detection is ignored.
-    non_table = _FakeRuntime([{"label": "no object", "score": 0.9, "bbox": [0, 0, 100, 100]}], [])
+    non_table = _FakeRuntime(
+        [{"label": "no object", "score": 0.9, "bbox": [0, 0, 100, 100]}], []
+    )
     finder2 = _tatr.find_tables(
         None,
         options={"native_line_guidance": False, "adaptive_crop": False},
@@ -816,10 +889,16 @@ def test_tatr_069_find_tables_short_circuits(monkeypatch):
     assert len(finder2) == 0
 
     # A sub-pixel detection cannot produce a crop.
-    tiny = _FakeRuntime([{"label": "table", "score": 0.9, "bbox": [0, 0, 0.5, 0.5]}], [])
+    tiny = _FakeRuntime(
+        [{"label": "table", "score": 0.9, "bbox": [0, 0, 0.5, 0.5]}], []
+    )
     finder3 = _tatr.find_tables(
         None,
-        options={"native_line_guidance": False, "adaptive_crop": False, "crop_padding": 0},
+        options={
+            "native_line_guidance": False,
+            "adaptive_crop": False,
+            "crop_padding": 0,
+        },
         _runtime=tiny,
     )
     assert len(finder3) == 0
@@ -833,9 +912,23 @@ def test_tatr_070_find_tables_adaptive_expansion(monkeypatch):
     captured: dict = {}
     original = _tatr._table_from_structure
 
-    def spy(objects, crop, rendered, detection_score, runtime_metadata, structure_threshold=0.5):
+    def spy(
+        objects,
+        crop,
+        rendered,
+        detection_score,
+        runtime_metadata,
+        structure_threshold=0.5,
+    ):
         captured.update(runtime_metadata)
-        return original(objects, crop, rendered, detection_score, runtime_metadata, structure_threshold)
+        return original(
+            objects,
+            crop,
+            rendered,
+            detection_score,
+            runtime_metadata,
+            structure_threshold,
+        )
 
     monkeypatch.setattr(_tatr, "_table_from_structure", spy)
 
@@ -847,7 +940,9 @@ def test_tatr_070_find_tables_adaptive_expansion(monkeypatch):
         [{"label": "table", "score": 0.9, "bbox": [20, 20, 180, 80]}], full_crop_table
     )
     _tatr.find_tables(
-        None, options={"native_line_guidance": False, "adaptive_crop": True}, _runtime=runtime
+        None,
+        options={"native_line_guidance": False, "adaptive_crop": True},
+        _runtime=runtime,
     )
     # Initial crop plus two adaptive expansions -> three recognize calls.
     assert runtime.recognize_calls == 3
@@ -864,9 +959,23 @@ def test_tatr_071_find_tables_line_guided(monkeypatch):
     captured: dict = {}
     original = _tatr._table_from_structure
 
-    def spy(objects, crop, rendered, detection_score, runtime_metadata, structure_threshold=0.5):
+    def spy(
+        objects,
+        crop,
+        rendered,
+        detection_score,
+        runtime_metadata,
+        structure_threshold=0.5,
+    ):
         captured.update(runtime_metadata)
-        return original(objects, crop, rendered, detection_score, runtime_metadata, structure_threshold)
+        return original(
+            objects,
+            crop,
+            rendered,
+            detection_score,
+            runtime_metadata,
+            structure_threshold,
+        )
 
     monkeypatch.setattr(_tatr, "_table_from_structure", spy)
 

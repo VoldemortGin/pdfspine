@@ -399,7 +399,9 @@ class TestModuleHelperBranches:
 # --------------------------------------------------------------------------- #
 # Property-based algebraic identities (fast, deterministic-bounded)
 # --------------------------------------------------------------------------- #
-_finite = st.floats(min_value=-1e4, max_value=1e4, allow_nan=False, allow_infinity=False)
+_finite = st.floats(
+    min_value=-1e4, max_value=1e4, allow_nan=False, allow_infinity=False
+)
 
 
 class TestGeometryProperties:

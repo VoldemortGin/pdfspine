@@ -374,8 +374,12 @@ def _toc_doc() -> pdfspine.Document:
 
 def test_docpy_009_set_toc_item_uri_goto_and_title() -> None:
     with _toc_doc() as doc:
-        doc.set_toc_item(0, kind=pdfspine.linkDest.LINK_URI, uri="https://ex.org", title="URI")
-        doc.set_toc_item(1, kind=pdfspine.linkDest.LINK_GOTO, pno=2, to=pdfspine.Point(72, 100))
+        doc.set_toc_item(
+            0, kind=pdfspine.linkDest.LINK_URI, uri="https://ex.org", title="URI"
+        )
+        doc.set_toc_item(
+            1, kind=pdfspine.linkDest.LINK_GOTO, pno=2, to=pdfspine.Point(72, 100)
+        )
         doc.set_toc_item(2, title="Renamed")  # title-only
         doc.set_toc_item(2, kind=None, title=None)  # no-op path
         toc = doc.get_toc()
@@ -409,9 +413,7 @@ def test_docpy_009_set_toc_item_errors_and_delete() -> None:
         with pytest.raises(ValueError, match="bad bookmark dest"):
             doc.set_toc_item(0, dest_dict={"kind": 0})
         with pytest.raises(ValueError, match="bad color value"):
-            doc.set_toc_item(
-                0, dest_dict={"kind": 2, "uri": "u", "color": (2, 2, 2)}
-            )
+            doc.set_toc_item(0, dest_dict={"kind": 2, "uri": "u", "color": (2, 2, 2)})
         # kind == LINK_NONE deletes (dims) the item.
         doc.set_toc_item(2, kind=pdfspine.linkDest.LINK_NONE)
         assert doc.get_toc()[2][2] == -1  # page reset on a neutralized item

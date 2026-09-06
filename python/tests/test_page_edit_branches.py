@@ -318,7 +318,9 @@ def test_docpy_034_shape_insert_text_needs_page() -> None:
         # A page-backed shape writes through to the page.
         shape = page.new_shape()
         assert shape.insert_text((20, 20), ["a", "b"]) == 2
-        assert isinstance(shape.insert_textbox(pdfspine.Rect(0, 0, 100, 80), ["x"]), float)
+        assert isinstance(
+            shape.insert_textbox(pdfspine.Rect(0, 0, 100, 80), ["x"]), float
+        )
 
         # A page-less shape raises for text emission.
         orphan = Shape(page._page.new_shape())
@@ -674,7 +676,9 @@ def test_docpy_046_add_highlight_quad_and_list() -> None:
     with pdfspine.open() as doc:
         page = doc.new_page(width=200, height=200)
         page.insert_text((20, 100), "highlighted")
-        page.add_highlight_annot(pdfspine.Quad((10, 90), (120, 90), (10, 110), (120, 110)))
+        page.add_highlight_annot(
+            pdfspine.Quad((10, 90), (120, 90), (10, 110), (120, 110))
+        )
         page.add_highlight_annot([pdfspine.Rect(10, 90, 60, 110)])
         assert len(list(page.annots())) == 2
 

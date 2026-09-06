@@ -101,7 +101,9 @@ def test_tatr_026_nms_metrics_and_zero_division():
     ]
     assert len(pp.nms(list(overlapping))) == 1
     assert len(pp.nms(list(overlapping), match_criteria="object1_overlap")) == 1
-    assert len(pp.nms(list(overlapping), match_criteria="iou", match_threshold=0.5)) == 1
+    assert (
+        len(pp.nms(list(overlapping), match_criteria="iou", match_threshold=0.5)) == 1
+    )
     # Degenerate object2 area -> ZeroDivisionError is swallowed, nothing removed.
     degenerate = [
         {"bbox": [0, 0, 10, 10], "score": 0.9},
@@ -158,7 +160,15 @@ def test_tatr_029_sort_ascending_and_overlaps_zero_area():
 # --- TATR-030: pruning content-free objects ---
 def test_tatr_030_remove_objects_without_content():
     objects = [{"bbox": [0, 0, 10, 10]}, {"bbox": [50, 50, 60, 60]}]
-    spans = [{"text": "hi", "bbox": [1, 1, 9, 9], "block_num": 0, "line_num": 0, "span_num": 0}]
+    spans = [
+        {
+            "text": "hi",
+            "bbox": [1, 1, 9, 9],
+            "block_num": 0,
+            "line_num": 0,
+            "span_num": 0,
+        }
+    ]
     pp.remove_objects_without_content(spans, objects)
     assert objects == [{"bbox": [0, 0, 10, 10]}]
 
@@ -380,10 +390,34 @@ def test_tatr_041_objects_to_cells_valid_and_invalid():
         {"label": 4, "score": 0.9, "bbox": [0, 50, 200, 100]},
     ]
     tokens = [
-        {"bbox": [10, 10, 50, 40], "text": "A", "block_num": 0, "line_num": 0, "span_num": 0},
-        {"bbox": [110, 10, 150, 40], "text": "B", "block_num": 0, "line_num": 0, "span_num": 1},
-        {"bbox": [10, 60, 50, 90], "text": "C", "block_num": 1, "line_num": 0, "span_num": 0},
-        {"bbox": [110, 60, 150, 90], "text": "D", "block_num": 1, "line_num": 0, "span_num": 1},
+        {
+            "bbox": [10, 10, 50, 40],
+            "text": "A",
+            "block_num": 0,
+            "line_num": 0,
+            "span_num": 0,
+        },
+        {
+            "bbox": [110, 10, 150, 40],
+            "text": "B",
+            "block_num": 0,
+            "line_num": 0,
+            "span_num": 1,
+        },
+        {
+            "bbox": [10, 60, 50, 90],
+            "text": "C",
+            "block_num": 1,
+            "line_num": 0,
+            "span_num": 0,
+        },
+        {
+            "bbox": [110, 60, 150, 90],
+            "text": "D",
+            "block_num": 1,
+            "line_num": 0,
+            "span_num": 1,
+        },
     ]
     structures, cells, confidence = pp.objects_to_cells(
         table, objects, tokens, class_map, thresholds
