@@ -8,9 +8,14 @@ mod common;
 
 use common::{blank_page, dict, name_obj, open, save_reopen};
 use pdf_core::object::Name;
-use pdf_core::ocg::{get_ocgs, layer_ui_configs, ocg_state};
+use pdf_core::ocg::{
+    get_layers, get_ocgs, get_ocmd, layer_config_count, layer_ui_configs, ocg_state,
+    select_layer_config, VeExpr,
+};
 use pdf_core::{DocumentStore, Object, StreamObj};
-use pdf_edit::ocg::{add_ocg, set_layer, set_layer_state, set_oc};
+use pdf_edit::ocg::{
+    add_layer, add_ocg, set_layer, set_layer_config_as_default, set_layer_state, set_oc, set_ocmd,
+};
 
 /// The catalog dict of `doc`, resolved through the overlay (reopen-safe).
 fn catalog(doc: &DocumentStore) -> pdf_core::Dict {
@@ -131,7 +136,7 @@ fn ocg_add_config_label() {
     assert_eq!(cfgs[0].text, "My Group");
     assert_eq!(cfgs[0].depth, 0);
     assert_eq!(cfgs[1].kind, "checkbox");
-    assert_eq!(cfgs[1].number, xref.num);
+    assert_eq!(cfgs[1].ocg, xref.num);
     assert_eq!(cfgs[1].depth, 1);
     assert_eq!(cfgs[1].text, "Inside");
 }
@@ -352,4 +357,277 @@ fn ocg_add_existing_ocproperties() {
     assert_eq!(ocgs.len(), 2);
     assert!(ocgs.contains_key(&first.num));
     assert!(ocgs.contains_key(&second.num));
+}
+
+// === OCG-LAYER-* / OCG-DEFAULT-* / OCG-OCMD-* / OCG-TOGGLE-RESETS-VIEW =====
+
+/// The `/D` config dict of `doc`, resolved through any reference.
+fn d_dict(doc: &DocumentStore) -> pdf_core::Dict {
+    let ocp = oc_properties(doc);
+    doc.resolve_dict_key(&ocp, &Name::new("D"))
+        .unwrap()
+        .unwrap()
+        .as_dict()
+        .cloned()
+        .unwrap()
+}
+
+/// The `/Configs[n]` dict of `doc`, resolved through any reference.
+fn config_n(doc: &DocumentStore, n: usize) -> pdf_core::Dict {
+    let ocp = oc_properties(doc);
+    let configs = doc
+        .resolve_dict_key(&ocp, &Name::new("Configs"))
+        .unwrap()
+        .unwrap();
+    let arr = configs.as_array().unwrap();
+    match &arr[n] {
+        Object::Dictionary(d) => d.clone(),
+        Object::Reference(r) => doc.resolve(*r).unwrap().as_dict().cloned().unwrap(),
+        other => panic!("unexpected /Configs entry: {other:?}"),
+    }
+}
+
+/// The object numbers in a config-dict array sub-key (`ON`/`OFF`).
+fn cfg_nums(d: &pdf_core::Dict, key: &str) -> Vec<u32> {
+    match d.get(&Name::new(key)) {
+        Some(Object::Array(a)) => a
+            .iter()
+            .filter_map(Object::as_reference)
+            .map(|r| r.num)
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+/// The `/Name` name string of `d`'s `key`, if present.
+fn name_str(d: &pdf_core::Dict, key: &str) -> Option<String> {
+    d.get(&Name::new(key))
+        .and_then(Object::as_name)
+        .map(|n| String::from_utf8_lossy(n.as_bytes()).into_owned())
+}
+
+/// Whether the catalog carries an `/OCProperties` entry.
+fn has_ocproperties(doc: &DocumentStore) -> bool {
+    catalog(doc).contains_key(&Name::new("OCProperties"))
+}
+
+/// OCG-LAYER-ADD: `add_layer` appends a direct `/OCConfig` to `/Configs`
+/// (`/BaseState /OFF`, `/ON` listing the requested OCGs), visible via
+/// `get_layers`.
+#[test]
+fn ocg_layer_add() {
+    let doc = open(&blank_page(612, 792));
+    let a = add_ocg(&doc, "A", true, &[], None).expect("a");
+    let _b = add_ocg(&doc, "B", true, &[], None).expect("b");
+
+    add_layer(&doc, "Config 1", Some("pdfspine"), &[a.num]).expect("add_layer");
+
+    let layers = get_layers(&doc);
+    assert_eq!(layers.len(), 1);
+    assert_eq!(layers[0].number, 0);
+    assert_eq!(layers[0].name.as_deref(), Some("Config 1"));
+    assert_eq!(layers[0].creator.as_deref(), Some("pdfspine"));
+    assert_eq!(layer_config_count(&doc), 1);
+
+    // The stored config is a direct dict with /BaseState /OFF and /ON [a].
+    let cfg = config_n(&doc, 0);
+    assert_eq!(name_str(&cfg, "BaseState").as_deref(), Some("OFF"));
+    assert_eq!(cfg_nums(&cfg, "ON"), vec![a.num]);
+}
+
+/// OCG-LAYER-ADD-CREATES-OCPROPS: `add_layer` on a doc without `/OCProperties`
+/// creates it (and wires the catalog entry).
+#[test]
+fn ocg_layer_add_creates_ocprops() {
+    let doc = open(&blank_page(612, 792));
+    assert!(!has_ocproperties(&doc), "no /OCProperties initially");
+
+    add_layer(&doc, "Cfg", None, &[]).expect("add_layer");
+
+    assert!(has_ocproperties(&doc), "/OCProperties created");
+    assert_eq!(layer_config_count(&doc), 1);
+    let layers = get_layers(&doc);
+    assert_eq!(layers[0].name.as_deref(), Some("Cfg"));
+    assert_eq!(layers[0].creator, None);
+    // No /Creator key is written when `creator` is None.
+    let cfg = config_n(&doc, 0);
+    assert!(!cfg.contains_key(&Name::new("Creator")), "no /Creator");
+}
+
+/// OCG-LAYER-ADD-DROPS-UNKNOWN: `on` xrefs not declared in `/OCGs` are dropped.
+#[test]
+fn ocg_layer_add_drops_unknown() {
+    let doc = open(&blank_page(612, 792));
+    let a = add_ocg(&doc, "A", true, &[], None).expect("a");
+
+    // 9999 is not a declared OCG → dropped; `a` is kept.
+    add_layer(&doc, "Cfg", None, &[a.num, 9999]).expect("add_layer");
+
+    let cfg = config_n(&doc, 0);
+    assert_eq!(cfg_nums(&cfg, "ON"), vec![a.num]);
+}
+
+/// OCG-LAYER-ADD-ROUNDTRIP: an added config survives save → reopen.
+#[test]
+fn ocg_layer_add_roundtrip() {
+    let doc = open(&blank_page(612, 792));
+    let a = add_ocg(&doc, "A", true, &[], None).expect("a");
+    add_layer(&doc, "Saved", Some("me"), &[a.num]).expect("add_layer");
+
+    let re = save_reopen(&doc);
+    let layers = get_layers(&re);
+    assert_eq!(layers.len(), 1);
+    assert_eq!(layers[0].name.as_deref(), Some("Saved"));
+    assert_eq!(layers[0].creator.as_deref(), Some("me"));
+}
+
+/// OCG-DEFAULT-SET: with the view on an alternate config, `set_layer_config_as_default`
+/// rewrites `/D` from the view (`/BaseState /OFF`, `/ON` = the on-set), deletes
+/// `/Configs`, and resets the view. Survives save → reopen.
+#[test]
+fn ocg_default_set() {
+    let doc = open(&blank_page(612, 792));
+    let a = add_ocg(&doc, "A", true, &[], None).expect("a"); // A on in /D
+    let b = add_ocg(&doc, "B", true, &[], None).expect("b"); // B on in /D
+    add_layer(&doc, "OnlyB", None, &[b.num]).expect("add_layer"); // base off, only B on
+
+    select_layer_config(&doc, Some(0)).expect("select alt");
+    assert!(!ocg_state(&doc, a.num), "A off under the alt config");
+    assert!(ocg_state(&doc, b.num), "B on under the alt config");
+
+    set_layer_config_as_default(&doc).expect("as_default");
+
+    // The view is reset and `/Configs` is gone.
+    assert!(get_layers(&doc).is_empty());
+    assert_eq!(layer_config_count(&doc), 0);
+    assert!(
+        !oc_properties(&doc).contains_key(&Name::new("Configs")),
+        "/Configs dropped"
+    );
+    // The new /D reflects the baked state.
+    let d = d_dict(&doc);
+    assert_eq!(name_str(&d, "BaseState").as_deref(), Some("OFF"));
+    assert_eq!(cfg_nums(&d, "ON"), vec![b.num]);
+    assert_eq!(name_str(&d, "Intent").as_deref(), Some("View"));
+    assert!(!ocg_state(&doc, a.num), "A off in the new /D");
+    assert!(ocg_state(&doc, b.num), "B on in the new /D");
+
+    let re = save_reopen(&doc);
+    assert!(get_layers(&re).is_empty());
+    assert!(!ocg_state(&re, a.num));
+    assert!(ocg_state(&re, b.num));
+}
+
+/// OCG-DEFAULT-NOOP: `set_layer_config_as_default` on a doc without
+/// `/OCProperties` is a harmless no-op (creates nothing).
+#[test]
+fn ocg_default_noop() {
+    let doc = open(&blank_page(612, 792));
+    set_layer_config_as_default(&doc).expect("no-op ok");
+    assert!(!has_ocproperties(&doc), "no /OCProperties created");
+    assert!(get_ocgs(&doc).is_empty());
+}
+
+/// OCG-OCMD-SET-NEW: `set_ocmd(0, …)` creates a new OCMD; `get_ocmd` reads it
+/// back.
+#[test]
+fn ocg_ocmd_set_new() {
+    let doc = open(&blank_page(612, 792));
+    let a = add_ocg(&doc, "A", true, &[], None).expect("a");
+    let b = add_ocg(&doc, "B", false, &[], None).expect("b");
+
+    let xref = set_ocmd(&doc, 0, Some(&[a.num, b.num]), Some("AnyOn"), None).expect("set_ocmd");
+    assert_ne!(xref, 0);
+
+    let info = get_ocmd(&doc, xref).expect("get_ocmd");
+    assert_eq!(info.xref, xref);
+    assert_eq!(info.ocgs, Some(vec![a.num, b.num]));
+    assert_eq!(info.policy.as_deref(), Some("AnyOn"));
+    assert_eq!(info.ve, None);
+}
+
+/// OCG-OCMD-SET-VE: an OCMD created with a `/VE` expression round-trips through
+/// `get_ocmd`.
+#[test]
+fn ocg_ocmd_set_ve() {
+    let doc = open(&blank_page(612, 792));
+    let a = add_ocg(&doc, "A", true, &[], None).expect("a");
+    let b = add_ocg(&doc, "B", false, &[], None).expect("b");
+
+    let ve = VeExpr::Op {
+        op: "Or".to_string(),
+        args: vec![
+            VeExpr::Ocg(a.num),
+            VeExpr::Op {
+                op: "Not".to_string(),
+                args: vec![VeExpr::Ocg(b.num)],
+            },
+        ],
+    };
+    let xref = set_ocmd(&doc, 0, None, None, Some(&ve)).expect("set_ocmd ve");
+
+    let info = get_ocmd(&doc, xref).expect("get_ocmd");
+    assert_eq!(info.ocgs, None, "no /OCGs written");
+    assert_eq!(info.policy, None);
+    assert_eq!(info.ve, Some(ve));
+}
+
+/// OCG-OCMD-SET-REPLACE: replacing an OCMD writes the whole dict — the previous
+/// `/OCGs` / `/P` are dropped.
+#[test]
+fn ocg_ocmd_set_replace() {
+    let doc = open(&blank_page(612, 792));
+    let a = add_ocg(&doc, "A", true, &[], None).expect("a");
+
+    let xref = set_ocmd(&doc, 0, Some(&[a.num]), Some("AllOn"), None).expect("create");
+    assert_eq!(
+        get_ocmd(&doc, xref).unwrap().policy.as_deref(),
+        Some("AllOn")
+    );
+
+    let ve = VeExpr::Op {
+        op: "Not".to_string(),
+        args: vec![VeExpr::Ocg(a.num)],
+    };
+    let same = set_ocmd(&doc, xref, None, None, Some(&ve)).expect("replace");
+    assert_eq!(same, xref, "replacing keeps the object number");
+
+    let after = get_ocmd(&doc, xref).unwrap();
+    assert_eq!(after.ocgs, None, "old /OCGs dropped");
+    assert_eq!(after.policy, None, "old /P dropped");
+    assert_eq!(after.ve, Some(ve));
+}
+
+/// OCG-OCMD-SET-BAD-XREF: `set_ocmd` on a non-OCMD object number is an error.
+#[test]
+fn ocg_ocmd_set_bad_xref() {
+    let doc = open(&blank_page(612, 792));
+    let a = add_ocg(&doc, "A", true, &[], None).expect("a");
+
+    // `a` is an /Type /OCG, not an OCMD.
+    let err = set_ocmd(&doc, a.num, Some(&[a.num]), None, None).unwrap_err();
+    assert!(matches!(
+        err,
+        pdf_core::Error::InvalidArgument("bad xref or not an OCMD")
+    ));
+}
+
+/// OCG-TOGGLE-RESETS-VIEW: a `/D`-mutating write (`set_layer`) resets the
+/// in-memory layer view back to the default `/D`.
+#[test]
+fn ocg_toggle_resets_view() {
+    let doc = open(&blank_page(612, 792));
+    let a = add_ocg(&doc, "A", true, &[], None).expect("a");
+    let b = add_ocg(&doc, "B", true, &[], None).expect("b");
+    add_layer(&doc, "Alt", None, &[b.num]).expect("add_layer");
+
+    select_layer_config(&doc, Some(0)).expect("select");
+    assert_eq!(doc.layer_view().config, Some(0));
+
+    set_layer(&doc, &[a.num], &[]).expect("set_layer");
+    assert_eq!(
+        doc.layer_view().config,
+        None,
+        "a /D-mutating write resets the view to /D"
+    );
 }

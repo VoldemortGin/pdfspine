@@ -12,8 +12,18 @@
 //! - [`set_oc`] binds a target object (an XObject, annotation, …) to an OCG by
 //!   setting its `/OC` entry.
 //! - [`set_layer`] is a bulk ON/OFF toggle over several OCGs at once.
+//! - [`add_layer`] appends an alternate configuration to `/OCProperties
+//!   /Configs`; [`set_layer_config_as_default`] rewrites `/D` from the store's
+//!   in-memory layer view and drops `/Configs` (PyMuPDF `switch_layer(...,
+//!   as_default=True)`).
+//! - [`set_ocmd`] creates or replaces an Optional Content Membership
+//!   Dictionary (`/OCGs` + `/P`, or a `/VE` visibility expression).
+//!
+//! The writers that change `/D` reset the store's in-memory
+//! [`pdf_core::ocg::LayerView`] so the written state is what renders next.
 
 use pdf_core::object::Name;
+use pdf_core::ocg::{LayerView, VeExpr};
 use pdf_core::{Dict, DocumentStore, ObjRef, Object, PdfString, StringKind};
 
 /// Creates a new Optional Content Group named `name` and registers it in the
@@ -95,6 +105,7 @@ pub fn add_ocg(
     // Write /OCProperties back, creating the catalog entry if needed.
     write_oc_properties(doc, &mut catalog, ocp)?;
     doc.update_object(root, Object::Dictionary(catalog))?;
+    doc.set_layer_view(LayerView::default());
     Ok(ocg_ref)
 }
 
@@ -160,7 +171,148 @@ pub fn set_layer(doc: &DocumentStore, on: &[u32], off: &[u32]) -> pdf_core::Resu
 
     write_oc_properties(doc, &mut catalog, ocp)?;
     doc.update_object(root, Object::Dictionary(catalog))?;
+    doc.set_layer_view(LayerView::default());
     Ok(())
+}
+
+/// Appends an alternate layer configuration to `/OCProperties /Configs`
+/// (PyMuPDF `add_layer(name, creator, on)`): a direct `/OCConfig` dictionary
+/// with `/Name`, an optional `/Creator`, `/BaseState /OFF` and `/ON` listing
+/// the OCGs of `on` that are declared in `/OCGs` (unknown numbers are dropped,
+/// like PyMuPDF). `/OCProperties` (with an empty `/D`) is created when absent.
+///
+/// # Errors
+///
+/// As [`add_ocg`].
+pub fn add_layer(
+    doc: &DocumentStore,
+    name: &str,
+    creator: Option<&str>,
+    on: &[u32],
+) -> pdf_core::Result<()> {
+    let root = doc
+        .root()
+        .ok_or(pdf_core::Error::InvalidArgument("document has no /Root"))?;
+    let mut catalog = catalog_dict(doc)?;
+    let mut ocp = oc_properties_dict(doc, &catalog)?;
+
+    let known: Vec<u32> = array_value(doc, &ocp, "OCGs")
+        .iter()
+        .filter_map(Object::as_reference)
+        .map(|r| r.num)
+        .collect();
+    let mut on_refs: Vec<u32> = Vec::new();
+    for &num in on {
+        if known.contains(&num) && !on_refs.contains(&num) {
+            on_refs.push(num);
+        }
+    }
+
+    let mut cfg = Dict::new();
+    cfg.insert(Name::new("Name"), Object::String(encode_text(name)));
+    if let Some(creator) = creator {
+        cfg.insert(Name::new("Creator"), Object::String(encode_text(creator)));
+    }
+    cfg.insert(Name::new("BaseState"), Object::Name(Name::new("OFF")));
+    cfg.insert(Name::new("ON"), refs_array(&on_refs));
+
+    let mut configs = array_value(doc, &ocp, "Configs");
+    configs.push(Object::Dictionary(cfg));
+    ocp.insert(Name::new("Configs"), Object::Array(configs));
+
+    write_oc_properties(doc, &mut catalog, ocp)?;
+    doc.update_object(root, Object::Dictionary(catalog))?;
+    Ok(())
+}
+
+/// Makes the configuration currently selected in the store's in-memory layer
+/// view the document default (MuPDF `pdf_set_layer_config_as_default`; PyMuPDF
+/// `switch_layer(n, as_default=True)`): `/D` gets `/BaseState /OFF`, `/ON`
+/// listing every OCG that is ON in the view (in `/OCGs` order) and `/Intent
+/// /View`; its `/OFF`, `/AS`, `/Name`, `/Creator`, `/RBGroups` and `/Locked`
+/// are removed and `/Configs` is deleted. `/D /Order` is kept as is (MuPDF
+/// flattens it). The view is then reset to the (rewritten) default.
+///
+/// # Errors
+///
+/// As [`add_ocg`]. A document with no `/OCProperties` or no `/D` is left
+/// unchanged.
+pub fn set_layer_config_as_default(doc: &DocumentStore) -> pdf_core::Result<()> {
+    let root = doc
+        .root()
+        .ok_or(pdf_core::Error::InvalidArgument("document has no /Root"))?;
+    let mut catalog = catalog_dict(doc)?;
+    let Some(mut ocp) = existing_oc_properties(doc, &catalog) else {
+        return Ok(());
+    };
+    if !ocp.contains_key(&Name::new("D")) {
+        return Ok(());
+    }
+    let on: Vec<u32> = pdf_core::ocg::get_ocgs(doc)
+        .into_iter()
+        .filter(|(_, info)| info.on)
+        .map(|(num, _)| num)
+        .collect();
+
+    let mut d = config_d_dict(doc, &ocp);
+    d.insert(Name::new("BaseState"), Object::Name(Name::new("OFF")));
+    d.insert(Name::new("ON"), refs_array(&on));
+    d.insert(Name::new("Intent"), Object::Name(Name::new("View")));
+    for key in ["OFF", "AS", "Name", "Creator", "RBGroups", "Locked"] {
+        d.remove(&Name::new(key));
+    }
+    ocp.insert(Name::new("D"), Object::Dictionary(d));
+    ocp.remove(&Name::new("Configs"));
+
+    write_oc_properties(doc, &mut catalog, ocp)?;
+    doc.update_object(root, Object::Dictionary(catalog))?;
+    doc.set_layer_view(LayerView::default());
+    Ok(())
+}
+
+/// Creates (`xref == 0`) or replaces an Optional Content Membership Dictionary
+/// (PyMuPDF `set_ocmd`): `/Type /OCMD`, plus `/OCGs` when `ocgs` is a
+/// non-empty list, `/P` when `policy` is given (`AnyOn` / `AllOn` / `AnyOff` /
+/// `AllOff`, passed verbatim) and `/VE` when `ve` is given. Returns the OCMD's
+/// object number. Replacing writes the whole dictionary (an omitted entry is
+/// dropped).
+///
+/// # Errors
+///
+/// [`pdf_core::Error::InvalidArgument`] when `xref != 0` does not name an
+/// existing `/Type /OCMD` dictionary; propagates object-edit errors.
+pub fn set_ocmd(
+    doc: &DocumentStore,
+    xref: u32,
+    ocgs: Option<&[u32]>,
+    policy: Option<&str>,
+    ve: Option<&VeExpr>,
+) -> pdf_core::Result<u32> {
+    let mut ocmd = Dict::new();
+    ocmd.insert(Name::new("Type"), Object::Name(Name::new("OCMD")));
+    if let Some(list) = ocgs.filter(|l| !l.is_empty()) {
+        ocmd.insert(Name::new("OCGs"), refs_array(list));
+    }
+    if let Some(p) = policy {
+        ocmd.insert(Name::new("P"), Object::Name(Name::new(p)));
+    }
+    if let Some(expr) = ve {
+        ocmd.insert(Name::new("VE"), ve_object(expr));
+    }
+    if xref == 0 {
+        return Ok(doc.add_object(Object::Dictionary(ocmd))?.num);
+    }
+    let existing = doc.get_object(xref, 0)?;
+    let is_ocmd = existing.as_dict().is_some_and(|d| {
+        d.get(&Name::new("Type"))
+            .and_then(Object::as_name)
+            .is_some_and(|n| n.as_bytes() == b"OCMD")
+    });
+    if !is_ocmd {
+        return Err(pdf_core::Error::InvalidArgument("bad xref or not an OCMD"));
+    }
+    doc.update_object(ObjRef::new(xref, 0), Object::Dictionary(ocmd))?;
+    Ok(xref)
 }
 
 /// Binds the object `target` to the OCG `ocg` by setting its `/OC` entry
@@ -281,6 +433,20 @@ fn refs_array(nums: &[u32]) -> Object {
             .map(|&num| Object::Reference(ObjRef::new(num, 0)))
             .collect(),
     )
+}
+
+/// Serializes a visibility expression as its `/VE` array
+/// (`[/And|/Or|/Not operand …]`, OCGs as gen-0 references).
+fn ve_object(expr: &VeExpr) -> Object {
+    match expr {
+        VeExpr::Ocg(num) => Object::Reference(ObjRef::new(*num, 0)),
+        VeExpr::Op { op, args } => {
+            let mut items = Vec::with_capacity(args.len() + 1);
+            items.push(Object::Name(Name::new(op)));
+            items.extend(args.iter().map(ve_object));
+            Object::Array(items)
+        }
+    }
 }
 
 /// Encodes a layer name / label as a PDF text string (ASCII literal, else

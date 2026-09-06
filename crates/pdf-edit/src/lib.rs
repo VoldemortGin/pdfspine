@@ -67,7 +67,9 @@ pub use image::{insert_image_jpeg, insert_image_rgb};
 pub use links::{delete_link, get_links, insert_link, update_link, Link, LinkKind};
 pub use merge::{extract_pages, insert_pdf, show_pdf_page, InsertOptions};
 pub use metadata::{del_xml_metadata, get_xml_metadata, set_metadata, set_xml_metadata};
-pub use ocg::{add_ocg, set_layer, set_layer_state, set_oc};
+pub use ocg::{
+    add_layer, add_ocg, set_layer, set_layer_config_as_default, set_layer_state, set_oc, set_ocmd,
+};
 pub use page_content::{
     clean_contents, delete_image, get_oc as page_get_oc, replace_image_jpeg, set_oc as page_set_oc,
     wrap_contents,

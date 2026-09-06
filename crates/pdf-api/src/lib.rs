@@ -91,7 +91,7 @@ pub use image_table::{
 // Optional-content (OCG / layers, M7): the read/write surface used by the
 // `Document` OCG methods below (PRD §7). `OcgInfo`/`LayerUiConfig` are returned
 // by value so the bindings depend only on `pdf-api`.
-pub use pdf_core::ocg::{LayerUiConfig, OcgInfo};
+pub use pdf_core::ocg::{LayerConfig, LayerUiConfig, LayerView, OcgInfo, OcmdInfo, VeExpr};
 
 // SVG export (M7): page → standalone SVG string (PRD §7).
 pub use svg::page_get_svg_image;
@@ -1497,6 +1497,100 @@ impl Document {
     pub fn set_oc(&self, target: u32, ocg: u32) -> Result<()> {
         pdf_edit::set_oc(&self.store, ObjRef::new(target, 0), ObjRef::new(ocg, 0))?;
         Ok(())
+    }
+
+    /// The alternate layer configurations in `/OCProperties /Configs` (PyMuPDF
+    /// `Document.get_layers`).
+    #[must_use]
+    pub fn get_layers(&self) -> Vec<LayerConfig> {
+        pdf_core::ocg::get_layers(&self.store)
+    }
+
+    /// The number of alternate layer configurations (the valid
+    /// `switch_layer` numbers).
+    #[must_use]
+    pub fn layer_config_count(&self) -> usize {
+        pdf_core::ocg::layer_config_count(&self.store)
+    }
+
+    /// Selects the layer configuration used for rendering / extraction
+    /// (PyMuPDF `Document.switch_layer` without `as_default`): `None` for the
+    /// default `/D`, `Some(n)` for `/Configs[n]`. In-memory only.
+    ///
+    /// # Errors
+    ///
+    /// A typed [`Error`] when `Some(n)` names no configuration.
+    pub fn select_layer_config(&self, number: Option<usize>) -> Result<()> {
+        pdf_core::ocg::select_layer_config(&self.store, number)?;
+        Ok(())
+    }
+
+    /// Makes the selected layer configuration the document default and drops
+    /// `/Configs` (PyMuPDF `Document.switch_layer(n, as_default=True)`).
+    ///
+    /// # Errors
+    ///
+    /// A typed [`Error`] from the object-edit path.
+    pub fn set_layer_config_as_default(&self) -> Result<()> {
+        pdf_edit::set_layer_config_as_default(&self.store)?;
+        Ok(())
+    }
+
+    /// Sets (`action` 0), toggles (1) or clears (2) layer-panel row `number`
+    /// in the in-memory view (PyMuPDF `Document.set_layer_ui_config`).
+    ///
+    /// # Errors
+    ///
+    /// A typed [`Error`] when `number` is out of range.
+    pub fn set_layer_ui_config(&self, number: usize, action: u8) -> Result<()> {
+        pdf_core::ocg::set_layer_ui_config(&self.store, number, action)?;
+        Ok(())
+    }
+
+    /// Appends an alternate layer configuration (PyMuPDF `Document.add_layer`).
+    ///
+    /// # Errors
+    ///
+    /// A typed [`Error`] from the object-edit path.
+    pub fn add_layer(&self, name: &str, creator: Option<&str>, on: &[u32]) -> Result<()> {
+        pdf_edit::add_layer(&self.store, name, creator, on)?;
+        Ok(())
+    }
+
+    /// The `/OC` object number of the image / form XObject `xref`, or 0
+    /// (PyMuPDF `Document.get_oc`).
+    ///
+    /// # Errors
+    ///
+    /// A typed [`Error`] when `xref` is not an image / form XObject.
+    pub fn get_oc(&self, xref: u32) -> Result<u32> {
+        Ok(pdf_core::ocg::get_oc(&self.store, xref)?)
+    }
+
+    /// Reads the Optional Content Membership Dictionary `xref` (PyMuPDF
+    /// `Document.get_ocmd`).
+    ///
+    /// # Errors
+    ///
+    /// A typed [`Error`] when `xref` is not a `/Type /OCMD` dictionary.
+    pub fn get_ocmd(&self, xref: u32) -> Result<OcmdInfo> {
+        Ok(pdf_core::ocg::get_ocmd(&self.store, xref)?)
+    }
+
+    /// Creates (`xref == 0`) or replaces an OCMD, returning its object number
+    /// (PyMuPDF `Document.set_ocmd`).
+    ///
+    /// # Errors
+    ///
+    /// A typed [`Error`] when `xref != 0` is not an existing OCMD.
+    pub fn set_ocmd(
+        &self,
+        xref: u32,
+        ocgs: Option<&[u32]>,
+        policy: Option<&str>,
+        ve: Option<&VeExpr>,
+    ) -> Result<u32> {
+        Ok(pdf_edit::set_ocmd(&self.store, xref, ocgs, policy, ve)?)
     }
 
     // --- page navigation / identity (PRD §8.7 / §7) ----------------------

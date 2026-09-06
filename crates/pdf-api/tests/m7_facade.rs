@@ -4,7 +4,7 @@
 //! `Document` OCG read/write round-trip, and `page_get_svg_image`. All fixtures
 //! are self-generated in-test (PRD §10).
 
-use pdf_api::{Document, Matrix, Strategy, TableOptions};
+use pdf_api::{Document, Matrix, Strategy, TableOptions, VeExpr};
 
 /// A complete classic-xref PDF from `(num, body)` object pairs + trailer keys.
 fn build_pdf(objects: &[(u32, &[u8])], root: u32, extra_trailer: &str) -> Vec<u8> {
@@ -195,4 +195,135 @@ fn svg_api_001_get_svg_image_wellformed() {
     );
     assert!(svg.contains("<svg"), "has an <svg> root");
     assert!(svg.contains("</svg>"), "closed <svg>");
+}
+
+/// A one-page PDF with a Form XObject (object 6) wired into the page resources
+/// under `/Fm0` — a `get_oc` / `set_oc` target.
+fn form_xobject_pdf() -> Vec<u8> {
+    build_pdf(
+        &[
+            (1, b"<< /Type /Catalog /Pages 2 0 R >>"),
+            (2, b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>"),
+            (
+                3,
+                b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Resources << /XObject << /Fm0 6 0 R >> >> >>",
+            ),
+            (
+                6,
+                b"<< /Type /XObject /Subtype /Form /BBox [0 0 100 100] /Length 3 >>\nstream\nq Q\nendstream",
+            ),
+        ],
+        1,
+        "",
+    )
+}
+
+#[test]
+fn ocg_api_003_add_layer_get_layers_roundtrip() {
+    let doc = Document::open_bytes(blank_pdf()).expect("open");
+    let a = doc.add_ocg("A", true, &[], None).expect("a");
+    let _b = doc.add_ocg("B", true, &[], None).expect("b");
+    assert_eq!(doc.layer_config_count(), 0, "no configs yet");
+
+    doc.add_layer("Cfg", Some("me"), &[a]).expect("add_layer");
+    assert_eq!(doc.layer_config_count(), 1);
+    let layers = doc.get_layers();
+    assert_eq!(layers.len(), 1);
+    assert_eq!(layers[0].number, 0);
+    assert_eq!(layers[0].name.as_deref(), Some("Cfg"));
+    assert_eq!(layers[0].creator.as_deref(), Some("me"));
+
+    let bytes = doc
+        .save_to_bytes(&pdf_core::SaveOptions::default().with_garbage(1))
+        .expect("save");
+    let re = Document::open_bytes(bytes).expect("reopen");
+    assert_eq!(re.layer_config_count(), 1);
+    assert_eq!(re.get_layers()[0].name.as_deref(), Some("Cfg"));
+}
+
+#[test]
+fn ocg_api_004_select_config_and_set_default() {
+    let doc = Document::open_bytes(blank_pdf()).expect("open");
+    let a = doc.add_ocg("A", true, &[], None).expect("a");
+    let b = doc.add_ocg("B", true, &[], None).expect("b");
+    doc.add_layer("OnlyB", None, &[b]).expect("add_layer"); // base off, only B on
+
+    // Default `/D`: both on.
+    assert!(doc.ocg_state(a));
+    assert!(doc.ocg_state(b));
+
+    // Selecting the alternate config flips the read state.
+    doc.select_layer_config(Some(0)).expect("select");
+    assert!(!doc.ocg_state(a), "A off under the alternate config");
+    assert!(doc.ocg_state(b));
+    let ocgs = doc.get_ocgs();
+    assert!(!ocgs[&a].on);
+    assert!(ocgs[&b].on);
+
+    // An out-of-range config index errors.
+    assert!(doc.select_layer_config(Some(9)).is_err());
+
+    // Baking the alternate config as default drops `/Configs`.
+    doc.select_layer_config(Some(0)).expect("reselect");
+    doc.set_layer_config_as_default().expect("as_default");
+    assert!(doc.get_layers().is_empty());
+    assert_eq!(doc.layer_config_count(), 0);
+    assert!(!doc.ocg_state(a), "A off in the new /D");
+    assert!(doc.ocg_state(b), "B on in the new /D");
+}
+
+#[test]
+fn ocg_api_005_set_layer_ui_config() {
+    let doc = Document::open_bytes(blank_pdf()).expect("open");
+    let a = doc.add_ocg("A", true, &[], None).expect("a");
+    let b = doc.add_ocg("B", false, &[], None).expect("b");
+
+    let rows = doc.layer_ui_configs();
+    assert_eq!(rows.len(), 2, "row0 -> A, row1 -> B");
+    assert_eq!(rows[0].ocg, a);
+    assert_eq!(rows[1].ocg, b);
+
+    // Row 0 (A) OFF, row 1 (B) ON.
+    doc.set_layer_ui_config(0, 2).expect("A off");
+    assert!(!doc.ocg_state(a));
+    doc.set_layer_ui_config(1, 0).expect("B on");
+    assert!(doc.ocg_state(b));
+
+    // Out of range errors.
+    assert!(doc.set_layer_ui_config(99, 0).is_err());
+}
+
+#[test]
+fn ocg_api_006_set_ocmd_get_ocmd_get_oc() {
+    let doc = Document::open_bytes(form_xobject_pdf()).expect("open");
+    let a = doc.add_ocg("A", true, &[], None).expect("a");
+    let b = doc.add_ocg("B", false, &[], None).expect("b");
+
+    // Create an OCMD over [A, B] with /P /AnyOn.
+    let ocmd = doc
+        .set_ocmd(0, Some(&[a, b]), Some("AnyOn"), None)
+        .expect("set_ocmd");
+    assert_ne!(ocmd, 0);
+
+    // Bind the form XObject (object 6) to the OCMD, then read it back via get_oc.
+    doc.set_oc(6, ocmd).expect("set_oc");
+    assert_eq!(doc.get_oc(6).expect("get_oc"), ocmd);
+
+    let info = doc.get_ocmd(ocmd).expect("get_ocmd");
+    assert_eq!(info.xref, ocmd);
+    assert_eq!(info.ocgs, Some(vec![a, b]));
+    assert_eq!(info.policy.as_deref(), Some("AnyOn"));
+    assert_eq!(info.ve, None);
+
+    // Replacing the OCMD with a /VE expression round-trips (old /OCGs / /P gone).
+    let ve = VeExpr::Op {
+        op: "Not".to_string(),
+        args: vec![VeExpr::Ocg(b)],
+    };
+    let same = doc.set_ocmd(ocmd, None, None, Some(&ve)).expect("replace");
+    assert_eq!(same, ocmd);
+    let after = doc.get_ocmd(ocmd).expect("get_ocmd again");
+    assert_eq!(after.ocgs, None);
+    assert_eq!(after.policy, None);
+    assert_eq!(after.ve, Some(ve));
 }
