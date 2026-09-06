@@ -30,6 +30,17 @@ feature-complete, but the public API and on-disk formats may still change.
   columns survive as space padding, `pdftotext -layout` style. A
   pdfspine-original extension, outside the fitz-compat surface (`COMPAT.toml`
   unchanged).
+- **`pdf-typeset`: PowerPoint-style font-independent line spacing.**
+  `LineHeightRule::{FontMetrics, FontIndependent}` plus
+  `Typesetter::set_line_height_rule()` / `line_height_rule()`: under
+  `FontIndependent` a line is 1.2 × the largest font size on it with the
+  baseline 1.0 em below the line top (the PowerPoint rule LibreOffice Impress
+  emulates for ppt/pptx), engine-wide — flow, text boxes, table cells and the
+  measure API agree. The default (`FontMetrics`, real face metrics) is
+  byte-for-byte unchanged. LibreOffice-oracle SSIM of the pptx sample fixture
+  0.92 → 0.98 (docx unchanged at 0.98). Crate-level Rust API consumed by
+  docspine / pptspine; outside the fitz-compat surface (`COMPAT.toml`
+  unchanged).
 - **PDF → Markdown export.** `Page.to_markdown()`, `Document.to_markdown()` and
   `Document.save_markdown()` render a page or a whole document as Markdown for
   RAG / LLM pipelines: headings from font-size clustering, lists, GFM tables via

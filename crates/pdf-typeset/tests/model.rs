@@ -4,8 +4,8 @@
 use pdf_typeset::ops::{FaceId, Fill, LineCap, LineJoin, Op, PageOps, PathSeg, Stroke};
 use pdf_typeset::{
     Align, Block, BorderEdge, CellBorders, ColumnWidth, ExportResult, ExportWarning, ImageSpec,
-    LineSpacing, ListLabel, Matrix, ParaProps, Rect, Rgb, Run, RunStyle, TableCell, TableRow,
-    TableSpec, TextBoxSpec, VAnchor,
+    LineHeightRule, LineSpacing, ListLabel, Matrix, ParaProps, Rect, Rgb, Run, RunStyle, TableCell,
+    TableRow, TableSpec, TextBoxSpec, VAnchor,
 };
 
 #[test]
@@ -29,6 +29,11 @@ fn paragraph_props_default_to_word_neutral_values() {
     assert_eq!(props.indent_right, 0.0);
     assert_eq!(props.first_line_indent, 0.0);
     assert_eq!(props.list, None);
+}
+
+#[test]
+fn line_height_rule_defaults_to_font_metrics() {
+    assert_eq!(LineHeightRule::default(), LineHeightRule::FontMetrics);
 }
 
 #[test]

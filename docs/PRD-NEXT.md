@@ -942,6 +942,28 @@ lists why · files · effort · **Acceptance**, the green condition that means "
     the word); adjacent same-URI runs merge to one rect while distinct URIs stay separate; a hard-broken
     linked run yields **two** vertically-separated rects (one per line); an unlinked run produces no
     annotation. `cargo test -p pdf-typeset` + clippy `-D warnings` green.
+- **TS-12 · Font-independent line spacing (PowerPoint / Impress rule)** — ✅ DONE 2026-09-05 · *S*. The
+  pptx LO-oracle gap (0.92 vs docx 0.98) was measured to come from line-box metrics, not fonts or wrapping:
+  PowerPoint's 100 % line spacing is **font-independent** — line height = 1.2 × font size with the baseline
+  1.0 × size below the line top (ascent 1.0 em / descent 0.2 em), which LibreOffice Impress emulates for
+  ppt/pptx (`ImplCalculateFontIndependentLineSpacing`); the engine used real hhea metrics everywhere
+  (Liberation Sans 1.15 em, baseline 0.94 em), so every slide line drifted 1.1–3.8 pt (title 1.7 pt).
+  New `LineHeightRule { FontMetrics (default), FontIndependent }` + `Typesetter::set_line_height_rule` /
+  `line_height_rule()`: one match site in `flow.rs::line_metrics` serves flow, text boxes, table cells and
+  the TS-10 measure API alike (largest size on the line; `LineSpacing` multiple / exact / at-least apply on
+  top; decorations / highlight / link rects keep the face metrics). ppt-render sets it once per render;
+  docspine leaves the default — `FontMetrics` output is byte-identical (3 of 4 fixtures + refs unchanged).
+  `typeset-lo-slide.pdf` opts in (its `.ssimref` regenerated). **Acceptance:** LO oracle (LibreOffice
+  26.8.0.3, dpi 100) pptx **0.9228 → 0.9777**, docx unchanged 0.9815; slide baselines LO 197.97 / 227.57 /
+  257.16 / 286.75 vs engine 198.0 / 227.6 / 257.2 / 286.8 (title 87.99 vs 88.0); CI typeset gates green
+  (read-back 4/4 order / F1 = 1.0; SSIM 5/5 — box 0.9999, others 1.0); `cargo test -p pdf-typeset`
+  138 → 149 (11 new: default unchanged, baseline, pitch + read-back, mixed sizes, empty paragraph, measure
+  metrics under Multiple / Exact / AtLeast, paged flow, table row height, middle-anchor measure ⇄ layout
+  agreement, rule change after layout). **Next candidates** (docspine / pptspine gap survey, 2026-09-05):
+  docx paragraph borders / shading (`pBdr` / `shd` — parsed by docspine, no `ParaProps` slot); run-level
+  super/subscript, letter-spacing and caps (`RunStyle` gaps both consumers share); the residual docx 0.98
+  (Writer places the hhea line gap **below** the descent, the engine above it — 0.5 pt at 12 pt, 1 pt at
+  24 pt; verify Word's behaviour before changing).
 - **Downstream unblocking:** **Phase B (pptspine `ppt-render`)** starts when the TS-2/3/5/6 gates are
   green; **Phase C (docspine `doc-render`)** when the TS-2/3/4 gates (incl. TS-4's table primitives) are
   green. Phase B/C PRDs live in the consumer repos; each pins a pdfspine rev with its needed TS tasks
@@ -949,7 +971,7 @@ lists why · files · effort · **Acceptance**, the green condition that means "
 
 **Resume pointer.** **Phase A is COMPLETE (TS-1..TS-7 all ✅, 2026-07-02→03; +TS-8 consumer batch 1,
 2026-07-04; +TS-9 tab stops, 2026-07-08; +TS-10 public measure API + TS-11 cell v-align / run hyperlinks,
-2026-07-13)** — pdf-typeset ships the
+2026-07-13; +TS-12 font-independent line rule — LO oracle pptx 0.92 → 0.98, 2026-09-05)** — pdf-typeset ships the
 Typesetter facade (layout_flow / layout_text_box / **measure_blocks / measure_text_box** / emit), fontdb
 resolution, the TTC-aware glyph subsetter (pdf-edit), the 35-preset subset, and the TS-7 gate stack (typeset
 read-back + SSIM in CI accuracy-gate; LO oracle advisory local-only). Consumers pin a git rev of this repo
