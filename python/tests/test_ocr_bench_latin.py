@@ -74,10 +74,14 @@ def test_latin_misses_record_best_match_behind_the_score():
     bench = _bench()
     truth = "invoice no. A1938"
     pred = "invoice no.A19w"
-    assert bench._latin_misses(pred, truth) == [{"truth": "a1938", "best": "a19w", "sim": 0.6}]
+    assert bench._latin_misses(pred, truth) == [
+        {"truth": "a1938", "best": "a19w", "sim": 0.6}
+    ]
     matches = bench._latin_matches(pred, truth)
     assert [t for t, _, _ in matches] == ["invoice", "no", "a1938"]
-    assert bench._latin_acc(pred, truth) == pytest.approx(sum(s for _, _, s in matches) / 3)
+    assert bench._latin_acc(pred, truth) == pytest.approx(
+        sum(s for _, _, s in matches) / 3
+    )
 
 
 # --- OCR-BENCH-003: CJK is character accuracy over the pure-CJK streams ----
@@ -87,7 +91,9 @@ def test_char_acc_over_cjk_streams():
     bench = _bench()
     truth = bench._cjk_only("机器学习与深度神经网络 PaddleOCR v4 model")
     assert truth == "机器学习与深度神经网络"
-    assert bench._char_acc(bench._cjk_only("机器学习与深度神经络"), truth) == pytest.approx(1 - 1 / 11)
+    assert bench._char_acc(
+        bench._cjk_only("机器学习与深度神经络"), truth
+    ) == pytest.approx(1 - 1 / 11)
     assert bench._char_acc("", "") == 1.0
 
 
