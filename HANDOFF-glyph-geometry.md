@@ -575,6 +575,10 @@ rotated-page 差异记录在文本提取文档中。
 source ID、大小和 PDF SHA-256，portable fingerprint 为
 `87804b5a316632e3920ec198f24bdc26c50131a6344bd51dd522a858963e82c0`。语料构成为
 FinTabNet 132、GovDocs1 100、EUR-Lex 41、fixtures 9、Arabic 9、born 6、CJK 3；共 1887 页。
+后续 `32e6232`（typeset TS-12）改写了 `fixtures/typeset/typeset-lo-slide.pdf`，该 manifest 对
+当前工作树已无法整体校验；现行清单是 `build_corpus.py --refresh-stale` 派生的
+`glyph-geometry-2026-09-05b-manifest.json`（指纹 `6c7126de…`，只此一条更新，旧哈希留在
+`previous_*`，顶层 `supersedes` 指回本文件）。本节及 C–G 报告引用的指纹仍指旧文件，旧文件不改。
 
 同一清单上，`aaee2a9`、`9912a23`、post-F、post-G 的 extraction JSON 均逐文档一致。
 固定 PyMuPDF 1.28.2 比较为 over 137、under 329、mixed 130，oracle/pdfspine 均零提取错误。
