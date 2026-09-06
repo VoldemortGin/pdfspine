@@ -52,6 +52,7 @@ use pdf_text::{interpret_page_render, ImageOp, RenderOp, ShadingOp, TextRun};
 
 use crate::canvas::Canvas;
 use crate::error::{Error, Result};
+use crate::glyph_cache::GlyphMaskCache;
 use crate::image::{
     draw_axial_shading, draw_image, draw_image_mask, draw_radial_shading, PdfFunction,
 };
@@ -437,6 +438,10 @@ struct FontCache {
     /// done once and reused for every occurrence. `None` caches a
     /// whitespace/missing/degenerate glyph (no outline) so it is not re-probed.
     glyph_paths: HashMap<(usize, u16), Option<tiny_skia::Path>>,
+    /// Per-`(font, glyph id, device 2×2, sub-pixel phase)` rasterized coverage
+    /// mask, blitted for every repeat occurrence instead of re-running
+    /// tiny-skia's scan conversion + raster pipeline (the dominant text cost).
+    glyph_masks: GlyphMaskCache,
 }
 
 impl FontCache {
@@ -446,6 +451,7 @@ impl FontCache {
             index: HashMap::new(),
             prog_by_ref: HashMap::new(),
             glyph_paths: HashMap::new(),
+            glyph_masks: GlyphMaskCache::default(),
         }
     }
 }
@@ -550,6 +556,7 @@ fn draw_text(
     let FontCache {
         entries,
         glyph_paths,
+        glyph_masks,
         ..
     } = cache;
     // The optional supplement face, parsed alongside the primary. Resolving both
@@ -657,6 +664,8 @@ fn draw_text(
             stroke_paint,
             &stroke,
             &mut scratch,
+            Some(&mut *glyph_masks),
+            key,
         );
     }
     Ok(())
