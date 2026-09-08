@@ -2320,7 +2320,7 @@ class Page:
         ``strategy`` is ``"lines"`` (default), ``"lines_strict"``, ``"text"``
         or pdfspine's opt-in ``"vision"`` extension. Vision uses Microsoft
         Table Transformer (``backend="tatr"``, the default) or the ONNX
-        DocLayout-YOLO + SLANet-plus pair (``backend="onnx"``), with model
+        PP-DocLayout + SLANet-plus pair (``backend="onnx"``), with model
         options in ``vision_options``. The optional runtimes are installed with
         ``pip install 'pdfspine[tatr]'`` / ``'pdfspine[onnx]'``; weights are
         never bundled (TATR: pinned Hugging Face cache; ONNX:
@@ -2379,13 +2379,14 @@ class Page:
     # --- ONNX layout analysis (pdfspine extra; not in PyMuPDF) ---
     def find_layout(self, **vision_options) -> list:
         """Detect layout regions (titles, paragraphs, tables, figures,
-        captions, headers/footers) with the opt-in ONNX DocLayout-YOLO model.
+        captions, headers/footers) with the opt-in ONNX PP-DocLayout model.
 
         Returns a list of :class:`pdfspine.LayoutBlock` in reading order, with
         ``bbox`` in page points. Keyword arguments are
-        :class:`pdfspine.OnnxOptions` fields (``layout_model``, ``providers``,
-        ``layout_threshold``, ``dpi``, ...). Requires ``pip install
-        'pdfspine[onnx]'`` and the model file under ``PDFSPINE_ONNX_MODELS``.
+        :class:`pdfspine.OnnxOptions` fields (``layout_model``,
+        ``layout_variant``, ``providers``, ``layout_threshold``, ``dpi``, ...).
+        Requires ``pip install 'pdfspine[onnx]'`` and the model file under
+        ``PDFSPINE_ONNX_MODELS``.
         """
         from ._onnx import find_layout as _find_layout
 

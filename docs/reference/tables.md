@@ -62,11 +62,11 @@ Useful `vision_options` include `dpi` (default 144), `device` (`auto`, `cpu`,
 When `clip=` is supplied, vision still performs one full-page detection pass and
 returns only tables intersecting that page-space rectangle.
 
-## Vision / ONNX (DocLayout-YOLO + SLANet-plus)
+## Vision / ONNX (PP-DocLayout + SLANet-plus)
 
-A torch-free alternative to TATR that also exposes page layout. DocLayout-YOLO
-detects layout regions (titles, paragraphs, figures, captions, tables, ...) on
-the rendered page; SLANet-plus predicts the cell structure of each `table`
+A torch-free alternative to TATR that also exposes page layout. PP-DocLayout
+(an RT-DETR detector from PaddleX) finds layout regions (titles, paragraphs,
+figures, captions, tables, ...) on the rendered page; SLANet-plus predicts the cell structure of each `table`
 region as HTML tokens with `rowspan` / `colspan`; the page's text-layer words
 are then assigned to those cells by geometry. Both networks run through
 onnxruntime. As with TATR, the models only decide *where* things are: no
@@ -77,16 +77,31 @@ for the end-to-end picture, the reading-order rule, and the current limitations.
 ```bash
 pip install "pdfspine[onnx]"          # onnxruntime, numpy, Pillow
 mkdir -p ~/models/pdfspine-onnx
-curl -L -o ~/models/pdfspine-onnx/doclayout_yolo_docstructbench_imgsz1024.onnx \
-  https://www.modelscope.cn/models/RapidAI/RapidLayout/resolve/v1.2.0/onnx/doclayout/doclayout_yolo_docstructbench_imgsz1024.onnx
+curl -L -o ~/models/pdfspine-onnx/pp_doc_layoutv3.onnx \
+  https://www.modelscope.cn/models/RapidAI/RapidLayout/resolve/v1.2.0/onnx/pp_doc_layout/pp_doc_layoutv3.onnx
 curl -L -o ~/models/pdfspine-onnx/slanet-plus.onnx \
   https://www.modelscope.cn/models/RapidAI/RapidTable/resolve/v2.0.0/slanet-plus.onnx
 export PDFSPINE_ONNX_MODELS=~/models/pdfspine-onnx
+# optional, faster variant (layout_variant="pp_doclayout_l"):
+curl -L -o ~/models/pdfspine-onnx/pp_doclayout_l.onnx \
+  https://www.modelscope.cn/models/RapidAI/RapidDoc/resolve/v1.0.0/layout/PP-DocLayout-L/pp_doclayout_l.onnx
 ```
 
 (`wget -O <file> <url>` works the same way.) Point `PDFSPINE_ONNX_MODELS` at
-the directory holding both files, or pass explicit paths through
-`vision_options={"layout_model": ..., "table_model": ...}`. The weights are
+the directory holding the files, or pass explicit paths through
+`vision_options={"layout_model": ..., "table_model": ...}`. Two layout
+detectors are supported: PP-DocLayoutV3 (`pp_doc_layoutv3.onnx`, 800 x 800,
+25 classes, predicts the reading order and has a dedicated `vision_footnote`
+class; the default) and PP-DocLayout-L (`pp_doclayout_l.onnx`, 640 x 640,
+23 classes, the faster optional variant). Select one with
+`vision_options={"layout_variant": "pp_doclayout_l"}` or
+`page.find_layout(layout_variant="pp_doclayout_l")`; the default `"auto"`
+infers the variant from the layout model's file name and falls back to
+PP-DocLayoutV3. **PP-DocLayoutV3 is the default** — on the baseline pages
+PP-DocLayout-L misclassified one table as `image` and duplicated another,
+V3 did neither; see the
+[Layout HTML guide](../guide/layout-html.md#layout-model-variants) and
+[ONNX backend baseline (2026-09-08)](../onnx-backend-baseline-2026-09-08.md). The weights are
 never part of the wheel; a missing file raises `PdfUnsupportedError` carrying
 the download URL, and a missing runtime raises it with the `pdfspine[onnx]`
 hint.
@@ -105,18 +120,19 @@ html = page.get_layout_html()      # semantic HTML for the whole page
 `find_tables(..., backend="onnx")` returns the standard `TableFinder` / `Table`
 objects (`extract()`, `to_html()`, `spans`, `cells`, `metadata`);
 `backend=None` still selects TATR. `Page.find_layout(**vision_options)` returns
-[`LayoutBlock`](#layoutblock)s (page points, DocLayout-YOLO label, score) and
+[`LayoutBlock`](#layoutblock)s (page points, normalised `label`, `score`, and
+`raw_label` — the PP-DocLayout class the model predicted) and
 `Page.get_layout_html(**vision_options)` turns the same blocks into HTML
-(`<h2>`, `<p>`, `<table>`, `<figure>` placeholders, ...).
+(`<h2>`, `<p>`, `<table>`, `<figure>` placeholders, ...). The
+raw-class → normalised-label mapping table lives in the
+[Layout HTML guide](../guide/layout-html.md#find_layout-listlayoutblock).
 
-**Licence.** Both models are Apache-2.0 exports published by RapidAI:
-DocLayout-YOLO (opendatalab, DocStructBench weights, from RapidLayout v1.2.0)
-and SLANet-plus (PaddleOCR, from RapidTable v2.0.0). pdfspine's pre/post-
-processing follows the `rapid_layout` / `rapid_table` reference code. Note that
-the DocLayout-YOLO ONNX file's embedded metadata still carries the Ultralytics
-exporter's default `license: AGPL-3.0` stamp (DocLayout-YOLO builds on the
-YOLOv10 code base); check that the upstream licence position suits your use
-before shipping a product on it.
+**Licence.** Both models are Apache-2.0. PP-DocLayout is Baidu PaddlePaddle /
+PaddleX (Apache-2.0); the ONNX exports are published by RapidAI (Apache-2.0;
+PP-DocLayout-L from RapidDoc v1.0.0, PP-DocLayoutV3 from RapidLayout v1.2.0).
+SLANet-plus is PaddleOCR (Apache-2.0), ONNX export by RapidAI from RapidTable
+v2.0.0. pdfspine's pre/post-processing follows the `rapid_layout` /
+`rapid_table` reference code.
 
 **Execution providers.** `providers="auto"` (the default) uses
 `CUDAExecutionProvider` when the installed onnxruntime offers it (install
@@ -128,12 +144,15 @@ the process while building the execution plan, so Apple-silicon machines run
 on CPU.
 
 Useful `vision_options` (see [`OnnxOptions`](#onnxoptions) for the full list):
-`dpi` (144), `layout_size` (1024, a multiple of 32), `layout_threshold` (0.25),
-`layout_nms_iou` (0.7, class-agnostic NMS; `None` disables it), `table_size`
-(488), `table_min_score` (0.0; drops tables whose mean structure-token score is
-lower), `channel_order` (`"bgr"`, the PaddleOCR convention; `"rgb"` is
-available), `crop_padding` (10 pixels), `layout_model` / `table_model`
-(explicit paths), `providers`, and the same `ocr_if_no_text` / `ocr_engine` /
+`dpi` (144), `layout_variant` (`"auto"`; `"pp_doclayout_l"` or
+`"pp_doclayoutv3"`), `layout_size` (`None`, read from the model's own input
+shape — 640 for PP-DocLayout-L, 800 for PP-DocLayoutV3; an explicit int must
+be a multiple of 32), `layout_threshold` (0.5), `layout_nms_iou` (0.6,
+same-class NMS since the RT-DETR head applies none of its own; `None`
+disables it), `table_size` (488), `table_min_score` (0.0; drops tables whose
+mean structure-token score is lower), `channel_order` (`"bgr"`, the PaddleOCR
+convention, affects SLANet-plus only; `"rgb"` is available), `crop_padding`
+(10 pixels), `layout_model` / `table_model` (explicit paths), `providers`, and the same `ocr_if_no_text` / `ocr_engine` /
 `ocr_language` page-level OCR fallback as TATR (it triggers only when the page
 has no text layer at all).
 

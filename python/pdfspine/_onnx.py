@@ -1,16 +1,29 @@
-"""Optional ONNX vision backend: DocLayout-YOLO layout + SLANet-plus tables.
+"""Optional ONNX vision backend: PP-DocLayout layout + SLANet-plus tables.
 
 The two networks only predict *where* things are (layout regions, table cells).
 Every character of text comes from the PDF text layer through pdfspine's native
 word coordinates; the models never regenerate text and no OCR is applied.
+
+Both models are Apache-2.0 (PaddleX/PaddleOCR upstream, ONNX exports published
+by RapidAI). The layout detector is a PP-DocLayout RT-DETR: ``PP-DocLayoutV3``
+(25 classes, 800x800, a per-box reading-order key and a dedicated
+``vision_footnote`` class) by default, with the faster ``PP-DocLayout-L``
+(23 classes, 640x640) available through ``OnnxOptions.layout_variant``. The
+YOLO-based detector used before 2026-09-08
+was dropped because its upstream repository, PyPI package and ONNX metadata all
+declare AGPL-3.0; the evidence is in ``docs/table-structure-models-survey.md``
+section 4.1.
 
 Runtime dependencies (``onnxruntime``, ``numpy``, ``Pillow``) are imported
 lazily, so importing :mod:`pdfspine` has no ML dependency and never loads a
 model. Model weights are not shipped in the wheel: they are resolved from
 ``PDFSPINE_ONNX_MODELS`` or explicit ``OnnxOptions`` paths at call time.
 
-Pre/post-processing follows RapidAI's ``rapid_layout`` (DocLayout-YOLO) and
-``rapid_table`` (SLANet-plus) reference implementations.
+Pre/post-processing follows RapidAI's ``rapid_layout`` (PP-DocLayout) and
+``rapid_table`` (SLANet-plus) reference implementations: the page is resized to
+the model's square input, scaled to ``[0, 1]`` RGB (no mean/std), and fed as
+``image`` / ``im_shape`` / ``scale_factor``; the RT-DETR head returns
+``(class_id, score, x0, y0, x1, y1)`` rows already in original-image pixels.
 """
 
 from __future__ import annotations
@@ -44,30 +57,156 @@ from .geometry import Rect
 
 
 MODELS_ENV = "PDFSPINE_ONNX_MODELS"
-LAYOUT_MODEL_FILE = "doclayout_yolo_docstructbench_imgsz1024.onnx"
+
+# The two PP-DocLayout variants (PaddleX RT-DETR heads, Apache-2.0). ``auto``
+# picks the variant from the model file name, defaulting to PP-DocLayoutV3.
+LAYOUT_VARIANTS: tuple[str, ...] = ("pp_doclayout_l", "pp_doclayoutv3")
+LAYOUT_MODEL_FILES: dict[str, str] = {
+    "pp_doclayout_l": "pp_doclayout_l.onnx",
+    "pp_doclayoutv3": "pp_doc_layoutv3.onnx",
+}
+LAYOUT_MODEL_URLS: dict[str, str] = {
+    "pp_doclayout_l": (
+        "https://www.modelscope.cn/models/RapidAI/RapidDoc/resolve/v1.0.0/"
+        "layout/PP-DocLayout-L/pp_doclayout_l.onnx"
+    ),
+    "pp_doclayoutv3": (
+        "https://www.modelscope.cn/models/RapidAI/RapidLayout/resolve/v1.2.0/"
+        "onnx/pp_doc_layout/pp_doc_layoutv3.onnx"
+    ),
+}
+# Square input edge each variant was exported with. The real value is read back
+# from the session's static ``image`` input shape; this is the fallback used
+# before the session exists and for exports with a dynamic spatial dimension.
+LAYOUT_INPUT_SIZES: dict[str, int] = {"pp_doclayout_l": 640, "pp_doclayoutv3": 800}
+DEFAULT_LAYOUT_VARIANT = "pp_doclayoutv3"
+LAYOUT_MODEL_FILE = LAYOUT_MODEL_FILES[DEFAULT_LAYOUT_VARIANT]
+LAYOUT_MODEL_URL = LAYOUT_MODEL_URLS[DEFAULT_LAYOUT_VARIANT]
+
 TABLE_MODEL_FILE = "slanet-plus.onnx"
-LAYOUT_MODEL_URL = (
-    "https://www.modelscope.cn/models/RapidAI/RapidLayout/resolve/v1.2.0/"
-    "onnx/doclayout/doclayout_yolo_docstructbench_imgsz1024.onnx"
-)
 TABLE_MODEL_URL = "https://www.modelscope.cn/models/RapidAI/RapidTable/resolve/v2.0.0/slanet-plus.onnx"
 
-# DocLayout-YOLO DocStructBench classes, in class-id order. The RapidAI export
-# also embeds this list in the ONNX metadata (``names`` as a Python dict
-# literal and ``character`` as one name per line); when present, the embedded
-# list wins over this fallback.
-LAYOUT_LABELS: tuple[str, ...] = (
-    "title",
-    "plain text",
-    "abandon",
-    "figure",
-    "figure_caption",
+# PP-DocLayout-L classes, in class-id order. The RapidAI export also embeds this
+# list in the ONNX metadata (``character``, one name per line); when present,
+# the embedded list wins over this fallback.
+PP_DOCLAYOUT_L_LABELS: tuple[str, ...] = (
+    "paragraph_title",
+    "image",
+    "text",
+    "number",
+    "abstract",
+    "content",
+    "figure_title",
+    "formula",
     "table",
-    "table_caption",
-    "table_footnote",
-    "isolate_formula",
-    "formula_caption",
+    "table_title",
+    "reference",
+    "doc_title",
+    "footnote",
+    "header",
+    "algorithm",
+    "footer",
+    "seal",
+    "chart_title",
+    "chart",
+    "formula_number",
+    "header_image",
+    "footer_image",
+    "aside_text",
 )
+
+# PP-DocLayoutV3 classes, in class-id order (alphabetical upstream). Adds
+# ``vision_footnote`` (a note attached to a table/figure) and splits formulas
+# into display/inline; it has no ``table_title`` — table and figure captions
+# share ``figure_title``.
+PP_DOCLAYOUTV3_LABELS: tuple[str, ...] = (
+    "abstract",
+    "algorithm",
+    "aside_text",
+    "chart",
+    "content",
+    "display_formula",
+    "doc_title",
+    "figure_title",
+    "footer",
+    "footer_image",
+    "footnote",
+    "formula_number",
+    "header",
+    "header_image",
+    "image",
+    "inline_formula",
+    "number",
+    "paragraph_title",
+    "reference",
+    "reference_content",
+    "seal",
+    "table",
+    "text",
+    "vertical_text",
+    "vision_footnote",
+)
+
+# Back-compatible alias: the default variant's class list.
+LAYOUT_LABELS: tuple[str, ...] = PP_DOCLAYOUTV3_LABELS
+
+LAYOUT_LABELS_BY_VARIANT: dict[str, tuple[str, ...]] = {
+    "pp_doclayout_l": PP_DOCLAYOUT_L_LABELS,
+    "pp_doclayoutv3": PP_DOCLAYOUTV3_LABELS,
+}
+
+# PP-DocLayout class -> pdfspine layout label. The downstream vocabulary
+# (`LayoutBlock.label`, `get_layout_html()`) is unchanged, so the HTML mapping
+# and every consumer keep working; ``LayoutBlock.raw_label`` keeps the model's
+# own class name. Anything not listed passes through unchanged.
+LAYOUT_LABEL_MAP: dict[str, str] = {
+    # body text and text-like regions
+    "text": "plain text",
+    "abstract": "plain text",
+    "content": "plain text",
+    "reference": "plain text",
+    "reference_content": "plain text",
+    "aside_text": "plain text",
+    "algorithm": "plain text",
+    "vertical_text": "plain text",
+    # headings
+    "paragraph_title": "title",
+    "doc_title": "title",
+    # graphics
+    "image": "figure",
+    "chart": "figure",
+    "seal": "figure",
+    "figure_title": "figure_caption",
+    "chart_title": "figure_caption",
+    # tables
+    "table": "table",
+    "table_title": "table_caption",
+    # PP-DocLayout-L has no separate table footnote class; ``footnote`` is the
+    # closest approximation (overridden for PP-DocLayoutV3 below).
+    "footnote": "table_footnote",
+    "vision_footnote": "table_footnote",
+    # furniture that never carries body text
+    "header": "abandon",
+    "footer": "abandon",
+    "number": "abandon",
+    "header_image": "abandon",
+    "footer_image": "abandon",
+    # formulas
+    "formula": "isolate_formula",
+    "display_formula": "isolate_formula",
+    "inline_formula": "isolate_formula",
+    "formula_number": "formula_caption",
+}
+
+# PP-DocLayoutV3 has a dedicated ``vision_footnote`` for notes attached to a
+# table or figure, so its ``footnote`` really is a page footnote: keep it as
+# body text (rendered with a ``footnote`` CSS class).
+LAYOUT_LABEL_MAP_V3: dict[str, str] = {**LAYOUT_LABEL_MAP, "footnote": "plain text"}
+
+LAYOUT_LABEL_MAPS: dict[str, dict[str, str]] = {
+    "pp_doclayout_l": LAYOUT_LABEL_MAP,
+    "pp_doclayoutv3": LAYOUT_LABEL_MAP_V3,
+}
 
 # SLANet-plus structure vocabulary. Source: RapidAI RapidTable v2.0.0
 # ``slanet-plus.onnx`` metadata key ``character`` (48 entries, identical to
@@ -95,7 +234,6 @@ _TD_TOKENS = frozenset({"<td", "<td></td>", "<td>"})
 
 _IMAGENET_MEAN = (0.485, 0.456, 0.406)
 _IMAGENET_STD = (0.229, 0.224, 0.225)
-_LETTERBOX_FILL = 114
 
 _TEXT_LABELS = {
     "title": "h2",
@@ -107,6 +245,9 @@ _CLASSED_LABELS = {
     "table_footnote",
 }
 _FORMULA_LABELS = {"isolate_formula", "formula_caption"}
+# Raw model classes that keep their own CSS class even though they normalise to
+# a generic label (PP-DocLayoutV3 page footnotes become ``plain text``).
+_RAW_CSS_LABELS = {"footnote"}
 
 
 @dataclass(frozen=True)
@@ -117,9 +258,10 @@ class OnnxOptions:
     layout_model: str | None = None
     table_model: str | None = None
     providers: str | tuple[str, ...] = "auto"
-    layout_size: int = 1024
-    layout_threshold: float = 0.25
-    layout_nms_iou: float | None = 0.7
+    layout_variant: str = "auto"
+    layout_size: int | None = None
+    layout_threshold: float = 0.5
+    layout_nms_iou: float | None = 0.6
     table_size: int = 488
     table_min_score: float = 0.0
     channel_order: str = "bgr"
@@ -129,9 +271,11 @@ class OnnxOptions:
     ocr_language: str = "eng"
 
     def __post_init__(self) -> None:
-        for name in ("dpi", "layout_size", "table_size", "crop_padding"):
+        for name in ("dpi", "table_size", "crop_padding"):
             if type(getattr(self, name)) is not int:
                 raise TypeError(f"ONNX {name} must be an int")
+        if self.layout_size is not None and type(self.layout_size) is not int:
+            raise TypeError("ONNX layout_size must be an int or None")
         for name in ("layout_threshold", "table_min_score"):
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, (int, float)):
@@ -148,10 +292,13 @@ class OnnxOptions:
                 raise TypeError(f"ONNX {name} must be a path or None")
             if value is not None:
                 object.__setattr__(self, name, os.fspath(value))
-        for name in ("channel_order", "ocr_engine", "ocr_language"):
+        for name in ("channel_order", "layout_variant", "ocr_engine", "ocr_language"):
             if not isinstance(getattr(self, name), str):
                 raise TypeError(f"ONNX {name} must be a string")
         object.__setattr__(self, "channel_order", self.channel_order.casefold().strip())
+        object.__setattr__(
+            self, "layout_variant", self.layout_variant.casefold().strip()
+        )
         if isinstance(self.providers, str):
             object.__setattr__(self, "providers", self.providers.strip())
         elif isinstance(self.providers, Sequence) and all(
@@ -181,8 +328,15 @@ class OnnxOptions:
     def _validate(self) -> None:
         if not 36 <= self.dpi <= 600:
             raise ValueError("ONNX dpi must be between 36 and 600")
-        if self.layout_size < 32 or self.layout_size % 32:
+        if self.layout_size is not None and (
+            self.layout_size < 32 or self.layout_size % 32
+        ):
             raise ValueError("ONNX layout_size must be a positive multiple of 32")
+        if self.layout_variant not in ("auto", *LAYOUT_VARIANTS):
+            raise ValueError(
+                "ONNX layout_variant must be 'auto' or one of "
+                + ", ".join(repr(name) for name in LAYOUT_VARIANTS)
+            )
         if self.table_size < 32:
             raise ValueError("ONNX table_size must be at least 32 pixels")
         for name in ("layout_threshold", "table_min_score"):
@@ -209,19 +363,49 @@ class OnnxOptions:
 class LayoutBlock:
     """One layout region in page coordinates (pdfspine extra; not in PyMuPDF).
 
-    ``label`` is a DocLayout-YOLO class name (``title``, ``plain text``,
+    ``label`` is pdfspine's normalised class: ``title``, ``plain text``,
     ``abandon``, ``figure``, ``figure_caption``, ``table``, ``table_caption``,
-    ``table_footnote``, ``isolate_formula``, ``formula_caption``).
+    ``table_footnote``, ``isolate_formula`` or ``formula_caption``.
+    ``raw_label`` is the PP-DocLayout class the model actually predicted (for
+    example ``paragraph_title``, ``aside_text``, ``vision_footnote``); see
+    :data:`LAYOUT_LABEL_MAP` for the mapping. It equals ``label`` when the model
+    class needs no translation.
     """
 
     bbox: Rect
     label: str
     score: float
+    raw_label: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.raw_label:
+            object.__setattr__(self, "raw_label", self.label)
 
 
 # --------------------------------------------------------------------------- #
 # Model file resolution and runtime cache
 # --------------------------------------------------------------------------- #
+def _variant_from_name(name: str) -> str:
+    """Guess the PP-DocLayout variant from a model file name."""
+
+    stem = os.path.basename(name).casefold()
+    if "v3" in stem:
+        return "pp_doclayoutv3"
+    if "doclayout_l" in stem or "doclayout-l" in stem:
+        return "pp_doclayout_l"
+    return DEFAULT_LAYOUT_VARIANT
+
+
+def _layout_variant(options: OnnxOptions) -> str:
+    """Resolve ``layout_variant``: explicit value, else the file name, else V3."""
+
+    if options.layout_variant != "auto":
+        return options.layout_variant
+    if options.layout_model:
+        return _variant_from_name(options.layout_model)
+    return DEFAULT_LAYOUT_VARIANT
+
+
 def _model_paths(options: OnnxOptions) -> tuple[Path, Path]:
     """Resolve the two model files (existence is checked when they are loaded)."""
 
@@ -236,14 +420,16 @@ def _model_paths(options: OnnxOptions) -> tuple[Path, Path]:
         return Path(filename)
 
     return (
-        resolve(options.layout_model, LAYOUT_MODEL_FILE),
+        resolve(options.layout_model, LAYOUT_MODEL_FILES[_layout_variant(options)]),
         resolve(options.table_model, TABLE_MODEL_FILE),
     )
 
 
-def _missing_model(kind: str, path: Path) -> PdfUnsupportedError:
+def _missing_model(
+    kind: str, path: Path, variant: str = DEFAULT_LAYOUT_VARIANT
+) -> PdfUnsupportedError:
     filename, url = (
-        (LAYOUT_MODEL_FILE, LAYOUT_MODEL_URL)
+        (LAYOUT_MODEL_FILES[variant], LAYOUT_MODEL_URLS[variant])
         if kind == "layout"
         else (TABLE_MODEL_FILE, TABLE_MODEL_URL)
     )
@@ -309,6 +495,7 @@ class _OnnxRuntime:
         layout_path: Path,
         table_path: Path,
         providers: str | tuple[str, ...],
+        layout_variant: str = DEFAULT_LAYOUT_VARIANT,
     ) -> None:
         try:
             import numpy
@@ -324,14 +511,24 @@ class _OnnxRuntime:
         self.providers = _resolve_providers(
             providers, tuple(onnxruntime.get_available_providers())
         )
-        self._layout_labels: tuple[str, ...] = LAYOUT_LABELS
+        self.layout_variant = layout_variant
+        self._layout_labels: tuple[str, ...] = LAYOUT_LABELS_BY_VARIANT.get(
+            layout_variant, PP_DOCLAYOUTV3_LABELS
+        )
+        self._label_map: dict[str, str] = LAYOUT_LABEL_MAPS.get(
+            layout_variant, LAYOUT_LABEL_MAP_V3
+        )
+        self._layout_size = LAYOUT_INPUT_SIZES.get(layout_variant, 800)
         self._structure_dict: tuple[str, ...] = SLANET_STRUCTURE_DICT
         self.metadata: dict[str, Any] = {
             "backend": "onnx",
             "layout_model": os.fspath(layout_path),
+            "layout_variant": layout_variant,
             "table_model": os.fspath(table_path),
             "providers": list(self.providers),
-            "preprocessing": "doclayout-letterbox-rgb/slanet-plus-488-imagenet",
+            "preprocessing": (
+                f"pp-doclayout-{self._layout_size}-rgb/slanet-plus-488-imagenet"
+            ),
         }
 
     def _session(self, kind: str) -> Any:
@@ -341,7 +538,7 @@ class _OnnxRuntime:
                 return session
             path = self._paths[kind]
             if not path.is_file():
-                raise _missing_model(kind, path)
+                raise _missing_model(kind, path, self.layout_variant)
             options = self._ort.SessionOptions()
             options.log_severity_level = 3
             session = self._ort.InferenceSession(
@@ -354,6 +551,13 @@ class _OnnxRuntime:
                     self._layout_labels = embedded
                 else:
                     self._structure_dict = embedded
+            if kind == "layout":
+                size = _input_edge(session)
+                if size is not None:
+                    self._layout_size = size
+                    self.metadata["preprocessing"] = (
+                        f"pp-doclayout-{size}-rgb/slanet-plus-488-imagenet"
+                    )
             self._sessions[kind] = session
             return session
 
@@ -362,26 +566,48 @@ class _OnnxRuntime:
         return self._layout_labels
 
     @property
+    def layout_label_map(self) -> dict[str, str]:
+        return self._label_map
+
+    @property
     def structure_dict(self) -> tuple[str, ...]:
         return self._structure_dict
 
     def detect_layout(self, image: Any, options: OnnxOptions) -> list[dict[str, Any]]:
         session = self._session("layout")
         np = self._np
-        array, ratio, pad = _letterbox(image, options.layout_size, np)
-        outputs = session.run(None, {session.get_inputs()[0].name: array})
+        size = options.layout_size or self._layout_size
+        array, scale_factor = _layout_input(image, size, np)
+        names = {spec.name for spec in session.get_inputs()}
+        if "image" not in names:
+            raise PdfUnsupportedError(
+                "Unexpected PP-DocLayout inputs; expected an 'image' input, got "
+                + (", ".join(sorted(names)) or "none")
+            )
+        feeds: dict[str, Any] = {"image": array}
+        if "im_shape" in names:
+            feeds["im_shape"] = np.asarray(
+                [[float(size), float(size)]], dtype=np.float32
+            )
+        if "scale_factor" in names:
+            feeds["scale_factor"] = np.asarray([scale_factor], dtype=np.float32)
+        outputs = session.run(None, feeds)
         output = outputs[0]
         if output.ndim == 3:
             output = output[0]
-        rows = output.tolist()
+        count = None
+        if len(outputs) > 1:
+            flat = outputs[1].reshape(-1)
+            if flat.size:
+                count = int(flat[0])
         return _decode_layout(
-            rows,
-            ratio,
-            pad,
+            output.tolist(),
             image.size,
             options.layout_threshold,
             self._layout_labels,
+            self._label_map,
             options.layout_nms_iou,
+            count,
         )
 
     def recognize_table(
@@ -406,6 +632,7 @@ class _RuntimeSpec:
     layout_path: str
     table_path: str
     providers: str | tuple[str, ...]
+    layout_variant: str = DEFAULT_LAYOUT_VARIANT
 
 
 _MODEL_CACHE: dict[_RuntimeSpec, _OnnxRuntime] = {}
@@ -418,7 +645,10 @@ def _cached_runtime(spec: _RuntimeSpec) -> _OnnxRuntime:
         if cached is not None:
             return cached
         runtime = _OnnxRuntime(
-            Path(spec.layout_path), Path(spec.table_path), spec.providers
+            Path(spec.layout_path),
+            Path(spec.table_path),
+            spec.providers,
+            spec.layout_variant,
         )
         if len(_MODEL_CACHE) >= 4:
             _MODEL_CACHE.pop(next(iter(_MODEL_CACHE)))
@@ -436,39 +666,70 @@ def clear_model_cache() -> None:
 def _get_runtime(options: OnnxOptions) -> _OnnxRuntime:
     layout_path, table_path = _model_paths(options)
     return _cached_runtime(
-        _RuntimeSpec(os.fspath(layout_path), os.fspath(table_path), options.providers)
+        _RuntimeSpec(
+            os.fspath(layout_path),
+            os.fspath(table_path),
+            options.providers,
+            _layout_variant(options),
+        )
     )
 
 
 # --------------------------------------------------------------------------- #
-# DocLayout-YOLO pre/post-processing
+# PP-DocLayout pre/post-processing
 # --------------------------------------------------------------------------- #
-def _letterbox(
-    image: Any, size: int, np: Any
-) -> tuple[Any, float, tuple[float, float]]:
-    """Resize with a centred 114-grey letterbox and return NCHW float32 RGB."""
+def _input_edge(session: Any) -> int | None:
+    """Read the static square edge of the session's ``image`` input, if any."""
+
+    for spec in session.get_inputs():
+        if spec.name != "image":
+            continue
+        shape = list(getattr(spec, "shape", ()) or ())
+        if len(shape) != 4:
+            return None
+        height, width = shape[2], shape[3]
+        if isinstance(height, int) and isinstance(width, int) and height == width > 0:
+            return int(height)
+        return None
+    return None
+
+
+def _layout_input(image: Any, size: int, np: Any) -> tuple[Any, tuple[float, float]]:
+    """Resize to ``size``x``size`` RGB in ``[0, 1]``, NCHW float32.
+
+    PP-DocLayout is a PaddleDetection RT-DETR export: it only rescales to
+    ``[0, 1]`` (no ImageNet mean/std, no letterbox) and recovers the original
+    image size inside the head as ``im_shape / scale_factor``. The returned
+    ``scale_factor`` is PaddleDetection's ``(resize_h / h, resize_w / w)``
+    order, so the predicted boxes come back in original-image pixels.
+    """
 
     from PIL import Image
 
     width, height = image.size
-    ratio = min(size / width, size / height)
-    new_width = max(1, round(width * ratio))
-    new_height = max(1, round(height * ratio))
-    left = int(round((size - new_width) / 2.0 - 0.1))
-    top = int(round((size - new_height) / 2.0 - 0.1))
-    resized = image.convert("RGB").resize((new_width, new_height), Image.BILINEAR)
-    canvas = Image.new("RGB", (size, size), (_LETTERBOX_FILL,) * 3)
-    canvas.paste(resized, (left, top))
-    array = np.asarray(canvas, dtype=np.float32) / 255.0
+    if width <= 0 or height <= 0:
+        raise PdfUnsupportedError("Cannot run layout detection on an empty page image")
+    resized = image.convert("RGB").resize((size, size), Image.BILINEAR)
+    array = np.asarray(resized, dtype=np.float32) / 255.0
     array = np.ascontiguousarray(array.transpose(2, 0, 1))[None]
-    return array, ratio, (float(left), float(top))
+    return array, (size / float(height), size / float(width))
 
 
-def _nms(boxes: list[dict[str, Any]], iou_threshold: float) -> list[dict[str, Any]]:
+def _nms(
+    boxes: list[dict[str, Any]], iou_threshold: float, per_class: bool = True
+) -> list[dict[str, Any]]:
+    """Greedy NMS, by default only between boxes of the same model class.
+
+    RT-DETR has no NMS of its own and emits the top-k (query, class) pairs, so
+    a same-class pass removes the duplicate boxes it produces.
+    """
+
     kept: list[dict[str, Any]] = []
     for candidate in sorted(boxes, key=lambda b: -float(b["score"])):
         suppressed = False
         for existing in kept:
+            if per_class and existing.get("raw_label") != candidate.get("raw_label"):
+                continue
             inter = _intersection_area(candidate["bbox"], existing["bbox"])
             union = _area(candidate["bbox"]) + _area(existing["bbox"]) - inter
             if union > 0 and inter / union >= iou_threshold:
@@ -481,38 +742,55 @@ def _nms(boxes: list[dict[str, Any]], iou_threshold: float) -> list[dict[str, An
 
 def _decode_layout(
     rows: Sequence[Sequence[float]],
-    ratio: float,
-    pad: tuple[float, float],
     image_size: tuple[int, int],
     threshold: float,
     labels: Sequence[str],
+    label_map: Mapping[str, str] | None = None,
     nms_iou: float | None = None,
+    count: int | None = None,
 ) -> list[dict[str, Any]]:
-    """Decode YOLOv10 end-to-end rows ``[x0, y0, x1, y1, conf, cls]``."""
+    """Decode PP-DocLayout RT-DETR rows ``[cls, score, x0, y0, x1, y1(, order)]``.
+
+    Coordinates are already in original-image pixels. Rows with a negative
+    class id are the head's padding and are skipped. PP-DocLayoutV3 adds a
+    seventh column: a monotonically increasing reading-order key, kept as
+    ``read_order``.
+    """
 
     width, height = image_size
+    if count is not None and 0 <= count < len(rows):
+        rows = rows[:count]
+    mapping = label_map if label_map is not None else LAYOUT_LABEL_MAP
     results: list[dict[str, Any]] = []
     for row in rows:
         if len(row) < 6:
             continue
-        score = float(row[4])
+        class_id = int(row[0])
+        if class_id < 0:
+            continue
+        score = float(row[1])
         if not math.isfinite(score) or score < threshold:
             continue
-        class_id = int(row[5])
-        label = labels[class_id] if 0 <= class_id < len(labels) else str(class_id)
-        x0 = (float(row[0]) - pad[0]) / ratio
-        y0 = (float(row[1]) - pad[1]) / ratio
-        x1 = (float(row[2]) - pad[0]) / ratio
-        y1 = (float(row[3]) - pad[1]) / ratio
+        raw_label = labels[class_id] if class_id < len(labels) else str(class_id)
         bbox = (
-            max(0.0, min(float(width), x0)),
-            max(0.0, min(float(height), y0)),
-            max(0.0, min(float(width), x1)),
-            max(0.0, min(float(height), y1)),
+            max(0.0, min(float(width), float(row[2]))),
+            max(0.0, min(float(height), float(row[3]))),
+            max(0.0, min(float(width), float(row[4]))),
+            max(0.0, min(float(height), float(row[5]))),
         )
         if _area(bbox) <= 0:
             continue
-        results.append({"label": label, "score": score, "bbox": bbox})
+        item: dict[str, Any] = {
+            "label": mapping.get(raw_label, raw_label),
+            "raw_label": raw_label,
+            "score": score,
+            "bbox": bbox,
+        }
+        if len(row) >= 7:
+            order = float(row[6])
+            if math.isfinite(order):
+                item["read_order"] = order
+        results.append(item)
     if nms_iou is not None:
         results = _nms(results, nms_iou)
     results.sort(key=lambda item: -float(item["score"]))
@@ -899,7 +1177,7 @@ def find_tables(
     options: Mapping[str, object] | None = None,
     _runtime: Any = None,
 ) -> _TatrTableFinderRecord:
-    """DocLayout-YOLO table regions -> SLANet-plus cells -> text-layer words."""
+    """PP-DocLayout table regions -> SLANet-plus cells -> text-layer words."""
 
     config, runtime, rendered = _prepare(page, options, _runtime)
     if _area(rendered.page_bbox) <= 0:
@@ -965,10 +1243,25 @@ def _layout_blocks(
         page_box = _image_box_to_page(_box4(detection["bbox"]), rendered)
         if _area(page_box) <= 0:
             continue
+        label = str(detection["label"])
         block = LayoutBlock(
-            Rect(*page_box), str(detection["label"]), float(detection.get("score", 0.0))
+            Rect(*page_box),
+            label,
+            float(detection.get("score", 0.0)),
+            str(detection.get("raw_label") or label),
         )
         blocks.append((block, dict(detection)))
+    # PP-DocLayoutV3 predicts a reading-order key per box; when every block has
+    # one it beats the geometric band rule (it handles column changes mid-page).
+    if blocks and all("read_order" in detection for _, detection in blocks):
+        return sorted(
+            blocks,
+            key=lambda item: (
+                float(item[1]["read_order"]),
+                item[0].bbox.y0,
+                item[0].bbox.x0,
+            ),
+        )
     return _reading_order(blocks, rendered.page_bbox)
 
 
@@ -978,7 +1271,7 @@ def find_layout(
     options: Mapping[str, object] | None = None,
     _runtime: Any = None,
 ) -> list[LayoutBlock]:
-    """Detect layout regions with DocLayout-YOLO, in reading order (page points)."""
+    """Detect layout regions with PP-DocLayout, in reading order (page points)."""
 
     config, runtime, rendered = _prepare(page, options, _runtime)
     if _area(rendered.page_bbox) <= 0:
@@ -1067,7 +1360,9 @@ def get_layout_html(
         if not block_words:
             continue
         text = escape(" ".join(_lines_text(block_words)))
-        if label in _TEXT_LABELS:
+        if block.raw_label in _RAW_CSS_LABELS:
+            parts.append(f'<p class="{escape(block.raw_label)}">{text}</p>')
+        elif label in _TEXT_LABELS:
             tag = _TEXT_LABELS[label]
             parts.append(f"<{tag}>{text}</{tag}>")
         elif label in _FORMULA_LABELS:
@@ -1085,10 +1380,21 @@ def get_layout_html(
 
 
 __all__ = [
+    "DEFAULT_LAYOUT_VARIANT",
+    "LAYOUT_INPUT_SIZES",
     "LAYOUT_LABELS",
+    "LAYOUT_LABELS_BY_VARIANT",
+    "LAYOUT_LABEL_MAP",
+    "LAYOUT_LABEL_MAPS",
+    "LAYOUT_LABEL_MAP_V3",
     "LAYOUT_MODEL_FILE",
+    "LAYOUT_MODEL_FILES",
     "LAYOUT_MODEL_URL",
+    "LAYOUT_MODEL_URLS",
+    "LAYOUT_VARIANTS",
     "MODELS_ENV",
+    "PP_DOCLAYOUTV3_LABELS",
+    "PP_DOCLAYOUT_L_LABELS",
     "SLANET_STRUCTURE_DICT",
     "TABLE_MODEL_FILE",
     "TABLE_MODEL_URL",

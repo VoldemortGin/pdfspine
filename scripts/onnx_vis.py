@@ -118,7 +118,7 @@ def legend(d: ImageDraw.ImageDraw, height: int, kind: str) -> None:
         y += 17
 
 
-def process(doc_id: str, out: Path, dpi: int) -> dict:
+def process(doc_id: str, out: Path, dpi: int, variant: str | None = None) -> dict:
     scale = dpi / 72.0
 
     def px(box: object) -> tuple[float, float, float, float]:
@@ -132,14 +132,18 @@ def process(doc_id: str, out: Path, dpi: int) -> dict:
     page = doc[0]
     info: dict = {"doc_id": doc_id, "page_rect": rect_of(page.rect)}
 
-    blocks = page.find_layout()
-    html = page.get_layout_html()
-    tables = list(page.find_tables(strategy="vision", backend="onnx"))
+    options = {"layout_variant": variant} if variant else {}
+    blocks = page.find_layout(**options)
+    html = page.get_layout_html(**options)
+    tables = list(
+        page.find_tables(strategy="vision", backend="onnx", vision_options=options)
+    )
     (out / f"{doc_id}.out.html").write_text(html, encoding="utf-8")
 
     info["blocks"] = [
         {
             "label": b.label,
+            "raw_label": b.raw_label,
             "score": round(b.score, 3),
             "bbox": [round(v, 1) for v in rect_of(b.bbox)],
         }
@@ -237,7 +241,7 @@ def process(doc_id: str, out: Path, dpi: int) -> dict:
         color = LABEL_COLORS.get(b.label, (0, 0, 0))
         x0, y0, x1, y1 = px(b.bbox)
         d.rectangle([x0, y0, x1, y1], outline=color, width=3)
-        label_text(d, (x0, y0), f"{i}:{b.label} {b.score:.2f}", color)
+        label_text(d, (x0, y0), f"{i}:{b.raw_label} {b.score:.2f}", color)
     for ti, t in enumerate(tables):
         md = dict(t.metadata or {})
         if md.get("detection_bbox"):
@@ -306,13 +310,19 @@ def main() -> None:
     parser.add_argument(
         "--dpi", type=int, default=150, help="render DPI for the PNGs (default: 150)"
     )
+    parser.add_argument(
+        "--variant",
+        choices=("pp_doclayout_l", "pp_doclayoutv3"),
+        default=None,
+        help="PP-DocLayout variant (default: the backend default, PP-DocLayoutV3)",
+    )
     args = parser.parse_args()
 
     args.out.mkdir(parents=True, exist_ok=True)
     results = []
     for doc_id in args.pages:
         print("processing", doc_id, flush=True)
-        results.append(process(doc_id, args.out, args.dpi))
+        results.append(process(doc_id, args.out, args.dpi, args.variant))
     (args.out / "stats.json").write_text(
         json.dumps(results, indent=1, ensure_ascii=False)
     )
