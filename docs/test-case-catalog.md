@@ -2899,6 +2899,20 @@ Tests live in `crates/pdf-core/tests/ocg_unit.rs` (read) and
 | `OCG-OCMD-SET-REPLACE` | replacing writes the whole dictionary (previous `/OCGs` / `/P` dropped) | PRD §7 | green |
 | `OCG-OCMD-SET-BAD-XREF` | `set_ocmd` on a non-OCMD xref → `InvalidArgument("bad xref or not an OCMD")` | PRD §7 | green |
 | `OCG-TOGGLE-RESETS-VIEW` | `set_layer` after `select_layer_config(Some(0))` resets the view to `/D` | PRD §7 | green |
+| `OCG-VIS-USAGE-NONE` | `OcVisibility`: ON OCG without `/Usage` (or an empty one) → visible | ISO §8.11.4.4 | green |
+| `OCG-VIS-USAGE-VIEWSTATE-OFF` | ON + `/Usage /View /ViewState /OFF`, no `/AS` → hidden (MuPDF parity, unconditional) | ISO §8.11.4.4 | green |
+| `OCG-VIS-USAGE-VIEWSTATE-OFF-AS` | ON + ViewState OFF + `/AS` View entry listing the OCG → hidden | ISO §8.11.4.4 | green |
+| `OCG-VIS-USAGE-VIEWSTATE-OFF-AS-MISS` | ON + ViewState OFF + `/AS` with `/Event /Print` only or `/OCGs []` → hidden | ISO §8.11.4.4 | green |
+| `OCG-VIS-USAGE-VIEWSTATE-ON` | ON + ViewState ON → visible | ISO §8.11.4.4 | green |
+| `OCG-VIS-USAGE-AS-ABSENT` | OFF + ViewState ON with no applicable `/AS` entry (absent / `/Event /Print` / `/Category` without `/View` / lists another OCG) → hidden | ISO §8.11.4.4 | green |
+| `OCG-VIS-USAGE-AS-PROMOTE` | OFF (or `/BaseState /OFF`) + ViewState ON + `/AS` View entry listing the OCG → **visible**, OCMD over it too — deliberate divergence from MuPDF / PyMuPDF (hidden; ignores `/AS`) | ISO §8.11.4.4 | green |
+| `OCG-VIS-USAGE-PRINT-EXPORT` | `/Print /PrintState /OFF` and `/Export /ExportState /OFF` leave an ON OCG visible; `/PrintState /ON` + `/AS` Print entry does not promote an OFF one | ISO §8.11.4.4 | green |
+| `OCG-VIS-USAGE-OCMD` | ViewState OFF reached through OCMD `/OCGs [ocg]` → hidden; `/VE [/Not ocg]` → visible (evaluated per OCG, OCMD inherits) | ISO §8.11.4.4 | green |
+| `OCG-VIS-USAGE-OVERRIDE` | ViewState OFF beats a layer-panel override ON; an override OFF beats an `/AS` promotion; no write | ISO §8.11.4.4 | green |
+| `OCG-VIS-USAGE-BOGUS` | unrecognised `/ViewState` name / string value / `/View <<>>` / `/Usage` without `/View` → configuration state, never promoted | ISO §8.11.4.4 | green |
+| `OCG-VIS-USAGE-AS-CONFIG` | `/AS` read from the active configuration only: `/D`'s `/AS` does not leak into a selected `/Configs[n]`; the alternate's own `/AS` applies when selected | ISO §8.11.4.4 | green |
+| `OCG-VIS-USAGE-INDIRECT` | `/Usage`, `/View`, `/AS`, its entries, `/Category` and `/OCGs` all indirect → resolved on both the hide and the promote path | ISO §8.11.4.4 | green |
+| `OCG-VIS-USAGE-REPORT` | `ocg_state` / `get_ocgs` / `layer_ui_configs` reflect only the configuration ON/OFF state, untouched by `/ViewState` or `/AS` (PyMuPDF parity) | ISO §8.11.4.4 | green |
 
 ### M7 follow-up — optional content in the interpreter (`pdf_text::interp`) — `OCG-INTERP-*`
 

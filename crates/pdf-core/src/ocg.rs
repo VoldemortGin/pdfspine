@@ -26,6 +26,44 @@
 //! Optional Content Membership Dictionaries (`/OCMD` with `/OCGs` + `/P`, or a
 //! `/VE` visibility expression; [`get_ocmd`]).
 //!
+//! # View usage (`/Usage /View /ViewState` and `/AS`)
+//!
+//! On top of the configuration state, [`OcVisibility::read`] applies the
+//! *View* usage of each OCG (ISO 32000-1 §8.11.4.4; MuPDF
+//! `pdf_is_ocg_hidden`). Per OCG `num` listed in `/OCGs`, with
+//! `vs` = its `/Usage /View /ViewState` (`ON` / `OFF` / absent):
+//!
+//! 1. `vs == OFF` → hidden, unconditionally — even a layer-panel override
+//!    cannot show it (MuPDF parity).
+//! 2. else a layer-panel override decides.
+//! 3. else `vs == ON` **and** the active configuration's `/AS` array has a
+//!    usage-application entry with `/Event /View` whose `/Category` contains
+//!    `/View` and whose `/OCGs` lists `num` → visible, whatever `/ON` /
+//!    `/OFF` / `/BaseState` say.
+//! 4. else the configuration state ([`OcConfig::is_on`]).
+//!
+//! Only the View usage is evaluated: `/Print /PrintState`, `/Export` and the
+//! other usage categories are ignored, as is an `/AS` entry for any other
+//! `/Event`. A `/ViewState` that is neither `/ON` nor `/OFF`, an empty
+//! `/View <<>>` or a missing `/View` fall through to the configuration state.
+//! `/AS` is read from the *active* configuration only (`/D`, or the selected
+//! `/Configs[n]`); an alternate configuration never inherits `/D`'s `/AS`.
+//! The reporting API ([`get_ocgs`], [`ocg_state`], [`layer_ui_configs`])
+//! reflects the configuration ON/OFF state alone, untouched by `/Usage`
+//! (PyMuPDF parity).
+//!
+//! ## Deliberate divergences from MuPDF / PyMuPDF
+//!
+//! pdfspine follows ISO 32000-1 where MuPDF does not:
+//!
+//! - `/OCMD /P` `AllOn` / `AnyOff` and `/VE` expressions are evaluated per
+//!   §8.11.2.2 (MuPDF mis-evaluates the former and ignores the latter).
+//! - Rule 3 above (`/AS` promotion): an OCG that is OFF in the configuration
+//!   but has `/ViewState /ON` and is listed by a View usage-application entry
+//!   is **visible** here, **hidden** in MuPDF / PyMuPDF, which ignores `/AS`
+//!   altogether (its source carries a FIXME saying it should not). §8.11.4.4
+//!   says the usage application dictionary sets the state, so the spec wins.
+//!
 //! This module parses all of that into plain value types. A non-layered PDF
 //! (no `/OCProperties`) yields empty results and never panics (PRD robustness).
 
@@ -353,18 +391,29 @@ pub fn get_ocmd(doc: &DocumentStore, xref: u32) -> Result<OcmdInfo> {
     })
 }
 
-/// The hidden-OCG oracle for one interpreter run: the set of OCGs that are OFF
-/// in the store's active [`LayerView`], plus the `/OCMD` evaluation rules
-/// (ISO 32000-1 §8.11.2.2; MuPDF `pdf_is_ocg_hidden`).
+/// The hidden-OCG oracle for one interpreter run: the set of OCGs that are
+/// hidden in the store's active [`LayerView`] once the View usage rules are
+/// applied (module docs), plus the `/OCMD` evaluation rules (ISO 32000-1
+/// §8.11.2.2; MuPDF `pdf_is_ocg_hidden`).
 #[derive(Clone, Debug, Default)]
 pub struct OcVisibility {
-    /// The object numbers of the OCGs that are OFF.
+    /// The object numbers of the OCGs that are hidden.
     hidden: HashSet<u32>,
 }
 
 impl OcVisibility {
-    /// Snapshots the active configuration's OFF set. A non-layered document
+    /// Snapshots the hidden-OCG set of the active configuration, applying the
+    /// per-OCG View usage rules (`/Usage /View /ViewState` and the
+    /// configuration's `/AS`; see the module docs). A non-layered document
     /// yields an oracle that hides nothing.
+    ///
+    /// OCMDs are evaluated later over this per-OCG set, so an OCG hidden by
+    /// its `/ViewState` hides through `/OCGs` / `/VE` as well.
+    ///
+    /// Divergence from MuPDF: an OCG that is OFF in the configuration but
+    /// carries `/ViewState /ON` and is listed by a `/Event /View` entry of
+    /// `/AS` is visible here (ISO 32000-1 §8.11.4.4) while MuPDF ignores
+    /// `/AS` and hides it.
     #[must_use]
     pub fn read(doc: &DocumentStore) -> Self {
         let Some(ocp) = oc_properties(doc) else {
@@ -373,7 +422,22 @@ impl OcVisibility {
         let cfg = OcConfig::active(doc, &ocp);
         let hidden = ocg_object_numbers(doc, &ocp)
             .into_iter()
-            .filter(|&num| !cfg.is_on(num))
+            .filter(|&num| {
+                let vs = view_state(doc, num);
+                if vs == Some(false) {
+                    // MuPDF: `/ViewState /OFF` always hides, even over a
+                    // layer-panel override.
+                    true
+                } else if let Some(&forced) = cfg.overrides.get(&num) {
+                    !forced
+                } else if vs == Some(true) && cfg.as_view.contains(&num) {
+                    // `/AS` usage application (spec; MuPDF would fall
+                    // through to the configuration state here).
+                    false
+                } else {
+                    !cfg.is_on(num)
+                }
+            })
             .collect();
         OcVisibility { hidden }
     }
@@ -384,7 +448,7 @@ impl OcVisibility {
         !self.hidden.is_empty()
     }
 
-    /// Whether the OCG `num` is OFF.
+    /// Whether the OCG `num` is hidden.
     #[must_use]
     pub fn is_ocg_hidden(&self, num: u32) -> bool {
         self.hidden.contains(&num)
@@ -682,8 +746,8 @@ fn walk_order(
 }
 
 /// A parsed `/OCConfig` — the ON/OFF/Locked sets, the base state, the raw
-/// `/Order` array (resolved one level), the `/RBGroups` radio groups and any
-/// layer-panel overrides.
+/// `/Order` array (resolved one level), the `/RBGroups` radio groups, the
+/// OCGs its `/AS` applies the View usage to, and any layer-panel overrides.
 pub(crate) struct OcConfig {
     on: Vec<u32>,
     off: Vec<u32>,
@@ -692,6 +756,10 @@ pub(crate) struct OcConfig {
     base_off: bool,
     order: Option<Vec<Object>>,
     rbgroups: Vec<Vec<u32>>,
+    /// The OCGs listed by the `/AS` usage-application entries with `/Event
+    /// /View` and `/View` in `/Category` (ISO 32000-1 §8.11.4.4). Read from
+    /// this configuration only — never inherited from `/D`.
+    as_view: HashSet<u32>,
     /// Per-OCG overrides from the store's [`LayerView`] (win over the arrays).
     overrides: BTreeMap<u32, bool>,
 }
@@ -700,7 +768,7 @@ impl OcConfig {
     /// Reads the configuration selected by the store's [`LayerView`] (`/D`, or
     /// `/Configs[n]` falling back to `/D` when it does not resolve) and applies
     /// its overrides. Like MuPDF's `load_ui`, an alternate configuration
-    /// without `/Order` / `/RBGroups` inherits them from `/D`.
+    /// without `/Order` / `/RBGroups` inherits them from `/D` (but not `/AS`).
     pub(crate) fn active(doc: &DocumentStore, ocp: &Dict) -> Self {
         let view = doc.layer_view();
         let default = config_dict(doc, ocp, None).unwrap_or_default();
@@ -738,6 +806,7 @@ impl OcConfig {
             base_off,
             order: read_order(doc, d),
             rbgroups: read_rbgroups(doc, d),
+            as_view: read_as_view(doc, d),
             overrides: BTreeMap::new(),
         }
     }
@@ -800,6 +869,73 @@ fn read_rbgroups(doc: &DocumentStore, d: &Dict) -> Vec<Vec<u32>> {
                 .collect()
         })
         .collect()
+}
+
+/// The OCGs a configuration's `/AS` array applies the View usage to: the
+/// union of `/OCGs` over every usage-application dictionary whose `/Event`
+/// is `/View` and whose `/Category` contains `/View` (ISO 32000-1
+/// §8.11.4.4). References are resolved at every level; anything malformed
+/// contributes nothing.
+fn read_as_view(doc: &DocumentStore, d: &Dict) -> HashSet<u32> {
+    let mut out = HashSet::new();
+    let Ok(Some(entries)) = doc.resolve_dict_key(d, &Name::new("AS")) else {
+        return out;
+    };
+    let Some(entries) = entries.as_array() else {
+        return out;
+    };
+    for entry in entries {
+        let app = match entry {
+            Object::Reference(r) => doc.resolve(*r).ok().and_then(|o| o.as_dict().cloned()),
+            direct => direct.as_dict().cloned(),
+        };
+        let Some(app) = app else {
+            continue;
+        };
+        let app = &app;
+        let is_view_event = doc
+            .resolve_dict_key(app, &Name::new("Event"))
+            .ok()
+            .flatten()
+            .and_then(|o| o.as_name().map(|n| n.as_bytes() == b"View"))
+            .unwrap_or(false);
+        let has_view_category = doc
+            .resolve_dict_key(app, &Name::new("Category"))
+            .ok()
+            .flatten()
+            .and_then(|o| {
+                o.as_array().map(|items| {
+                    items
+                        .iter()
+                        .filter_map(Object::as_name)
+                        .any(|n| n.as_bytes() == b"View")
+                })
+            })
+            .unwrap_or(false);
+        if is_view_event && has_view_category {
+            out.extend(ref_nums(doc, app, "OCGs"));
+        }
+    }
+    out
+}
+
+/// The `/Usage /View /ViewState` of OCG `num`: `Some(true)` for `/ON`,
+/// `Some(false)` for `/OFF`, `None` when the OCG, its `/Usage`, its `/View`
+/// or the state is absent or not a recognised name (references resolved at
+/// every level).
+fn view_state(doc: &DocumentStore, num: u32) -> Option<bool> {
+    let ocg = doc.get_object(num, 0).ok()?;
+    let ocg = ocg.as_dict()?;
+    let usage = doc.resolve_dict_key(ocg, &Name::new("Usage")).ok()??;
+    let usage = usage.as_dict()?;
+    let view = doc.resolve_dict_key(usage, &Name::new("View")).ok()??;
+    let view = view.as_dict()?;
+    let state = doc.resolve_dict_key(view, &Name::new("ViewState")).ok()??;
+    match state.as_name()?.as_bytes() {
+        b"ON" => Some(true),
+        b"OFF" => Some(false),
+        _ => None,
+    }
 }
 
 /// Resolves a configuration array key (`ON`/`OFF`/`Locked`) into a list of
