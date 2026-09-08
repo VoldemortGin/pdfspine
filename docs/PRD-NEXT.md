@@ -545,6 +545,37 @@ oracle-cross-checked against real PyMuPDF 1.24.14 (`.venv-oracle`) with zero reg
   - **Scores** (recall-weighted over all 186 gold tables; `tables_diff.py --gold` gained a `--strategy` flag, default `lines` unchanged): default `lines` GriTS_Top **0.073** / Con **0.070** (39/150 pages any detection) — **parity with fitz**, whose default also detects ~0 on these borderless financial tables; `strategy="text"` GriTS_Top **0.185** / Con **0.107** (148/150 pages, 148/148 predictions match gold IoU>0.5) — the engine's real detection capability, with a documented structure-quality tradeoff (page-grid over-merge/over-split; matched-only means drop vs lines' few-but-clean matches). These are custom **end-to-end extraction** baselines (full-page detection first; missed gold tables count 0). They are not directly comparable with Microsoft's published TATR ~0.98, which is TSR-only GriTS on gold cropped-table inputs. Reports: `GT-REPORT-tables-gold.md` (+ strategy-comparison section) and `GT-REPORT-tables-gold-text.md`.
   - **TATR vision vertical slice (2026-08-03): implemented, corpus re-score pending.** `page.find_tables(strategy="vision", backend="tatr")` now runs pinned Microsoft detection (`34669b5…`, no-timm backbone) + v1.1-all structure (`7587a7e…`) checkpoints through an optional Python extra. It preserves the base wheel, uses Microsoft's MIT canonical row/column/header/supercell post-processing with the official 10px crop padding, and slots exact pdfspine native words into cells (built-in OCR only when the whole page has no text layer). The default `native_line_guidance=True` can enlarge the structure-recognition crop with a matching native vector-line outline, while `adaptive_crop=True` can add up to two model-driven context expansions when structure objects touch an edge; both retain detector/crop provenance in metadata. Disable native guidance for a pure TATR path, and disable adaptive crop too for a single recognition pass. Real offline CPU smoke: synthetic ruled table detected as exactly 2×3 with `A1…C2` unchanged in ~1.7s. The gold harness consumes direct cells, requires bbox IoU ≥0.5, scores detector P/R/F1 from the raw `metadata.detection_bbox`, pairs extracted structure by the final `Table.bbox`, reports both recall-weighted end-to-end and matched-only GriTS, and uses a persistent JSONL worker so both models load once per run. Worker/model failure now stops immediately, writes `status=invalid` with no aggregate score, and exits non-zero. A gold-crop TSR-only mode remains required for a true apples-to-apples comparison with the published ~0.98. The 150/150 FinTabNet source PDFs were recovered during the 2026-09-05 glyph-geometry corpus run, but the separate vision score has not been rerun; use `tables_diff.py --gold ... --strategy vision` when resuming this item.
 
+- **P3-6 · Table-structure backend benchmark + multi-backend seam — PROPOSED (2026-09-07)** — *M–L · Medium*
+  - Decision record: [`docs/adr/0002-table-structure-backends.md`](adr/0002-table-structure-backends.md)
+    (Status: Proposed → Accepted after the benchmark). Survey with code pointers, external models,
+    metrics and datasets: [`docs/table-structure-models-survey.md`](table-structure-models-survey.md).
+  - **Why:** the default structure model (`tatr/v1.1-all`) is general-purpose; Docling TableFormer is
+    trained with FinTabNet and reports 96.8 % TEDS on it, and Microsoft also publishes a `v1.1-fin`
+    TATR variant. Financial reports are a primary workload, so the default should be picked on a
+    measured FinTabNet.c result, not by assumption. Users also want to swap in industry models
+    (including their own fine-tunes) without code changes.
+  - **Direction (see ADR):** a `TableStructureBackend` Protocol with separately replaceable
+    detection / structure stages; `find_tables(backend="tatr" | "tableformer")`; model choice via a
+    named alias registry with pinned revisions (`tatr/v1.1-all` default, `tatr/v1.1-fin`,
+    `tatr/v1.1-pub`, `tableformer/accurate`, `tableformer/fast`, or any raw HF repo id / local path);
+    pip extras by runtime family (`tatr`, `tableformer`, `tables-all`), never by model.
+  - **Sub-tasks (in order):**
+    1. `tables_diff.py --gold` gains a **gold-crop TSR-only mode** (crop with the gold bbox, score the
+       structure stage alone) so numbers are comparable with Microsoft's published ~0.98 GriTS.
+    2. **Rerun the vision score** on the recovered 150-page / 186-table FinTabNet.c slice
+       (`tables_diff.py --gold ... --strategy vision`), both end-to-end and TSR-only, for `v1.1-all`.
+    3. **TableFormer backend** (`docling-ibm-models` `TFPredictor.multi_table_predict`, pdfspine
+       detection + native words as `iocr_page`) behind the new Protocol, plus the `tableformer` extra.
+    4. **Model alias registry** with `tatr/v1.1-fin` and `tatr/v1.1-pub` aliases, wired to
+       `vision_options={"structure_model": ...}`, the `PDFSPINE_TATR_STRUCTURE_MODEL` env var, and a
+       `pdfspine models download <alias>` CLI.
+    5. **Benchmark report**: GriTS Top/Con (optionally TEDS via `table-recognition-metric`), per-table
+       CPU latency, peak memory, weight size and licence for all five candidates → `docs/BENCHMARKS.md`
+       and one `GT-REPORT-tables-gold-*.md` per candidate.
+    6. **Decide**: apply the ADR threshold (structure-stage GriTS_Con ≥ `v1.1-all` + 0.02 to change the
+       financial-report default; otherwise keep `v1.1-all` and ship the rest as opt-in aliases), then
+       flip ADR 0002 to Accepted with the chosen default recorded in its registry table.
+
 ### Phase 4 — Post-launch capability / strategic
 
 - **P4-1 · Font handle carries `/FontFile*` program bytes — ✅ DONE (2026-06-21)** — *was L · Medium (API)* · NOT the rendering keystone (C3)
@@ -635,6 +666,7 @@ oracle-cross-checked against real PyMuPDF 1.24.14 (`.venv-oracle`) with zero reg
 | P3-4 | Kangxi fold + edge-case tests + robustness rerun | S–M | Low–Med | ✅ done | 3 |
 | P3-4r | vertical writing-mode (wmode 1, `/W2`+`/DW2`, −y advance) | M | Low | ✅ done | 3r |
 | P3-5 | FinTabNet GriTS absolute score (HF-mirror fetch; lines 0.073 / text 0.185 Top) | M | Med | ✅ done | 3 |
+| P3-6 | Table-structure backend benchmark + multi-backend seam (ADR 0002: TATR v1.1-all/fin/pub vs TableFormer) | M–L | Med | proposed | 3 |
 | P4-1 | Font carries `/FontFile*` (buffer/glyph_bbox, +2) | L | Med | ✅ done | 4 |
 | P4-2 | Type1 charstring (PFB/PFA) support | L | Med | ✅ done | 4 |
 | P4-2r | Type1 builtin `/Encoding` parse (hint-replace / MM stay safe no-ops) | S | Low | ✅ done | 4r |
