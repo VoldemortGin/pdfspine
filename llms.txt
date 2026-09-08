@@ -5,6 +5,7 @@
 - pip 安装名: `pdfspine`（裸安装自动带上共享 `ocrspine-models` 数据包；`[ocr]`/`[all]` 是兼容性空壳）
 - import 名: `import pdfspine`
 - 要求: CPython >= 3.12（abi3 wheel；`requires-python = ">=3.12"`）
+- Spine 家族关系地图（成员 / 分层 / 依赖方向）: [docs/spine-family.md](docs/spine-family.md)
 
 ## fitz / pymupdf 兼容
 
