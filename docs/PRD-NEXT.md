@@ -580,9 +580,9 @@ oracle-cross-checked against real PyMuPDF 1.24.14 (`.venv-oracle`) with zero reg
     6. **Decide**: apply the ADR threshold (structure-stage GriTS_Con ≥ `v1.1-all` + 0.02 to change the
        financial-report default; otherwise keep `v1.1-all` and ship the rest as opt-in aliases), then
        flip ADR 0002 to Accepted with the chosen default recorded in its registry table.
-  - **ONNX backend landed (2026-09-08):** `find_tables(strategy="vision", backend="onnx")` — DocLayout-YOLO
-    layout detection + SLANet-plus cell structure (both Apache-2.0 RapidAI exports, onnxruntime only, no
-    torch; weights downloaded separately via `PDFSPINE_ONNX_MODELS`) — plus `Page.find_layout()` /
+  - **ONNX backend landed (2026-09-08):** `find_tables(strategy="vision", backend="onnx")` — PP-DocLayout
+    layout detection + SLANet-plus cell structure (both Apache-2.0 PaddlePaddle models as RapidAI ONNX
+    exports, onnxruntime only, no torch; weights downloaded separately via `PDFSPINE_ONNX_MODELS`) — plus `Page.find_layout()` /
     `Page.get_layout_html()` (semantic HTML, text 100 % from the text layer), all in
     `python/pdfspine/_onnx.py`; user docs in [`docs/guide/layout-html.md`](guide/layout-html.md). The models
     are **not yet validated on an evaluation set**. Follow-up sub-tasks: (a) build the 30–50-page financial
@@ -592,13 +592,21 @@ oracle-cross-checked against real PyMuPDF 1.24.14 (`.venv-oracle`) with zero reg
     Protocol once that refactor happens (it is the end-to-end "third backend" revisit trigger named there).
   - **First real-model baseline (2026-09-08):** three FinTabNet.c pages run by eye against gold
     annotations — full write-up, numbers and reproduction steps in
-    [`docs/onnx-backend-baseline-2026-09-08.md`](../onnx-backend-baseline-2026-09-08.md)
+    [`docs/onnx-backend-baseline-2026-09-08.md`](onnx-backend-baseline-2026-09-08.md)
     (`scripts/onnx_vis.py`). Confirms the numeric-block cropping failure mode from (b) above is the
     dominant error (3 of 5 tables lose their row-label column) and sharpens the fix order for this
     backend specifically:
-    1. **Table detection box expansion** — grow the detected box leftward along row-aligned text to
-       recover the row-label column that DocLayout-YOLO crops away (ADI `Table.bbox` IoU 0.32 / 897
-       unclaimed words; AMP T1 IoU 0.29; AMP T2 IoU 0.63).
+    - **Layout model switched (2026-09-08):** the original YOLO-based layout detector was replaced by
+      PP-DocLayout-L (default; PP-DocLayoutV3 optional via `layout_variant="pp_doclayoutv3"` and
+      recommended) because the old detector's upstream repo, PyPI metadata and ONNX `license` field all
+      say AGPL-3.0. The numbers below are the pre-swap baseline and are superseded by the PP-DocLayout
+      re-run in
+      [`docs/onnx-backend-baseline-2026-09-08.md`](onnx-backend-baseline-2026-09-08.md).
+    1. ~~**Table detection box expansion**~~ — **resolved by the model swap**: the row-label-column crop was a
+       failure of the old detector (ADI `Table.bbox` IoU 0.32 / 897 unclaimed words; AMP T1 IoU 0.29; AMP T2
+       IoU 0.63); PP-DocLayoutV3 detects the full table on all three pages (IoU 0.99 / 0.85 / 0.92,
+       unclaimed words 897 → 23 and 21 → 0). PP-DocLayout-L fixes ADI (0.98) but misclassifies the shaded
+       ADBE table as `image` and emits a nested duplicate box on ADI — hence the V3 recommendation.
     2. **Cell text assignment / column merging** — fold `"$"`-only predicted columns into their numeric
        neighbor, assign row-label words by row-band y-range instead of nearest-cell-box (fixes multi-line
        label misattribution), strip dotted-leader tokens (ADBE 11 vs 8 predicted columns; AMP T0 12 vs 9).

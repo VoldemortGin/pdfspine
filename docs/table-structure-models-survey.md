@@ -1,11 +1,13 @@
 # Table-structure models: pdfspine status and external survey
 
-- Date: 2026-09-07
-- Code baseline: `main` @ `9145f9f` (line numbers below refer to that commit)
+- Date: 2026-09-07; §4 (layout detection models) and its sources added
+  2026-09-08
+- Code baseline: `main` @ `9145f9f` (line numbers below refer to that commit;
+  §4 refers to branch `fix/onnx-layout-ppdoclayout`)
 - Method: read-only code survey of this repository plus web verification of
   GitHub, Hugging Face, PyPI and arXiv pages. Context7 MCP was **not** available
   in the session, so no vendor documentation was fetched through it; every
-  external claim is sourced in §5 with the access date.
+  external claim is sourced in §6 with the access date.
 - **"Unverified"** marks a statement that comes from a second-hand summary, a
   page that did not state the fact explicitly, or a model card with missing
   fields. Treat those as leads to confirm before they drive a decision, not as
@@ -27,7 +29,11 @@ what has to be measured before anything changes.
 - Which TATR checkpoints exist and what was each trained on? → [§3.1](#31-official-microsoft-checkpoints-microsofttable-transformer)
 - How do we benchmark the structure stage alone (gold-crop TSR-only) and with
   which metrics / data? → [§1.4](#14-tests-and-evaluation-infrastructure),
-  [§4](#4-evaluation-resources)
+  [§5](#5-evaluation-resources)
+- Why was DocLayout-YOLO removed from the ONNX backend, and what is the
+  evidence? → [§4.1](#41-doclayout-yolo-agpl-30-lineage-withdrawn-2026-09-08)
+- Which PP-DocLayout variant should the ONNX backend use? →
+  [§4.2](#42-paddlex-pp-doclayout-family), [§4.4](#44-recommendation)
 - Why not one pip extra per model? → [ADR 0002, "Model selection"](adr/0002-table-structure-backends.md#model-selection-named-registry-with-pinned-revisions)
 
 ---
@@ -303,9 +309,142 @@ model-selection mechanism must accept arbitrary repo ids / local paths.
 
 ---
 
-## 4. Evaluation resources
+## 4. Layout detection models (ONNX backend, added 2026-09-08)
 
-### 4.1 Metric implementations
+The ONNX backend (`python/pdfspine/_onnx.py`, `backend="onnx"`) is
+end-to-end: a page-layout detector finds `table` regions (and every other
+block type), SLANet-plus predicts the cell grid of each region, and the
+native word layer fills the cells. This section records the layout stage:
+why the first detector was withdrawn, what the replacement family looks like,
+and which variant the measurements favour. SLANet-plus itself is unchanged
+(§3.3).
+
+### 4.1 DocLayout-YOLO: AGPL-3.0 lineage, withdrawn 2026-09-08
+
+The backend first shipped with DocLayout-YOLO
+(`doclayout_yolo_docstructbench_imgsz1024.onnx`, RapidAI RapidLayout
+v1.2.0). The weights card on Hugging Face is tagged Apache-2.0; the project's
+own lineage is not. Three independent pieces of evidence, all checked
+2026-09-08:
+
+| # | Evidence | What it says |
+|---|---|---|
+| 1 | Upstream repository `LICENSE`: https://raw.githubusercontent.com/opendatalab/DocLayout-YOLO/main/LICENSE | The file is the AGPL-3.0 text ("GNU AFFERO GENERAL PUBLIC LICENSE, Version 3, 19 November 2007"). |
+| 2 | PyPI package metadata: https://pypi.org/pypi/doclayout-yolo/json | `license: AGPL-3.0`; classifier `License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)` (latest 0.0.4). The repository is a fork of Ultralytics and its `pyproject.toml` carries the same classifier. |
+| 3 | Ultralytics' own licence position: https://www.ultralytics.com/license | AGPL-3.0 for open use, otherwise a paid Enterprise licence; the page states this applies to "code, models, architectures, training pipelines, or trained/fine-tuned models". DocLayout-YOLO builds on the Ultralytics / YOLOv10 code base. |
+
+Local corroboration: the RapidAI ONNX export we were loading embeds
+`author=Ultralytics, license=AGPL-3.0` in its own model metadata.
+
+Conclusion: the Apache-2.0 tag on the weights card does not override the
+upstream project's LICENSE, its package metadata and the artefact's own
+stamp. Under the family rule (Apache-2.0 or more permissive through the whole
+chain; [ADR 0002, "Licence stance"](adr/0002-table-structure-backends.md#licence-stance-apache-20-only-through-the-whole-chain))
+the model was **removed from pdfspine** the same day — code, docs and the
+`onnx/doclayout-slanet-plus` registry alias — and replaced by PaddleX
+PP-DocLayout (§4.2). The DocLayout-YOLO numbers in
+`docs/onnx-backend-baseline-2026-09-08.md` are kept as history only.
+
+### 4.2 PaddleX PP-DocLayout family
+
+All members are PaddleX / PaddleOCR layout detectors published by
+PaddlePaddle under Apache-2.0, with ONNX exports published by RapidAI
+(Apache-2.0, `onnxruntime`, no torch). Head / backbone, class count and input
+size are read from each model's `inference.yml` on Hugging Face (`arch`,
+`label_list`, `Preprocess.Resize.target_size`) and from the PaddleX model
+descriptions; mAP and storage size are PaddleX's published figures. **The mAP
+numbers are not mutually comparable**: L / M / S are scored on one self-built
+PaddleX evaluation set (the Hugging Face cards say 500 images of Chinese and
+English papers, newspapers, research reports and test papers), plus-L on a
+different and broader one (1,000 images that add PPT, magazines and
+textbooks), and V3 has no published mAP at all. The PaddleOCR 3.x module page
+gives yet another size for the same eval set (1,300 images) — treat the
+image counts as approximate.
+
+| Model | Head / backbone | Classes | Input | Published mAP(0.5) | Size on disk | Licence |
+|---|---|---:|---|---|---|---|
+| PP-DocLayout-S | PicoDet-S (`arch: GFL`) | 23 | 480×480 | 70.9 % (PaddleX self-built layout eval set) | 4.834 MB (PaddleX) | Apache-2.0 |
+| PP-DocLayout-M | PicoDet-L (`arch: GFL`) | 23 | 640×640 | 75.2 % (same set) | 22.578 MB (PaddleX) | Apache-2.0 |
+| PP-DocLayout-L | RT-DETR-L (`arch: DETR`) | 23 | 640×640 | 90.4 % (same set) | 123.76 MB (PaddleX); 123 MB as `pp_doclayout_l.onnx` | Apache-2.0 |
+| PP-DocLayout_plus-L | RT-DETR-L (`arch: DETR`) | 20 | 800×800 | 83.2 % (**different**, broader self-built set) | 126.01 MB (PaddleX) | Apache-2.0 |
+| PP-DocLayoutV3 | RT-DETR framework with a mask head and a "Global Pointer" reading-order head in the decoder (`arch: DETR`); backbone name **not published**; 33 M parameters per the paper | 25 | 800×800 | **Not published.** PaddleX / PaddleOCR list only latency (23.77 ms, A100) and size. The RT-DocLayout paper reports end-to-end document-parsing scores with a VLM recogniser (OmniDocBench v1.5 overall 94.50; Real5-OmniDocBench six-dimension average 92.46 %), not a standalone layout mAP | 126 MB (PaddleX); 124 MB as `pp_doc_layoutv3.onnx` | Apache-2.0 |
+
+Notes on the rows:
+
+- Lineage: PP-DocLayout-S / M / L are the three models of the PP-DocLayout
+  paper (arXiv 2503.17213, March 2025; 23 region types; L on RT-DETR-L).
+  PP-DocLayout_plus-L is the PP-StructureV3 default, retrained on a broader
+  corpus with a 20-class vocabulary. PP-DocLayoutV3 is the open-source
+  release of RT-DocLayout (arXiv 2606.23344, ECCV 2026); the paper says so
+  explicitly. It unifies classification, box regression, pixel masks and
+  reading-order prediction in one query-based RT-DETR decoder.
+- The intermediate PP-DocLayoutV2 (25 classes, 203.8 MB, 81.4 % mAP(0.5) on
+  a 1,000-image / 25-class self-built set per the PaddleX layout-analysis
+  page) is the nearest published reference point for V3's vocabulary; V3
+  itself is only ever compared end-to-end.
+- Class vocabularies: S / M / L share one 23-entry list (`paragraph_title`,
+  `image`, `text`, `number`, `abstract`, `content`, `figure_title`,
+  `formula`, `table`, `table_title`, `reference`, `doc_title`, `footnote`,
+  `header`, `algorithm`, `footer`, `seal`, `chart_title`, `chart`,
+  `formula_number`, `header_image`, `footer_image`, `aside_text`). plus-L
+  drops `table_title`, `chart_title`, `header_image`, `footer_image` and adds
+  `reference_content`. V3 has 25 entries, alphabetical upstream: relative
+  to L it adds `vision_footnote`, `vertical_text`, `reference_content`,
+  splits `formula` into `display_formula` / `inline_formula`, and drops
+  `table_title` and `chart_title` (it keeps `header_image` / `footer_image`).
+- Input sizes are the fixed square resize in `inference.yml`
+  (`keep_ratio: false`); the 640 / 800 figures for L and V3 are also what the
+  RapidAI ONNX graphs expect and what `_onnx.py` `LAYOUT_INPUT_SIZES` pins.
+
+### 4.3 What pdfspine ships
+
+Two variants are wired behind `vision_options={"layout_variant": ...}`
+(`_onnx.py` `LAYOUT_VARIANTS`), both RapidAI ONNX exports fetched from
+ModelScope at pinned revisions:
+
+| Variant | File | Pinned source | Input | Classes | Output row |
+|---|---|---|---|---|---|
+| `pp_doclayout_l` (default) | `pp_doclayout_l.onnx`, 123 MB | ModelScope `RapidAI/RapidDoc` @ `v1.0.0`, `layout/PP-DocLayout-L/` | 640×640 | 23 | `(class_id, score, x0, y0, x1, y1)` |
+| `pp_doclayoutv3` | `pp_doc_layoutv3.onnx`, 124 MB | ModelScope `RapidAI/RapidLayout` @ `v1.2.0`, `onnx/pp_doc_layout/` | 800×800 | 25 | same + 7th column: per-box reading-order key |
+
+Both graphs take three named inputs (`image`, `im_shape`, `scale_factor`)
+and return boxes already in original-image pixels, RT-DETR style: no
+letterbox, no ImageNet mean / std, and **no built-in NMS**, so pdfspine runs
+a same-class IoU pass afterwards. The RapidLayout release notes record
+`v1.1.0` as "support PP-DocLayoutV2" and `v1.2.0` as "support
+PP-DocLayoutV3"; RapidDoc's README lists PP-DocLayoutV3 as its own default
+("自带阅读顺序，支持异形框，默认使用"). SLANet-plus stays
+`slanet-plus.onnx` (6.8 MB) from ModelScope `RapidAI/RapidTable` @ `v2.0.0`.
+PP-DocLayout-S / M / plus-L have no pdfspine wiring; adding one is a
+file-name and label-list entry in `_onnx.py`.
+
+### 4.4 Recommendation
+
+Measured on the same three FinTabNet.c pages as the original baseline
+(ADBE_2011_page_118, ADI_2010_page_51, AMP_2015_page_94; details and every
+number in
+[`docs/onnx-backend-baseline-2026-09-08.md`](onnx-backend-baseline-2026-09-08.md),
+"Layout model switched to PP-DocLayout"), **PP-DocLayoutV3 is materially
+better than PP-DocLayout-L**. V3 recovers the full table box, including the
+wide row-label column, on every table of every page (IoU 0.97 / 0.99 / 0.94 /
+0.85 / 0.92 against gold) and leaves no text-layer word unclaimed on two of
+the three pages; its per-box reading-order key also replaces the geometric
+band rule that misordered two-column pages. PP-DocLayout-L fixes ADI (IoU
+0.98) but classifies ADBE's shaded, zebra-striped table as `image` (0.83 vs
+0.38 as `table`, so `find_tables()` returns nothing at the 0.5 threshold) and
+emits a nested duplicate table box on ADI that IoU-based NMS cannot remove
+(IoU 0.31), while still cropping AMP T1 / T2 (IoU 0.36 / 0.62). The cost of
+V3 is roughly 40 % more per-page latency (2.5–3.5 s vs 1.6–2.0 s on CPU) and
+one missed running-head block. **The shipped default is currently
+PP-DocLayout-L** (`DEFAULT_LAYOUT_VARIANT` in `_onnx.py`); the survey's
+recommendation is to flip it to V3 once a scored run over the full 150-page
+slice confirms the three-page picture.
+
+---
+
+## 5. Evaluation resources
+
+### 5.1 Metric implementations
 
 | Metric | Implementation | Notes |
 |---|---|---|
@@ -313,7 +452,7 @@ model-selection mechanism must accept arbitrary repo ids / local paths.
 | TEDS | `table-recognition-metric` (PyPI, author SWHL, Apache-2.0, Python 3.6–3.14) | needed to compare with the Docling paper numbers |
 | TEDS + layout | `docling-eval` (IBM; CLI batch evaluation over PubTabNet / PubTables-1M / FinTabNet / OmniDocBench) | heavy; pulls in the Docling stack |
 
-### 4.2 Datasets
+### 5.2 Datasets
 
 - **PubTables-1M** (`bsmock/pubtables-1m` on HF): ~947K cropped table
   instances for structure, ~575K pages for detection; no native `datasets`
@@ -323,7 +462,7 @@ model-selection mechanism must accept arbitrary repo ids / local paths.
   slice of it.
 - **PubTabNet**: ~568K table images from the PubMed Central OA subset.
 
-### 4.3 Recommendation for a small-scale comparison
+### 5.3 Recommendation for a small-scale comparison
 
 Use the FinTabNet.c **test split** (thousands of tables, GB-scale download) or
 the PubTabNet val split, both downloadable from the HF repositories above. For
@@ -333,7 +472,7 @@ structure-stage numbers are comparable with Microsoft's published ~0.98.
 
 ---
 
-## 5. Sources (all accessed 2026-09-07)
+## 6. Sources (accessed 2026-09-07 unless marked otherwise)
 
 Docling / TableFormer
 
@@ -362,3 +501,42 @@ Evaluation tools and datasets
 - https://github.com/docling-project/docling-eval
 - https://huggingface.co/datasets/bsmock/FinTabNet.c
 - https://huggingface.co/datasets/bsmock/pubtables-1m
+
+DocLayout-YOLO licence evidence (§4.1; accessed 2026-09-08)
+
+- https://raw.githubusercontent.com/opendatalab/DocLayout-YOLO/main/LICENSE
+- https://pypi.org/pypi/doclayout-yolo/json
+- https://www.ultralytics.com/license
+
+PP-DocLayout family (§4.2; accessed 2026-09-08)
+
+- https://paddlepaddle.github.io/PaddleX/latest/en/module_usage/tutorials/ocr_modules/layout_detection.html
+  (S / M / L / plus-L: mAP, storage size, descriptions, eval-set note)
+- https://paddlepaddle.github.io/PaddleX/3.7/en/module_usage/tutorials/ocr_modules/layout_analysis.html
+  (V3: latency, storage size, description; V2 reference row)
+- https://raw.githubusercontent.com/PaddlePaddle/PaddleOCR/main/docs/version3.x/module_usage/layout_detection.en.md
+- https://raw.githubusercontent.com/PaddlePaddle/PaddleOCR/main/docs/version3.x/module_usage/layout_analysis.en.md
+- https://huggingface.co/PaddlePaddle/PP-DocLayout-S,
+  https://huggingface.co/PaddlePaddle/PP-DocLayout-M,
+  https://huggingface.co/PaddlePaddle/PP-DocLayout-L,
+  https://huggingface.co/PaddlePaddle/PP-DocLayout_plus-L,
+  https://huggingface.co/PaddlePaddle/PP-DocLayoutV3 (model cards: licence,
+  eval-set image counts; `raw/main/inference.yml` in each: `arch`,
+  `label_list`, `Preprocess.Resize.target_size`)
+- https://arxiv.org/abs/2503.17213 (PP-DocLayout paper)
+- https://arxiv.org/abs/2606.23344 (RT-DocLayout paper; released as
+  PP-DocLayoutV3)
+- https://github.com/huggingface/transformers/blob/main/docs/source/en/model_doc/pp_doclayout_v3.md
+
+RapidAI ONNX exports (§4.3; accessed 2026-09-08)
+
+- https://github.com/RapidAI/RapidLayout,
+  https://rapidai.github.io/RapidLayout/latest/models/,
+  https://github.com/RapidAI/RapidLayout/releases
+- https://github.com/RapidAI/RapidDoc
+- https://github.com/RapidAI/RapidTable,
+  https://github.com/RapidAI/RapidTable/releases/tag/v2.0.0
+- ModelScope model pages `RapidAI/RapidDoc`, `RapidAI/RapidLayout`,
+  `RapidAI/RapidTable` (the pinned `resolve/<rev>/...` download URLs are in
+  `python/pdfspine/_onnx.py`; the pages themselves were unreachable from this
+  session on 2026-09-08 — file sizes above are from the downloaded artefacts)

@@ -64,20 +64,41 @@ usable runtime raises `PdfUnsupportedError`.
 
 ### Optional ONNX layout/table backend
 
-A torch-free vision backend (DocLayout-YOLO layout detection + SLANet-plus
-table structure, both Apache-2.0 RapidAI exports running on onnxruntime) is
-also opt-in:
+A torch-free vision backend (PP-DocLayout layout detection + SLANet-plus
+table structure, both Apache-2.0 PaddlePaddle models running as RapidAI ONNX
+exports on onnxruntime) is also opt-in:
 
 ```bash
 pip install "pdfspine[onnx]"
 ```
 
-It adds `onnxruntime`, `numpy`, and `Pillow`. The two model files are not in
-the wheel: download `doclayout_yolo_docstructbench_imgsz1024.onnx` and
-`slanet-plus.onnx` into a directory and point `PDFSPINE_ONNX_MODELS` at it
-(or pass `layout_model` / `table_model` paths in `vision_options`); see
-[Tables](../reference/tables.md#vision-onnx-doclayout-yolo-slanet-plus) for the
-download commands and the [Layout HTML guide](layout-html.md) for usage.
+It adds `onnxruntime`, `numpy`, and `Pillow`. The model files are not in the
+wheel: download the layout detector and `slanet-plus.onnx` into a directory
+and point `PDFSPINE_ONNX_MODELS` at it (or pass `layout_model` /
+`table_model` paths in `vision_options`). Two layout variants are supported,
+selected with `vision_options={"layout_variant": ...}`:
+
+- `pp_doclayout_l.onnx` — PP-DocLayout-L, the default
+  (`layout_variant="pp_doclayout_l"`);
+- `pp_doc_layoutv3.onnx` — PP-DocLayoutV3 (`layout_variant="pp_doclayoutv3"`),
+  optional but recommended for financial statements: it also predicts the
+  reading order and, on the baseline pages, detects every table that
+  PP-DocLayout-L misses.
+
+See [Tables](../reference/tables.md#vision-onnx-pp-doclayout-slanet-plus) for
+the download commands and the [Layout HTML guide](layout-html.md) for usage
+and the variant comparison.
+
+**Model attribution.** PP-DocLayout (PP-DocLayout-L and PP-DocLayoutV3) —
+Copyright (c) PaddlePaddle Authors, Apache-2.0,
+<https://github.com/PaddlePaddle/PaddleX>; ONNX conversion by RapidAI
+(<https://www.modelscope.cn/models/RapidAI/RapidLayout>,
+<https://www.modelscope.cn/models/RapidAI/RapidDoc>), Apache-2.0. SLANet-plus —
+Copyright (c) PaddlePaddle Authors, Apache-2.0,
+<https://github.com/PaddlePaddle/PaddleOCR>; ONNX conversion by RapidAI
+(<https://www.modelscope.cn/models/RapidAI/RapidTable>), Apache-2.0. These
+weights are downloaded by the user and are not part of the wheel, so they are
+not listed in the repository `NOTICE` file.
 
 For CUDA, install `onnxruntime-gpu` instead of `onnxruntime`; the default
 `providers="auto"` then picks `CUDAExecutionProvider` automatically. `auto`

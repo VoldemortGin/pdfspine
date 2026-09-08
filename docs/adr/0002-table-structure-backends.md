@@ -76,12 +76,15 @@ The current code cannot serve either request cleanly:
   such as SLANet or UniTable); the Protocol then gains an end-to-end variant
   rather than being bypassed.
 - Status note (2026-09-08): `backend="onnx"` landed as exactly such an
-  end-to-end backend (DocLayout-YOLO layout → SLANet-plus cells → native
+  end-to-end backend (PP-DocLayout layout → SLANet-plus cells → native
   words) in `python/pdfspine/_onnx.py`, dispatched by a string check in
   `document.py` without the Protocol refactor. It is the "third backend whose
   stages do not map onto detection / structure" revisit trigger above; the
   Protocol's end-to-end variant should be designed around it when the seam is
-  built. The first real-model run (three FinTabNet.c pages) is recorded in
+  built. The layout stage first shipped with DocLayout-YOLO and was switched
+  to PaddleX PP-DocLayout the same day for licence reasons (see "Licence
+  stance" below). The first real-model run (three FinTabNet.c pages, both
+  layout models) is recorded in
   [`docs/onnx-backend-baseline-2026-09-08.md`](../onnx-backend-baseline-2026-09-08.md);
   its fix-priority list should inform this backend's shape before it is
   folded into the Protocol.
@@ -98,9 +101,13 @@ The current code cannot serve either request cleanly:
   | `tatr/v1.1-pub` | tatr | `microsoft/table-transformer-structure-recognition-v1.1-pub` |
   | `tableformer/accurate` | tableformer | `docling-project/docling-models`, `model_artifacts/tableformer/accurate` |
   | `tableformer/fast` | tableformer | `docling-project/docling-models`, `model_artifacts/tableformer/fast` |
-  | `onnx/doclayout-slanet-plus` | onnx | RapidAI exports: DocLayout-YOLO docstructbench @ RapidLayout v1.2.0 + SLANet-plus @ RapidTable v2.0.0 (Apache-2.0, onnxruntime, no torch) |
+  | `onnx/pp-doclayout-slanet-plus` | onnx | RapidAI ONNX exports: PP-DocLayout-L @ RapidDoc v1.0.0 (default) or PP-DocLayoutV3 @ RapidLayout v1.2.0, plus SLANet-plus @ RapidTable v2.0.0 (all Apache-2.0, onnxruntime, no torch) |
 
   Revisions for the entries not yet pinned are fixed when the backend lands.
+  The previous `onnx/doclayout-slanet-plus` entry (DocLayout-YOLO
+  docstructbench @ RapidLayout v1.2.0) was **withdrawn on 2026-09-08 because
+  of its AGPL-3.0 lineage**; the evidence is in
+  [survey §4.1](../table-structure-models-survey.md#41-doclayout-yolo-agpl-30-lineage-withdrawn-2026-09-08).
 - Selection surfaces: `vision_options={"structure_model": "<alias>"}`, the
   existing `PDFSPINE_TATR_STRUCTURE_MODEL` environment variable (generalised
   to accept aliases), and a future `pdfspine models download <alias>` CLI that
@@ -130,6 +137,37 @@ The current code cannot serve either request cleanly:
   upstream; or the number of aliases grows to the point where a data file
   (TOML) beats a Python dict.
 
+### Licence stance: Apache-2.0 only, through the whole chain
+
+- pdfspine's dependency chain — runtime packages, ONNX exports and the
+  weights themselves — is **Apache-2.0 or more permissive, with no
+  exceptions**. A model whose lineage is in doubt is **replaced, not
+  negotiated**: no dual-licence enquiry, no "internal use only" carve-out, no
+  waiting for upstream to clarify.
+- A permissive tag on a weights card (Hugging Face, ModelScope) does **not**
+  override the upstream project's own `LICENSE` file or its package metadata.
+  The licence of a model is the most restrictive licence found anywhere in its
+  lineage: the training / export code base it is a fork of, the package that
+  publishes it, and the metadata stamped into the artefact.
+- This is now a **standing acceptance criterion** for every alias added to
+  the registry above: before an entry lands, the upstream repository LICENSE,
+  the package index metadata and the artefact's embedded metadata are checked
+  and the URLs recorded in the survey. An alias whose chain cannot be traced
+  to Apache-2.0 (or MIT / BSD / CDLA-Permissive) at every link is not added.
+- Applied once already: DocLayout-YOLO, the ONNX backend's first layout
+  model, is a fork of Ultralytics YOLOv10 and carries AGPL-3.0 in its
+  repository LICENSE, its PyPI metadata and the RapidAI export's own
+  metadata, regardless of the Apache-2.0 tag on the weights card. It was
+  removed from the code base on 2026-09-08 and replaced by PaddleX
+  PP-DocLayout (Apache-2.0). The three pieces of evidence, with URLs and the
+  date checked, are recorded in
+  [survey §4.1](../table-structure-models-survey.md#41-doclayout-yolo-agpl-30-lineage-withdrawn-2026-09-08).
+- Affected files: the registry module (licence label per alias), the model
+  survey (evidence per alias), `THIRD-PARTY-NOTICES.md` when weights are
+  ever shipped.
+- Revisit trigger: none foreseen. Relaxing this rule would be a new ADR, not
+  an amendment to this one.
+
 ### pip extras by runtime family
 
 - Extras are split by **runtime family**, not by model:
@@ -137,7 +175,7 @@ The current code cannot serve either request cleanly:
   - `tableformer` — `docling-ibm-models` and the torch version it requires
     (to be pinned when the backend lands; the required torch range is
     unverified in the survey).
-  - `onnx` — `onnxruntime` + `numpy` + `Pillow` for the DocLayout-YOLO +
+  - `onnx` — `onnxruntime` + `numpy` + `Pillow` for the PP-DocLayout +
     SLANet-plus backend (landed 2026-09-08; no torch).
   - `tables-all` — union of the two.
   - `all` — includes `tables-all`.
