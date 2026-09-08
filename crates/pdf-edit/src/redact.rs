@@ -361,24 +361,34 @@ impl<'a> RedactCtx<'a> {
                 }
             }
             b"'" => {
-                // T* then show.
+                // `(s) '` ≡ `T* (s) Tj`. The show is rewritten as a `TJ` (or
+                // dropped entirely), so the implicit line advance must be
+                // re-emitted as an explicit `T*` or the survivors — and every
+                // line after them — land on the previous baseline.
                 let ty = -st.gs.leading;
                 st.tlm = Matrix::concat(&Matrix::translate(0.0, ty), &st.tlm);
                 st.tm = st.tlm;
+                out.extend_from_slice(b"T*\n");
                 if let Some(s) = first_string(ops) {
                     self.rewrite_show(&s, st, font_cache, out);
                 }
             }
             b"\"" => {
+                // `aw ac (s) "` ≡ `aw Tw ac Tc T* (s) Tj`. `Tw` / `Tc` persist
+                // in the text state, so they are re-emitted explicitly before
+                // the line advance and the rewritten show.
                 if let Some(aw) = nth_f64(ops, 0) {
                     st.gs.word_spacing = aw;
+                    emit_op(out, &ops[..1], b"Tw");
                 }
                 if let Some(ac) = nth_f64(ops, 1) {
                     st.gs.char_spacing = ac;
+                    emit_op(out, &ops[1..2], b"Tc");
                 }
                 let ty = -st.gs.leading;
                 st.tlm = Matrix::concat(&Matrix::translate(0.0, ty), &st.tlm);
                 st.tm = st.tlm;
+                out.extend_from_slice(b"T*\n");
                 if let Some(s) = last_string(ops) {
                     self.rewrite_show(&s, st, font_cache, out);
                 }

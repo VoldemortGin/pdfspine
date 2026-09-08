@@ -81,6 +81,25 @@ feature-complete, but the public API and on-disk formats may still change.
   single-stream `/AP /N` gets its `/Matrix` composed with the same matrix so
   the appearance follows the content. Widget `/Rect` now matches PyMuPDF 1.28
   for 0°/90°/180° (PyMuPDF itself writes an off-page rect at 270°).
+- **`apply_redactions()` kept the `'` and `"` operator semantics.** The content
+  rewriter re-emitted both text-showing operators as a bare `TJ`, dropping the
+  implicit `T*` line advance and, for `"`, the `aw` / `ac` word- and
+  char-spacing operands, so on a page typeset with them every surviving line
+  after the first `'` / `"` was drawn on the previous baseline with the wrong
+  spacing (a fidelity defect, not a leak). Each `'` now expands to an explicit
+  `T*` and each `"` to `aw Tw ac Tc T*` ahead of the rewritten (or dropped)
+  show, on the mapped and the verbatim-font paths alike; surviving words match
+  real PyMuPDF's redaction within 0.5 pt.
+- `Page.get_text(..., clip=)` now honours `clip` in every Rust-backed mode
+  (`text`, `dict`, `rawdict`, `words`, `blocks`, `json`, `rawjson`) and so does
+  `Page.get_textpage(clip=)` / `Annot.get_text`: the `TextPage` is built clipped
+  the way PyMuPDF does it — a character is kept when its bbox overlaps the clip,
+  block / line / span geometry and numbering are rebuilt from the kept
+  characters, `width`/`height` are the clip's, image blocks are cut to the
+  overlap. As in PyMuPDF a supplied `textpage=` wins over `clip=`, `html` /
+  `xhtml` / `xml` always cover the whole page, and `search_for(clip=)` no longer
+  reports a needle that straddles the clip edge. Previously the clip was
+  ignored and running headers survived a clipped extraction.
 - **PaddleOCR Latin accuracy 0.839 → 0.990** (CJK 0.989 → 0.993, speed unchanged)
   on the 16-scan CJK+Latin benchmark (`docs/BENCHMARKS.md` §6) by pinning
   `ocrspine` `e810a9c`: the recognizer right-padded each height-48 crop to its
@@ -99,6 +118,17 @@ feature-complete, but the public API and on-disk formats may still change.
 - **`get_ocgs()` / `layer_ui_configs()` / `ocg_state()` now report the active
   layer view** — the in-memory selected configuration + panel overrides —
   matching PyMuPDF's in-memory state, instead of only the on-disk default.
+- **Conformance: the frozen 300-document corpus-diff manifest is usable again.**
+  `32e6232` rewrote `fixtures/typeset/typeset-lo-slide.pdf`, so
+  `conformance/corpus-diff/build_corpus.py --manifest` hard-failed on its stale
+  sha256/size (1/300). `build_corpus.py` gained an explicit
+  `--manifest OLD --refresh-stale --freeze NEW` path that re-hashes only the
+  stale entries, keeps their old values as `previous_sha256` / `previous_size`,
+  and writes a superseding manifest whose top-level `supersedes` names the old
+  file and fingerprint. `glyph-geometry-2026-09-05b-manifest.json` is that
+  derivative (fingerprint `6c7126de…`, 299 entries byte-identical); the original
+  `…-2026-09-05-manifest.json` (fingerprint `87804b5a…`) is kept verbatim as the
+  corpus the committed summary and the C–G reports refer to.
 
 
 ## [0.7.1] — 2026-09-05

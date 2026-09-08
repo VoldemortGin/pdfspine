@@ -116,7 +116,10 @@ def test_docpy_030_annot_setters_getters_aliases() -> None:
         assert isinstance(annot.vertices, list)
         assert isinstance(annot.has_ap(), bool)
         assert isinstance(annot.apn_bbox(), pdfspine.Rect)
-        assert annot.get_text().startswith("Hello")
+        # The icon rect (20, 20)-(38, 40) lies above the text, so the default
+        # clip sees nothing (as in PyMuPDF); a page-wide clip sees the text.
+        assert annot.get_text() == ""
+        assert annot.get_text(clip=page.rect).startswith("Hello")
         assert isinstance(annot.get_textpage(), pdfspine.TextPage)
         assert repr(annot).startswith("<pdfspine.Annot ")
 

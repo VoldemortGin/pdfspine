@@ -9,6 +9,13 @@ self-generated in-test (PRD §10). Catalog IDs ``PYM4-*``.
 
 from __future__ import annotations
 
+import json
+import os
+import subprocess
+import sys
+
+import pytest
+
 import pdfspine
 
 
@@ -254,6 +261,174 @@ def test_pym4_redact_001_secret_gone_after_reopen(tmp_path):
 def test_pym4_redact_002_no_annots_noop():
     doc = blank_doc()
     assert doc[0].apply_redactions() == 0
+
+
+# Top-left rect covering only ``SECRET`` on line two of ``_quote_ops_doc``:
+# baseline 686 (user y 684..696 → top-left 96..108), x 108..151.2 at 7.2 pt per
+# glyph, kept clear of the neighbouring spaces.
+_QUOTE_OPS_RECT = (108.5, 96.0, 150.7, 108.0)
+
+
+def _quote_ops_doc(*, explicit: bool = False) -> bytes:
+    """Four lines at leading 14 typeset with ``Tj``, ``'`` and ``"``: the ``"``
+    on line three sets ``Tw``/``Tc`` that the ``'`` on line four inherits.
+    ``explicit=True`` spells the same page with ``T*`` / ``Tw`` / ``Tc`` / ``Tj``
+    (identical glyph placement, no ``'`` / ``"``)."""
+    if explicit:
+        body = (
+            b"BT /F1 12 Tf 14 TL 1 0 0 1 72 700 Tm (LINE ONE) Tj "
+            b"T* (KEEP SECRET TAIL) Tj 3 Tw 1 Tc T* (LINE THREE) Tj "
+            b"T* (LINE FOUR) Tj ET"
+        )
+    else:
+        body = (
+            b"BT /F1 12 Tf 14 TL 1 0 0 1 72 700 Tm (LINE ONE) Tj "
+            b"(KEEP SECRET TAIL) ' 3 1 (LINE THREE) \" (LINE FOUR) ' ET"
+        )
+    objects = [
+        (1, b"<< /Type /Catalog /Pages 2 0 R >>"),
+        (2, b"<< /Type /Pages /Count 1 /Kids [3 0 R] >>"),
+        (
+            3,
+            b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+            b"/Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
+        ),
+        (
+            4,
+            b"<< /Length "
+            + str(len(body)).encode()
+            + b" >>\nstream\n"
+            + body
+            + b"\nendstream",
+        ),
+        (5, _widths_font()),
+    ]
+    return _build_pdf(objects, root=1)
+
+
+# Runs under the REAL PyMuPDF: redacts ``src`` over ``rect`` into ``theirs``,
+# then reads and renders ``ours`` / ``theirs`` (words + SSIM) with one reader.
+_ORACLE_SCRIPT = r"""
+import json, sys
+import pymupdf
+
+src, rect, ours, theirs = sys.argv[1], json.loads(sys.argv[2]), sys.argv[3], sys.argv[4]
+doc = pymupdf.open(src)
+doc[0].add_redact_annot(pymupdf.Rect(*rect), fill=(0, 0, 0))
+doc[0].apply_redactions()
+doc.save(theirs)
+
+
+def words(path):
+    return [
+        [w[4], round(w[0], 3), round(w[1], 3), round(w[2], 3), round(w[3], 3)]
+        for w in pymupdf.open(path)[0].get_text("words")
+    ]
+
+
+def gray(path):
+    pm = pymupdf.open(path)[0].get_pixmap(dpi=36, colorspace=pymupdf.csGRAY)
+    return pm.width, pm.height, pm.samples
+
+
+def ssim(a, b):
+    # Mean SSIM over 8x8 windows of two equal-size 8-bit gray images.
+    (w, h, sa), (_, _, sb) = a, b
+    c1, c2 = (0.01 * 255) ** 2, (0.03 * 255) ** 2
+    scores = []
+    for y in range(0, h - 7, 8):
+        for x in range(0, w - 7, 8):
+            pa = [sa[(y + j) * w + x + i] for j in range(8) for i in range(8)]
+            pb = [sb[(y + j) * w + x + i] for j in range(8) for i in range(8)]
+            ma, mb = sum(pa) / 64, sum(pb) / 64
+            va = sum((p - ma) ** 2 for p in pa) / 63
+            vb = sum((p - mb) ** 2 for p in pb) / 63
+            cov = sum((p - ma) * (q - mb) for p, q in zip(pa, pb)) / 63
+            scores.append(
+                ((2 * ma * mb + c1) * (2 * cov + c2))
+                / ((ma * ma + mb * mb + c1) * (va + vb + c2))
+            )
+    return sum(scores) / len(scores)
+
+
+print(json.dumps({"ours": words(ours), "theirs": words(theirs), "ssim": ssim(gray(ours), gray(theirs))}))
+"""
+
+
+def _real_pymupdf_python() -> str | None:
+    """An interpreter with the REAL PyMuPDF: the ``.venv-oracle`` next to the
+    repo when present, else this one if a fresh process (no ``fitz`` shim
+    installed) imports a ``pymupdf`` that is not pdfspine's."""
+    root = os.path.join(os.path.dirname(__file__), "..", "..", ".venv-oracle")
+    for candidate in (
+        os.path.join(root, "bin", "python"),
+        os.path.join(root, "Scripts", "python.exe"),
+    ):
+        if os.path.exists(candidate):
+            return candidate
+    # pdfspine's shim imports pdfspine; the real package never does.
+    probe = "import pymupdf, sys; sys.exit('pdfspine' in sys.modules)"
+    ok = subprocess.run([sys.executable, "-c", probe], capture_output=True)
+    return sys.executable if ok.returncode == 0 else None
+
+
+def _assert_words_match(got, ref, tol: float = 0.5) -> None:
+    """Same words in the same order, every box edge within ``tol`` pt."""
+    assert [w[0] for w in got] == [w[0] for w in ref]
+    for g, r in zip(got, ref):
+        for axis, a, b in zip(("x0", "y0", "x1", "y1"), g[1:], r[1:]):
+            assert abs(a - b) <= tol, f"{r[0]} {axis}: {a} vs {b}"
+
+
+def test_pym4_redact_003_quote_operators_match_real_pymupdf(tmp_path):
+    # pdfspine redacts the `'` / `"` page; real PyMuPDF redacts the explicit
+    # `T*` / `Tw` / `Tc` / `Tj` spelling of the same page (its own filter
+    # mishandles `'` / `"`: MuPDF 1.27 drops the leading and collapses the
+    # lines). Both results are read and rendered by real PyMuPDF so only the
+    # rewrite differs. Before the fix pdfspine put lines two to four on line
+    # one's baseline and lost the `"` spacing (words off by 14+ pt).
+    oracle = _real_pymupdf_python()
+    if oracle is None:
+        pytest.skip("real PyMuPDF not available")
+    src = tmp_path / "src.pdf"
+    src.write_bytes(_quote_ops_doc(explicit=True))
+    ours = tmp_path / "ours.pdf"
+    theirs = tmp_path / "theirs.pdf"
+
+    data = _quote_ops_doc()
+    doc = pdfspine.open(stream=data)
+    doc[0].add_redact_annot(_QUOTE_OPS_RECT, fill=(0, 0, 0))
+    assert doc[0].apply_redactions() == 1
+    doc.save(str(ours))
+
+    out = subprocess.run(
+        [
+            oracle,
+            "-c",
+            _ORACLE_SCRIPT,
+            str(src),
+            json.dumps(_QUOTE_OPS_RECT),
+            str(ours),
+            str(theirs),
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    result = json.loads(out)
+    survivors = ["LINE", "ONE", "KEEP", "TAIL", "LINE", "THREE", "LINE", "FOUR"]
+    assert [w[0] for w in result["theirs"]] == survivors
+    _assert_words_match(result["ours"], result["theirs"])
+    assert result["ssim"] >= 0.99, f"render SSIM {result['ssim']:.4f}"
+
+    # pdfspine's own reader: the survivors keep the boxes they had before.
+    def words(d):
+        return [(w[4], *w[:4]) for w in d[0].get_text("words")]
+
+    before = [w for w in words(pdfspine.open(stream=data)) if w[0] != "SECRET"]
+    after = words(pdfspine.open(str(ours)))
+    assert [w[0] for w in after] == survivors
+    _assert_words_match(after, before)
 
 
 # --- PYM4-WIDGET-* : forms + Widget ----------------------------------------

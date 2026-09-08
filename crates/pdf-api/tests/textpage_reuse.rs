@@ -1,7 +1,9 @@
 //! `TEXTPAGE-REUSE-*` — a pre-built [`pdf_text::TextPage`] can be shared across
-//! `get_text` + `search` so the model is built once (PRD §9.4). Self-built
-//! classic-xref fixture with a WinAnsi Type1 font + a `BT … Tj … ET` content
-//! stream so real glyphs are produced.
+//! `get_text` + `search` so the model is built once (PRD §9.4); `TEXTPAGE-CLIP-*`
+//! — `textpage(.., clip)` builds the model clipped per character, so `get_text`
+//! and `search` over it see only that region. Self-built classic-xref fixture
+//! with a WinAnsi Type1 font + a `BT … Tj … ET` content stream so real glyphs
+//! are produced.
 
 use pdf_api::{get_text, textpage, Document, TextOutput};
 use pdf_core::object::{Dict, Name, ObjRef, Object};
@@ -173,4 +175,64 @@ fn textpage_reuse_003_search_reused_equals_fresh() {
     let fresh = pdf_api::search(&page, "Hello", opts(), None);
     assert_eq!(reused.len(), fresh.len());
     assert_eq!(reused.len(), 1);
+}
+
+#[test]
+fn textpage_clip_001_build_clipped_keeps_overlapping_glyphs() {
+    // TEXTPAGE-CLIP-001: "Hello" 12 pt, widths 500 → 6 pt glyphs from x=20,
+    // baseline device y=100. A clip ending 3 pt into the first "l" keeps
+    // "Hel" (strict overlap, glyph kept whole), and the model reports the
+    // clip's size.
+    let doc = Document::open_bytes(text_doc()).unwrap();
+    let page = doc.load_page(0).unwrap();
+
+    let clip = pdf_core::geom::Rect::new(0.0, 80.0, 35.0, 120.0);
+    let tp = textpage(&page, 0, Some(clip));
+    let txt = output_text(&get_text(&page, "text", None, Some(&tp)));
+    assert_eq!(txt.trim_end(), "Hel");
+    assert!((tp.width - 35.0).abs() < 1e-9 && (tp.height - 40.0).abs() < 1e-9);
+
+    // The touch case: a clip ending exactly at the first "l" keeps "He".
+    let touch = textpage(
+        &page,
+        0,
+        Some(pdf_core::geom::Rect::new(0.0, 80.0, 32.0, 120.0)),
+    );
+    let txt = output_text(&get_text(&page, "text", None, Some(&touch)));
+    assert_eq!(txt.trim_end(), "He");
+
+    // A clip meeting no glyph yields an empty model.
+    let away = textpage(
+        &page,
+        0,
+        Some(pdf_core::geom::Rect::new(0.0, 0.0, 200.0, 50.0)),
+    );
+    assert!(away.blocks.is_empty());
+    assert_eq!(output_text(&get_text(&page, "text", None, Some(&away))), "");
+}
+
+#[test]
+fn textpage_clip_002_search_sees_only_the_clipped_model() {
+    // TEXTPAGE-CLIP-002: a needle straddling the clip edge is no longer in the
+    // clipped TextPage, so `search` reports no hit; the kept prefix is found.
+    let doc = Document::open_bytes(text_doc()).unwrap();
+    let page = doc.load_page(0).unwrap();
+
+    let clip = pdf_core::geom::Rect::new(0.0, 80.0, 35.0, 120.0);
+    let opts = || pdf_api::SearchOptions {
+        hit_max: 16,
+        clip: Some(clip),
+        quads: false,
+    };
+    assert!(pdf_api::search(&page, "Hello", opts(), None).is_empty());
+    assert_eq!(pdf_api::search(&page, "Hel", opts(), None).len(), 1);
+
+    // The same through a pre-built clipped model.
+    let tp = textpage(&page, 0, Some(clip));
+    let no_clip = pdf_api::SearchOptions {
+        hit_max: 16,
+        clip: None,
+        quads: false,
+    };
+    assert!(pdf_api::search(&page, "Hello", no_clip, Some(&tp)).is_empty());
 }
