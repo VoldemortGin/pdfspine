@@ -671,8 +671,15 @@ class Annot:
         ``annot.get_textpage``). Defaults to the annotation's own rect."""
         if self._parent is None:
             raise PdfError("Annot.get_textpage requires the owning page")
-        clip = clip if clip is not None else self.rect
+        clip = clip if clip is not None else self._page_rect()
         return self._parent.get_textpage(clip=clip, flags=flags)
+
+    def _page_rect(self) -> Rect:
+        """The annotation rect in page (y-down) space, the space ``clip=``
+        expects. ``Annot.rect`` is PDF user space, so it is brought over by
+        ``page.transformation_matrix``."""
+        assert self._parent is not None
+        return Rect(*self.rect) * self._parent.transformation_matrix
 
     def get_text(self, option: str = "text", *, clip=None, flags=None, **_ignored):
         """Text under the annotation (PyMuPDF ``annot.get_text``).
@@ -681,7 +688,7 @@ class Annot:
         """
         if self._parent is None:
             raise PdfError("Annot.get_text requires the owning page")
-        clip = clip if clip is not None else self.rect
+        clip = clip if clip is not None else self._page_rect()
         return self._parent.get_text(option, clip=clip, flags=flags)
 
     # --- PyMuPDF deprecated camelCase aliases ---
@@ -2522,6 +2529,8 @@ class Page:
         if not options.images:
             flags &= ~TEXT_PRESERVE_IMAGES
         data = self.get_text("dict", clip=clip, flags=flags, sort=True)
+        # The dict is already clipped per character; the bbox filters below
+        # stay as an idempotent guard.
         cr = _rt(clip) if clip is not None else None
         blocks = []
         for block in data.get("blocks", ()):

@@ -426,10 +426,18 @@ fn char_overlaps_clip(c: &Rect, clip: &Rect) -> bool {
 /// that only ever painted those glyphs would number them. An image block stays
 /// when its bbox meets the clip, cut down to the overlap (fitz reports the
 /// intersection); one entirely outside is dropped. `width`/`height` become the
-/// clip's, matching fitz's `dict` header for a clipped TextPage.
+/// clip's, matching fitz's `dict` header for a clipped TextPage. An empty clip
+/// — degenerate or inverted, which MuPDF does not normalize — keeps nothing
+/// and reports a 0 × 0 page, as fitz does.
 #[must_use]
 pub fn clip_textpage(tp: &TextPage, clip: Rect) -> TextPage {
-    let clip = clip.normalize();
+    if clip.is_empty() {
+        return TextPage {
+            width: 0.0,
+            height: 0.0,
+            blocks: Vec::new(),
+        };
+    }
     let mut blocks: Vec<Block> = Vec::new();
     for block in &tp.blocks {
         let kept = match block.kind {

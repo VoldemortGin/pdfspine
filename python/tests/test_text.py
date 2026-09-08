@@ -14,8 +14,34 @@ width-less font collapses glyph boxes to zero width at the correct x).
 from __future__ import annotations
 
 import json
+import sys
+import types
+
+import pytest
 
 import pdfspine
+
+
+def _real_pymupdf() -> types.ModuleType | None:
+    """The real PyMuPDF module, or ``None`` when it is not importable.
+
+    ``conftest.py`` registers the pdfspine shim under ``pymupdf`` first, so a
+    real PyMuPDF only wins when it was imported before the session started
+    (``pytest -p pymupdf``) — otherwise the cross-check is skipped."""
+    mod = sys.modules.get("pymupdf")
+    if mod is None:
+        try:
+            import pymupdf as mod
+        except Exception:  # ImportError, or an import-time warning under -W error
+            return None
+    # The shim is the `pdfspine.pymupdf` module registered under the name.
+    return mod if getattr(mod, "__name__", "") == "pymupdf" else None
+
+
+_requires_real_pymupdf = pytest.mark.skipif(
+    _real_pymupdf() is None,
+    reason="real PyMuPDF not importable (install it and run `pytest -p pymupdf`)",
+)
 
 
 # --- self-generated PDF assembler (classic xref) --------------------------
@@ -484,6 +510,229 @@ def test_pytext_010_sort_orders_plain_text_by_y_then_x():
     assert sorted_text.index("Left block") < sorted_text.index("Right block")
     assert sorted_text.index("Right block") < sorted_text.index("Bottom block")
     assert page.get_text("TEXT", sort=True) == sorted_text
+
+
+# --- PYTEXT-012..019: clip= (PyMuPDF character-level TextPage clipping) ----
+
+_CLIP_LINES = ["Header text", "alpha beta gamma", "Footer"]
+
+
+def _clip_page() -> tuple["pdfspine.Page", tuple[float, float, float, float], dict]:
+    """A three-line page, the band clip enclosing only its middle line, and
+    the unclipped word tuples keyed by text (12 pt, width-500 glyphs: 6 pt
+    per glyph from x=72)."""
+    page = _page(text_pdf(_CLIP_LINES))
+    words = {w[4]: w for w in page.get_text("words")}
+    _x0, y0, _x1, y1 = words["alpha"][:4]
+    band = (0.0, y0 - 2.0, 612.0, y1 + 2.0)
+    return page, band, words
+
+
+def test_pytext_012_clip_restricts_every_rust_mode():
+    # PYTEXT-012: clip= selects the characters overlapping the rectangle in
+    # text / words / blocks / dict / rawdict / json / rawjson alike; block and
+    # line numbers restart at 0 and dict width/height are the clip's.
+    page, band, _ = _clip_page()
+    assert page.get_text("text", clip=band) == "alpha beta gamma\n"
+    assert page.get_text("text", clip=pdfspine.Rect(*band)) == "alpha beta gamma\n"
+    assert page.get_text(clip=band) == "alpha beta gamma\n"
+
+    words = page.get_text("words", clip=band)
+    assert [w[4] for w in words] == ["alpha", "beta", "gamma"]
+    assert {(w[5], w[6]) for w in words} == {(0, 0)}
+    assert [w[7] for w in words] == [0, 1, 2]
+
+    blocks = page.get_text("blocks", clip=band)
+    assert len(blocks) == 1
+    assert blocks[0][4].strip() == "alpha beta gamma"
+    assert blocks[0][5] == 0
+
+    size = (band[2] - band[0], band[3] - band[1])
+    d = page.get_text("dict", clip=band)
+    assert (d["width"], d["height"]) == size
+    assert len(d["blocks"]) == 1
+    block = d["blocks"][0]
+    assert block["number"] == 0
+    assert block["lines"][0]["number"] == 0
+    assert block["lines"][0]["spans"][0]["text"] == "alpha beta gamma"
+
+    raw = page.get_text("rawdict", clip=band)
+    chars = raw["blocks"][0]["lines"][0]["spans"][0]["chars"]
+    assert "".join(c["c"] for c in chars) == "alpha beta gamma"
+
+    for opt in ("json", "rawjson"):
+        j = json.loads(page.get_text(opt, clip=band))
+        assert len(j["blocks"]) == 1
+        assert (j["width"], j["height"]) == pytest.approx(size)
+
+
+def test_pytext_013_clip_keeps_a_cut_glyph_whole_drops_a_touched_one():
+    # PYTEXT-013: the rule is strict bbox overlap per character — a glyph the
+    # clip cuts into is kept whole (not clamped), one it merely touches is out.
+    page, band, words = _clip_page()
+    _, y0, _, y1 = band
+    bx0, _, bx1, _ = words["beta"][:4]
+    gw = (bx1 - bx0) / len("beta")  # 6 pt per glyph
+
+    deep = (0.0, y0, bx0 + 0.5 * gw, y1)
+    assert page.get_text("text", clip=deep) == "alpha b\n"
+    kept = page.get_text("words", clip=deep)
+    assert [w[4] for w in kept] == ["alpha", "b"]
+    assert kept[1][2] == pytest.approx(bx0 + gw)  # the cut glyph keeps its box
+
+    sliver = (0.0, y0, bx0 + 0.01, y1)
+    assert page.get_text("text", clip=sliver) == "alpha b\n"
+
+    touch = (0.0, y0, bx0, y1)
+    assert page.get_text("text", clip=touch) == "alpha \n"
+    assert [w[4] for w in page.get_text("words", clip=touch)] == ["alpha"]
+
+
+def test_pytext_014_empty_or_outside_clip_yields_nothing():
+    # PYTEXT-014: an empty rect, a rect outside the page and an inverted rect
+    # (MuPDF does not normalize it: empty) all yield the empty extraction;
+    # dict width/height are the clip's, 0 × 0 for an empty one.
+    page, band, _ = _clip_page()
+    x0, y0, x1, y1 = band
+    for clip in (
+        (0, 0, 0, 0),
+        pdfspine.Rect(),
+        (1000, 1000, 1100, 1100),
+        (x1, y1, x0, y0),
+    ):
+        assert page.get_text("text", clip=clip) == ""
+        assert page.get_text("words", clip=clip) == []
+        assert page.get_text("blocks", clip=clip) == []
+        assert page.get_text("dict", clip=clip)["blocks"] == []
+        assert json.loads(page.get_text("json", clip=clip))["blocks"] == []
+    for clip in ((0, 0, 0, 0), (x1, y1, x0, y0)):
+        d = page.get_text("dict", clip=clip)
+        assert (d["width"], d["height"]) == (0.0, 0.0)
+    d = page.get_text("dict", clip=(1000, 1000, 1100, 1100))
+    assert (d["width"], d["height"]) == (100.0, 100.0)
+
+
+def test_pytext_015_markup_modes_and_textpage_ignore_clip():
+    # PYTEXT-015: html / xhtml / xml always cover the whole page, and a
+    # supplied textpage= wins over clip= (PyMuPDF semantics).
+    page, band, _ = _clip_page()
+    for opt in ("html", "xhtml", "xml"):
+        assert page.get_text(opt, clip=band) == page.get_text(opt)
+        assert "Header" in page.get_text(opt, clip=band)
+    tp = page.get_textpage()
+    full = page.get_text("text")
+    assert "Header text" in full
+    assert page.get_text("text", clip=band, textpage=tp) == full
+    assert page.get_text("words", clip=band, textpage=tp) == page.get_text("words")
+
+
+def test_pytext_016_get_textpage_clip_builds_a_clipped_model():
+    # PYTEXT-016: get_textpage(clip=) is clipped for every flags value (the
+    # clip is not tied to TEXT_MEDIABOX_CLIP), and everything read off that
+    # handle — extractText, get_text(textpage=), search_for(textpage=) —
+    # sees only the region.
+    page, band, _ = _clip_page()
+    for flags in (None, 0, pdfspine.TEXTFLAGS_TEXT):
+        tp = page.get_textpage(clip=band, flags=flags)
+        assert tp.extractText() == "alpha beta gamma\n"
+    tp = page.get_textpage(clip=band)
+    assert [w[4] for w in tp.extractWORDS()] == ["alpha", "beta", "gamma"]
+    assert page.get_text("text", textpage=tp) == "alpha beta gamma\n"
+    assert page.search_for("Header", textpage=tp) == []
+    assert len(page.search_for("beta", textpage=tp)) == 1
+    d = tp.extractDICT()
+    assert (d["width"], d["height"]) == (band[2] - band[0], band[3] - band[1])
+
+
+def test_pytext_017_search_for_clip_is_the_clipped_textpage():
+    # PYTEXT-017: search_for(clip=) searches the clipped TextPage, so a needle
+    # straddling the clip edge is no longer a hit, while the unclipped search
+    # is unchanged.
+    page, band, words = _clip_page()
+    _, y0, _, y1 = band
+    bx0, _, bx1, _ = words["beta"][:4]
+    straddle = (0.0, y0, bx0 + 0.5 * (bx1 - bx0) / len("beta"), y1)
+    assert page.search_for("beta", clip=straddle) == []
+    assert len(page.search_for("alpha", clip=straddle)) == 1
+    assert page.search_for("Header", clip=band) == []
+    assert len(page.search_for("beta", clip=band)) == 1
+    assert len(page.search_for("beta")) == 1
+    assert len(page.search_for("Header")) == 1
+
+
+def test_pytext_018_sort_applies_after_clip():
+    # PYTEXT-018: sort=True orders what the clip kept; the block outside the
+    # clip never appears, in blocks or in plain text.
+    content = (
+        b"BT /F1 12 Tf 72 700 Td (Header) Tj ET "
+        b"BT /F1 12 Tf 72 500 Td (Lower) Tj ET "
+        b"BT /F1 12 Tf 72 600 Td (Upper) Tj ET"
+    )
+    page = _page(_raw_content_pdf(content, _helvetica_font()))
+    band = (0, 150, 612, 350)  # device y: Header≈92, Upper≈192, Lower≈292
+    assert page.get_text("text", clip=band) == "Lower\nUpper\n"
+    assert page.get_text("text", clip=band, sort=True) == "Upper\nLower\n"
+    blocks = page.get_text("blocks", clip=band, sort=True)
+    assert [b[4].strip() for b in blocks] == ["Upper", "Lower"]
+    assert [b[5] for b in page.get_text("blocks", clip=band)] == [0, 1]
+
+
+@_requires_real_pymupdf
+def test_pytext_019_clip_matches_real_pymupdf():
+    # PYTEXT-019: the clipped extraction agrees with real PyMuPDF on the same
+    # bytes — band, cut glyph, touched glyph, empty clip, dict size and the
+    # straddling search.
+    pymupdf = _real_pymupdf()
+    assert pymupdf is not None
+    pdf = text_pdf(_CLIP_LINES)
+    ours = pdfspine.open(stream=pdf)[0]
+    theirs = pymupdf.open(stream=pdf, filetype="pdf")[0]
+    words = {w[4]: w for w in theirs.get_text("words")}
+    _x0, y0, _x1, y1 = words["alpha"][:4]
+    bx0, _, bx1, _ = words["beta"][:4]
+    band = (0.0, y0 - 2.0, 612.0, y1 + 2.0)
+    deep = (0.0, y0, bx0 + 0.5 * (bx1 - bx0) / len("beta"), y1)
+    touch = (0.0, y0, bx0, y1)
+    inverted = (band[2], band[3], band[0], band[1])
+    for clip in (band, deep, touch, inverted, (0, 0, 0, 0), (1000, 1000, 1100, 1100)):
+        assert ours.get_text("text", clip=clip) == theirs.get_text("text", clip=clip)
+        assert [tuple(w[4:]) for w in ours.get_text("words", clip=clip)] == [
+            tuple(w[4:]) for w in theirs.get_text("words", clip=clip)
+        ]
+        d_ours = ours.get_text("dict", clip=clip)
+        d_theirs = theirs.get_text("dict", clip=clip)
+        assert (d_ours["width"], d_ours["height"]) == pytest.approx(
+            (d_theirs["width"], d_theirs["height"])
+        )
+        assert len(d_ours["blocks"]) == len(d_theirs["blocks"])
+    assert theirs.get_text("text", clip=deep) == "alpha b\n"
+    assert (
+        ours.search_for("beta", clip=deep) == theirs.search_for("beta", clip=deep) == []
+    )
+    assert (
+        len(ours.search_for("beta", clip=band))
+        == len(theirs.search_for("beta", clip=band))
+        == 1
+    )
+
+
+def test_pytext_020_annot_get_text_clips_in_page_space():
+    # PYTEXT-020: Annot.get_text / get_textpage clip by the annotation rect in
+    # page (y-down) space, as PyMuPDF does; Annot.rect itself is PDF user
+    # space, so it is converted through page.transformation_matrix. A rect over
+    # the text sees it, one elsewhere on the page sees nothing.
+    doc = pdfspine.open()
+    page = doc.new_page(width=300, height=200)
+    page.insert_text((50, 100), "Hello world")
+    over = page.add_rect_annot((40, 85, 200, 110))
+    assert over.get_text().startswith("Hello world")
+    assert over.get_textpage().extractText().startswith("Hello world")
+    assert [w[4] for w in over.get_text("words")] == ["Hello", "world"]
+    away = page.add_rect_annot((40, 20, 200, 45))
+    assert away.get_text() == ""
+    assert away.get_text("words") == []
+    assert over.get_text(clip=(40, 20, 200, 45)) == ""
+    doc.close()
 
 
 # ==========================================================================

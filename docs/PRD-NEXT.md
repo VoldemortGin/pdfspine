@@ -18,8 +18,11 @@
   `3aa558b`, redact `'`/`"` operator fix). CI run 34013201908 on `21d636a` was
   22/22 green; the two later pushes passed the local pre-push gate (full
   `cargo test` + pytest). Verify with `git status -sb` and `git log origin/main -1`.
-- **Four branches are in flight, each in its own worktree with a HANDOFF file**; see
-  "In-flight branches" below. They are not merged and must not be deleted.
+- **Three branches are in flight, each in its own worktree with a HANDOFF file**; see
+  "In-flight branches" below. They are not merged and must not be deleted. The
+  fourth, the `get_text(clip=)` fix, is finished on the local branch
+  `fix/get-text-clip` (see "Completed 2026-09-06: get_text(clip=)" below) and
+  waits for its merge into `main`.
 - `.venv` extension rule: the pre-push gate does not rebuild the extension. After
   merging any Rust change into `main`, run `maturin develop --release` (with
   `PATH="$PWD/.venv/bin:$PATH"`) before `git push`, or pytest runs against the previous
@@ -55,7 +58,6 @@
 
 | Branch / worktree | Commit | State | Handoff |
 |---|---|---|---|
-| `worktree-agent-adf6ef49d2e5f6b57` at `.claude/worktrees/agent-adf6ef49d2e5f6b57` | `17dd57d` (wip) | `get_text(clip=)` fix: `pdf_text::clip_textpage`, pdf-api applies clip after building the TextPage, py-bindings dispatch pre-clips for every Rust mode except html/xhtml/xml; `cargo check` passes. Tests, catalog rows, the 300-document 0-difference digest and all gates are still pending. PyMuPDF semantics were measured (character-level strict intersection; `dict` width/height become the clip size; `textpage=` ignores clip). | `HANDOFF-clip.md` in the worktree |
 | `worktree-agent-ab9e257cbb9ab89c3` at `.claude/worktrees/agent-ab9e257cbb9ab89c3` | `9edd635` (wip) | `remove_rotation()` fix works: annotations, widgets and links are transformed once by the content matrix and single-stream `/AP /N` gets `/Matrix` composed; targeted tests (`DOCPY-037[0/90/180/270]`) pass and 0/90/180 match PyMuPDF 1.28.2 (PyMuPDF itself writes an off-page rect at 270). Remaining: the catalog description for `DOCPY-037`, the full gates, and renaming the commit to `fix(python): let remove_rotation transform widget rectangles`. | `HANDOFF-remove-rotation.md` |
 | `worktree-agent-ae07f5282e4af72f5` at `.claude/worktrees/agent-ae07f5282e4af72f5` | `2be80e5` (wip) | Reading order stages 3/4: baseline reproduced for PMC, born, PMC212689 and both FR runs; the EUR-Lex GT run was killed at 22/40 by a sub-agent that shared the worktree. Stage 3/4 specs are drafted (`stage3-spec.md`, `stage4-spec.md` in the worktree); no product code yet. Evidence and scripts in `/Volumes/ExternalSSD/tmp/ro34/`. | `HANDOFF-reading-order-3-4.md` |
 | `worktree-agent-a86bc39cb9edfca42` at `.claude/worktrees/agent-a86bc39cb9edfca42` | `ed79776` (wip) | OCG gaps, research only: PyMuPDF writes `/OC /MCn BDC … EMC` inside `q`/`Q` for text and shapes (keys `/MCn`, reused per xref) and puts `/OC` on the XObject for images; `/Usage /View /ViewState /OFF` hides regardless of `/AS`; MuPDF ignores `/AS`. Implementation, tests and docs not started. | `HANDOFF-ocg-gaps.md` |
@@ -68,8 +70,10 @@ run the ruff check, push, and delete the worktree and branch.
 
 ### Next task queue
 
-1. **Finish the four in-flight branches** in this order: clip fix, `remove_rotation`,
-   reading order 3/4, OCG gaps. Each has a HANDOFF with the exact remaining steps.
+1. **Merge `fix/get-text-clip` into `main`** (`git merge --no-ff`, rebuild `.venv`,
+   ruff check, push), then **finish the three in-flight branches** in this order:
+   `remove_rotation`, reading order 3/4, OCG gaps. Each has a HANDOFF with the
+   exact remaining steps.
 2. **govdocs1-00074 near-blank render** (fitz SSIM 0.2654 at baseline): not started;
    the agent was cut off while reading. Corpus is in `fixtures/corpus`.
 3. **Render, remaining cost:** first-seen glyph rasterization (~30% of text pages),
@@ -88,6 +92,41 @@ run the ruff check, push, and delete the worktree and branch.
    pre-existing `cargo fmt --check` violations in ocrspine; a CI check that warns
    30 days before the cargo-vet trust entries expire (2027-09-05).
 8. **Continue the existing roadmap** (§4–§6 below).
+
+### Completed 2026-09-06: `get_text(clip=)` honours the clip (branch `fix/get-text-clip`)
+
+- The WIP branch `17dd57d` (`macstudio/adf6ef49d2e5f6b57`) was merged onto `main`
+  `ad00163` and finished; `HANDOFF-clip.md` is deleted. `pdf_text::clip_textpage`
+  restricts a built `TextPage` per character (strict bbox overlap, a cut glyph
+  kept whole, block / line numbers restart at 0, span / line / block bbox rebuilt
+  from the kept chars, image blocks cut to the overlap or dropped, `width` /
+  `height` = the clip's); `pdf_api::textpage(page, flags, clip)` applies it, so
+  `get_text` in every Rust mode, `get_textpage(clip=)` and `search_for(clip=)`
+  see the clipped model. `html` / `xhtml` / `xml` ignore the clip and a supplied
+  `textpage=` wins over it, as in PyMuPDF. An empty or inverted clip is *not*
+  normalized (MuPDF treats it as empty): nothing is kept and the dict reports
+  0 × 0 — measured on real PyMuPDF 1.27.2 (`.venv-oracle`), which the 2026-09-05
+  handoff table (1.28.2) had not covered.
+- Tests: `SERIAL-CLIP-001..007` (`serialize_unit.rs`), `TEXTPAGE-CLIP-001/002`
+  (`textpage_reuse.rs`), `PYTEXT-012..019` (`test_text.py`; 019 is the real-PyMuPDF
+  parity check, run with `PYTHONPATH=.venv-oracle/lib/python3.12/site-packages
+  .venv/bin/python -m pytest -p pymupdf python/tests/test_text.py -k pytext_019`
+  and green). Known, documented divergence: MuPDF tests the glyph *ink* box while
+  pdfspine has the glyph cell, so a cell sliver with no ink under a clip edge
+  (`bx0 + 0.01`) keeps the glyph here and drops it in fitz.
+- No-clip byte identity: text / dict / rawdict / words / blocks digests over every
+  local corpus PDF (415 files listed, 318 present and hashed, 7,149 pages — the 77
+  `corpus-robustness` and 20 `corpus-eurlex` documents of the frozen 300-manifest
+  are not fetched on this machine) are identical before and after the change.
+- Exposed by the fix: `Annot.get_text()` / `Annot.get_textpage()` passed the raw
+  `Annot.rect` as the clip, but `Annot.rect` (like `Widget.rect` and
+  `link["from"]`, see `HANDOFF-remove-rotation.md`) is PDF user space (y-up)
+  while `clip=` is page space (y-down), so once the clip was honoured every
+  annotation read an empty region. Both methods now convert the rect through
+  `page.transformation_matrix` (`PYTEXT-020`); `Annot.rect` itself is unchanged
+  because the in-flight `remove_rotation` branch builds on its user-space
+  convention. `DOCPY-030` asserted the old accident (a Text-annot icon rect above
+  the text "seeing" it) and now asserts the PyMuPDF behaviour.
 
 ### Completed 2026-09-06: frozen manifest refreshed (`4e20fb9`, merge `4489aef`)
 
