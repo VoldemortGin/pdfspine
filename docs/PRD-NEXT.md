@@ -580,6 +580,34 @@ oracle-cross-checked against real PyMuPDF 1.24.14 (`.venv-oracle`) with zero reg
     6. **Decide**: apply the ADR threshold (structure-stage GriTS_Con ≥ `v1.1-all` + 0.02 to change the
        financial-report default; otherwise keep `v1.1-all` and ship the rest as opt-in aliases), then
        flip ADR 0002 to Accepted with the chosen default recorded in its registry table.
+  - **ONNX backend landed (2026-09-08):** `find_tables(strategy="vision", backend="onnx")` — DocLayout-YOLO
+    layout detection + SLANet-plus cell structure (both Apache-2.0 RapidAI exports, onnxruntime only, no
+    torch; weights downloaded separately via `PDFSPINE_ONNX_MODELS`) — plus `Page.find_layout()` /
+    `Page.get_layout_html()` (semantic HTML, text 100 % from the text layer), all in
+    `python/pdfspine/_onnx.py`; user docs in [`docs/guide/layout-html.md`](guide/layout-html.md). The models
+    are **not yet validated on an evaluation set**. Follow-up sub-tasks: (a) build the 30–50-page financial
+    evaluation set with hand-written correct HTML and a TEDS / cell-alignment scorer; (b) decide priorities
+    from the numbers (XY-cut reading order, `rows`/`cols` approximation, table detection cropping to the
+    numeric block, model fine-tune / swap); (c) fold the backend into the ADR 0002 `TableStructureBackend`
+    Protocol once that refactor happens (it is the end-to-end "third backend" revisit trigger named there).
+  - **First real-model baseline (2026-09-08):** three FinTabNet.c pages run by eye against gold
+    annotations — full write-up, numbers and reproduction steps in
+    [`docs/onnx-backend-baseline-2026-09-08.md`](../onnx-backend-baseline-2026-09-08.md)
+    (`scripts/onnx_vis.py`). Confirms the numeric-block cropping failure mode from (b) above is the
+    dominant error (3 of 5 tables lose their row-label column) and sharpens the fix order for this
+    backend specifically:
+    1. **Table detection box expansion** — grow the detected box leftward along row-aligned text to
+       recover the row-label column that DocLayout-YOLO crops away (ADI `Table.bbox` IoU 0.32 / 897
+       unclaimed words; AMP T1 IoU 0.29; AMP T2 IoU 0.63).
+    2. **Cell text assignment / column merging** — fold `"$"`-only predicted columns into their numeric
+       neighbor, assign row-label words by row-band y-range instead of nearest-cell-box (fixes multi-line
+       label misattribution), strip dotted-leader tokens (ADBE 11 vs 8 predicted columns; AMP T0 12 vs 9).
+    3. **Structure-model swap or fine-tune** — deferred until 1–2 land; SLANet-plus's merged-cell
+       prediction is unreliable in both directions (ADI 22 spurious `colspan=2`; ADBE misses 3 gold
+       `colspan=8` rows), but more than half the current rows×cols gap traces to 1–2, not the model.
+    4. **Recursive XY-cut reading order** — deferred; the one page with accurate table boxes (ADBE)
+       already ordered correctly, so the reading-order errors seen on the other two pages are downstream
+       of item 1, not a band-rule limitation.
 
 ### Phase 4 — Post-launch capability / strategic
 
@@ -671,7 +699,7 @@ oracle-cross-checked against real PyMuPDF 1.24.14 (`.venv-oracle`) with zero reg
 | P3-4 | Kangxi fold + edge-case tests + robustness rerun | S–M | Low–Med | ✅ done | 3 |
 | P3-4r | vertical writing-mode (wmode 1, `/W2`+`/DW2`, −y advance) | M | Low | ✅ done | 3r |
 | P3-5 | FinTabNet GriTS absolute score (HF-mirror fetch; lines 0.073 / text 0.185 Top) | M | Med | ✅ done | 3 |
-| P3-6 | Table-structure backend benchmark + multi-backend seam (ADR 0002: TATR v1.1-all/fin/pub vs TableFormer) | M–L | Med | proposed | 3 |
+| P3-6 | Table-structure backend benchmark + multi-backend seam (ADR 0002: TATR v1.1-all/fin/pub vs TableFormer; onnx backend landed 2026-09-08) | M–L | Med | proposed | 3 |
 | P4-1 | Font carries `/FontFile*` (buffer/glyph_bbox, +2) | L | Med | ✅ done | 4 |
 | P4-2 | Type1 charstring (PFB/PFA) support | L | Med | ✅ done | 4 |
 | P4-2r | Type1 builtin `/Encoding` parse (hint-replace / MM stay safe no-ops) | S | Low | ✅ done | 4r |

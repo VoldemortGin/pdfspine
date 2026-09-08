@@ -4,6 +4,7 @@ import os
 from typing import Any, Iterator, Mapping, Sequence
 
 from . import _core
+from ._onnx import LayoutBlock
 from .geometry import IRect, Matrix, Point, Quad, Rect
 from .models import FilledRectangle, ImageBlock, LinkAnnotation, TextBlock
 
@@ -627,6 +628,8 @@ class Page:
         clip: _Rect | None = ...,
         **_ignored: Any,
     ) -> TableFinder: ...
+    def find_layout(self, **vision_options: Any) -> list[LayoutBlock]: ...
+    def get_layout_html(self, **vision_options: Any) -> str: ...
     def get_svg_image(
         self, matrix: _Matrix | None = ..., *, text_as_path: bool = ..., **_ignored: Any
     ) -> str: ...

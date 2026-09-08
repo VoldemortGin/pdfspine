@@ -81,6 +81,7 @@ nav:
       - Installation: guide/installation.md
       - Quickstart: guide/quickstart.md
       - Text extraction: guide/text-extraction.md
+      - Layout HTML (ONNX backend): guide/layout-html.md
       - Editing & saving: guide/editing.md
       - Rendering: guide/rendering.md
       - Command-line interface: guide/cli.md

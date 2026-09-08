@@ -55,6 +55,7 @@ from .document import (
     markdown_to_pdf,
     open,
 )
+from ._onnx import LayoutBlock, OnnxOptions
 from .geometry import IRect, Matrix, Point, Quad, Rect
 from .helpers import (
     Base14_fontdict,
@@ -133,6 +134,8 @@ __all__ = [
     "TableFinder",
     "ImageTable",
     "ImageTableCell",
+    "LayoutBlock",
+    "OnnxOptions",
     "Font",
     "Base14_fontnames",
     "Tools",

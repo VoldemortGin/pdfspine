@@ -75,6 +75,16 @@ The current code cannot serve either request cleanly:
   detection / structure (for example an end-to-end image-to-sequence model
   such as SLANet or UniTable); the Protocol then gains an end-to-end variant
   rather than being bypassed.
+- Status note (2026-09-08): `backend="onnx"` landed as exactly such an
+  end-to-end backend (DocLayout-YOLO layout → SLANet-plus cells → native
+  words) in `python/pdfspine/_onnx.py`, dispatched by a string check in
+  `document.py` without the Protocol refactor. It is the "third backend whose
+  stages do not map onto detection / structure" revisit trigger above; the
+  Protocol's end-to-end variant should be designed around it when the seam is
+  built. The first real-model run (three FinTabNet.c pages) is recorded in
+  [`docs/onnx-backend-baseline-2026-09-08.md`](../onnx-backend-baseline-2026-09-08.md);
+  its fix-priority list should inform this backend's shape before it is
+  folded into the Protocol.
 
 ### Model selection: named registry with pinned revisions
 
@@ -88,6 +98,7 @@ The current code cannot serve either request cleanly:
   | `tatr/v1.1-pub` | tatr | `microsoft/table-transformer-structure-recognition-v1.1-pub` |
   | `tableformer/accurate` | tableformer | `docling-project/docling-models`, `model_artifacts/tableformer/accurate` |
   | `tableformer/fast` | tableformer | `docling-project/docling-models`, `model_artifacts/tableformer/fast` |
+  | `onnx/doclayout-slanet-plus` | onnx | RapidAI exports: DocLayout-YOLO docstructbench @ RapidLayout v1.2.0 + SLANet-plus @ RapidTable v2.0.0 (Apache-2.0, onnxruntime, no torch) |
 
   Revisions for the entries not yet pinned are fixed when the backend lands.
 - Selection surfaces: `vision_options={"structure_model": "<alias>"}`, the
@@ -126,6 +137,8 @@ The current code cannot serve either request cleanly:
   - `tableformer` — `docling-ibm-models` and the torch version it requires
     (to be pinned when the backend lands; the required torch range is
     unverified in the survey).
+  - `onnx` — `onnxruntime` + `numpy` + `Pillow` for the DocLayout-YOLO +
+    SLANet-plus backend (landed 2026-09-08; no torch).
   - `tables-all` — union of the two.
   - `all` — includes `tables-all`.
 - Weight distribution is **out of scope for this ADR**. If "weights installed
