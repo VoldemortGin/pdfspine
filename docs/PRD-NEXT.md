@@ -13,16 +13,18 @@
 - Repository: `/Users/linhan/startup/spine/pdfspine`. The published release is still
   `v0.7.1` at `9da7ca6` (annotated tag, GitHub Release, PyPI wheels and sdist all
   unchanged). Nothing since has been released.
-- `main` = `origin/main` = `ec798bd`. On top of the fan-out checkpoint `21d636a`:
-  `4489aef` (merge of `4e20fb9`, refreshed frozen manifest) and `ec798bd` (merge of
-  `3aa558b`, redact `'`/`"` operator fix). CI run 34013201908 on `21d636a` was
-  22/22 green; the two later pushes passed the local pre-push gate (full
-  `cargo test` + pytest). Verify with `git status -sb` and `git log origin/main -1`.
+- `main` = `5a95731` (local, not yet pushed); `origin/main` = `ad00163`. On top of
+  the fan-out checkpoint `21d636a`: `4489aef` (merge of `4e20fb9`, refreshed frozen
+  manifest), `ec798bd` (merge of `3aa558b`, redact `'`/`"` operator fix), `ad00163`
+  (this checkpoint) and `5a95731` (merge of `482c19c`, the `get_text(clip=)` fix,
+  2026-09-07; full `./ci.sh` green before the merge). CI run 34013201908 on
+  `21d636a` was 22/22 green; the two later pushes passed the local pre-push gate
+  (full `cargo test` + pytest). Verify with `git status -sb` and `git log origin/main -1`.
 - **Three branches are in flight, each in its own worktree with a HANDOFF file**; see
   "In-flight branches" below. They are not merged and must not be deleted. The
-  fourth, the `get_text(clip=)` fix, is finished on the local branch
-  `fix/get-text-clip` (see "Completed 2026-09-06: get_text(clip=)" below) and
-  waits for its merge into `main`.
+  fourth, the `get_text(clip=)` fix on `fix/get-text-clip`, was merged into local
+  `main` on 2026-09-07 (`482c19c`, merge `5a95731`; see "Completed 2026-09-06:
+  get_text(clip=)" below) and only waits for the push.
 - `.venv` extension rule: the pre-push gate does not rebuild the extension. After
   merging any Rust change into `main`, run `maturin develop --release` (with
   `PATH="$PWD/.venv/bin:$PATH"`) before `git push`, or pytest runs against the previous
@@ -70,8 +72,8 @@ run the ruff check, push, and delete the worktree and branch.
 
 ### Next task queue
 
-1. **Merge `fix/get-text-clip` into `main`** (`git merge --no-ff`, rebuild `.venv`,
-   ruff check, push), then **finish the three in-flight branches** in this order:
+1. **Push `main`** (`fix/get-text-clip` is merged as `5a95731`, 2026-09-07; `.venv`
+   rebuilt, `./ci.sh` green), then **finish the three in-flight branches** in this order:
    `remove_rotation`, reading order 3/4, OCG gaps. Each has a HANDOFF with the
    exact remaining steps.
 2. **govdocs1-00074 near-blank render** (fitz SSIM 0.2654 at baseline): not started;
@@ -93,7 +95,7 @@ run the ruff check, push, and delete the worktree and branch.
    30 days before the cargo-vet trust entries expire (2027-09-05).
 8. **Continue the existing roadmap** (§4–§6 below).
 
-### Completed 2026-09-06: `get_text(clip=)` honours the clip (branch `fix/get-text-clip`)
+### Completed 2026-09-06: `get_text(clip=)` honours the clip (branch `fix/get-text-clip`, merged 2026-09-07 as `5a95731`)
 
 - The WIP branch `17dd57d` (`macstudio/adf6ef49d2e5f6b57`) was merged onto `main`
   `ad00163` and finished; `HANDOFF-clip.md` is deleted. `pdf_text::clip_textpage`
