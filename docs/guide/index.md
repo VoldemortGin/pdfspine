@@ -27,6 +27,7 @@ to the shim, call `pdfspine.install_fitz_shim()` once at startup — see
 | [Installation](installation.md) | Installing from PyPI or building the wheel from source. |
 | [Quickstart](quickstart.md) | Open, extract, search, render, and save. |
 | [Text extraction](text-extraction.md) | `get_text` variants, `search_for`, `TextPage`, tables. |
+| [Layout HTML (ONNX backend)](layout-html.md) | `find_layout` / `get_layout_html`: page layout and semantic HTML from the text layer, for RAG ingestion. |
 | [Editing & saving](editing.md) | Merge / split, metadata, TOC, annotations, forms, redaction. |
 | [Rendering](rendering.md) | `get_pixmap`, `Pixmap`, `DisplayList`, SVG. |
 | [Command-line interface](cli.md) | The planned `pdfspine` CLI. |

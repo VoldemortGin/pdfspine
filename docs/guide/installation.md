@@ -62,6 +62,29 @@ usable runtime raises `PdfUnsupportedError`.
     CPU-only installation instructions first if download or environment size is
     important; then install `pdfspine[tatr]`.
 
+### Optional ONNX layout/table backend
+
+A torch-free vision backend (DocLayout-YOLO layout detection + SLANet-plus
+table structure, both Apache-2.0 RapidAI exports running on onnxruntime) is
+also opt-in:
+
+```bash
+pip install "pdfspine[onnx]"
+```
+
+It adds `onnxruntime`, `numpy`, and `Pillow`. The two model files are not in
+the wheel: download `doclayout_yolo_docstructbench_imgsz1024.onnx` and
+`slanet-plus.onnx` into a directory and point `PDFSPINE_ONNX_MODELS` at it
+(or pass `layout_model` / `table_model` paths in `vision_options`); see
+[Tables](../reference/tables.md#vision-onnx-doclayout-yolo-slanet-plus) for the
+download commands and the [Layout HTML guide](layout-html.md) for usage.
+
+For CUDA, install `onnxruntime-gpu` instead of `onnxruntime`; the default
+`providers="auto"` then picks `CUDAExecutionProvider` automatically. `auto`
+never selects `CoreMLExecutionProvider`: it crashed the process ("Error in
+building plan") with onnxruntime 1.29 on macOS, so Apple-silicon machines run
+on CPU.
+
 ## Build from source
 
 Clone the repository and build the extension in place:
