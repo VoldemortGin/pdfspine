@@ -26,9 +26,9 @@
   local `main` on 2026-09-07 (`482c19c`, merge `5a95731`; see "Completed 2026-09-06:
   get_text(clip=)" below), and the `remove_rotation` widget fix on
   `fix/remove-rotation` (Mac Studio `9edd635`, cached as
-  `macstudio/ab9e257cbb9ab89c3`) was merged on 2026-09-07 (see "Completed
-  2026-09-07: remove_rotation" below; hashes recorded there). Both only wait for
-  the push.
+  `macstudio/ab9e257cbb9ab89c3`, closing commit `fc865d6`) was merged on
+  2026-09-07 as `00b62d9` (see "Completed 2026-09-07: remove_rotation" below).
+  Both only wait for the push.
 - `.venv` extension rule: the pre-push gate does not rebuild the extension. After
   merging any Rust change into `main`, run `maturin develop --release` (with
   `PATH="$PWD/.venv/bin:$PATH"`) before `git push`, or pytest runs against the previous
@@ -104,8 +104,8 @@ run the ruff check, push, and delete the worktree and branch.
   on top of `21d636a`) was merged with `main` `9145f9f` (only `CHANGELOG.md`
   conflicted; both entries kept) and finished; `HANDOFF-remove-rotation.md` is
   deleted, its conclusions live in `docs/guide/editing.md` and `DOCPY-037`.
-  Closing commit and `--no-ff` merge hashes: see the checkpoint line above once
-  recorded (PENDING-HASHES).
+  Closing commit `fc865d6` (`fix(python): let remove_rotation transform widget
+  rectangles`), `--no-ff` merge `00b62d9`.
 - `Page.remove_rotation()` no longer raises `PdfUnsupportedError` on a rotated
   page with form widgets (it assigned the read-only `Widget.rect`). Root cause of
   the wider bug: `Annot.rect` / `Widget.rect` / `link["from"]` are PDF user space
