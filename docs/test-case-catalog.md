@@ -1346,6 +1346,23 @@ glyph lists via `textpage_from_glyphs` (no PyMuPDF files). Tests live in
 | `SERIAL-TEXTBOX-001` | clip rect selects only intersecting lines | PRD §8.6.2 | green |
 | `SERIAL-TEXTBOX-002` | clip outside all content → empty string | PRD §8.6.2 | green |
 
+### clip_textpage (`serialize.rs`) — `SERIAL-CLIP-*`
+
+PyMuPDF `get_textpage(clip=)` semantics (measured on PyMuPDF 1.28.2): the clip
+is applied per character at TextPage build time, strict bbox overlap (a glyph the
+clip touches is out, one it cuts into is kept whole and unclamped); MuPDF tests
+the glyph *ink* box while pdfspine has the glyph cell, the one known divergence.
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `SERIAL-CLIP-001` | strict overlap: a touched glyph is out, a glyph cut into (0.01 pt or 90 %) is kept whole, not clamped | PRD-NEXT §0 (clip fix) | green |
+| `SERIAL-CLIP-002` | no overlapping glyph → empty TextPage (`""`, no words) with the clip's size; an empty or inverted clip (not normalized, as in MuPDF) → empty, 0 × 0 | PRD-NEXT §0 (clip fix) | green |
+| `SERIAL-CLIP-003` | kept block / line renumbered from 0; span, line and block bbox = union of the kept chars; words carry the new numbers | PRD-NEXT §0 (clip fix) | green |
+| `SERIAL-CLIP-004` | `width` / `height` of the clipped page (and of `to_dict`) are the clip's | PRD-NEXT §0 (clip fix) | green |
+| `SERIAL-CLIP-005` | image block inside the clip kept as is, one the clip crosses cut to the overlap, one outside dropped | PRD-NEXT §0 (clip fix) | green |
+| `SERIAL-CLIP-006` | surviving span's `origin` / `matrix` / `rendered_size` / `seq` come from its first kept char; bbox and quad from the kept chars only | PRD-NEXT §0 (clip fix) | green |
+| `SERIAL-CLIP-007` | a whole-page clip reproduces `to_text` / `to_words` / `to_blocks` / `to_json` of the unclipped page | PRD-NEXT §0 (clip fix) | green |
+
 ### blocks (`serialize.rs`) — `SERIAL-BLOCKS-*`
 
 | ID | feature | spec ref | status |
@@ -1465,6 +1482,8 @@ methods, and the **M2 accuracy exit gate**. Self-generated fixtures only
 | `TEXTPAGE-REUSE-001` | `Page::textpage` builds once; reused by get_text + search | PRD §9.4 | green |
 | `TEXTPAGE-REUSE-002` | reused TextPage yields identical text to a fresh build | PRD §9.4 | green |
 | `TEXTPAGE-REUSE-003` | search over a reused TextPage equals a fresh search | PRD §9.4 | green |
+| `TEXTPAGE-CLIP-001` | `textpage(page, flags, Some(clip))` keeps the glyphs overlapping the clip (`"Hel"` for a clip 3 pt into the first `l`; `"He"` when it ends exactly there; empty when it meets none) and reports the clip's size | PRD-NEXT §0 (clip fix) | green |
+| `TEXTPAGE-CLIP-002` | `search` with `clip` runs on the clipped model: a needle straddling the clip edge is no hit, the kept prefix is one; same through a pre-built clipped TextPage | PRD-NEXT §0 (clip fix) | green |
 
 ### Python text surface (`test_text.py`) — `PYTEXT-*` / `PYSEARCH-*` / `PYINV-*`
 
@@ -1481,6 +1500,15 @@ methods, and the **M2 accuracy exit gate**. Self-generated fixtures only
 | `PYTEXT-009` | `sort=True` orders blocks by (y, x) | PRD §9.4 | green |
 | `PYTEXT-010` | `sort=True` orders plain-text lines by (y, x), including lines sharing one block; `sort=False` stays unchanged | compatibility findings P2 | green |
 | `PYTEXT-011` | `TEXT_INHIBIT_SPACES` reaches the layout: a `-600`-kerned `TJ` yields `ABCD` / `["ABCD"]` with the flag and `AB CD` without; a literal space glyph is kept either way | PRD §8.6.2 | green |
+| `PYTEXT-012` | `clip=` restricts text / words / blocks / dict / rawdict / json / rawjson alike; block and line numbers restart at 0; dict / json `width`/`height` are the clip's | PRD-NEXT §0 (clip fix) | green |
+| `PYTEXT-013` | per-character strict overlap: a glyph the clip cuts into (30 % or 0.01 pt) is kept whole with its full box, one it touches is out (the preceding space glyph stays) | PRD-NEXT §0 (clip fix) | green |
+| `PYTEXT-014` | empty rect, `Rect()`, a rect outside the page, an inverted rect → `""` / `[]` / no blocks; dict size is the clip's (0×0 for an empty or inverted one) | PRD-NEXT §0 (clip fix) | green |
+| `PYTEXT-015` | `html` / `xhtml` / `xml` ignore `clip`; a supplied `textpage=` wins over `clip=` | PRD-NEXT §0 (clip fix) | green |
+| `PYTEXT-016` | `get_textpage(clip=)` is clipped for every `flags` (`None`, 0, `TEXTFLAGS_TEXT`); `extractText` / `extractWORDS` / `extractDICT` / `get_text(textpage=)` / `search_for(textpage=)` see only the region | PRD-NEXT §0 (clip fix) | green |
+| `PYTEXT-017` | `search_for(clip=)` searches the clipped TextPage: a needle straddling the clip edge is no hit; unclipped search unchanged | PRD-NEXT §0 (clip fix) | green |
+| `PYTEXT-018` | `sort=True` orders what the clip kept (text and blocks); the block outside the clip never appears | PRD-NEXT §0 (clip fix) | green |
+| `PYTEXT-019` | real-PyMuPDF parity of the clipped text / word tuples / dict size / straddling search (skipped unless run with `pytest -p pymupdf`) | PRD-NEXT §0 (clip fix) | green |
+| `PYTEXT-020` | `Annot.get_text` / `Annot.get_textpage` clip by the annotation rect converted to page space via `page.transformation_matrix` (`Annot.rect` is PDF user space); a rect over the text sees it, one elsewhere sees nothing | PRD-NEXT §0 (clip fix) | green |
 | `PYSEARCH-001` | `search_for` returns Rect overlapping the known location | PRD §9.4 | green |
 | `PYSEARCH-002` | `quads=True` returns `Quad`s | PRD §9.4 | green |
 | `PYSEARCH-003` | `hit_max` caps results | PRD §9.4 | green |
