@@ -877,7 +877,7 @@ drive the seldom-used parameters, error branches and camelCase aliases of the
 | `DOCPY-034` | `Shape` curve/oval/sector/squiggle/zigzag/angle/text | PRD §8.8 | green |
 | `DOCPY-035` | `Page` draw + annotation camelCase aliases | PRD §9.5 | green |
 | `DOCPY-036` | `cluster_drawings` neighbor-join + clip/drawings args | PRD §8.6 | green |
-| `DOCPY-037` | `remove_rotation` rewrites links (90/180/270 + identity) | PRD §8.9 | green |
+| `DOCPY-037` | `remove_rotation` rewrites links (90/180/270 + identity) and moves widget / annot `/Rect` by the content matrix in PDF user space (`rewrites_widget_rects[0/90/180/270]`: no `PdfUnsupportedError` on a page with widgets, rects stay inside `page.rect`, 0/90/180 match the PyMuPDF 1.28.2 widget rect within 0.5 pt; PyMuPDF writes an off-page rect at 270) | PRD §8.9 | green |
 | `DOCPY-038` | `write_text` composed multi-writer / rotate path | PRD §8.8 | green |
 | `DOCPY-039` | `text_in_rect` / `content_blocks` / `filled_rectangles` / `link_annotations` | PRD §7 | green |
 | `DOCPY-040` | `get_text_blocks`/`get_textbox`/`get_text_selection` clipping | PRD §9.4 | green |

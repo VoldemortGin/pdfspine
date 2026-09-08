@@ -20,11 +20,15 @@
   2026-09-07; full `./ci.sh` green before the merge). CI run 34013201908 on
   `21d636a` was 22/22 green; the two later pushes passed the local pre-push gate
   (full `cargo test` + pytest). Verify with `git status -sb` and `git log origin/main -1`.
-- **Three branches are in flight, each in its own worktree with a HANDOFF file**; see
-  "In-flight branches" below. They are not merged and must not be deleted. The
-  fourth, the `get_text(clip=)` fix on `fix/get-text-clip`, was merged into local
-  `main` on 2026-09-07 (`482c19c`, merge `5a95731`; see "Completed 2026-09-06:
-  get_text(clip=)" below) and only waits for the push.
+- **Two branches are in flight, each in its own worktree with a HANDOFF file**; see
+  "In-flight branches" below. They are not merged and must not be deleted. Two
+  others are done: the `get_text(clip=)` fix on `fix/get-text-clip` was merged into
+  local `main` on 2026-09-07 (`482c19c`, merge `5a95731`; see "Completed 2026-09-06:
+  get_text(clip=)" below), and the `remove_rotation` widget fix on
+  `fix/remove-rotation` (Mac Studio `9edd635`, cached as
+  `macstudio/ab9e257cbb9ab89c3`) was merged on 2026-09-07 (see "Completed
+  2026-09-07: remove_rotation" below; hashes recorded there). Both only wait for
+  the push.
 - `.venv` extension rule: the pre-push gate does not rebuild the extension. After
   merging any Rust change into `main`, run `maturin develop --release` (with
   `PATH="$PWD/.venv/bin:$PATH"`) before `git push`, or pytest runs against the previous
@@ -60,7 +64,6 @@
 
 | Branch / worktree | Commit | State | Handoff |
 |---|---|---|---|
-| `worktree-agent-ab9e257cbb9ab89c3` at `.claude/worktrees/agent-ab9e257cbb9ab89c3` | `9edd635` (wip) | `remove_rotation()` fix works: annotations, widgets and links are transformed once by the content matrix and single-stream `/AP /N` gets `/Matrix` composed; targeted tests (`DOCPY-037[0/90/180/270]`) pass and 0/90/180 match PyMuPDF 1.28.2 (PyMuPDF itself writes an off-page rect at 270). Remaining: the catalog description for `DOCPY-037`, the full gates, and renaming the commit to `fix(python): let remove_rotation transform widget rectangles`. | `HANDOFF-remove-rotation.md` |
 | `worktree-agent-ae07f5282e4af72f5` at `.claude/worktrees/agent-ae07f5282e4af72f5` | `2be80e5` (wip) | Reading order stages 3/4: baseline reproduced for PMC, born, PMC212689 and both FR runs; the EUR-Lex GT run was killed at 22/40 by a sub-agent that shared the worktree. Stage 3/4 specs are drafted (`stage3-spec.md`, `stage4-spec.md` in the worktree); no product code yet. Evidence and scripts in `/Volumes/ExternalSSD/tmp/ro34/`. | `HANDOFF-reading-order-3-4.md` |
 | `worktree-agent-a86bc39cb9edfca42` at `.claude/worktrees/agent-a86bc39cb9edfca42` | `ed79776` (wip) | OCG gaps, research only: PyMuPDF writes `/OC /MCn BDC … EMC` inside `q`/`Q` for text and shapes (keys `/MCn`, reused per xref) and puts `/OC` on the XObject for images; `/Usage /View /ViewState /OFF` hides regardless of `/AS`; MuPDF ignores `/AS`. Implementation, tests and docs not started. | `HANDOFF-ocg-gaps.md` |
 
@@ -72,10 +75,10 @@ run the ruff check, push, and delete the worktree and branch.
 
 ### Next task queue
 
-1. **Push `main`** (`fix/get-text-clip` is merged as `5a95731`, 2026-09-07; `.venv`
-   rebuilt, `./ci.sh` green), then **finish the three in-flight branches** in this order:
-   `remove_rotation`, reading order 3/4, OCG gaps. Each has a HANDOFF with the
-   exact remaining steps.
+1. **Push `main`** (`fix/get-text-clip` merged as `5a95731` and `fix/remove-rotation`
+   merged 2026-09-07; `.venv` rebuilt, `./ci.sh` green), then **finish the two
+   in-flight branches** in this order: reading order 3/4, OCG gaps. Each has a
+   HANDOFF with the exact remaining steps.
 2. **govdocs1-00074 near-blank render** (fitz SSIM 0.2654 at baseline): not started;
    the agent was cut off while reading. Corpus is in `fixtures/corpus`.
 3. **Render, remaining cost:** first-seen glyph rasterization (~30% of text pages),
@@ -94,6 +97,34 @@ run the ruff check, push, and delete the worktree and branch.
    pre-existing `cargo fmt --check` violations in ocrspine; a CI check that warns
    30 days before the cargo-vet trust entries expire (2027-09-05).
 8. **Continue the existing roadmap** (§4–§6 below).
+
+### Completed 2026-09-07: `remove_rotation` moves widget / annot rects (branch `fix/remove-rotation`, merged 2026-09-07)
+
+- The Mac Studio WIP commit `9edd635` (cached as `macstudio/ab9e257cbb9ab89c3`,
+  on top of `21d636a`) was merged with `main` `9145f9f` (only `CHANGELOG.md`
+  conflicted; both entries kept) and finished; `HANDOFF-remove-rotation.md` is
+  deleted, its conclusions live in `docs/guide/editing.md` and `DOCPY-037`.
+  Closing commit and `--no-ff` merge hashes: see the checkpoint line above once
+  recorded (PENDING-HASHES).
+- `Page.remove_rotation()` no longer raises `PdfUnsupportedError` on a rotated
+  page with form widgets (it assigned the read-only `Widget.rect`). Root cause of
+  the wider bug: `Annot.rect` / `Widget.rect` / `link["from"]` are PDF user space
+  (y-up), the content-stream space, while PyMuPDF's are y-down page space; the
+  old code applied PyMuPDF's y-down inverse to y-up rects, so 90°/270°
+  annotations and links landed off-page and links were transformed twice. Now
+  every non-link annotation `/Rect` (widgets included, through `Page.annots()`)
+  and every link rect is transformed by the content matrix `mat` exactly once,
+  and a single-stream `/AP /N` gets `/Matrix ∘ mat` so the appearance follows
+  the content without regeneration; `/MK /R` untouched, return value unchanged.
+  Widget `/Rect` matches PyMuPDF 1.28.2 for 0°/90°/180°; PyMuPDF writes an
+  off-page rect at 270° (its widgets vanish), pdfspine stays on the page.
+- Tests: `DOCPY-037` `rewrites_widget_rects[0/90/180/270]`
+  (`test_page_edit_branches.py`); `test_longtail13.py::test_remove_rotation_rewrites_annot_rect`
+  now expects `before * ~inv` (the old `before * inv` pinned the off-page bug).
+- Risks kept from the handoff: state-dictionary `/AP /N` widgets (real
+  checkboxes / radios) only get `/Rect` moved; if `Page.annots()` ever stops
+  yielding widgets for PyMuPDF parity, `remove_rotation` needs an explicit
+  widget loop via `page.load_annot(widget.xref)`.
 
 ### Completed 2026-09-06: `get_text(clip=)` honours the clip (branch `fix/get-text-clip`, merged 2026-09-07 as `5a95731`)
 
@@ -122,13 +153,15 @@ run the ruff check, push, and delete the worktree and branch.
   are not fetched on this machine) are identical before and after the change.
 - Exposed by the fix: `Annot.get_text()` / `Annot.get_textpage()` passed the raw
   `Annot.rect` as the clip, but `Annot.rect` (like `Widget.rect` and
-  `link["from"]`, see `HANDOFF-remove-rotation.md`) is PDF user space (y-up)
+  `link["from"]`, see `docs/guide/editing.md`) is PDF user space (y-up)
   while `clip=` is page space (y-down), so once the clip was honoured every
   annotation read an empty region. Both methods now convert the rect through
-  `page.transformation_matrix` (`PYTEXT-020`); `Annot.rect` itself is unchanged
-  because the in-flight `remove_rotation` branch builds on its user-space
-  convention. `DOCPY-030` asserted the old accident (a Text-annot icon rect above
-  the text "seeing" it) and now asserts the PyMuPDF behaviour.
+  `page.transformation_matrix` (`PYTEXT-020`); `Annot.rect` itself is unchanged.
+  That user-space convention is now settled on both sides — the `remove_rotation`
+  fix merged 2026-09-07 relies on it (see the next record and
+  `docs/guide/editing.md`, "Coordinate space of annotation rects"). `DOCPY-030`
+  asserted the old accident (a Text-annot icon rect above the text "seeing" it)
+  and now asserts the PyMuPDF behaviour.
 
 ### Completed 2026-09-06: frozen manifest refreshed (`4e20fb9`, merge `4489aef`)
 
@@ -224,7 +257,8 @@ run the ruff check, push, and delete the worktree and branch.
 - Two pre-existing bugs found: `Page.remove_rotation()` raises `PdfUnsupportedError`
   on a rotated page that has widgets (`document.py` around L3428); `redact.rs`
   rewrites the `'` and `"` operators as a bare `TJ`, losing the implicit newline and
-  spacing (around L363–385). Queue item 1.
+  spacing (around L363–385). Both fixed: redact `3aa558b`, `remove_rotation`
+  2026-09-07.
 
 ### Completed 2026-09-05: reading order stages 1 + 1.5 (`948ebd1`, merge `cc3ebbc`); P3-1r resolved
 
