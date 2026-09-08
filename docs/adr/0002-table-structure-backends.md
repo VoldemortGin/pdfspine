@@ -81,7 +81,10 @@ The current code cannot serve either request cleanly:
   `document.py` without the Protocol refactor. It is the "third backend whose
   stages do not map onto detection / structure" revisit trigger above; the
   Protocol's end-to-end variant should be designed around it when the seam is
-  built.
+  built. The first real-model run (three FinTabNet.c pages) is recorded in
+  [`docs/onnx-backend-baseline-2026-09-08.md`](../onnx-backend-baseline-2026-09-08.md);
+  its fix-priority list should inform this backend's shape before it is
+  folded into the Protocol.
 
 ### Model selection: named registry with pinned revisions
 

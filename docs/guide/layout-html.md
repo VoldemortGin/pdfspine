@@ -200,3 +200,13 @@ it does.
   fixed upstream.
 - Do not change the tag mapping above without updating the evaluation set's
   hand-written HTML in the same change.
+
+## Known issues
+
+The first by-eye run against real financial-report pages with gold
+annotations (three FinTabNet.c pages) is recorded in
+[ONNX backend baseline (2026-09-08)](../onnx-backend-baseline-2026-09-08.md):
+numbers, the numeric-block cropping failure mode from "Table detection may
+crop to the numeric block" above in detail, `"$"`-as-its-own-column and
+multi-line row-label misattribution, hallucinated merged cells, and a fix
+priority order.
