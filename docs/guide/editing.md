@@ -162,6 +162,18 @@ for a in page.annots():
 page.delete_annot(annot)
 ```
 
+**Coordinate space of annotation rects.** `Annot.rect`, `Widget.rect` and
+`link["from"]` are the raw `/Rect` in PDF user space (y up, unrotated), the same
+space the content stream draws in; PyMuPDF reports them in y-down page space.
+Convert with `rect * page.transformation_matrix` when a page-space rect is needed
+(`get_text(clip=)`, `search_for(clip=)`, comparing against text `bbox`es;
+`Annot.get_text` / `Annot.get_textpage` already do this). `Page.remove_rotation()`
+follows the same convention: annotation, widget and link rects move by the content
+derotation matrix (the inverse of its return value, `~inv`), so they stay inside
+`page.rect` for every angle, and a single-stream `/AP /N` gets its `/Matrix`
+composed with the same matrix instead of being regenerated. Widget `/Rect`s match
+PyMuPDF 1.28 for 0°/90°/180°; PyMuPDF itself writes an off-page rect at 270°.
+
 ## Content & vector insertion
 
 ```python
