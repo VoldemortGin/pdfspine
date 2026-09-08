@@ -2811,6 +2811,29 @@ deterministic model-output fixtures.
 | `TATR-070` | `find_tables` adaptive cropping expands a truncated detection twice | TATR evidence-fusion contract | green |
 | `TATR-071` | `find_tables` vector-line guidance overrides the detector crop | TATR evidence-fusion contract | green |
 
+### ONNX vision layout/tables — `ONNX-*`
+
+Offline tests live in `python/tests/test_onnx_tables.py`; they do not install
+onnxruntime/numpy/Pillow, load a model, or access the network. Both models are
+replaced by fakes injected through `_runtime=`, and the end-to-end case uses the
+native `strategy="lines"` result on a ruled fixture as ground truth.
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `ONNX-001` | `OnnxOptions` validation (types, ranges, channel order, providers) and `from_mapping` unknown-key rejection | pdfspine vision extension | green |
+| `ONNX-002` | model path resolution: explicit path > `PDFSPINE_ONNX_MODELS` > bare filename; missing model file and missing runtime raise `PdfUnsupportedError` with the download URL / `pdfspine[onnx]` hint | ONNX runtime contract | green |
+| `ONNX-003` | `_decode_structure` greedy token decoding stops at `<eos>`, skips `<sos>`, and turns the 8-point quad of every `<td` token into a scaled axis-aligned rect | SLANet-plus post-processing | green |
+| `ONNX-004` | `_structure_to_cells` builds the occupancy grid with `colspan`/`rowspan` and flags `<thead>` cells as headers | SLANet-plus post-processing | green |
+| `ONNX-005` | `_assign_words` overlap → centre → nearest-cell fallback never drops a word; multi-line cells keep line order | text-layer fill contract | green |
+| `ONNX-006` | `_decode_layout` inverts the letterbox, applies the threshold, resolves labels (metadata `names`/`character` or fallback) and class-agnostic NMS | DocLayout-YOLO post-processing | green |
+| `ONNX-007` | `backend="onnx"` dispatches to `_onnx.find_tables`; `backend=None` stays TATR; `find_layout`/`get_layout_html` forward `vision_options` | API contract | green |
+| `ONNX-008` | fake runtime with two table regions: page-space `clip=` keeps only the intersecting table | ONNX end-to-end contract | green |
+| `ONNX-009` | stubbed models replay the native `lines` grid of a ruled fixture: `extract()` matches cell for cell, `source == "onnx"`, `to_html()` well-formed | ONNX end-to-end contract | green |
+| `ONNX-010` | `_reading_order` bands + two columns; `get_layout_html` tag mapping (h2/p/class/figure/abandon/table fallback) | layout HTML contract | green |
+| `ONNX-011` | `_split_table_outputs` identifies bbox/structure tensors by last dimension in either order and rejects unexpected shapes | SLANet-plus post-processing | green |
+| `ONNX-012` | `_grid_boxes` derives row/column bands from cells; runtime cache is keyed by model paths + providers and `clear_model_cache` empties it | ONNX runtime contract | green |
+| `ONNX-013` | `_resolve_providers`: `auto` prefers CUDA then CPU, never CoreML; explicit unavailable provider raises `PdfUnsupportedError` | ONNX runtime contract | green |
+
 ### M7 — optional content (`pdf_core::ocg` / `pdf_edit::ocg`) — `OCG-READ-*` / `OCG-ADD-*` / `OCG-TOGGLE-*` / `OCG-BIND-*` / `OCG-VIS-*` / `OCG-LAYER-*` / `OCG-DEFAULT-*` / `OCG-OCMD-SET-*`
 
 Tests live in `crates/pdf-core/tests/ocg_unit.rs` (read) and

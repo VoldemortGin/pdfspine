@@ -89,7 +89,21 @@ tatr = [
 #   4. else the in-crate `ocrspine/models` dev fallback (source checkout);
 #   5. else a clear `PdfUnsupportedError`.
 ocr = []  # models arrive via the base `ocrspine-models` dependency; back-compat no-op.
+# `[onnx]` is the torch-free vision backend (DocLayout-YOLO layout detection +
+# SLANet-plus table structure, both Apache-2.0 RapidAI exports) behind
+# `find_tables(strategy="vision", backend="onnx")`, `Page.find_layout()` and
+# `Page.get_layout_html()`. Model files are NOT in the wheel: download them into
+# a directory and point `PDFSPINE_ONNX_MODELS` at it (see docs/reference/tables.md).
+# Install `onnxruntime-gpu` instead of `onnxruntime` for CUDA; `providers="auto"`
+# picks it up automatically.
+onnx = [
+    "onnxruntime>=1.17",
+    "numpy>=1.26",
+    "Pillow>=11,<13",
+]
 all = [
+    "onnxruntime>=1.17; python_version < '3.15' and ((sys_platform == 'linux' and (platform_machine == 'x86_64' or platform_machine == 'aarch64')) or (sys_platform == 'darwin' and platform_machine == 'arm64') or (sys_platform == 'win32' and (platform_machine == 'AMD64' or platform_machine == 'x86_64')))",
+    "numpy>=1.26; python_version < '3.15' and ((sys_platform == 'linux' and (platform_machine == 'x86_64' or platform_machine == 'aarch64')) or (sys_platform == 'darwin' and platform_machine == 'arm64') or (sys_platform == 'win32' and (platform_machine == 'AMD64' or platform_machine == 'x86_64')))",
     "Pillow>=11,<13; python_version < '3.15' and ((sys_platform == 'linux' and (platform_machine == 'x86_64' or platform_machine == 'aarch64')) or (sys_platform == 'darwin' and platform_machine == 'arm64') or (sys_platform == 'win32' and (platform_machine == 'AMD64' or platform_machine == 'x86_64')))",
     "torch>=2.6,<3; python_version < '3.15' and ((sys_platform == 'linux' and (platform_machine == 'x86_64' or platform_machine == 'aarch64')) or (sys_platform == 'darwin' and platform_machine == 'arm64') or (sys_platform == 'win32' and (platform_machine == 'AMD64' or platform_machine == 'x86_64')))",
     "transformers>=5,<6; python_version < '3.15' and ((sys_platform == 'linux' and (platform_machine == 'x86_64' or platform_machine == 'aarch64')) or (sys_platform == 'darwin' and platform_machine == 'arm64') or (sys_platform == 'win32' and (platform_machine == 'AMD64' or platform_machine == 'x86_64')))",

@@ -1557,7 +1557,7 @@ class Table:
 
     @property
     def source(self) -> str:
-        """The producing backend: ``"native"`` or ``"tatr"``."""
+        """The producing backend: ``"native"``, ``"tatr"`` or ``"onnx"``."""
         return str(getattr(self._table, "source", "native"))
 
     @property
@@ -2318,11 +2318,13 @@ class Page:
         """Detects the tables on this page (PyMuPDF ``page.find_tables``).
 
         ``strategy`` is ``"lines"`` (default), ``"lines_strict"``, ``"text"``
-        or pdfspine's opt-in ``"vision"`` extension. Vision currently uses
-        Microsoft Table Transformer (``backend="tatr"``), with model options in
-        ``vision_options``. The optional runtime is installed with
-        ``pip install 'pdfspine[tatr]'``; checkpoints are pinned and loaded from
-        the local Hugging Face cache by default.
+        or pdfspine's opt-in ``"vision"`` extension. Vision uses Microsoft
+        Table Transformer (``backend="tatr"``, the default) or the ONNX
+        DocLayout-YOLO + SLANet-plus pair (``backend="onnx"``), with model
+        options in ``vision_options``. The optional runtimes are installed with
+        ``pip install 'pdfspine[tatr]'`` / ``'pdfspine[onnx]'``; weights are
+        never bundled (TATR: pinned Hugging Face cache; ONNX:
+        ``PDFSPINE_ONNX_MODELS``).
 
         PyMuPDF's ``vertical_strategy``/``horizontal_strategy`` kwargs are
         accepted: a single non-default value selects that strategy. Returns a
@@ -2334,9 +2336,16 @@ class Page:
             normalized_strategy in {"vision", "tatr"} or normalized_backend is not None
         )
         if vision_requested:
-            if normalized_backend not in {None, "tatr"}:
+            if normalized_backend not in {None, "tatr", "onnx"}:
                 raise PdfUnsupportedError(
-                    f"unsupported vision table backend {backend!r}; expected 'tatr'"
+                    f"unsupported vision table backend {backend!r}; "
+                    "expected 'tatr' or 'onnx'"
+                )
+            if normalized_backend == "onnx":
+                from ._onnx import find_tables as _find_onnx_tables
+
+                return TableFinder(
+                    _find_onnx_tables(self, clip=clip, options=vision_options)
                 )
             from ._tatr import find_tables as _find_vision_tables
 
@@ -2349,7 +2358,7 @@ class Page:
             )
         if vision_options is not None:
             raise TypeError(
-                "vision_options requires strategy='vision' or backend='tatr'"
+                "vision_options requires strategy='vision' or backend='tatr'/'onnx'"
             )
         # PyMuPDF passes vertical_strategy / horizontal_strategy; honor either.
         vs = _ignored.get("vertical_strategy")
@@ -2366,6 +2375,33 @@ class Page:
                 min_line_length=float(min_line_length),
             )
         )
+
+    # --- ONNX layout analysis (pdfspine extra; not in PyMuPDF) ---
+    def find_layout(self, **vision_options) -> list:
+        """Detect layout regions (titles, paragraphs, tables, figures,
+        captions, headers/footers) with the opt-in ONNX DocLayout-YOLO model.
+
+        Returns a list of :class:`pdfspine.LayoutBlock` in reading order, with
+        ``bbox`` in page points. Keyword arguments are
+        :class:`pdfspine.OnnxOptions` fields (``layout_model``, ``providers``,
+        ``layout_threshold``, ``dpi``, ...). Requires ``pip install
+        'pdfspine[onnx]'`` and the model file under ``PDFSPINE_ONNX_MODELS``.
+        """
+        from ._onnx import find_layout as _find_layout
+
+        return _find_layout(self, options=vision_options or None)
+
+    def get_layout_html(self, **vision_options) -> str:
+        """Render this page as semantic HTML (headings, paragraphs, captions,
+        ``<table>`` with ``rowspan``/``colspan``, ``<figure>`` placeholders)
+        using the ONNX layout + table models for geometry only.
+
+        Every character comes from the PDF text layer; no OCR is performed.
+        Keyword arguments are :class:`pdfspine.OnnxOptions` fields.
+        """
+        from ._onnx import get_layout_html as _get_layout_html
+
+        return _get_layout_html(self, options=vision_options or None)
 
     def find_image_tables(
         self,
