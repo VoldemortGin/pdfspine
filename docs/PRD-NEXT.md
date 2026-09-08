@@ -597,8 +597,9 @@ oracle-cross-checked against real PyMuPDF 1.24.14 (`.venv-oracle`) with zero reg
     dominant error (3 of 5 tables lose their row-label column) and sharpens the fix order for this
     backend specifically:
     - **Layout model switched (2026-09-08):** the original YOLO-based layout detector was replaced by
-      PP-DocLayout-L (default; PP-DocLayoutV3 optional via `layout_variant="pp_doclayoutv3"` and
-      recommended) because the old detector's upstream repo, PyPI metadata and ONNX `license` field all
+      PP-DocLayout — PP-DocLayoutV3 by default (with reading order and `vision_footnote`),
+      PP-DocLayout-L as the faster optional variant via `layout_variant="pp_doclayout_l"` — because the
+      old detector's upstream repo, PyPI metadata and ONNX `license` field all
       say AGPL-3.0. The numbers below are the pre-swap baseline and are superseded by the PP-DocLayout
       re-run in
       [`docs/onnx-backend-baseline-2026-09-08.md`](onnx-backend-baseline-2026-09-08.md).
@@ -606,7 +607,7 @@ oracle-cross-checked against real PyMuPDF 1.24.14 (`.venv-oracle`) with zero reg
        failure of the old detector (ADI `Table.bbox` IoU 0.32 / 897 unclaimed words; AMP T1 IoU 0.29; AMP T2
        IoU 0.63); PP-DocLayoutV3 detects the full table on all three pages (IoU 0.99 / 0.85 / 0.92,
        unclaimed words 897 → 23 and 21 → 0). PP-DocLayout-L fixes ADI (0.98) but misclassifies the shaded
-       ADBE table as `image` and emits a nested duplicate box on ADI — hence the V3 recommendation.
+       ADBE table as `image` and emits a nested duplicate box on ADI — hence V3 as the default.
     2. **Cell text assignment / column merging** — fold `"$"`-only predicted columns into their numeric
        neighbor, assign row-label words by row-band y-range instead of nearest-cell-box (fixes multi-line
        label misattribution), strip dotted-leader tokens (ADBE 11 vs 8 predicted columns; AMP T0 12 vs 9).

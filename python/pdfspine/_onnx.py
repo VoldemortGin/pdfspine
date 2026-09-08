@@ -5,10 +5,11 @@ Every character of text comes from the PDF text layer through pdfspine's native
 word coordinates; the models never regenerate text and no OCR is applied.
 
 Both models are Apache-2.0 (PaddleX/PaddleOCR upstream, ONNX exports published
-by RapidAI). The layout detector is a PP-DocLayout RT-DETR: ``PP-DocLayout-L``
-(23 classes, 640x640) by default, with ``PP-DocLayoutV3`` (25 classes, 800x800,
-plus a per-box reading-order key) available through
-``OnnxOptions.layout_variant``. The YOLO-based detector used before 2026-09-08
+by RapidAI). The layout detector is a PP-DocLayout RT-DETR: ``PP-DocLayoutV3``
+(25 classes, 800x800, a per-box reading-order key and a dedicated
+``vision_footnote`` class) by default, with the faster ``PP-DocLayout-L``
+(23 classes, 640x640) available through ``OnnxOptions.layout_variant``. The
+YOLO-based detector used before 2026-09-08
 was dropped because its upstream repository, PyPI package and ONNX metadata all
 declare AGPL-3.0; the evidence is in ``docs/table-structure-models-survey.md``
 section 4.1.
@@ -58,7 +59,7 @@ from .geometry import Rect
 MODELS_ENV = "PDFSPINE_ONNX_MODELS"
 
 # The two PP-DocLayout variants (PaddleX RT-DETR heads, Apache-2.0). ``auto``
-# picks the variant from the model file name, defaulting to PP-DocLayout-L.
+# picks the variant from the model file name, defaulting to PP-DocLayoutV3.
 LAYOUT_VARIANTS: tuple[str, ...] = ("pp_doclayout_l", "pp_doclayoutv3")
 LAYOUT_MODEL_FILES: dict[str, str] = {
     "pp_doclayout_l": "pp_doclayout_l.onnx",
@@ -78,7 +79,7 @@ LAYOUT_MODEL_URLS: dict[str, str] = {
 # from the session's static ``image`` input shape; this is the fallback used
 # before the session exists and for exports with a dynamic spatial dimension.
 LAYOUT_INPUT_SIZES: dict[str, int] = {"pp_doclayout_l": 640, "pp_doclayoutv3": 800}
-DEFAULT_LAYOUT_VARIANT = "pp_doclayout_l"
+DEFAULT_LAYOUT_VARIANT = "pp_doclayoutv3"
 LAYOUT_MODEL_FILE = LAYOUT_MODEL_FILES[DEFAULT_LAYOUT_VARIANT]
 LAYOUT_MODEL_URL = LAYOUT_MODEL_URLS[DEFAULT_LAYOUT_VARIANT]
 
@@ -147,7 +148,7 @@ PP_DOCLAYOUTV3_LABELS: tuple[str, ...] = (
 )
 
 # Back-compatible alias: the default variant's class list.
-LAYOUT_LABELS: tuple[str, ...] = PP_DOCLAYOUT_L_LABELS
+LAYOUT_LABELS: tuple[str, ...] = PP_DOCLAYOUTV3_LABELS
 
 LAYOUT_LABELS_BY_VARIANT: dict[str, tuple[str, ...]] = {
     "pp_doclayout_l": PP_DOCLAYOUT_L_LABELS,
@@ -390,11 +391,13 @@ def _variant_from_name(name: str) -> str:
     stem = os.path.basename(name).casefold()
     if "v3" in stem:
         return "pp_doclayoutv3"
+    if "doclayout_l" in stem or "doclayout-l" in stem:
+        return "pp_doclayout_l"
     return DEFAULT_LAYOUT_VARIANT
 
 
 def _layout_variant(options: OnnxOptions) -> str:
-    """Resolve ``layout_variant``: explicit value, else the file name, else L."""
+    """Resolve ``layout_variant``: explicit value, else the file name, else V3."""
 
     if options.layout_variant != "auto":
         return options.layout_variant
@@ -510,12 +513,12 @@ class _OnnxRuntime:
         )
         self.layout_variant = layout_variant
         self._layout_labels: tuple[str, ...] = LAYOUT_LABELS_BY_VARIANT.get(
-            layout_variant, PP_DOCLAYOUT_L_LABELS
+            layout_variant, PP_DOCLAYOUTV3_LABELS
         )
         self._label_map: dict[str, str] = LAYOUT_LABEL_MAPS.get(
-            layout_variant, LAYOUT_LABEL_MAP
+            layout_variant, LAYOUT_LABEL_MAP_V3
         )
-        self._layout_size = LAYOUT_INPUT_SIZES.get(layout_variant, 640)
+        self._layout_size = LAYOUT_INPUT_SIZES.get(layout_variant, 800)
         self._structure_dict: tuple[str, ...] = SLANET_STRUCTURE_DICT
         self.metadata: dict[str, Any] = {
             "backend": "onnx",

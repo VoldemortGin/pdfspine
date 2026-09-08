@@ -78,12 +78,13 @@ and point `PDFSPINE_ONNX_MODELS` at it (or pass `layout_model` /
 `table_model` paths in `vision_options`). Two layout variants are supported,
 selected with `vision_options={"layout_variant": ...}`:
 
-- `pp_doclayout_l.onnx` — PP-DocLayout-L, the default
-  (`layout_variant="pp_doclayout_l"`);
-- `pp_doc_layoutv3.onnx` — PP-DocLayoutV3 (`layout_variant="pp_doclayoutv3"`),
-  optional but recommended for financial statements: it also predicts the
-  reading order and, on the baseline pages, detects every table that
-  PP-DocLayout-L misses.
+- `pp_doc_layoutv3.onnx` — PP-DocLayoutV3, the default
+  (`layout_variant="pp_doclayoutv3"`): it also predicts the reading order,
+  has a dedicated `vision_footnote` class and, on the baseline pages, detects
+  every table;
+- `pp_doclayout_l.onnx` — PP-DocLayout-L (`layout_variant="pp_doclayout_l"`),
+  an optional, faster variant (640 x 640 input) that misses or duplicates
+  some tables on the baseline pages.
 
 See [Tables](../reference/tables.md#vision-onnx-pp-doclayout-slanet-plus) for
 the download commands and the [Layout HTML guide](layout-html.md) for usage

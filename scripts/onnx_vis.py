@@ -314,7 +314,7 @@ def main() -> None:
         "--variant",
         choices=("pp_doclayout_l", "pp_doclayoutv3"),
         default=None,
-        help="PP-DocLayout variant (default: the backend default, PP-DocLayout-L)",
+        help="PP-DocLayout variant (default: the backend default, PP-DocLayoutV3)",
     )
     args = parser.parse_args()
 

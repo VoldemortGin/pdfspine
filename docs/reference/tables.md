@@ -77,27 +77,27 @@ for the end-to-end picture, the reading-order rule, and the current limitations.
 ```bash
 pip install "pdfspine[onnx]"          # onnxruntime, numpy, Pillow
 mkdir -p ~/models/pdfspine-onnx
-curl -L -o ~/models/pdfspine-onnx/pp_doclayout_l.onnx \
-  https://www.modelscope.cn/models/RapidAI/RapidDoc/resolve/v1.0.0/layout/PP-DocLayout-L/pp_doclayout_l.onnx
+curl -L -o ~/models/pdfspine-onnx/pp_doc_layoutv3.onnx \
+  https://www.modelscope.cn/models/RapidAI/RapidLayout/resolve/v1.2.0/onnx/pp_doc_layout/pp_doc_layoutv3.onnx
 curl -L -o ~/models/pdfspine-onnx/slanet-plus.onnx \
   https://www.modelscope.cn/models/RapidAI/RapidTable/resolve/v2.0.0/slanet-plus.onnx
 export PDFSPINE_ONNX_MODELS=~/models/pdfspine-onnx
-# optional, recommended for financial statements (layout_variant="pp_doclayoutv3"):
-curl -L -o ~/models/pdfspine-onnx/pp_doc_layoutv3.onnx \
-  https://www.modelscope.cn/models/RapidAI/RapidLayout/resolve/v1.2.0/onnx/pp_doc_layout/pp_doc_layoutv3.onnx
+# optional, faster variant (layout_variant="pp_doclayout_l"):
+curl -L -o ~/models/pdfspine-onnx/pp_doclayout_l.onnx \
+  https://www.modelscope.cn/models/RapidAI/RapidDoc/resolve/v1.0.0/layout/PP-DocLayout-L/pp_doclayout_l.onnx
 ```
 
 (`wget -O <file> <url>` works the same way.) Point `PDFSPINE_ONNX_MODELS` at
 the directory holding the files, or pass explicit paths through
 `vision_options={"layout_model": ..., "table_model": ...}`. Two layout
-detectors are supported: PP-DocLayout-L (`pp_doclayout_l.onnx`, 640 x 640,
-23 classes, the default) and PP-DocLayoutV3 (`pp_doc_layoutv3.onnx`,
-800 x 800, 25 classes, predicts the reading order as well). Select one with
-`vision_options={"layout_variant": "pp_doclayoutv3"}` or
-`page.find_layout(layout_variant="pp_doclayoutv3")`; the default `"auto"`
+detectors are supported: PP-DocLayoutV3 (`pp_doc_layoutv3.onnx`, 800 x 800,
+25 classes, predicts the reading order and has a dedicated `vision_footnote`
+class; the default) and PP-DocLayout-L (`pp_doclayout_l.onnx`, 640 x 640,
+23 classes, the faster optional variant). Select one with
+`vision_options={"layout_variant": "pp_doclayout_l"}` or
+`page.find_layout(layout_variant="pp_doclayout_l")`; the default `"auto"`
 infers the variant from the layout model's file name and falls back to
-PP-DocLayout-L. **PP-DocLayoutV3 is the recommended variant even though
-PP-DocLayout-L is the current default** — on the baseline pages
+PP-DocLayoutV3. **PP-DocLayoutV3 is the default** — on the baseline pages
 PP-DocLayout-L misclassified one table as `image` and duplicated another,
 V3 did neither; see the
 [Layout HTML guide](../guide/layout-html.md#layout-model-variants) and

@@ -404,8 +404,8 @@ ModelScope at pinned revisions:
 
 | Variant | File | Pinned source | Input | Classes | Output row |
 |---|---|---|---|---|---|
-| `pp_doclayout_l` (default) | `pp_doclayout_l.onnx`, 123 MB | ModelScope `RapidAI/RapidDoc` @ `v1.0.0`, `layout/PP-DocLayout-L/` | 640×640 | 23 | `(class_id, score, x0, y0, x1, y1)` |
-| `pp_doclayoutv3` | `pp_doc_layoutv3.onnx`, 124 MB | ModelScope `RapidAI/RapidLayout` @ `v1.2.0`, `onnx/pp_doc_layout/` | 800×800 | 25 | same + 7th column: per-box reading-order key |
+| `pp_doclayoutv3` (default) | `pp_doc_layoutv3.onnx`, 124 MB | ModelScope `RapidAI/RapidLayout` @ `v1.2.0`, `onnx/pp_doc_layout/` | 800×800 | 25 | same + 7th column: per-box reading-order key |
+| `pp_doclayout_l` | `pp_doclayout_l.onnx`, 123 MB | ModelScope `RapidAI/RapidDoc` @ `v1.0.0`, `layout/PP-DocLayout-L/` | 640×640 | 23 | `(class_id, score, x0, y0, x1, y1)` |
 
 Both graphs take three named inputs (`image`, `im_shape`, `scale_factor`)
 and return boxes already in original-image pixels, RT-DETR style: no
@@ -435,10 +435,10 @@ band rule that misordered two-column pages. PP-DocLayout-L fixes ADI (IoU
 emits a nested duplicate table box on ADI that IoU-based NMS cannot remove
 (IoU 0.31), while still cropping AMP T1 / T2 (IoU 0.36 / 0.62). The cost of
 V3 is roughly 40 % more per-page latency (2.5–3.5 s vs 1.6–2.0 s on CPU) and
-one missed running-head block. **The shipped default is currently
-PP-DocLayout-L** (`DEFAULT_LAYOUT_VARIANT` in `_onnx.py`); the survey's
-recommendation is to flip it to V3 once a scored run over the full 150-page
-slice confirms the three-page picture.
+one missed running-head block. **The shipped default is PP-DocLayoutV3**
+(`DEFAULT_LAYOUT_VARIANT` in `_onnx.py`, flipped on 2026-09-08), with
+PP-DocLayout-L kept as the faster optional variant; a scored run over the
+full 150-page slice should still confirm the three-page picture.
 
 ---
 

@@ -50,19 +50,19 @@ it improves a benchmark.
 ```bash
 pip install "pdfspine[onnx]"
 mkdir -p ~/models/pdfspine-onnx
-curl -L -o ~/models/pdfspine-onnx/pp_doclayout_l.onnx \
-  https://www.modelscope.cn/models/RapidAI/RapidDoc/resolve/v1.0.0/layout/PP-DocLayout-L/pp_doclayout_l.onnx
+curl -L -o ~/models/pdfspine-onnx/pp_doc_layoutv3.onnx \
+  https://www.modelscope.cn/models/RapidAI/RapidLayout/resolve/v1.2.0/onnx/pp_doc_layout/pp_doc_layoutv3.onnx
 curl -L -o ~/models/pdfspine-onnx/slanet-plus.onnx \
   https://www.modelscope.cn/models/RapidAI/RapidTable/resolve/v2.0.0/slanet-plus.onnx
 export PDFSPINE_ONNX_MODELS=~/models/pdfspine-onnx
 ```
 
-Optional variant, recommended for financial statements (see
+Optional faster variant, PP-DocLayout-L (see
 [Layout model variants](#layout-model-variants)):
 
 ```bash
-curl -L -o ~/models/pdfspine-onnx/pp_doc_layoutv3.onnx \
-  https://www.modelscope.cn/models/RapidAI/RapidLayout/resolve/v1.2.0/onnx/pp_doc_layout/pp_doc_layoutv3.onnx
+curl -L -o ~/models/pdfspine-onnx/pp_doclayout_l.onnx \
+  https://www.modelscope.cn/models/RapidAI/RapidDoc/resolve/v1.0.0/layout/PP-DocLayout-L/pp_doclayout_l.onnx
 ```
 
 For CUDA install `onnxruntime-gpu` instead of `onnxruntime`; the default
@@ -95,16 +95,16 @@ Two PP-DocLayout detectors (both RT-DETR heads) are supported; pick one with
 
 | `layout_variant` | File | Input | Classes | Notes |
 |---|---|---|---|---|
-| `"pp_doclayout_l"` (default) | `pp_doclayout_l.onnx` (~123 MB) | 640 x 640 | 23 | PP-DocLayout-L; reading order from the geometric band rule |
-| `"pp_doclayoutv3"` | `pp_doc_layoutv3.onnx` (~124 MB) | 800 x 800 | 25 | PP-DocLayoutV3; emits a per-box reading-order key that replaces the band rule |
-| `"auto"` (the default value) | either | | | picks the variant from the layout model's file name, falling back to PP-DocLayout-L |
+| `"pp_doclayoutv3"` (default) | `pp_doc_layoutv3.onnx` (~124 MB) | 800 x 800 | 25 | PP-DocLayoutV3; emits a per-box reading-order key that replaces the band rule and has a dedicated `vision_footnote` class |
+| `"pp_doclayout_l"` | `pp_doclayout_l.onnx` (~123 MB) | 640 x 640 | 23 | PP-DocLayout-L; faster (smaller input), reading order from the geometric band rule |
+| `"auto"` (the default value) | either | | | picks the variant from the layout model's file name, falling back to PP-DocLayoutV3 |
 
 ```python
-blocks = page.find_layout(layout_variant="pp_doclayoutv3")
-html = page.get_layout_html(layout_variant="pp_doclayoutv3")
+blocks = page.find_layout(layout_variant="pp_doclayout_l")
+html = page.get_layout_html(layout_variant="pp_doclayout_l")
 tables = page.find_tables(
     strategy="vision", backend="onnx",
-    vision_options={"layout_variant": "pp_doclayoutv3"},
+    vision_options={"layout_variant": "pp_doclayout_l"},
 )
 ```
 
@@ -112,11 +112,11 @@ With `layout_variant="auto"` and `PDFSPINE_ONNX_MODELS` holding only one of
 the two files, the variant follows the file present; pass `layout_model=` to
 point at a specific file.
 
-**PP-DocLayoutV3 is the recommended variant even though PP-DocLayout-L is the
-current default.** On the three FinTabNet.c baseline pages V3 detects every
-table with the correct extent (`Table.bbox` IoU 0.85-0.99), while
-PP-DocLayout-L misclassifies a shaded table as `image` (so no table is found
-on that page) and emits a nested duplicate table box on another; see
+**PP-DocLayoutV3 is the default; PP-DocLayout-L is the faster optional
+variant.** On the three FinTabNet.c baseline pages V3 detects every table
+with the correct extent (`Table.bbox` IoU 0.85-0.99), while PP-DocLayout-L
+misclassifies a shaded table as `image` (so no table is found on that page)
+and emits a nested duplicate table box on another; see
 [ONNX backend baseline (2026-09-08)](../onnx-backend-baseline-2026-09-08.md)
 for the numbers and [Known limitations](#known-limitations).
 
@@ -216,11 +216,11 @@ PP-DocLayout-L too.
   boxes (single-span cells for each index, falling back to any cell touching
   it). `cells`, `spans`, `extract()` and `to_html()` do not depend on them.
 - **PP-DocLayout-L can miss or duplicate tables.** On the three FinTabNet.c
-  baseline pages the default variant classified a shaded statement table as
-  `image`, so `find_tables()` found nothing on that page, and on another page
-  it emitted a second, nested table box inside the real one. PP-DocLayoutV3
-  showed neither problem; use `layout_variant="pp_doclayoutv3"` for financial
-  statements.
+  baseline pages the optional L variant classified a shaded statement table
+  as `image`, so `find_tables()` found nothing on that page, and on another
+  page it emitted a second, nested table box inside the real one.
+  PP-DocLayoutV3 (the default) showed neither problem; keep the default for
+  financial statements.
 - **Table cropping to the numeric block is fixed by PP-DocLayoutV3.** The
   YOLO-based detector used before the model swap often returned only the block
   of numbers and dropped the wide row-label column. PP-DocLayoutV3 detects the full table on
@@ -250,8 +250,8 @@ PP-DocLayout-L too.
    reading-order score for the rest of the page. The existing GriTS harness
    in `conformance/gt/` is the natural home.
 3. **Decide priorities from the numbers**, in whatever order the scores point
-   to: whether PP-DocLayoutV3 should become the default; recursive XY-cut
-   reading order for PP-DocLayout-L; a better `rows` / `cols` derivation;
+   to: whether the PP-DocLayoutV3 default holds up on a scored run; recursive
+   XY-cut reading order for PP-DocLayout-L; a better `rows` / `cols` derivation;
    fine-tuning or swapping the structure model for borderless tables.
 4. Fold the backend into the `TableStructureBackend` Protocol described in
    [ADR 0002](../adr/0002-table-structure-backends.md) when that refactor

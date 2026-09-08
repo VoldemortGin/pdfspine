@@ -101,7 +101,7 @@ The current code cannot serve either request cleanly:
   | `tatr/v1.1-pub` | tatr | `microsoft/table-transformer-structure-recognition-v1.1-pub` |
   | `tableformer/accurate` | tableformer | `docling-project/docling-models`, `model_artifacts/tableformer/accurate` |
   | `tableformer/fast` | tableformer | `docling-project/docling-models`, `model_artifacts/tableformer/fast` |
-  | `onnx/pp-doclayout-slanet-plus` | onnx | RapidAI ONNX exports: PP-DocLayout-L @ RapidDoc v1.0.0 (default) or PP-DocLayoutV3 @ RapidLayout v1.2.0, plus SLANet-plus @ RapidTable v2.0.0 (all Apache-2.0, onnxruntime, no torch) |
+  | `onnx/pp-doclayout-slanet-plus` | onnx | RapidAI ONNX exports: PP-DocLayoutV3 @ RapidLayout v1.2.0 (default) or PP-DocLayout-L @ RapidDoc v1.0.0 (faster optional variant), plus SLANet-plus @ RapidTable v2.0.0 (all Apache-2.0, onnxruntime, no torch) |
 
   Revisions for the entries not yet pinned are fixed when the backend lands.
   The previous `onnx/doclayout-slanet-plus` entry (DocLayout-YOLO

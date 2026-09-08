@@ -204,14 +204,23 @@ def test_onnx_002_model_paths_and_missing_errors(monkeypatch, tmp_path):
     layout, table = _onnx._model_paths(_onnx.OnnxOptions())
     assert layout == tmp_path / _onnx.LAYOUT_MODEL_FILE
     assert table == tmp_path / _onnx.TABLE_MODEL_FILE
-
-    # The V3 variant resolves to its own default file name.
-    layout_v3, table_v3 = _onnx._model_paths(
-        _onnx.OnnxOptions(layout_variant="pp_doclayoutv3")
+    # The default is PP-DocLayoutV3; its file name and URL are the defaults.
+    assert _onnx.DEFAULT_LAYOUT_VARIANT == "pp_doclayoutv3"
+    assert _onnx.LAYOUT_MODEL_FILE == "pp_doc_layoutv3.onnx"
+    assert _onnx.LAYOUT_MODEL_URL == _onnx.LAYOUT_MODEL_URLS["pp_doclayoutv3"]
+    assert _onnx.LAYOUT_MODEL_URL == (
+        "https://www.modelscope.cn/models/RapidAI/RapidLayout/resolve/v1.2.0/"
+        "onnx/pp_doc_layout/pp_doc_layoutv3.onnx"
     )
-    assert layout_v3 == tmp_path / _onnx.LAYOUT_MODEL_FILES["pp_doclayoutv3"]
-    assert layout_v3 != layout
-    assert table_v3 == table
+
+    # PP-DocLayout-L stays available and resolves to its own file name.
+    layout_l, table_l = _onnx._model_paths(
+        _onnx.OnnxOptions(layout_variant="pp_doclayout_l")
+    )
+    assert layout_l == tmp_path / _onnx.LAYOUT_MODEL_FILES["pp_doclayout_l"]
+    assert layout_l == tmp_path / "pp_doclayout_l.onnx"
+    assert layout_l != layout
+    assert table_l == table
 
     explicit = tmp_path / "custom-layout.onnx"
     layout, table = _onnx._model_paths(_onnx.OnnxOptions(layout_model=str(explicit)))
@@ -224,25 +233,29 @@ def test_onnx_002_model_paths_and_missing_errors(monkeypatch, tmp_path):
         _onnx._OnnxRuntime(layout, table, "auto")
 
     # Runtime present, model file absent: the download URL is in the message.
+    # The default runtime quotes the V3 file name and URL.
     _fake_onnx_modules(monkeypatch)
     runtime = _onnx._OnnxRuntime(layout, table, "auto")
     with pytest.raises(pdfspine.PdfUnsupportedError) as excinfo:
         runtime._session("layout")
-    assert _onnx.LAYOUT_MODEL_URL in str(excinfo.value)
-    assert _onnx.MODELS_ENV in str(excinfo.value)
+    message = str(excinfo.value)
+    assert _onnx.LAYOUT_MODEL_URL in message
+    assert "pp_doc_layoutv3.onnx" in message
+    assert _onnx.LAYOUT_MODEL_URLS["pp_doclayout_l"] not in message
+    assert _onnx.MODELS_ENV in message
     with pytest.raises(pdfspine.PdfUnsupportedError) as excinfo:
         runtime._session("table")
     assert _onnx.TABLE_MODEL_URL in str(excinfo.value)
 
-    # The V3 runtime quotes the V3 file name and download URL, not the L ones.
-    runtime_v3 = _onnx._OnnxRuntime(layout_v3, table, "auto", "pp_doclayoutv3")
+    # The L runtime quotes the L file name and download URL, not the V3 ones.
+    runtime_l = _onnx._OnnxRuntime(layout_l, table, "auto", "pp_doclayout_l")
     with pytest.raises(pdfspine.PdfUnsupportedError) as excinfo:
-        runtime_v3._session("layout")
+        runtime_l._session("layout")
     message = str(excinfo.value)
-    assert _onnx.LAYOUT_MODEL_FILES["pp_doclayoutv3"] in message
-    assert _onnx.LAYOUT_MODEL_URLS["pp_doclayoutv3"] in message
+    assert _onnx.LAYOUT_MODEL_FILES["pp_doclayout_l"] in message
+    assert _onnx.LAYOUT_MODEL_URLS["pp_doclayout_l"] in message
     assert _onnx.LAYOUT_MODEL_URL not in message
-    assert repr(str(layout_v3)) in message
+    assert repr(str(layout_l)) in message
 
 
 # --------------------------------------------------------------------------- #
@@ -371,8 +384,10 @@ def test_onnx_006_decode_layout_rtdetr_rows_labels_and_nms():
     labels_v3 = _onnx.PP_DOCLAYOUTV3_LABELS
     # Pin the class-id order: the model output only carries the integer id.
     assert len(labels) == 23 and labels[8] == "table"
-    assert len(labels_v3) == 25
-    assert _onnx.LAYOUT_LABELS is labels
+    assert len(labels_v3) == 25 and labels_v3[21] == "table"
+    # The back-compatible alias follows the default variant (V3).
+    assert _onnx.LAYOUT_LABELS is labels_v3
+    assert _onnx.LAYOUT_LABELS_BY_VARIANT[_onnx.DEFAULT_LAYOUT_VARIANT] is labels_v3
     cls = labels.index
     image_size = (400, 200)
     rows = [
@@ -941,37 +956,49 @@ def test_onnx_012_grid_boxes_and_runtime_cache(monkeypatch, tmp_path):
         )
         assert other is not first
         assert len(_onnx._MODEL_CACHE) == 2
-        # The variant is part of the cache key: V3 gets its own runtime, with
-        # its own class list, label map, model file and input edge.
-        v3 = _onnx._get_runtime(_onnx.OnnxOptions(layout_variant="pp_doclayoutv3"))
-        assert v3 is not first
+        # The default (V3) is what an explicit ``pp_doclayoutv3`` resolves to.
+        assert (
+            _onnx._get_runtime(_onnx.OnnxOptions(layout_variant="pp_doclayoutv3"))
+            is first
+        )
+        # The variant is part of the cache key: PP-DocLayout-L gets its own
+        # runtime, with its own class list, label map, model file and input edge.
+        l_runtime = _onnx._get_runtime(
+            _onnx.OnnxOptions(layout_variant="pp_doclayout_l")
+        )
+        assert l_runtime is not first
         assert (
             _onnx._get_runtime(
-                _onnx.OnnxOptions(layout_variant="pp_doclayoutv3", dpi=72)
+                _onnx.OnnxOptions(layout_variant="pp_doclayout_l", dpi=72)
             )
-            is v3
+            is l_runtime
         )
         assert len(_onnx._MODEL_CACHE) == 3
-        assert v3.layout_variant == "pp_doclayoutv3"
-        assert v3.layout_labels == _onnx.PP_DOCLAYOUTV3_LABELS
-        assert v3.layout_label_map is _onnx.LAYOUT_LABEL_MAP_V3
-        assert v3.metadata["layout_variant"] == "pp_doclayoutv3"
-        assert v3.metadata["layout_model"] == str(
-            tmp_path / _onnx.LAYOUT_MODEL_FILES["pp_doclayoutv3"]
+        assert l_runtime.layout_variant == "pp_doclayout_l"
+        assert l_runtime.layout_labels == _onnx.PP_DOCLAYOUT_L_LABELS
+        assert l_runtime.layout_label_map is _onnx.LAYOUT_LABEL_MAP
+        assert l_runtime.metadata["layout_variant"] == "pp_doclayout_l"
+        assert l_runtime.metadata["layout_model"] == str(
+            tmp_path / _onnx.LAYOUT_MODEL_FILES["pp_doclayout_l"]
         )
-        assert v3.metadata["preprocessing"] == (
-            "pp-doclayout-800-rgb/slanet-plus-488-imagenet"
+        assert l_runtime.metadata["preprocessing"] == (
+            "pp-doclayout-640-rgb/slanet-plus-488-imagenet"
         )
         # ``auto`` infers the variant from an explicit model file name; the
-        # default V3 file resolves to the same spec and hits the cache.
+        # default V3 file resolves to the same spec as ``first`` and the L file
+        # to the L runtime, both hitting the cache.
         named = _onnx._get_runtime(
             _onnx.OnnxOptions(layout_model=str(tmp_path / "pp_doc_layoutv3.onnx"))
         )
-        assert named is v3
+        assert named is first
+        named_l = _onnx._get_runtime(
+            _onnx.OnnxOptions(layout_model=str(tmp_path / "pp_doclayout_l.onnx"))
+        )
+        assert named_l is l_runtime
         custom = _onnx._get_runtime(
             _onnx.OnnxOptions(layout_model=str(tmp_path / "custom_v3.onnx"))
         )
-        assert custom.layout_variant == "pp_doclayoutv3" and custom is not v3
+        assert custom.layout_variant == "pp_doclayoutv3" and custom is not first
         assert len(_onnx._MODEL_CACHE) == 4
         assert {spec.layout_variant for spec in _onnx._MODEL_CACHE} == {
             "pp_doclayout_l",
@@ -989,13 +1016,13 @@ def test_onnx_012_grid_boxes_and_runtime_cache(monkeypatch, tmp_path):
             (str(tmp_path / _onnx.LAYOUT_MODEL_FILE), ("CPUExecutionProvider",))
         ]
         assert first.layout_variant == _onnx.DEFAULT_LAYOUT_VARIANT
-        assert first.layout_labels == _onnx.PP_DOCLAYOUT_L_LABELS
-        assert first.layout_label_map is _onnx.LAYOUT_LABEL_MAP
+        assert first.layout_labels == _onnx.PP_DOCLAYOUTV3_LABELS
+        assert first.layout_label_map is _onnx.LAYOUT_LABEL_MAP_V3
         assert first.structure_dict == _onnx.SLANET_STRUCTURE_DICT
         assert first.metadata["providers"] == ["CPUExecutionProvider"]
-        assert first.metadata["layout_variant"] == "pp_doclayout_l"
+        assert first.metadata["layout_variant"] == "pp_doclayoutv3"
         assert first.metadata["preprocessing"] == (
-            "pp-doclayout-640-rgb/slanet-plus-488-imagenet"
+            "pp-doclayout-800-rgb/slanet-plus-488-imagenet"
         )
     finally:
         _onnx.clear_model_cache()
@@ -1077,12 +1104,20 @@ def test_onnx_014_layout_input_and_variant_resolution(monkeypatch, tmp_path):
     assert _onnx._variant_from_name("pp_doc_layoutv3.onnx") == "pp_doclayoutv3"
     assert _onnx._variant_from_name("/models/PP-DocLayoutV3.onnx") == "pp_doclayoutv3"
     assert _onnx._variant_from_name("pp_doclayout_l.onnx") == "pp_doclayout_l"
-    assert _onnx._variant_from_name("layout.onnx") == "pp_doclayout_l"
+    assert _onnx._variant_from_name("/models/PP-DocLayout-L.onnx") == "pp_doclayout_l"
+    assert _onnx._variant_from_name("layout.onnx") == "pp_doclayoutv3"  # default
     assert (
         _onnx._variant_from_name(str(Path("v3-models") / "pp_doclayout_l.onnx"))
         == "pp_doclayout_l"
     )
+    assert (
+        _onnx._variant_from_name(str(Path("doclayout_l") / "custom.onnx"))
+        == "pp_doclayoutv3"
+    )
     assert _onnx._layout_variant(_onnx.OnnxOptions()) == _onnx.DEFAULT_LAYOUT_VARIANT
+    assert _onnx._layout_variant(_onnx.OnnxOptions()) == "pp_doclayoutv3"
+    assert _onnx.LAYOUT_INPUT_SIZES[_onnx.DEFAULT_LAYOUT_VARIANT] == 800
+    assert _onnx.LAYOUT_INPUT_SIZES["pp_doclayout_l"] == 640
     assert (
         _onnx._layout_variant(_onnx.OnnxOptions(layout_model="x_v3.onnx"))
         == "pp_doclayoutv3"
@@ -1125,8 +1160,9 @@ def test_onnx_014_layout_input_and_variant_resolution(monkeypatch, tmp_path):
 
         def run(self, _names, feeds):
             feeds_seen.append(feeds)
-            table = _onnx.PP_DOCLAYOUT_L_LABELS.index("table")
-            text = _onnx.PP_DOCLAYOUT_L_LABELS.index("text")
+            # The default runtime decodes with the V3 class list.
+            table = _onnx.PP_DOCLAYOUTV3_LABELS.index("table")
+            text = _onnx.PP_DOCLAYOUTV3_LABELS.index("text")
             rows = [
                 [table, 0.9, 10.0, 20.0, 210.0, 120.0],
                 [text, 0.8, 0.0, 0.0, 50.0, 50.0],
@@ -1146,9 +1182,10 @@ def test_onnx_014_layout_input_and_variant_resolution(monkeypatch, tmp_path):
     layout_path = tmp_path / _onnx.LAYOUT_MODEL_FILE
     layout_path.write_bytes(b"onnx")
     runtime = _onnx._OnnxRuntime(layout_path, tmp_path / "t.onnx", "auto")
-    assert runtime.metadata["preprocessing"].startswith("pp-doclayout-640-")
+    assert runtime.layout_variant == "pp_doclayoutv3"
+    assert runtime.metadata["preprocessing"].startswith("pp-doclayout-800-")
     detections = runtime.detect_layout(red, _onnx.OnnxOptions())
-    # The edge comes from the session (64), not the variant default (640).
+    # The edge comes from the session (64), not the variant default (800).
     assert runtime.metadata["preprocessing"] == (
         "pp-doclayout-64-rgb/slanet-plus-488-imagenet"
     )

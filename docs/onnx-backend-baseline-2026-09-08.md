@@ -221,7 +221,7 @@ model was removed rather than negotiated; see
 An RT-DETR detector from PaddleX, ONNX-exported by RapidAI, both Apache-2.0.
 Two variants ship behind `vision_options={"layout_variant": ...}`:
 
-| | PP-DocLayout-L (default) | PP-DocLayoutV3 |
+| | PP-DocLayout-L | PP-DocLayoutV3 (default) |
 |---|---|---|
 | File | `pp_doclayout_l.onnx` (123 MB) | `pp_doc_layoutv3.onnx` (124 MB) |
 | Input | 640x640 | 800x800 |
@@ -322,9 +322,10 @@ downstream error. Its costs are a ~40 % higher per-page latency and one
 missed running-head block on ADI (23 unclaimed words, which are still emitted
 verbatim in `<pre class="unclaimed">` and so are not lost).
 
-The shipped default is still `pp_doclayout_l`, per the brief for this change.
-Flipping it is a one-line change to `DEFAULT_LAYOUT_VARIANT` in
-`python/pdfspine/_onnx.py` plus the documented defaults.
+The shipped default was flipped to `pp_doclayoutv3` the same day
+(`DEFAULT_LAYOUT_VARIANT` in `python/pdfspine/_onnx.py`, plus the documented
+defaults); PP-DocLayout-L stays available as the faster optional variant
+(`layout_variant="pp_doclayout_l"`).
 
 Revised fix priority for this backend, replacing the list above:
 
