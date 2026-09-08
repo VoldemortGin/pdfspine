@@ -259,6 +259,12 @@ python scripts/quality_gate.py --help
 python conformance/run_validation.py …       # real-corpus accuracy harness
 ```
 
+The gate runs `rust → extension → python → drift → artifacts`. The `extension`
+phase fingerprints the Rust inputs (`crates/**`, `Cargo.toml`, `Cargo.lock`,
+`pyproject.toml`, `rust-toolchain*`) against `.gate/extension.stamp` and re-runs
+`maturin develop --release` when they differ, so pytest never runs against a stale
+`_core`. Skip it with `--skip-extension-check` or `PDFSPINE_GATE_SKIP_EXTENSION=1`.
+
 pdfspine is built strictly **test-first** (red → green → refactor → harden); the
 per-function test plan is in [`docs/test-case-catalog.md`](https://github.com/VoldemortGin/pdfspine/blob/main/docs/test-case-catalog.md).
 
