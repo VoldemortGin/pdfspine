@@ -25,11 +25,15 @@
   fourth, the `get_text(clip=)` fix on `fix/get-text-clip`, was merged into local
   `main` on 2026-09-07 (`482c19c`, merge `5a95731`; see "Completed 2026-09-06:
   get_text(clip=)" below) and only waits for the push.
-- `.venv` extension rule: the pre-push gate does not rebuild the extension. After
-  merging any Rust change into `main`, run `maturin develop --release` (with
-  `PATH="$PWD/.venv/bin:$PATH"`) before `git push`, or pytest runs against the previous
-  `.so`. Also run `.venv/bin/python -m ruff format --check python/pdfspine python/tests
-  scripts` before pushing; branches formatted with another ruff fail the gate.
+- `.venv` extension rule: the gate now detects and rebuilds the extension itself
+  (`scripts/quality_gate.py` `extension` phase: it fingerprints the content of
+  `crates/**`, `Cargo.toml`, `Cargo.lock`, `pyproject.toml` and `rust-toolchain*`,
+  compares it with `.gate/extension.stamp`, and runs `maturin develop --release`
+  on any mismatch before pytest; `--skip-extension-check` or
+  `PDFSPINE_GATE_SKIP_EXTENSION=1` opts out). No manual `maturin develop` is needed
+  before `git push`. Still run `.venv/bin/python -m ruff format --check
+  python/pdfspine python/tests scripts` before pushing; branches formatted with
+  another ruff fail the gate.
 - Environment: `target/` is a symlink to `/Volumes/Cargo/target/pdfspine` (`/target`
   is in `.gitignore`); the Homebrew python3.14 on `PATH` has no `ruff`; LibreOffice
   26.8.0.3 (brew cask) is installed for the typeset oracle. The pre-push gate's
@@ -305,8 +309,9 @@ run the ruff check, push, and delete the worktree and branch.
 - The CI coverage job runs `maturin develop` (debug) and the combined lcov is correct
   (run 33975022511: `py-bindings` 2,888/3,468). Codecov is active and ingests both
   the `rust` and `python` flags.
-- The `.venv` extension on `main` must be rebuilt with `maturin develop --release`
-  after merging Rust changes and before pushing; the gate does not rebuild it.
+- The `.venv` extension on `main` is rebuilt by the gate itself when the Rust
+  inputs change (see the `extension` phase in `scripts/quality_gate.py`); no manual
+  `maturin develop --release` is needed before pushing.
 
 ### Glyph geometry A–G: complete, do not restart
 
