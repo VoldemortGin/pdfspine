@@ -18,6 +18,18 @@ conversation can answer four questions: what pdfspine does today for table
 structure, which external models are candidates, why they are candidates, and
 what has to be measured before anything changes.
 
+### Questions this document answers
+
+- Is Docling's TableFormer a TATR fine-tune? Is it publicly released? →
+  [§2.0](#20-tableformer-is-not-a-tatr-fine-tune)
+- Can TableFormer run without the Docling pipeline, and what inputs does it
+  need? → [§2.1](#21-standalone-use)
+- Which TATR checkpoints exist and what was each trained on? → [§3.1](#31-official-microsoft-checkpoints-microsofttable-transformer)
+- How do we benchmark the structure stage alone (gold-crop TSR-only) and with
+  which metrics / data? → [§1.4](#14-tests-and-evaluation-infrastructure),
+  [§4](#4-evaluation-resources)
+- Why not one pip extra per model? → [ADR 0002, "Model selection"](adr/0002-table-structure-backends.md#model-selection-named-registry-with-pinned-revisions)
+
 ---
 
 ## 1. pdfspine today
@@ -154,6 +166,32 @@ recognition lives only in pdfspine.
 ---
 
 ## 2. Docling TableFormer
+
+### 2.0 TableFormer is not a TATR fine-tune
+
+A question every newcomer asks: *does Docling use its own fine-tuned TATR, and
+is it unreleased?* No on both counts.
+
+- **Docling does not use TATR.** TableFormer is IBM's own architecture
+  (arXiv 2203.01017, 2022). An encoder reads the table image; a decoder emits
+  an HTML-style sequence of structure tokens and, in the same pass, regresses a
+  bbox for every cell. It belongs to the **image-to-sequence** family (same
+  lineage as EDD and TableMaster). TATR is a **DETR object detector**: rows,
+  columns, headers and spanning cells are predicted as boxes, and a geometric
+  post-processing step assembles them into a grid.
+- **It is publicly released.** Code: `docling-ibm-models`
+  (`TFPredictor.multi_table_predict`, §2.1). Weights: Hugging Face
+  `docling-project/docling-models`, `fast` and `accurate` variants, licensed
+  CDLA-Permissive-2.0 / Apache-2.0 (§2.2). It can be used independently of
+  the Docling conversion pipeline.
+- **Still unverified:** whether the training recipe of the published HF
+  weights matches the paper (the paper's data mix is PubTabNet / FinTabNet /
+  TableBank / SynthTabNet).
+- **Consequence for pdfspine:** TableFormer is a **second model family**, not
+  another TATR checkpoint. Its inputs (page image + text tokens + external
+  table bboxes) and outputs (per-cell responses with spans) differ from TATR's
+  object lists, so it cannot be dropped into `TatrOptions.structure_model`.
+  That is the direct reason ADR 0002 asks for a backend seam before adding it.
 
 ### 2.1 Standalone use
 

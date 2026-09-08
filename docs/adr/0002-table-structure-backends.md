@@ -18,7 +18,12 @@ Two requests were raised for the table-structure stage of the vision path:
    PubTabNet, FinTabNet, TableBank and SynthTabNet and reports 96.8 % TEDS on
    FinTabNet. Financial reports are a primary pdfspine workload, so the
    structure stage should be measured against TableFormer (and against TATR's
-   own `v1.1-fin` variant) before the default is fixed.
+   own `v1.1-fin` variant) before the default is fixed. TableFormer is
+   **not** a TATR fine-tune: it is IBM's own publicly released
+   image-to-sequence architecture with a different input / output shape
+   (see [survey §2.0](../table-structure-models-survey.md#20-tableformer-is-not-a-tatr-fine-tune)),
+   which is why adding it means a second backend rather than a second
+   checkpoint.
 2. **Selectable industry models.** Users want to install pdfspine with one of
    several TATR checkpoints tuned for different industries, chosen at install
    time.
