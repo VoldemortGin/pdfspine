@@ -1,8 +1,10 @@
 """ONNX-* — offline tests for the optional ONNX layout/table backend.
 
 onnxruntime, numpy and Pillow are not required (same as CI): the pure
-decoders are exercised directly and the two models are replaced by fakes
-injected through ``_runtime=``. The end-to-end case replays the native
+decoders are exercised directly and the two models (PP-DocLayout layout,
+SLANet-plus tables) are replaced by fakes injected through ``_runtime=``.
+``ONNX-014`` runs the real PP-DocLayout preprocessing when numpy/Pillow are
+importable and skips otherwise. The end-to-end case replays the native
 ``strategy="lines"`` grid of a ruled fixture through the full ONNX pipeline
 (render -> crop -> structure tokens -> text-layer fill -> HTML) and compares
 cell for cell. Every character always comes from the PDF text layer.
@@ -111,6 +113,10 @@ def _fake_onnx_modules(monkeypatch, providers=("CPUExecutionProvider",), session
         def get_modelmeta(self):
             return SimpleNamespace(custom_metadata_map={})
 
+        def get_inputs(self):
+            # No static ``image`` shape: the variant's default edge is kept.
+            return []
+
     ort = ModuleType("onnxruntime")
     ort.get_available_providers = lambda: list(providers)
     ort.SessionOptions = lambda: SimpleNamespace(log_severity_level=0)
@@ -121,6 +127,14 @@ def _fake_onnx_modules(monkeypatch, providers=("CPUExecutionProvider",), session
     return created
 
 
+def _input_spec(name, shape):
+    return SimpleNamespace(name=name, shape=shape)
+
+
+def _session_with_inputs(*specs):
+    return SimpleNamespace(get_inputs=lambda: list(specs))
+
+
 # --------------------------------------------------------------------------- #
 # ONNX-001: option validation
 # --------------------------------------------------------------------------- #
@@ -128,12 +142,20 @@ def test_onnx_001_options_validation_and_mapping():
     default = _onnx.OnnxOptions()
     assert default.providers == "auto"
     assert default.channel_order == "bgr"
-    assert default.layout_nms_iou == 0.7
+    assert default.layout_nms_iou == 0.6
+    assert default.layout_threshold == 0.5
+    assert default.layout_size is None
+    assert default.layout_variant == "auto"
     listed = _onnx.OnnxOptions(
-        providers=["CPUExecutionProvider"], channel_order=" RGB "
+        providers=["CPUExecutionProvider"],
+        channel_order=" RGB ",
+        layout_variant=" PP_DocLayoutV3 ",
     )
     assert listed.providers == ("CPUExecutionProvider",)
     assert listed.channel_order == "rgb"
+    assert listed.layout_variant == "pp_doclayoutv3"
+    assert _onnx.OnnxOptions(layout_variant="AUTO").layout_variant == "auto"
+    assert _onnx.OnnxOptions(layout_size=640).layout_size == 640
     assert _onnx.OnnxOptions(layout_threshold=1).layout_threshold == 1.0
     assert _onnx.OnnxOptions(layout_nms_iou=None).layout_nms_iou is None
     assert _onnx.OnnxOptions(table_model=Path("x.onnx")).table_model == "x.onnx"
@@ -151,6 +173,9 @@ def test_onnx_001_options_validation_and_mapping():
         ({"layout_nms_iou": "x"}, TypeError, "layout_nms_iou"),
         ({"layout_nms_iou": 2.0}, ValueError, "layout_nms_iou"),
         ({"layout_size": 1000}, ValueError, "multiple of 32"),
+        ({"layout_size": "640"}, TypeError, "layout_size"),
+        ({"layout_variant": "nope"}, ValueError, "layout_variant"),
+        ({"layout_variant": 3}, TypeError, "layout_variant"),
         ({"table_size": 8}, ValueError, "table_size"),
         ({"channel_order": "gray"}, ValueError, "channel_order"),
         ({"channel_order": 3}, TypeError, "channel_order"),
@@ -180,6 +205,14 @@ def test_onnx_002_model_paths_and_missing_errors(monkeypatch, tmp_path):
     assert layout == tmp_path / _onnx.LAYOUT_MODEL_FILE
     assert table == tmp_path / _onnx.TABLE_MODEL_FILE
 
+    # The V3 variant resolves to its own default file name.
+    layout_v3, table_v3 = _onnx._model_paths(
+        _onnx.OnnxOptions(layout_variant="pp_doclayoutv3")
+    )
+    assert layout_v3 == tmp_path / _onnx.LAYOUT_MODEL_FILES["pp_doclayoutv3"]
+    assert layout_v3 != layout
+    assert table_v3 == table
+
     explicit = tmp_path / "custom-layout.onnx"
     layout, table = _onnx._model_paths(_onnx.OnnxOptions(layout_model=str(explicit)))
     assert layout == explicit
@@ -200,6 +233,16 @@ def test_onnx_002_model_paths_and_missing_errors(monkeypatch, tmp_path):
     with pytest.raises(pdfspine.PdfUnsupportedError) as excinfo:
         runtime._session("table")
     assert _onnx.TABLE_MODEL_URL in str(excinfo.value)
+
+    # The V3 runtime quotes the V3 file name and download URL, not the L ones.
+    runtime_v3 = _onnx._OnnxRuntime(layout_v3, table, "auto", "pp_doclayoutv3")
+    with pytest.raises(pdfspine.PdfUnsupportedError) as excinfo:
+        runtime_v3._session("layout")
+    message = str(excinfo.value)
+    assert _onnx.LAYOUT_MODEL_FILES["pp_doclayoutv3"] in message
+    assert _onnx.LAYOUT_MODEL_URLS["pp_doclayoutv3"] in message
+    assert _onnx.LAYOUT_MODEL_URL not in message
+    assert repr(str(layout_v3)) in message
 
 
 # --------------------------------------------------------------------------- #
@@ -321,27 +364,115 @@ def test_onnx_005_assign_words_overlap_centre_nearest():
 
 
 # --------------------------------------------------------------------------- #
-# ONNX-006: layout decoding (letterbox inverse, threshold, labels, NMS)
+# ONNX-006: PP-DocLayout RT-DETR row decoding (threshold, labels, NMS, order)
 # --------------------------------------------------------------------------- #
-def test_onnx_006_decode_layout_and_labels():
+def test_onnx_006_decode_layout_rtdetr_rows_labels_and_nms():
+    labels = _onnx.PP_DOCLAYOUT_L_LABELS
+    labels_v3 = _onnx.PP_DOCLAYOUTV3_LABELS
+    # Pin the class-id order: the model output only carries the integer id.
+    assert len(labels) == 23 and labels[8] == "table"
+    assert len(labels_v3) == 25
+    assert _onnx.LAYOUT_LABELS is labels
+    cls = labels.index
+    image_size = (400, 200)
     rows = [
-        [112.0, 12.0, 212.0, 62.0, 0.9, 5],  # table, letterbox coords
-        [112.0, 12.0, 212.0, 62.0, 0.8, 1],  # duplicate box, other class
-        [12.0, 12.0, 62.0, 62.0, 0.1, 0],  # below threshold
-        [12.0, 12.0, 62.0, 62.0, 0.5, 42],  # unknown class id
-        [12.0, 12.0, 12.0, 62.0, 0.5, 0],  # zero area
+        [cls("table"), 0.9, 10.0, 20.0, 210.0, 120.0],  # pixels taken verbatim
+        [cls("text"), 0.8, -5.0, -5.0, 450.0, 250.0],  # clamped to the image
+        [cls("paragraph_title"), 0.79, 10.0, 10.0, 50.0, 30.0],
+        [cls("table_title"), 0.78, 10.0, 40.0, 50.0, 60.0],
+        [cls("header"), 0.77, 10.0, 70.0, 50.0, 90.0],
+        [cls("number"), 0.76, 60.0, 70.0, 80.0, 90.0],
+        [cls("formula"), 0.75, 10.0, 100.0, 50.0, 120.0],
+        [cls("image"), 0.74, 10.0, 130.0, 50.0, 150.0],
+        [-1, 0.99, 0.0, 0.0, 100.0, 100.0],  # RT-DETR padding row
+        [cls("text"), 0.4, 0.0, 0.0, 100.0, 100.0],  # below threshold
+        [cls("text"), 0.9, 30.0, 30.0, 30.0, 80.0],  # zero area
+        [42, 0.6, 0.0, 0.0, 100.0, 100.0],  # unknown class id
+        [cls("text"), 0.9, 1.0, 2.0, 3.0],  # truncated row
     ]
-    # ratio 0.5 => a 400x200 image scaled to 200x100 inside a 200x200 canvas
-    # with a vertical pad of 50, horizontal pad of 0... use pad (12, 12) here.
-    decoded = _onnx._decode_layout(
-        rows, 0.5, (12.0, 12.0), (400, 200), 0.25, _onnx.LAYOUT_LABELS, 0.7
+    decoded = _onnx._decode_layout(rows, image_size, 0.5, labels)
+    assert [(d["raw_label"], d["label"], d["score"]) for d in decoded] == [
+        ("table", "table", 0.9),
+        ("text", "plain text", 0.8),
+        ("paragraph_title", "title", 0.79),
+        ("table_title", "table_caption", 0.78),
+        ("header", "abandon", 0.77),
+        ("number", "abandon", 0.76),
+        ("formula", "isolate_formula", 0.75),
+        ("image", "figure", 0.74),
+        ("42", "42", 0.6),
+    ]
+    assert decoded[0]["bbox"] == (10.0, 20.0, 210.0, 120.0)
+    assert decoded[1]["bbox"] == (0.0, 0.0, 400.0, 200.0)
+    assert all("read_order" not in d for d in decoded)
+    assert _onnx._decode_layout(rows, image_size, 0.95, labels) == []
+
+    # ``count`` (the head's second output) truncates the padded row list.
+    assert [
+        d["raw_label"]
+        for d in _onnx._decode_layout(rows, image_size, 0.5, labels, count=1)
+    ] == ["table"]
+    assert _onnx._decode_layout(rows, image_size, 0.5, labels, count=0) == []
+    for count in (len(rows), 99, -1):
+        assert (
+            len(_onnx._decode_layout(rows, image_size, 0.5, labels, count=count)) == 9
+        )
+
+    # Label map per variant: PP-DocLayout-L has no vision footnote, so its
+    # ``footnote`` is the closest thing to a table footnote; V3 keeps page
+    # footnotes as body text and maps ``vision_footnote`` instead.
+    l_footnote = _onnx._decode_layout(
+        [[cls("footnote"), 0.9, 0.0, 0.0, 10.0, 10.0]],
+        image_size,
+        0.5,
+        labels,
+        _onnx.LAYOUT_LABEL_MAP,
     )
-    assert [(d["label"], d["score"]) for d in decoded] == [("table", 0.9), ("42", 0.5)]
-    assert decoded[0]["bbox"] == (200.0, 0.0, 400.0, 100.0)
-    without_nms = _onnx._decode_layout(
-        rows, 0.5, (12.0, 12.0), (400, 200), 0.25, _onnx.LAYOUT_LABELS, None
+    assert (l_footnote[0]["raw_label"], l_footnote[0]["label"]) == (
+        "footnote",
+        "table_footnote",
     )
-    assert [d["label"] for d in without_nms] == ["table", "plain text", "42"]
+    cls_v3 = labels_v3.index
+    v3_rows = [
+        [cls_v3("footnote"), 0.9, 0.0, 150.0, 200.0, 190.0, 3.0],
+        [cls_v3("vision_footnote"), 0.8, 0.0, 100.0, 200.0, 140.0, 2.0],
+        [cls_v3("text"), 0.7, 0.0, 0.0, 200.0, 90.0, 1.0],
+        [cls_v3("text"), 0.6, 250.0, 0.0, 300.0, 90.0, float("nan")],
+    ]
+    v3 = _onnx._decode_layout(
+        v3_rows, image_size, 0.5, labels_v3, _onnx.LAYOUT_LABEL_MAP_V3
+    )
+    assert [(d["raw_label"], d["label"], d.get("read_order")) for d in v3] == [
+        ("footnote", "plain text", 3.0),
+        ("vision_footnote", "table_footnote", 2.0),
+        ("text", "plain text", 1.0),
+        ("text", "plain text", None),  # non-finite key is dropped
+    ]
+
+    # NMS only suppresses within the same model class: RT-DETR emits duplicate
+    # (query, class) pairs for one region, but a text box over an image box is
+    # real. ``per_class=False`` gives the classic class-agnostic pass.
+    overlapping = [
+        [cls("table"), 0.9, 10.0, 10.0, 110.0, 110.0],
+        [cls("table"), 0.8, 12.0, 12.0, 112.0, 112.0],  # IoU ~0.92, same class
+        [cls("image"), 0.7, 12.0, 12.0, 112.0, 112.0],  # same box, other class
+        [cls("table"), 0.6, 100.0, 100.0, 200.0, 200.0],  # barely touches
+    ]
+    with_nms = _onnx._decode_layout(overlapping, image_size, 0.5, labels, nms_iou=0.6)
+    assert [(d["raw_label"], d["score"]) for d in with_nms] == [
+        ("table", 0.9),
+        ("image", 0.7),
+        ("table", 0.6),
+    ]
+    without_nms = _onnx._decode_layout(overlapping, image_size, 0.5, labels)
+    assert len(without_nms) == 4
+    class_agnostic = _onnx._nms(without_nms, 0.6, per_class=False)
+    assert [(d["raw_label"], d["score"]) for d in class_agnostic] == [
+        ("table", 0.9),
+        ("table", 0.6),
+    ]
+    assert _onnx._nms(without_nms, 0.6) == with_nms
+
     assert _onnx._labels_from_metadata({"names": "{1: 'b', 0: 'a'}"}) == ("a", "b")
     assert _onnx._labels_from_metadata({"names": "['x', 'y']"}) == ("x", "y")
     assert _onnx._labels_from_metadata(
@@ -416,9 +547,24 @@ class _TwoTableRuntime:
 
     def detect_layout(self, _image, _options):
         return [
-            {"label": "table", "score": 0.99, "bbox": (0, 20, 180, 80)},
-            {"label": "plain text", "score": 0.99, "bbox": (0, 0, 180, 20)},
-            {"label": "table", "score": 0.98, "bbox": (220, 20, 400, 80)},
+            {
+                "label": "table",
+                "raw_label": "table",
+                "score": 0.99,
+                "bbox": (0, 20, 180, 80),
+            },
+            {
+                "label": "plain text",
+                "raw_label": "text",
+                "score": 0.99,
+                "bbox": (0, 0, 180, 20),
+            },
+            {
+                "label": "table",
+                "raw_label": "table",
+                "score": 0.98,
+                "bbox": (220, 20, 400, 80),
+            },
         ]
 
     def recognize_table(self, image, _options):
@@ -491,7 +637,7 @@ class _ReplayRuntime:
         bbox = (x0 * sx, y0 * sy, x1 * sx, y1 * sy)
         self.crop_origin = (bbox[0] - self.padding, bbox[1] - self.padding)
         self.scale = (sx, sy)
-        return [{"label": "table", "score": 0.95, "bbox": bbox}]
+        return [{"label": "table", "raw_label": "table", "score": 0.95, "bbox": bbox}]
 
     def recognize_table(self, _image, _options):
         sx, sy = self.scale
@@ -640,6 +786,10 @@ def test_onnx_010_reading_order_and_layout_html(monkeypatch):
     ]
     degenerate = _onnx._reading_order(blocks[:2], (0.0, 0.0, 0.0, 0.0))
     assert [b.label for b, _ in degenerate] == ["left-1", "right-1"]
+    # ``raw_label`` defaults to the normalised label.
+    assert blocks[0][0].raw_label == "right-1"
+    titled = _onnx.LayoutBlock(pdfspine.Rect(0, 0, 1, 1), "title", 0.5, "doc_title")
+    assert (titled.label, titled.raw_label) == ("title", "doc_title")
 
     tokens = [
         _token([20, 10, 60, 20], "Header", 0, 0, 0),
@@ -659,16 +809,57 @@ def test_onnx_010_reading_order_and_layout_html(monkeypatch):
         metadata = {"backend": "onnx"}
 
         def detect_layout(self, _image, _options):
+            # Normalised ``label`` plus the PP-DocLayout class it came from.
             return [
-                {"label": "abandon", "score": 0.9, "bbox": (0, 0, 400, 25)},
-                {"label": "title", "score": 0.9, "bbox": (0, 35, 400, 55)},
-                {"label": "plain text", "score": 0.9, "bbox": (0, 55, 400, 75)},
-                {"label": "table_caption", "score": 0.9, "bbox": (0, 75, 400, 95)},
-                {"label": "table", "score": 0.9, "bbox": (0, 95, 400, 135)},
-                {"label": "figure", "score": 0.9, "bbox": (0, 135, 400, 155)},
-                {"label": "isolate_formula", "score": 0.9, "bbox": (0, 155, 400, 175)},
+                {
+                    "label": "abandon",
+                    "raw_label": "header",
+                    "score": 0.9,
+                    "bbox": (0, 0, 400, 25),
+                },
+                {
+                    "label": "title",
+                    "raw_label": "paragraph_title",
+                    "score": 0.9,
+                    "bbox": (0, 35, 400, 55),
+                },
+                {
+                    "label": "plain text",
+                    "raw_label": "text",
+                    "score": 0.9,
+                    "bbox": (0, 55, 400, 75),
+                },
+                {
+                    "label": "table_caption",
+                    "raw_label": "table_title",
+                    "score": 0.9,
+                    "bbox": (0, 75, 400, 95),
+                },
+                {
+                    "label": "table",
+                    "raw_label": "table",
+                    "score": 0.9,
+                    "bbox": (0, 95, 400, 135),
+                },
+                {
+                    "label": "figure",
+                    "raw_label": "image",
+                    "score": 0.9,
+                    "bbox": (0, 135, 400, 155),
+                },
+                {
+                    "label": "isolate_formula",
+                    "raw_label": "formula",
+                    "score": 0.9,
+                    "bbox": (0, 155, 400, 175),
+                },
                 {"label": "unknown label", "score": 0.9, "bbox": (0, 175, 400, 195)},
-                {"label": "plain text", "score": 0.9, "bbox": (0, 195, 400, 199)},
+                {
+                    "label": "plain text",
+                    "raw_label": "aside_text",
+                    "score": 0.9,
+                    "bbox": (0, 195, 400, 199),
+                },
             ]
 
         def recognize_table(self, _image, _options):
@@ -689,6 +880,14 @@ def test_onnx_010_reading_order_and_layout_html(monkeypatch):
     assert "Header" not in html
     layout = _onnx.find_layout(None, _runtime=LayoutRuntime())
     assert [block.label for block in layout][:3] == ["abandon", "title", "plain text"]
+    assert [block.raw_label for block in layout][:3] == [
+        "header",
+        "paragraph_title",
+        "text",
+    ]
+    # A detection without ``raw_label`` falls back to its label.
+    assert (layout[7].label, layout[7].raw_label) == ("unknown label", "unknown label")
+    assert (layout[8].label, layout[8].raw_label) == ("plain text", "aside_text")
     assert layout[0].bbox == pdfspine.Rect(0, 0, 200, 12.5)
     assert layout[0].score == 0.9
 
@@ -742,20 +941,62 @@ def test_onnx_012_grid_boxes_and_runtime_cache(monkeypatch, tmp_path):
         )
         assert other is not first
         assert len(_onnx._MODEL_CACHE) == 2
+        # The variant is part of the cache key: V3 gets its own runtime, with
+        # its own class list, label map, model file and input edge.
+        v3 = _onnx._get_runtime(_onnx.OnnxOptions(layout_variant="pp_doclayoutv3"))
+        assert v3 is not first
+        assert (
+            _onnx._get_runtime(
+                _onnx.OnnxOptions(layout_variant="pp_doclayoutv3", dpi=72)
+            )
+            is v3
+        )
+        assert len(_onnx._MODEL_CACHE) == 3
+        assert v3.layout_variant == "pp_doclayoutv3"
+        assert v3.layout_labels == _onnx.PP_DOCLAYOUTV3_LABELS
+        assert v3.layout_label_map is _onnx.LAYOUT_LABEL_MAP_V3
+        assert v3.metadata["layout_variant"] == "pp_doclayoutv3"
+        assert v3.metadata["layout_model"] == str(
+            tmp_path / _onnx.LAYOUT_MODEL_FILES["pp_doclayoutv3"]
+        )
+        assert v3.metadata["preprocessing"] == (
+            "pp-doclayout-800-rgb/slanet-plus-488-imagenet"
+        )
+        # ``auto`` infers the variant from an explicit model file name; the
+        # default V3 file resolves to the same spec and hits the cache.
+        named = _onnx._get_runtime(
+            _onnx.OnnxOptions(layout_model=str(tmp_path / "pp_doc_layoutv3.onnx"))
+        )
+        assert named is v3
+        custom = _onnx._get_runtime(
+            _onnx.OnnxOptions(layout_model=str(tmp_path / "custom_v3.onnx"))
+        )
+        assert custom.layout_variant == "pp_doclayoutv3" and custom is not v3
+        assert len(_onnx._MODEL_CACHE) == 4
+        assert {spec.layout_variant for spec in _onnx._MODEL_CACHE} == {
+            "pp_doclayout_l",
+            "pp_doclayoutv3",
+        }
         for index in range(4):
             _onnx._get_runtime(
                 _onnx.OnnxOptions(table_model=str(tmp_path / f"t{index}.onnx"))
             )
-        assert len(_onnx._MODEL_CACHE) == 4
+        assert len(_onnx._MODEL_CACHE) == 4  # oldest entries were evicted
         assert created == []  # sessions are created lazily, on first use
         (tmp_path / _onnx.LAYOUT_MODEL_FILE).write_bytes(b"onnx")
         assert first._session("layout") is first._session("layout")
         assert created == [
             (str(tmp_path / _onnx.LAYOUT_MODEL_FILE), ("CPUExecutionProvider",))
         ]
-        assert first.layout_labels == _onnx.LAYOUT_LABELS
+        assert first.layout_variant == _onnx.DEFAULT_LAYOUT_VARIANT
+        assert first.layout_labels == _onnx.PP_DOCLAYOUT_L_LABELS
+        assert first.layout_label_map is _onnx.LAYOUT_LABEL_MAP
         assert first.structure_dict == _onnx.SLANET_STRUCTURE_DICT
         assert first.metadata["providers"] == ["CPUExecutionProvider"]
+        assert first.metadata["layout_variant"] == "pp_doclayout_l"
+        assert first.metadata["preprocessing"] == (
+            "pp-doclayout-640-rgb/slanet-plus-488-imagenet"
+        )
     finally:
         _onnx.clear_model_cache()
     assert _onnx._MODEL_CACHE == {}
@@ -775,3 +1016,256 @@ def test_onnx_013_resolve_providers():
     )
     with pytest.raises(pdfspine.PdfUnsupportedError, match="TensorrtExecutionProvider"):
         _onnx._resolve_providers(("TensorrtExecutionProvider",), cuda)
+
+
+# --------------------------------------------------------------------------- #
+# ONNX-014: PP-DocLayout input tensor, input edge and variant resolution
+# --------------------------------------------------------------------------- #
+def test_onnx_014_layout_input_and_variant_resolution(monkeypatch, tmp_path):
+    np = pytest.importorskip("numpy")
+    Image = pytest.importorskip("PIL.Image")
+
+    # Plain resize to a square, RGB in [0, 1], NCHW: no letterbox padding and
+    # no ImageNet mean/std (a red page stays exactly (1, 0, 0) everywhere).
+    red = Image.new("RGBA", (400, 200), (255, 0, 0, 255))
+    array, scale_factor = _onnx._layout_input(red, 64, np)
+    assert array.shape == (1, 3, 64, 64)
+    assert array.dtype == np.float32
+    assert array.flags["C_CONTIGUOUS"]
+    assert scale_factor == (64 / 200, 64 / 400)  # (scale_y, scale_x)
+    assert float(array[0, 0].min()) == 1.0 and float(array[0, 0].max()) == 1.0
+    assert float(array[0, 1:].max()) == 0.0
+    blue = Image.new("RGB", (10, 30), (0, 0, 255))
+    array, scale_factor = _onnx._layout_input(blue, 32, np)
+    assert array.shape == (1, 3, 32, 32)
+    assert float(array[0, 2].min()) == 1.0 and float(array[0, :2].max()) == 0.0
+    assert scale_factor == (32 / 30, 32 / 10)
+    with pytest.raises(pdfspine.PdfUnsupportedError, match="empty page image"):
+        _onnx._layout_input(FakeImage((0, 10)), 32, np)
+
+    # The static square edge is read from the ``image`` input only.
+    assert (
+        _onnx._input_edge(_session_with_inputs(_input_spec("image", [1, 3, 640, 640])))
+        == 640
+    )
+    assert (
+        _onnx._input_edge(
+            _session_with_inputs(
+                _input_spec("im_shape", [1, 2]), _input_spec("image", [-1, 3, 800, 800])
+            )
+        )
+        == 800
+    )
+    for shape in (
+        [1, 3, "h", "w"],
+        [1, 3, None, None],
+        [1, 3, 640, 800],
+        [3, 640, 640],
+        [1, 3, 0, 0],
+        None,
+    ):
+        assert (
+            _onnx._input_edge(_session_with_inputs(_input_spec("image", shape))) is None
+        )
+    assert (
+        _onnx._input_edge(_session_with_inputs(_input_spec("images", [1, 3, 640, 640])))
+        is None
+    )
+    assert _onnx._input_edge(_session_with_inputs()) is None
+
+    # Variant from the file name (basename only), then option precedence.
+    assert _onnx._variant_from_name("pp_doc_layoutv3.onnx") == "pp_doclayoutv3"
+    assert _onnx._variant_from_name("/models/PP-DocLayoutV3.onnx") == "pp_doclayoutv3"
+    assert _onnx._variant_from_name("pp_doclayout_l.onnx") == "pp_doclayout_l"
+    assert _onnx._variant_from_name("layout.onnx") == "pp_doclayout_l"
+    assert (
+        _onnx._variant_from_name(str(Path("v3-models") / "pp_doclayout_l.onnx"))
+        == "pp_doclayout_l"
+    )
+    assert _onnx._layout_variant(_onnx.OnnxOptions()) == _onnx.DEFAULT_LAYOUT_VARIANT
+    assert (
+        _onnx._layout_variant(_onnx.OnnxOptions(layout_model="x_v3.onnx"))
+        == "pp_doclayoutv3"
+    )
+    assert (
+        _onnx._layout_variant(
+            _onnx.OnnxOptions(layout_model="x_v3.onnx", layout_variant="pp_doclayout_l")
+        )
+        == "pp_doclayout_l"
+    )
+    assert (
+        _onnx._layout_variant(_onnx.OnnxOptions(layout_variant="pp_doclayoutv3"))
+        == "pp_doclayoutv3"
+    )
+    assert set(_onnx.LAYOUT_MODEL_FILES) == set(_onnx.LAYOUT_VARIANTS)
+    assert set(_onnx.LAYOUT_MODEL_URLS) == set(_onnx.LAYOUT_VARIANTS)
+    assert set(_onnx.LAYOUT_INPUT_SIZES) == set(_onnx.LAYOUT_VARIANTS)
+    assert set(_onnx.LAYOUT_LABELS_BY_VARIANT) == set(_onnx.LAYOUT_VARIANTS)
+    assert set(_onnx.LAYOUT_LABEL_MAPS) == set(_onnx.LAYOUT_VARIANTS)
+
+    # ``detect_layout`` feeds the PaddleDetection triple by input name, takes
+    # the box count from the second output and returns decoded detections.
+    feeds_seen = []
+
+    class FakeSession:
+        inputs = [
+            _input_spec("image", [1, 3, 64, 64]),
+            _input_spec("im_shape", [1, 2]),
+            _input_spec("scale_factor", [1, 2]),
+        ]
+
+        def __init__(self, path, sess_options=None, providers=None):
+            pass
+
+        def get_modelmeta(self):
+            return SimpleNamespace(custom_metadata_map={})
+
+        def get_inputs(self):
+            return list(self.inputs)
+
+        def run(self, _names, feeds):
+            feeds_seen.append(feeds)
+            table = _onnx.PP_DOCLAYOUT_L_LABELS.index("table")
+            text = _onnx.PP_DOCLAYOUT_L_LABELS.index("text")
+            rows = [
+                [table, 0.9, 10.0, 20.0, 210.0, 120.0],
+                [text, 0.8, 0.0, 0.0, 50.0, 50.0],
+                [text, 0.7, 0.0, 0.0, 50.0, 50.0],  # beyond ``count``
+                [-1, 0.0, 0.0, 0.0, 0.0, 0.0],
+            ]
+            return [
+                np.asarray([rows], dtype=np.float32),
+                np.asarray([2], dtype=np.int32),
+            ]
+
+    ort = ModuleType("onnxruntime")
+    ort.get_available_providers = lambda: ["CPUExecutionProvider"]
+    ort.SessionOptions = lambda: SimpleNamespace(log_severity_level=0)
+    ort.InferenceSession = FakeSession
+    monkeypatch.setitem(sys.modules, "onnxruntime", ort)
+    layout_path = tmp_path / _onnx.LAYOUT_MODEL_FILE
+    layout_path.write_bytes(b"onnx")
+    runtime = _onnx._OnnxRuntime(layout_path, tmp_path / "t.onnx", "auto")
+    assert runtime.metadata["preprocessing"].startswith("pp-doclayout-640-")
+    detections = runtime.detect_layout(red, _onnx.OnnxOptions())
+    # The edge comes from the session (64), not the variant default (640).
+    assert runtime.metadata["preprocessing"] == (
+        "pp-doclayout-64-rgb/slanet-plus-488-imagenet"
+    )
+    assert [
+        (d["raw_label"], d["label"], d["score"], d["bbox"]) for d in detections
+    ] == [
+        ("table", "table", pytest.approx(0.9), (10.0, 20.0, 210.0, 120.0)),
+        ("text", "plain text", pytest.approx(0.8), (0.0, 0.0, 50.0, 50.0)),
+    ]
+    feeds = feeds_seen[-1]
+    assert set(feeds) == {"image", "im_shape", "scale_factor"}
+    assert feeds["image"].shape == (1, 3, 64, 64)
+    assert feeds["im_shape"].tolist() == [[64.0, 64.0]]
+    assert feeds["scale_factor"].tolist() == [
+        [pytest.approx(64 / 200), pytest.approx(64 / 400)]
+    ]
+    # An explicit ``layout_size`` overrides the session edge.
+    runtime.detect_layout(red, _onnx.OnnxOptions(layout_size=32))
+    assert feeds_seen[-1]["image"].shape == (1, 3, 32, 32)
+    assert feeds_seen[-1]["im_shape"].tolist() == [[32.0, 32.0]]
+    # A model without an ``image`` input is rejected with its input names.
+    FakeSession.inputs = [_input_spec("x", [1, 3, 64, 64])]
+    other = _onnx._OnnxRuntime(layout_path, tmp_path / "t.onnx", "auto")
+    with pytest.raises(
+        pdfspine.PdfUnsupportedError, match="expected an 'image' input, got x"
+    ):
+        other.detect_layout(red, _onnx.OnnxOptions())
+
+
+# --------------------------------------------------------------------------- #
+# ONNX-015: PP-DocLayoutV3 reading order and footnote HTML
+# --------------------------------------------------------------------------- #
+class _V3Runtime:
+    metadata = {"backend": "onnx", "layout_variant": "pp_doclayoutv3"}
+
+    def __init__(self, detections):
+        self.detections = detections
+
+    def detect_layout(self, _image, _options):
+        return [dict(d) for d in self.detections]
+
+    def recognize_table(self, _image, _options):
+        return [], [], []
+
+
+def test_onnx_015_v3_read_order_and_footnote_html(monkeypatch):
+    tokens = [
+        _token([20, 10, 60, 20], "Second", 0, 0, 0),
+        _token([20, 60, 60, 70], "First", 1, 0, 0),
+        _token([20, 120, 60, 130], "Note", 2, 0, 0),
+        _token([20, 160, 60, 170], "Vis", 3, 0, 0),
+    ]
+    rendered = _rendered(tokens=tokens)
+    monkeypatch.setattr(_onnx, "_render_page", lambda _page, _options: rendered)
+    # Geometrically top-to-bottom, but the model's reading-order keys say the
+    # second block is read first.
+    detections = [
+        {
+            "label": "plain text",
+            "raw_label": "text",
+            "score": 0.9,
+            "bbox": (0, 0, 400, 30),
+            "read_order": 2.0,
+        },
+        {
+            "label": "plain text",
+            "raw_label": "text",
+            "score": 0.8,
+            "bbox": (0, 50, 400, 80),
+            "read_order": 1.0,
+        },
+        {
+            "label": "plain text",
+            "raw_label": "footnote",
+            "score": 0.7,
+            "bbox": (0, 110, 400, 140),
+            "read_order": 3.0,
+        },
+        {
+            "label": "table_footnote",
+            "raw_label": "vision_footnote",
+            "score": 0.6,
+            "bbox": (0, 150, 400, 180),
+            "read_order": 4.0,
+        },
+    ]
+    layout = _onnx.find_layout(None, _runtime=_V3Runtime(detections))
+    assert [(block.bbox.y0, block.raw_label) for block in layout] == [
+        (25.0, "text"),
+        (0.0, "text"),
+        (55.0, "footnote"),
+        (75.0, "vision_footnote"),
+    ]
+    assert (layout[2].label, layout[2].raw_label) == ("plain text", "footnote")
+    assert layout[3].label == "table_footnote"
+    html = _onnx.get_layout_html(None, _runtime=_V3Runtime(detections))
+    assert html == (
+        "<p>First</p>\n"
+        "<p>Second</p>\n"
+        '<p class="footnote">Note</p>\n'
+        '<p class="table_footnote">Vis</p>\n'
+    )
+    # Equal keys fall back to geometry (y, then x).
+    tied = [dict(d, read_order=1.0) for d in detections]
+    layout = _onnx.find_layout(None, _runtime=_V3Runtime(tied))
+    assert [block.bbox.y0 for block in layout] == [0.0, 25.0, 55.0, 75.0]
+    # As soon as one detection lacks a key the geometric band order is used.
+    mixed = [dict(d) for d in detections]
+    del mixed[1]["read_order"]
+    layout = _onnx.find_layout(None, _runtime=_V3Runtime(mixed))
+    assert [block.bbox.y0 for block in layout] == [0.0, 25.0, 55.0, 75.0]
+    expected = _onnx._reading_order(
+        _onnx._layout_blocks(rendered, _V3Runtime(detections), _onnx.OnnxOptions())[
+            ::-1
+        ],
+        rendered.page_bbox,
+    )
+    assert layout == [block for block, _ in expected]
+    html = _onnx.get_layout_html(None, _runtime=_V3Runtime(mixed))
+    assert html.startswith("<p>Second</p>\n<p>First</p>\n")
