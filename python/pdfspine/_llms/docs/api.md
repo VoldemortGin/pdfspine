@@ -368,7 +368,7 @@ pdfspine 在 `get_text("dict"/"rawdict"/"json"/"rawjson")` 的 PyMuPDF 键集合
 
 - `seq` = 内容流的**绘制顺序**（源字形下标），block / line / span / char 四层都有（block / line / span 取其内最小值）。用于"这段文字是第几笔画上去的"、稳定排序、把 span 拆回源顺序。
 - `number` = **阅读顺序**下标（block 层是块号，line 层是页内行号）。
-- **`number` 的已知局限**：pdfspine 当前的 region 间排序键是内容流**绘制序**，不是纯几何阅读序。所以 `number` 承诺的是 **"引擎实际输出的顺序下标 / 与 `get_text("text")` 的输出顺序一致"**，而**不是**"版面几何意义上的理想阅读顺序"。对绘制序混乱的 PDF（例如分栏内容交错绘制），`number` 会跟着一起乱。需要严格几何阅读序的下游应自己按 bbox 排序，或用 `sort=True`。
+- **`number` 是几何阅读序下标**：块按整页递归 XY-cut 排序（band 上→下、column 左→右、合法 column cut 优先于横向 band cut、通栏 spanning band 划分行、region 全原子），所以分栏连续、通栏页眉排在正文之前，即使内容流以别的顺序绘制它们。这是对 PyMuPDF 的**有意偏离**——PyMuPDF 默认 `get_text` 保留 content-stream 绘制序、不做几何重排（见 `docs/pymupdf-compat-findings.md`）。绘制序（`seq`）只保留在同一 block 内的共基线片段；**region 内的行序仍按 `seq`**（阶段 4 已实测放弃、尚未落地），所以 column cut 未能分开两栏的 region 仍可能逐行交错。`sort=True` 则是另一套更严格的全局 `(y, x)` 重排。
 
 **具体数值**（612×792 页、不旋转，`page_transform = [1, 0, 0, -1, 0, 792]`；字体每码宽 500/1000、ascent 800、descent −200）
 

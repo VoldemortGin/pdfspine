@@ -95,6 +95,19 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ### Fixed
 
+- **Line-level column-gutter splitting only happens when whitespace covers the
+  gutter valley.** `detect_page_gutters` now returns the valley band
+  `{lo, hi}` and `split_on_gutter` cuts a baseline run at it only when the
+  run's own blank gap spans at least 0.8 of the valley width, so a merged
+  `L1 + R1` line still splits into columns but a full-width running header
+  whose ordinary inter-word spaces are far narrower than the valley is left
+  whole (the large-font `is_heading` guard is unchanged). On govinfo Federal
+  Register this cuts running-header fragmentation 530 → 247 pages and
+  misplacement 64 → 24 / 2492 across the two reading-order changes (D4 alone:
+  367 → 247 fragmented, 30 → 24 misplaced; both still above fitz's 0). Header
+  words the old split broke apart (`JOURNAL OF CLIMATE` → `O F`) are intact
+  again; a read-only multiset check over the 49 changed pages confirmed zero
+  text gained or lost. New test `layout_e2e_006`.
 - `Page.remove_rotation()` no longer raises `PdfUnsupportedError` on a rotated
   page that carries form widgets (it assigned the read-only `Widget.rect`).
   Widgets are rewritten through their annotation handle, and every annotation
@@ -138,6 +151,29 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ### Changed
 
+- **Text block order under `sort=False` now follows page geometry, not
+  content-stream paint order.** `get_text` in every mode (`text` / `dict` /
+  `rawdict` / `json` / `rawjson` / `blocks`) and the reading-order `number`
+  now emit text blocks by a geometric recursive XY-cut — bands top-to-bottom,
+  columns left-to-right, a legal column cut always taking priority over a
+  horizontal band cut, and a full-width spanning band split into rows so a
+  running header sinks to the top of its columns and a footer to the bottom.
+  All regions are atomic; they are no longer ordered by `seq`, and painting
+  order survives only between same-baseline fragments **inside a single block**
+  (region-internal line order still follows `seq`; that remaining step was
+  measured and deferred). This is a **deliberate divergence** from PyMuPDF,
+  whose default `get_text` keeps content-stream paint order with no geometric
+  reordering (registered in `docs/pymupdf-compat-findings.md`); it keeps
+  columns contiguous on multi-column, flipped-CTM and row-major-painted pages
+  where paint order scrambles the reading order. Clean 7-document PMC order
+  holds at 0.9600 (fitz 0.9605); EUR-Lex 40 rises to lev 0.9375 / order 0.9777
+  (29 documents up, 3 down by ≤ 0.005); born-digital stays bit-identical.
+  Tests: `readorder_009..012` added; `PYTEXT-010` now asserts
+  `Right < Left < Bottom`, `PYTEXT-018` and `PYOCG-047` follow the geometric
+  order; `partition_spanning`, `cut_spanning`, `regions_are_side_by_side`,
+  `order_groups`, `root_column_cut` were removed and `cut_lines` no longer
+  returns a bool. Design and the full 300-document attribution live in
+  `docs/reading-order-root-cause.md`.
 - **`get_ocgs()` / `layer_ui_configs()` / `ocg_state()` now report the active
   layer view** — the in-memory selected configuration + panel overrides —
   matching PyMuPDF's in-memory state, instead of only the on-disk default.

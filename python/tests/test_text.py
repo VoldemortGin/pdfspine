@@ -486,10 +486,12 @@ def test_pytext_009_sort_orders_blocks_by_y():
 
 
 def test_pytext_010_sort_orders_plain_text_by_y_then_x():
-    # PYTEXT-010: plain text preserves content-stream order by default, while
-    # sort=True serializes visual lines in (y, x) order. The two top fragments
-    # intentionally share both a baseline and a text block: sorting only block
-    # tuples cannot fix their right-before-left content order.
+    # PYTEXT-010: plain text is geometric block order by default (the top band
+    # before the bottom one); the content-stream paint order survives only
+    # inside a block on a shared baseline. sort=True serializes visual lines in
+    # (y, x) order. The two top fragments intentionally share both a baseline
+    # and a text block: sorting only block tuples cannot fix their
+    # right-before-left content order.
     content = (
         b"BT /F1 12 Tf 72 100 Td (Bottom block) Tj ET "
         b"BT /F1 12 Tf 1 0 0 1 400 700 Tm (Right block) Tj ET "
@@ -505,8 +507,8 @@ def test_pytext_010_sort_orders_plain_text_by_y_then_x():
     unsorted = page.get_text("text", sort=False)
     sorted_text = page.get_text("text", sort=True)
 
-    assert unsorted.index("Bottom block") < unsorted.index("Right block")
     assert unsorted.index("Right block") < unsorted.index("Left block")
+    assert unsorted.index("Left block") < unsorted.index("Bottom block")
     assert sorted_text.index("Left block") < sorted_text.index("Right block")
     assert sorted_text.index("Right block") < sorted_text.index("Bottom block")
     assert page.get_text("TEXT", sort=True) == sorted_text
@@ -662,7 +664,8 @@ def test_pytext_017_search_for_clip_is_the_clipped_textpage():
 
 def test_pytext_018_sort_applies_after_clip():
     # PYTEXT-018: sort=True orders what the clip kept; the block outside the
-    # clip never appears, in blocks or in plain text.
+    # clip never appears, in blocks or in plain text. Plain text is geometric
+    # block order (Upper above Lower) even though Lower is painted first.
     content = (
         b"BT /F1 12 Tf 72 700 Td (Header) Tj ET "
         b"BT /F1 12 Tf 72 500 Td (Lower) Tj ET "
@@ -670,7 +673,7 @@ def test_pytext_018_sort_applies_after_clip():
     )
     page = _page(_raw_content_pdf(content, _helvetica_font()))
     band = (0, 150, 612, 350)  # device y: Header≈92, Upper≈192, Lower≈292
-    assert page.get_text("text", clip=band) == "Lower\nUpper\n"
+    assert page.get_text("text", clip=band) == "Upper\nLower\n"
     assert page.get_text("text", clip=band, sort=True) == "Upper\nLower\n"
     blocks = page.get_text("blocks", clip=band, sort=True)
     assert [b[4].strip() for b in blocks] == ["Upper", "Lower"]

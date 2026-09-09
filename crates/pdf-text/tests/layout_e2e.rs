@@ -256,3 +256,52 @@ fn layout_e2e_005_true_two_column_still_splits_at_gutter() {
         "expected column-major order (all L before all R): {lines:?}"
     );
 }
+
+/// LAYOUT-E2E-006 (D4): a govinfo Federal Register running header spanning the
+/// full page width is never fragmented at a body column gutter. The columns
+/// below leave a wide glyph-free band (midpoint ≈ 217); the header is painted in
+/// two positioned pieces whose ordinary ~3pt word gap happens to straddle that
+/// midpoint. That gap is real along-axis whitespace (a word break, not a space
+/// glyph, and well below the independent-run threshold), so the old midpoint-only
+/// rule cut the header into fragments. Requiring the run's own gap to cover most
+/// of the band keeps it one line (3pt ≪ 0.8 × 206pt), matching PyMuPDF — while a
+/// genuine two-column body row, whose whole gutter is empty between its glyphs,
+/// still splits.
+#[test]
+fn layout_e2e_006_full_width_header_word_gap_at_gutter_stays_one_line() {
+    let mut content = String::from("BT /F1 10 Tf ");
+    content.push_str("1 0 0 1 40 740 Tm (FederalRegisterVolumeNinetyNumberII) Tj ");
+    content.push_str("1 0 0 1 217.5 740 Tm (RulesAndRegulations) Tj ");
+    for row in 0..12 {
+        let y = 700.0 - 14.0 * row as f64;
+        content.push_str(&format!("1 0 0 1 40 {y} Tm (LeftColumnBody) Tj "));
+        content.push_str(&format!("1 0 0 1 320 {y} Tm (RightColumnBody) Tj "));
+    }
+    content.push_str("ET");
+    let tp = helvetica_page(content.as_bytes());
+
+    let lines = line_texts(&tp);
+    // The header stays one line: both pieces on it, never fragmented at the gutter.
+    assert!(
+        lines.iter().any(|l| {
+            l.contains("FederalRegisterVolumeNinetyNumberII") && l.contains("RulesAndRegulations")
+        }),
+        "running header was fragmented at the column gutter: {lines:?}"
+    );
+    // Reverse invariant: a genuine two-column body row — its whole gutter empty
+    // between its own glyphs — still splits into per-column lines.
+    assert!(
+        lines.iter().any(|l| l == "LeftColumnBody"),
+        "left column line missing: {lines:?}"
+    );
+    assert!(
+        lines.iter().any(|l| l == "RightColumnBody"),
+        "right column line missing: {lines:?}"
+    );
+    assert!(
+        lines
+            .iter()
+            .all(|l| !(l.contains("LeftColumnBody") && l.contains("RightColumnBody"))),
+        "column body rows merged across the gutter: {lines:?}"
+    );
+}

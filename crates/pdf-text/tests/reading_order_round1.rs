@@ -352,15 +352,16 @@ fn readorder_007_spanning_header_and_footer_paint_order_independent() {
     assert!(at("R9") < at("FOOTER"), "footer not last: {lines:?}");
 }
 
-/// A two-column page whose paragraph gap is wider than the column gutter is
-/// split into horizontal bands first. Painted in reading order, each column
-/// must still read whole (the band cut must not interleave the columns).
+/// A two-column page whose paragraph gap is wider than the column gutter: the
+/// column cut still wins over the band cut, so each column reads whole (the
+/// paragraph gap must not slice both columns into stacked bands).
 #[test]
 fn readorder_008_root_band_cut_keeps_columns_contiguous() {
     let size = 10.0;
     let mut gs = Vec::new();
     // Lines are ≈187 pt wide, so the gutter (x 247..320) is 73 pt; the gap
-    // between the paragraphs (y ≈ 577..670 in user space) is 93 pt and wins.
+    // between the paragraphs (y ≈ 577..670 in user space) is 93 pt — wider,
+    // but a valid column cut is structural and takes precedence.
     let paragraph = |gs: &mut Vec<PositionedGlyph>, tag: &str, x: f64, top: f64| {
         for i in 0..3 {
             let text = format!("{tag}{i} column paragraph line of prose");
@@ -380,6 +381,158 @@ fn readorder_008_root_band_cut_keeps_columns_contiguous() {
         "got {lines:?}"
     );
     assert!(at("RA0") < at("RB0"), "got {lines:?}");
+}
+
+/// Short number tokens painted as their own runs that start *inside* the
+/// gutter valley (OJ recital numbers `(32)`, `(33)` hanging into the gutter)
+/// are right-column lines, not spanning ones: they only reach into the valley,
+/// they do not cover it. Each reads after the whole left column and right
+/// before its own paragraph line — the midpoint test made them spanning and
+/// emitted them together, separated from their paragraphs.
+#[test]
+fn readorder_009_hanging_number_stays_in_its_column() {
+    let size = 10.0;
+    let mut gs = Vec::new();
+    // Left column x 60..241, right body x 320..523: the valley is x 241..320
+    // with its midpoint at ≈280 (22 lines, so two crossings are tolerated).
+    // The number runs at x 274..≈296 start left of the midpoint but cover only
+    // part of the valley, and their centre is on the right.
+    for i in 0..10 {
+        let text = format!("L{i} left column line of prose that");
+        lay_word_line(&mut gs, &text, 60.0, 700.0 - 14.0 * i as f64, size);
+    }
+    for i in 0..10 {
+        let y = 700.0 - 14.0 * i as f64;
+        if i == 0 {
+            lay_word_line(&mut gs, "(32)", 274.0, y, size);
+        } else if i == 5 {
+            lay_word_line(&mut gs, "(33)", 274.0, y, size);
+        }
+        let text = format!("R{i} right column line of prose that is");
+        lay_word_line(&mut gs, &text, 320.0, y, size);
+    }
+
+    let lines = extract(&gs);
+    let joined = lines.join("|");
+    let at = |needle: &str| joined.find(needle).unwrap();
+    assert!(
+        at("L9") < at("(32)"),
+        "number left the right column: {lines:?}"
+    );
+    for (number, paragraph) in [("(32)", "R0"), ("(33)", "R5")] {
+        let index = lines
+            .iter()
+            .position(|line| line.trim() == number)
+            .unwrap_or_else(|| panic!("{number} is not its own line: {lines:?}"));
+        assert!(
+            lines[index + 1].starts_with(paragraph),
+            "{number} not right before {paragraph}: {lines:?}"
+        );
+    }
+}
+
+/// A full-width heading between two column rows, painted last, partitions the
+/// columns into rows: both columns above it, the heading, both columns below
+/// (`SPANNING_BANDS_PARTITION_ROWS`).
+#[test]
+fn readorder_010_spanning_heading_partitions_rows() {
+    let size = 10.0;
+    let mut gs = Vec::new();
+    let rows = |gs: &mut Vec<PositionedGlyph>, tag: &str, x: f64, top: f64| {
+        for i in 0..4 {
+            let text = format!("{tag}{i} column body line of prose");
+            lay_word_line(gs, &text, x, top - 14.0 * i as f64, size);
+        }
+    };
+    rows(&mut gs, "LT", 60.0, 700.0);
+    rows(&mut gs, "RT", 320.0, 700.0);
+    rows(&mut gs, "LB", 60.0, 600.0);
+    rows(&mut gs, "RB", 320.0, 600.0);
+    lay_word_line(
+        &mut gs,
+        "HEADING spanning both columns between the two column rows",
+        60.0,
+        630.0,
+        size,
+    );
+
+    let lines = extract(&gs);
+    let joined = lines.join("|");
+    let at = |needle: &str| joined.find(needle).unwrap();
+    assert!(at("LT3") < at("RT0"), "top row interleaved: {lines:?}");
+    assert!(
+        at("RT3") < at("HEADING"),
+        "heading before the top row: {lines:?}"
+    );
+    assert!(
+        at("HEADING") < at("LB0"),
+        "heading after the bottom row: {lines:?}"
+    );
+    assert!(at("LB3") < at("RB0"), "bottom row interleaved: {lines:?}");
+}
+
+/// A page with no column structure anywhere — a title, a single-column
+/// paragraph and a footer — painted footer, paragraph, title reads in
+/// geometric order: title, paragraph, footer.
+#[test]
+fn readorder_011_band_root_page_is_geometric() {
+    let size = 10.0;
+    let mut gs = Vec::new();
+    lay_word_line(
+        &mut gs,
+        "FOOTER line at the bottom of the page",
+        60.0,
+        510.0,
+        size,
+    );
+    for i in 0..6 {
+        let text = format!("P{i} paragraph line of prose across the single column");
+        lay_word_line(&mut gs, &text, 60.0, 680.0 - 14.0 * i as f64, size);
+    }
+    lay_word_line(&mut gs, "TITLE of the page", 60.0, 740.0, size);
+
+    let lines = extract(&gs);
+    let joined = lines.join("|");
+    let at = |needle: &str| joined.find(needle).unwrap();
+    assert!(at("TITLE") < at("P0"), "title not first: {lines:?}");
+    assert!(at("P0") < at("P5"), "paragraph out of order: {lines:?}");
+    assert!(at("P5") < at("FOOTER"), "footer not last: {lines:?}");
+}
+
+/// A title band painted *after* a two-column body whose paragraph gap is wider
+/// than the gutter: the column cut wins over the band cut, the title (no
+/// column line above it) comes first, then each column whole.
+#[test]
+fn readorder_012_out_of_order_bands_with_columns() {
+    let size = 10.0;
+    let mut gs = Vec::new();
+    let paragraph = |gs: &mut Vec<PositionedGlyph>, tag: &str, x: f64, top: f64| {
+        for i in 0..3 {
+            let text = format!("{tag}{i} column paragraph line of prose");
+            lay_word_line(gs, &text, x, top - 14.0 * i as f64, size);
+        }
+    };
+    paragraph(&mut gs, "LA", 60.0, 700.0);
+    paragraph(&mut gs, "LB", 60.0, 570.0);
+    paragraph(&mut gs, "RA", 320.0, 700.0);
+    paragraph(&mut gs, "RB", 320.0, 570.0);
+    lay_word_line(
+        &mut gs,
+        "TITLE spanning both columns painted after the body",
+        60.0,
+        740.0,
+        size,
+    );
+
+    let lines = extract(&gs);
+    let joined = lines.join("|");
+    let at = |needle: &str| joined.find(needle).unwrap();
+    assert!(at("TITLE") < at("LA0"), "title not first: {lines:?}");
+    assert!(
+        at("LA0") < at("LB0") && at("LB2") < at("RA0"),
+        "left column not whole: {lines:?}"
+    );
+    assert!(at("RA0") < at("RB0"), "right column not whole: {lines:?}");
 }
 
 // === CROPCLIP: CropBox clipping ===========================================

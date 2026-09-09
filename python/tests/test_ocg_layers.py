@@ -1170,7 +1170,11 @@ def test_pyocg_047_live_oracle_oc_reverse(tmp_path):
     assert len(page.get_drawings()) == real["drawings"]
     assert _image_blocks(doc) == real["images"]
     doc.set_layer_ui_config(1, 0)
-    assert _text_words(doc) == real["ui10"]
+    # The placed form (STAMP, top right) is painted last but sits above the
+    # page text: PyMuPDF keeps the paint order, pdfspine reads the page in
+    # geometric order. Same visible words, geometric order.
+    assert sorted(_text_words(doc)) == sorted(real["ui10"])
+    assert _text_words(doc) == ["STAMP", "AAAA", "BBBB"]
     assert len(page.get_drawings()) == real["drawings_on"]
     assert _image_blocks(doc) == real["images_on"]
 

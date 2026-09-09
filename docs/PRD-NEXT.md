@@ -1,34 +1,27 @@
 # PRD-NEXT — Remaining Work Roadmap (live restart entry)
 
 > **Use this file first when resuming pdfspine.** This top section is the current
-> checkpoint as of 2026-09-06 (pause checkpoint: the weekly model quota ran out with
-> four branches in flight); it supersedes the 2026-09-05 morning, evening and
-> fan-out checkpoints. Older dated snapshots and completed phase records remain
-> below for history; they do not override this queue.
+> checkpoint as of 2026-09-09; it supersedes the 2026-09-06 pause checkpoint (which
+> had four branches in flight — all now resolved) and the earlier 2026-09-05
+> checkpoints. Older dated snapshots and completed phase records remain below for
+> history; they do not override this queue.
 
-## 0. Restart here (2026-09-06, pause checkpoint)
+## 0. Restart here (2026-09-09)
 
 ### Repository and release checkpoint
 
 - Repository: `/Users/linhan/startup/spine/pdfspine`. The published release is still
   `v0.7.1` at `9da7ca6` (annotated tag, GitHub Release, PyPI wheels and sdist all
   unchanged). Nothing since has been released.
-- `main` = `5a95731` (local, not yet pushed); `origin/main` = `ad00163`. On top of
-  the fan-out checkpoint `21d636a`: `4489aef` (merge of `4e20fb9`, refreshed frozen
-  manifest), `ec798bd` (merge of `3aa558b`, redact `'`/`"` operator fix), `ad00163`
-  (this checkpoint) and `5a95731` (merge of `482c19c`, the `get_text(clip=)` fix,
-  2026-09-07; full `./ci.sh` green before the merge). CI run 34013201908 on
-  `21d636a` was 22/22 green; the two later pushes passed the local pre-push gate
-  (full `cargo test` + pytest). Verify with `git status -sb` and `git log origin/main -1`.
-- **Two branches are in flight, each in its own worktree with a HANDOFF file**; see
-  "In-flight branches" below. They are not merged and must not be deleted. Two
-  others are done: the `get_text(clip=)` fix on `fix/get-text-clip` was merged into
-  local `main` on 2026-09-07 (`482c19c`, merge `5a95731`; see "Completed 2026-09-06:
-  get_text(clip=)" below), and the `remove_rotation` widget fix on
-  `fix/remove-rotation` (Mac Studio `9edd635`, cached as
-  `macstudio/ab9e257cbb9ab89c3`, closing commit `fc865d6`) was merged on
-  2026-09-07 as `00b62d9` (see "Completed 2026-09-07: remove_rotation" below).
-  Both only wait for the push.
+- `main` is at `72b1d4a` plus one spine-family documentation commit — that
+  `72b1d4a` wheel is the `base` this round's reading-order scoring ran against. The
+  three branches in flight at the 2026-09-06 pause are all resolved:
+  `fix/get-text-clip` (`get_text(clip=)`), `fix/remove-rotation` and `feat/ocg-gaps`
+  were merged on another machine and their worktrees / branches deleted here (their
+  completion records are below). The reading-order branch is finished this round
+  (see "Completed 2026-09-09: reading order stage 3 + D4" below) and is the last one
+  to `--no-ff` merge. Verify the exact state with `git status -sb` and
+  `git log --oneline -6` before pushing.
 - `.venv` extension rule: the gate now detects and rebuilds the extension itself
   (`scripts/quality_gate.py` `extension` phase: it fingerprints the content of
   `crates/**`, `Cargo.toml`, `Cargo.lock`, `pyproject.toml` and `rust-toolchain*`,
@@ -52,9 +45,11 @@
 ### Read in this order
 
 1. This section: the next-task queue, then the completion records below it.
-2. `docs/reading-order-root-cause.md`, section "2026-09-05 修复记录" (what changed,
-   the baseline reproduction, the 300-document attribution, the variant table and the
-   stage 2 black-box conclusion) before touching reading order.
+2. `docs/reading-order-root-cause.md`, section "2026-09-09 阶段 3 + D4 落地记录"
+   (what changed, the base/V1/V2/V3/V4 variant table, the stage 3 attribution and the
+   stage 4 measure-and-drop, plus the reading-order follow-ups) before touching
+   reading order; the earlier "2026-09-05 修复记录" and the root-cause design (a)–(e)
+   are the background above it.
 3. `conformance/COVERAGE-REPORT.md` (the `2b7df16` record and "Combined Rust+Python
    profile"), `conformance/BENCH.md` with `conformance/gt/RENDER-REPORT.md` (the
    2026-09-05 render numbers), and `docs/BENCHMARKS.md` §6 (OCR re-measurement and
@@ -64,44 +59,116 @@
    anchoring or the F thresholds.
 5. The older phase plan below only when taking one of its still-open items.
 
-### In-flight branches (resume these first)
+### In-flight branches
 
-| Branch / worktree | Commit | State | Handoff |
-|---|---|---|---|
-| `worktree-agent-ae07f5282e4af72f5` at `.claude/worktrees/agent-ae07f5282e4af72f5` | `2be80e5` (wip) | Reading order stages 3/4: baseline reproduced for PMC, born, PMC212689 and both FR runs; the EUR-Lex GT run was killed at 22/40 by a sub-agent that shared the worktree. Stage 3/4 specs are drafted (`stage3-spec.md`, `stage4-spec.md` in the worktree); no product code yet. Evidence and scripts in `/Volumes/ExternalSSD/tmp/ro34/`. | `HANDOFF-reading-order-3-4.md` |
-| `feat/ocg-gaps` (was `worktree-agent-a86bc39cb9edfca42`) | `c8170d3` (visibility), `3b7e3e5` (writers) | ✅ **Done 2026-09-08** — OCG gaps: `oc=` on every content writer (BDC/EMC + `/Properties`, XObject `/OC`) and `/Usage /View /ViewState` + config `/AS` visibility. See "Completed 2026-09-08: OCG gaps" below. Remaining: `--no-ff` merge into `main`, rebuild `.venv`, delete the worktree and branch. | folded into the completed section below (`HANDOFF-ocg-gaps.md` retired) |
-
-Resume procedure for each: `cd` into the worktree, read its HANDOFF file, `git merge
-main` (main moved to `ec798bd`; the redact and manifest changes must be picked up),
-rebuild with `maturin develop`, finish the pending items, run the gates listed in the
-HANDOFF, then from the main checkout `git merge --no-ff <branch>`, rebuild `.venv`,
-run the ruff check, push, and delete the worktree and branch.
+None. The three branches in flight at the 2026-09-06 pause were merged on another
+machine and deleted here (`fix/get-text-clip`, `fix/remove-rotation` and
+`feat/ocg-gaps` — see their completion records below), and the reading-order branch
+(`worktree-agent-ae07f5282e4af72f5`, HEAD `372213a`) is finished this round (see
+"Completed 2026-09-09" below) and `--no-ff` merged. `HANDOFF-reading-order-3-4.md`
+is retired — its content is folded into that completion record and into
+`docs/reading-order-root-cause.md`. `HANDOFF-glyph-geometry.md` and
+`HANDOFF-redact.md` stay (their work is not part of this round).
 
 ### Next task queue
 
-1. **Push `main`** (`fix/get-text-clip` merged as `5a95731` and `fix/remove-rotation`
-   merged 2026-09-07; `.venv` rebuilt, `./ci.sh` green), then **merge
-   `feat/ocg-gaps`** (done 2026-09-08, see "Completed 2026-09-08: OCG gaps") and
-   **finish the remaining in-flight branch**, reading order 3/4; its HANDOFF has
-   the exact remaining steps.
-2. **govdocs1-00074 near-blank render** (fitz SSIM 0.2654 at baseline): not started;
+1. **Merge and push the reading-order branch.** `--no-ff` merge
+   `worktree-agent-ae07f5282e4af72f5` (HEAD `372213a`: stage 3 + D4, see "Completed
+   2026-09-09" below) into `main`, rebuild `.venv`, run the ruff check, push, then
+   delete the worktree and branch. The three earlier branches are already merged.
+2. **Reading-order follow-ups** (from the 2026-09-09 attribution, by payoff; none
+   started):
+   1. Stop the horizontal band cut (R3/R4) from splitting two genuinely
+      side-by-side body columns into stacked bands — the one real reading-order bug
+      (`32013R0575_EL p0` recital interleave) and probably the 4 FR pages stage 3
+      newly regressed. Guard: only split a spanning row into rows when it covers the
+      whole gutter valley and is ≳ 50 % page width (a true full-width heading); or
+      treat a parent region as a single column region when both halves of a band cut
+      still column-cut into the same L/R structure.
+   2. SECCI label/value form detection: keep row-major (single region / shared
+      baseline) when a right column of short lines shares baselines with the left —
+      fixes `32008L0048_EL p21–26` and `_BG p22/p24` (small, and shared with fitz).
+   3. D4 header de-fragmentation, remaining 247 pages toward fitz's 0
+      (`independent_run_gap` etc.); D4's rule was the gutter-coverage split only.
+   4. PMC order 0.9605 / PMC212689 0.749 still unmet — the PLoS 3-column mid-page
+      spanning-caption float-vs-rows semantics stage 3 did not touch.
+3. **govdocs1-00074 near-blank render** (fitz SSIM 0.2654 at baseline): not started;
    the agent was cut off while reading. Corpus is in `fixtures/corpus`.
-3. **Render, remaining cost:** first-seen glyph rasterization (~30% of text pages),
-   `into_pixmap` (~10%), J2K decoding on image pages. Do this after item 2 so the two
+4. **Render, remaining cost:** first-seen glyph rasterization (~30% of text pages),
+   `into_pixmap` (~10%), J2K decoding on image pages. Do this after item 3 so the two
    do not collide in `pdf-render`.
-4. **The 9 remaining deferred symbols:** device-replay (`Page.run`,
+5. **The 9 remaining deferred symbols:** device-replay (`Page.run`,
    `Page.extend_textpage`, `DisplayList.run`, `DisplayList.get_textpage`), then
    `Page.insert_font`, `Pixmap.warp`, `Annot.get_textbox`,
    `Tools.set_annot_stem` / `set_subset_fontnames`.
-5. **typeset next increments:** docx paragraph borders/shading (`pBdr` / `shd`),
+6. **typeset next increments:** docx paragraph borders/shading (`pBdr` / `shd`),
    `RunStyle` superscript/subscript and character spacing, docx lineGap placement
    (confirm Word's behaviour first).
-6. **Coverage:** keep the `fail_under` ratchet (96) moving; enable Rust branch
+7. **Coverage:** keep the `fail_under` ratchet (96) moving; enable Rust branch
    coverage in the CI coverage job on a nightly toolchain.
-7. **OCR and supply chain:** the `AI → Al` homoglyph in the Latin benchmark; the 5
+8. **OCR and supply chain:** the `AI → Al` homoglyph in the Latin benchmark; the 5
    pre-existing `cargo fmt --check` violations in ocrspine; a CI check that warns
    30 days before the cargo-vet trust entries expire (2027-09-05).
-8. **Continue the existing roadmap** (§4–§6 below).
+9. **Continue the existing roadmap** (§4–§6 below).
+
+### Completed 2026-09-09: reading order stage 3 + D4 (stage 4 measured and dropped) (branch `worktree-agent-ae07f5282e4af72f5`, HEAD `372213a`)
+
+- **Stage 3 — geometric reading order** (`2dcbea5`, `crates/pdf-text/src/layout.rs`).
+  `get_text` block order under `sort=False` is now a geometric recursive XY-cut —
+  bands top→bottom, columns left→right, a legal column cut always beating a horizontal
+  band cut, a full-width spanning band split into rows — with all regions atomic;
+  paint order (`seq`) survives only between same-baseline fragments inside one block.
+  Five rules (full text in `docs/reading-order-root-cause.md`, "2026-09-09" section):
+  R1 `find_column_cut` classifies by the whole gutter valley; R2 `cut_lines` drops
+  `prefer_x = xg >= yg` so a legal column cut always wins and it no longer returns a
+  bool; R3 `emit_column_cut` splits the spanning band into rows
+  (`const SPANNING_BANDS_PARTITION_ROWS = true`; a one-line flip gives the float
+  branch); R4 `group_blocks_columned` orders regions by the XY-cut DFS and drops
+  `regions_are_side_by_side` / `COLUMN_REGION_OVERLAP_FRAC` / `order_groups` /
+  `root_column_cut`; R5 the paint-order-only-within-a-block semantic. This is a
+  deliberate divergence from PyMuPDF's paint order
+  (`docs/pymupdf-compat-findings.md`, divergence row 4).
+- **D4 — Federal Register header de-fragmentation** (branch HEAD `372213a`).
+  `detect_page_gutters` returns the valley band `Gutter{lo, hi}`; `split_on_gutter`
+  cuts a run at it only when the run's own blank gap spans ≥ 0.8 of the valley width,
+  so a merged `L1 + R1` line still splits but a running header whose word spaces are
+  far narrower than the valley is left whole (`is_heading` guard unchanged). New test
+  `layout_e2e_006`.
+- **Numbers** (base = main `72b1d4a`; oracle PyMuPDF 1.28.2; `ro34/summarize.py`):
+
+  | metric | base | V1 (stage 3) | V2 (float) | V3 (+stage 4) | V4 (+D4, HEAD) | fitz |
+  |---|---|---|---|---|---|---|
+  | PMC 7 order | 0.9600 | 0.9600 | 0.9596 | 0.9357 | 0.9600 | 0.9605 |
+  | PMC212689 order | 0.7456 | 0.7456 | 0.7434 | 0.7083 | 0.7456 | 0.7492 |
+  | EUR-Lex 40 lev / order | 0.9372 / 0.9773 | 0.9375 / 0.9777 | 0.9357 / 0.9757 | — / 0.9637 | 0.9375 / 0.9777 | 0.9396 / 0.9800 |
+  | born 6 order | 1.0000 | 1.0000 | — | 0.49–0.51¹ | 1.0000 | — |
+  | FR misplaced / 2492 | 64 | 30 | 436 | 23 | 24 | 64/2517 |
+  | FR fragmented pages | 530 | 367 | — | — | 247 | 0 |
+
+  ¹ V3 breaks the two 2-column born docs (`2col-justified` 1.0000 → 0.4947,
+  `2col-narrow-gutter` → 0.5116); the rest are unaffected.
+- **Tradeoffs.** V1 meets every hard bar, so `SPANNING_BANDS_PARTITION_ROWS = true`
+  (V2's float loses on PMC order, PMC212689, EUR-Lex and FR). **V4 = V1 + D4 is the
+  branch HEAD; every GT score equals V1's** — D4 only touches FR fragmentation and 49
+  header pages (0 permutations; a read-only multiset check confirmed zero text loss).
+  **Stage 4 dropped:** the in-region geometric line order turned column-cut-failed
+  2-column regions into line-interleave (born / PMC), for only 7 FR pages of gain, so
+  commit `90de9c5` was removed from the branch (local tag `ro-stage4-dropped`); a
+  retry needs a "no side-by-side columns inside the region" guard first.
+- **Stage 3 attribution** (300-document digest, `ro34/attribution-v1.md`): 143 docs /
+  1234 pages change = 1005 pure permutations (all benign paint-order fixes / no-column
+  geometric reorder; 0 body-column regressions) + 229 re-segmentation pages (zero text
+  loss: word- and whitespace-stripped-char multisets equal on 229/229). Only 3 EUR-Lex
+  docs regress, all ≤ 0.005 (`32013R0575_EL p0` recital interleave is the one real bug;
+  the two SECCI-form cases are a table-recognition gap). FR misplaced 64 → 30 = 38 real
+  fixes − 4 new regressions. Follow-ups are queue item 2.
+- Docs updated: this file, `docs/reading-order-root-cause.md` (new 2026-09-09
+  section), `CHANGELOG.md`, `docs/pymupdf-compat-findings.md` (divergence row 4),
+  `docs/guide/text-extraction.md`, `python/pdfspine/_llms/docs/api.md`.
+  `HANDOFF-reading-order-3-4.md` retired. Reproduction assets in
+  `/Volumes/ExternalSSD/tmp/ro34/` (not committed).
+- Gate green on the branch: `cargo fmt --check` / `clippy -D warnings` /
+  `test --workspace`, `pytest` 1211 passed, `ruff`.
 
 ### Completed 2026-09-08: OCG gaps (branch `feat/ocg-gaps`; `c8170d3` visibility, `3b7e3e5` writers)
 
