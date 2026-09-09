@@ -47,6 +47,14 @@ const FRAGMENT_MAX_WIDTH_FRAC: f64 = 3.0;
 const LINE_RUN_GAP_FRAC: f64 = 0.8;
 const LINE_RUN_GAP_EPSILON: f64 = 1e-6;
 
+/// A merged full-width baseline is split at a detected column gutter only when
+/// the run's *own* along-axis whitespace at the crossing covers at least this
+/// fraction of the gutter band's width — i.e. both sides clear the empty band,
+/// as a genuine L+R two-column line does. A full-width header line whose word
+/// space merely happens to fall on the gutter has a gap far narrower than the
+/// band and is kept whole, matching PyMuPDF.
+const GUTTER_COVER_FRAC: f64 = 0.8;
+
 /// Word-gap threshold as a fraction of the *device-space font size*. A gap
 /// between the trailing edge of one glyph and the leading edge of the next that
 /// exceeds `size * WORD_GAP_FRAC` is a word break even without a literal space
@@ -920,8 +928,28 @@ fn split_on_baseline(idxs: &[usize], dev: &[DevGlyph]) -> Vec<Vec<usize>> {
     groups
 }
 
-/// Detects the page's vertical **column gutters** (x-midpoints, left→right) from
-/// a glyph-occupancy profile, returning an empty vector when the page is not
+/// A detected column gutter: the near-empty vertical band `[lo, hi]` in device x
+/// left *between* two columns by the other lines on the page. The midpoint drives
+/// the crossing test; the width lets [`split_on_gutter`] demand that a run's own
+/// whitespace actually spans the band before cutting it.
+#[derive(Clone, Copy)]
+struct Gutter {
+    lo: f64,
+    hi: f64,
+}
+
+impl Gutter {
+    fn mid(self) -> f64 {
+        (self.lo + self.hi) / 2.0
+    }
+
+    fn width(self) -> f64 {
+        self.hi - self.lo
+    }
+}
+
+/// Detects the page's vertical **column gutters** (near-empty x-bands, left→right)
+/// from a glyph-occupancy profile, returning an empty vector when the page is not
 /// multi-column.
 ///
 /// The robustness comes from a property of PDF text: word spaces are emitted as
@@ -940,7 +968,7 @@ fn split_on_baseline(idxs: &[usize], dev: &[DevGlyph]) -> Vec<Vec<usize>> {
 /// raises the occupancy there, correctly suppressing a false column; a small
 /// tolerance lets a handful of such crossings through without hiding a real
 /// gutter. Generalizes to 2, 3, or N columns.
-fn detect_page_gutters(runs: &[Vec<usize>], dev: &[DevGlyph]) -> Vec<f64> {
+fn detect_page_gutters(runs: &[Vec<usize>], dev: &[DevGlyph]) -> Vec<Gutter> {
     // Horizontal-writing region bounds + a representative glyph size.
     let mut rx0 = f64::INFINITY;
     let mut rx1 = f64::NEG_INFINITY;
@@ -1037,7 +1065,7 @@ fn detect_page_gutters(runs: &[Vec<usize>], dev: &[DevGlyph]) -> Vec<f64> {
         v[v.len() / 2]
     };
 
-    let mut gutters: Vec<f64> = Vec::new();
+    let mut gutters: Vec<Gutter> = Vec::new();
     for (lo_bin, hi_bin) in candidates {
         let lo = (rx0 + lo_bin as f64 * bin_w).max(rx0);
         let hi = (rx0 + hi_bin as f64 * bin_w).min(rx1);
@@ -1062,10 +1090,10 @@ fn detect_page_gutters(runs: &[Vec<usize>], dev: &[DevGlyph]) -> Vec<f64> {
         // so a one-off stray glyph in the margin never manufactures a column.
         const MINOR_SIDE_FLOOR: u32 = 2;
         if major >= side_floor && minor >= MINOR_SIDE_FLOOR {
-            gutters.push((lo + hi) / 2.0);
+            gutters.push(Gutter { lo, hi });
         }
     }
-    gutters.sort_by(f64::total_cmp);
+    gutters.sort_by(|a, b| a.mid().total_cmp(&b.mid()));
     gutters
 }
 
@@ -1078,7 +1106,10 @@ fn detect_page_gutters(runs: &[Vec<usize>], dev: &[DevGlyph]) -> Vec<f64> {
 /// are never separated by either rule — a gutter is whitespace left by the
 /// *other* lines, so a run whose own cells fill the band (a one-string title
 /// across a table's columns, a form heading whose space glyph sits in the band)
-/// stays one line, as PyMuPDF reads it.
+/// stays one line, as PyMuPDF reads it. The gutter cut further requires the run's
+/// own gap at the crossing to cover most of the band's width (see
+/// [`GUTTER_COVER_FRAC`]): a genuine two-column line clears the whole band, while
+/// a full-width header whose word space merely lands on the gutter does not.
 ///
 /// A large-type heading/title legitimately spans the body's column gutters (e.g.
 /// a centered title over a multi-column page); when this cluster's glyphs are
@@ -1087,22 +1118,22 @@ fn detect_page_gutters(runs: &[Vec<usize>], dev: &[DevGlyph]) -> Vec<f64> {
 fn split_on_gutter(
     idxs: &[usize],
     dev: &[DevGlyph],
-    gutters: &[f64],
+    gutters: &[Gutter],
     body_h: f64,
 ) -> Vec<Vec<usize>> {
     let cluster_h = run_glyph_height(idxs, dev);
     let is_heading = body_h > 0.0 && cluster_h > body_h * 1.6;
-    let gutters: &[f64] = if is_heading { &[] } else { gutters };
+    let gutters: &[Gutter] = if is_heading { &[] } else { gutters };
 
     let mut runs: Vec<Vec<usize>> = Vec::new();
     let mut cur: Vec<usize> = Vec::new();
     let mut prev_end: Option<f64> = None;
     let mut prev_size: Option<f64> = None;
     // The device-x left edge of the previous glyph, so a gutter crossing fires
-    // even when a wide glyph's bbox straddles the gutter line. Gutters are
-    // device-x midpoints (from [`detect_page_gutters`], over horizontal glyphs),
-    // so the crossing test uses device x; the huge-gap fallback uses the reading
-    // axis so it still works for rotated text.
+    // even when a wide glyph's bbox straddles the gutter band. Gutters are
+    // device-x bands (from [`detect_page_gutters`], over horizontal glyphs), so
+    // the crossing test uses device x against the band midpoint; the huge-gap
+    // fallback uses the reading axis so it still works for rotated text.
     let mut prev_x0: Option<f64> = None;
     for &i in idxs {
         let g = &dev[i];
@@ -1121,11 +1152,17 @@ fn split_on_gutter(
             // 带内），PyMuPDF 同样把这种行读成一整行。
             let touching = gap <= gap_size * WORD_GAP_FRAC;
             // Cut where a detected gutter separates this glyph from the previous
-            // one: the previous glyph starts left of the gutter and this glyph
-            // starts at/right of it — and there is real along-axis whitespace
-            // between the two.
-            let crosses_gutter =
-                !touching && gutters.iter().any(|&gx| px < gx - 0.5 && x0 >= gx - 0.5);
+            // one: the previous glyph starts left of the band midpoint, this glyph
+            // starts at/right of it, and — crucially — this run's *own* along-axis
+            // whitespace covers most of the band (`gap ≥ GUTTER_COVER_FRAC · width`).
+            // A genuine L+R two-column line leaves the whole band empty and cuts; a
+            // full-width header whose word space merely lands on the gutter has a
+            // gap far narrower than the band and stays one line, as PyMuPDF reads it.
+            let crosses_gutter = !touching
+                && gutters.iter().any(|g| {
+                    let mid = g.mid();
+                    px < mid - 0.5 && x0 >= mid - 0.5 && gap >= g.width() * GUTTER_COVER_FRAC
+                });
             // Fallback: two independently painted runs with a device-space gap
             // at the compatibility boundary form distinct lines. Use the true
             // projected glyph edges — origin + AABB diagonal overestimates the
