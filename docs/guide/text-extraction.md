@@ -271,14 +271,18 @@ All three hold for spans and chars alike, and each is covered by a test:
   split a span back into source order.
 - `number` is a reading-order index (block index at the block level, page line
   index at the line level).
-- Known limitation of `number`: pdfspine's current inter-region ordering key is
-  the content stream's painting order, not a purely geometric reading order.
-  `number` therefore promises "the index in the order the engine actually emits,
-  consistent with `get_text("text")`" — **not** "the ideal geometric reading
-  order of the layout". For PDFs whose painting order is scrambled (for example
-  interleaved columns), `number` is scrambled with it. Consumers that need a
-  strict geometric reading order should sort by bbox themselves or pass
-  `sort=True`.
+- `number` is a **geometric** reading-order index. Blocks are ordered by a
+  recursive XY-cut over the page — bands top-to-bottom, columns left-to-right, a
+  legal column cut taking priority over a horizontal band cut, and a full-width
+  spanning band split into rows — so columns stay contiguous and a running
+  header sorts ahead of the body even when the content stream paints them in
+  another order. This is a **deliberate divergence** from PyMuPDF, whose default
+  `get_text` keeps content-stream paint order with no geometric reordering (see
+  `docs/pymupdf-compat-findings.md`). Painting order (`seq`) survives only
+  between same-baseline fragments inside one block; the line order *within* a
+  region still follows `seq` (a deferred step), so a region whose columns the
+  cut fails to separate can still interleave its lines. `sort=True` is a
+  separate, stricter global `(y, x)` reordering.
 
 #### Worked numbers
 

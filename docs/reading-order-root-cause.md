@@ -558,3 +558,143 @@ robustness(govdocs1) 23 篇、`fixtures/corpus/usgs-fs20183024` 1 篇、fintabne
 `ro_fr_header.py`（FR 页眉秩）、`ro_probe.py` / `ro_probe2.py`（阶段 2 探针）、`gt-*-{before,after,b,d,e}.json`、
 `compare-{after,b,d,e}.json`、`fr-header-{base,after,b,d,e,fitz}.json`、`govinfo-fr/`（12 期 FR PDF + manifest）。
 逐页摘要目录与各变体 wheel 已按任务要求删除。
+
+## 2026-09-09 阶段 3 + D4 落地记录（阶段 4 实测放弃）
+
+代码基线 `base` = main `72b1d4a` 的冻结 wheel · oracle PyMuPDF 1.28.2 · 分支 `worktree-agent-ae07f5282e4af72f5`，
+最终 HEAD `372213a`（阶段 3 `2dcbea5` + D4）· 打分资产在 `/Volumes/ExternalSSD/tmp/ro34/`（不入库）。
+本轮承接 2026-09-05 的阶段 1 + 1.5，落地**阶段 3**（几何 band → column → y）与 **D4**（FR 页眉行级去碎片），
+**阶段 4**（region 内几何行序）实测后放弃。退役 `HANDOFF-reading-order-3-4.md`（内容并入本节与上文）。
+
+### 改了什么
+
+**阶段 3（`2dcbea5`，`crates/pdf-text/src/layout.rs`）** —— 5 条规则（下文按 R1–R5 引用）：
+
+- **R1 `find_column_cut` 整条谷带分类**：`column_gutter` 返回 `(宽, 中点)`，取 `lo = at − w/2, hi = at + w/2`；
+  只有 `x0 < lo − 0.5 && x1 > hi + 0.5`（覆盖整条谷带）的行才算 spanning，其余按 bbox 中心归左/右栏。
+  取代上一轮失败的"逐行判据"（变体 c），修右栏序号 "(32)" 起点落在谷带被误判 spanning。
+- **R2 `cut_lines` 合法 column cut 永远优先于 band(Y) cut**：删 `prefer_x = xg >= yg`。段落间距宽于栏距时旧逻辑把
+  双栏横切成 band（`32011L0083_BG p10`）；column cut 有结构性保证（两侧 substantial、跨谷行 ≤ 10 %），band gap 只是空白宽度。
+  `cut_lines` 不再返回 `bool`（"根是否 X-cut"判别式连同其唯一消费者一起删）。
+- **R3 `emit_column_cut` spanning band 划行**（取代 `partition_spanning` 与三条过滤规则、
+  `SPANNING_COLUMN_LINE_MIN_WIDTH_FRAC`、`SPANNING_MARGIN_ROW_MAX_HEIGHT`）：spanning 行按 `split_y_bands`
+  （min_gap 1.3·typ_h）分 band，栏行行号 = 其下方 band 数，发射序 row0-L, row0-R, band0, row1-L, row1-R…；
+  页眉/页脚天然是 row0 为空 / 末行为空的 band。`const SPANNING_BANDS_PARTITION_ROWS: bool` 保留 float 分支
+  （中间 band 夹在整左栏与整右栏之间，即上一轮语义），翻转一行即可打第二个 wheel。**定为 `true`**（见变体表 V1 vs V2）。
+- **R4 `group_blocks_columned` region 全原子 + XY-cut DFS 序**：删 `regions_are_side_by_side`、
+  `COLUMN_REGION_OVERLAP_FRAC`、`side_by_side`、`order_groups`、`root_column_cut`；region 之间不再看绘制序
+  （band 上→下、column 左→右）；region 内仍 `sort_by_key(seq)`（阶段 4 才改）。`is_table_dominant` 单 region 路径不变。
+- **R5 语义取舍**：全页几何序（含无栏结构页），绘制序只保留在"同一 block 内共基线片段"。
+
+改的既有测试：`PYTEXT-010`（`Right < Left < Bottom`）、`PYTEXT-018`（clip 内 `Upper\nLower`）、
+`PYOCG-047`（sorted 比较 + 几何序断言）；新增 `readorder_009`（谷带内起笔的 "(32)" 留右栏）、`readorder_010`
+（通栏标题划两行：L上→R上→标题→L下→R下）、`readorder_011`（无栏页、页脚先画 → 几何序）、`readorder_012`
+（标题 band 后画 + 段距 > 栏距双栏 → 标题→整左→整右）。删除 `partition_spanning`、`cut_spanning`、
+`regions_are_side_by_side`、`order_groups`、`root_column_cut`；`cut_lines` 不再返回 bool。细节看 `git show 2dcbea5`。
+
+**D4（最终 HEAD `372213a`，FR 页眉行级去碎片）**：`detect_page_gutters` 返回谷带 `Gutter{lo, hi}`（不再只给中点）；
+`split_on_gutter` 仅当本 run 自己的空白 gap ≥ 0.8·谷宽（两侧 glyph 未侵入谷带）才切。合并的 L1 + R1 行 gap ≥ 谷宽会切；
+页眉普通词距 ≪ 谷宽不切。`is_heading`（大字号）保护不变。新增 `layout_e2e_006`。细节看 `git show 372213a`。
+
+### 基线复现（`.venv-base` = main `72b1d4a`；`ro34/summarize.py base` 可复核）
+
+| 语料 | pdfspine | fitz |
+|---|---|---|
+| PMC 干净 7 篇 lev / order | 0.7439 / 0.9600 | 0.7445 / 0.9605 |
+| PMC212689 lev / order | 0.7003 / 0.7456 | 0.7050 / 0.7492 |
+| born 6 篇 lev / order | 0.9803 / 1.0000 | 同 |
+| EUR-Lex 40 篇 lev / order | 0.9372 / 0.9773 | 0.9396 / 0.9800 |
+| govinfo FR 误排 / 碎片化 / 均块数 | 64/2492 / 530 / 1.58 | 64/2517 / 0 / 1.02 |
+
+### 五个变体的数字表
+
+口径：**V1** = 阶段 3（`2dcbea5`，`SPANNING_BANDS_PARTITION_ROWS = true`）；**V2** = 阶段 3 但 const `= false`（float 语义）；
+**V3** = 阶段 3 + 阶段 4（阶段 4 `90de9c5`，region 内几何行序 `sort_region_lines`，已从分支移除，本地 tag `ro-stage4-dropped`
+仅供本记录复核）；**V4** = 阶段 3 + D4 = 最终 HEAD `372213a`。数字可用 `ro34/summarize.py <tag>` 复核（tag：base/v1/v2/v3/v4）。
+
+| 指标 | base | **V1（阶段 3）** | V2（float） | V3（+阶段 4） | **V4（+D4，HEAD）** | fitz |
+|---|---|---|---|---|---|---|
+| PMC 7 篇 order | 0.9600 | 0.9600 | 0.9596 | 0.9357 | 0.9600 | 0.9605 |
+| PMC 7 篇 lev | 0.7439 | 0.7438 | — | — | 0.7438 | 0.7445 |
+| PMC212689 order | 0.7456 | 0.7456 | 0.7434 | 0.7083 | 0.7456 | 0.7492 |
+| PMC176546 order | 0.9950 | 0.9950 | — | 0.8628 | 0.9950 | — |
+| EUR-Lex 40 lev | 0.9372 | **0.9375** | 0.9357 | — | 0.9375 | 0.9396 |
+| EUR-Lex 40 order | 0.9773 | **0.9777** | 0.9757 | 0.9637 | 0.9777 | 0.9800 |
+| born order | 1.0000 | 1.0000 | — | 见¹ | 1.0000 | — |
+| FR 误排 / 2492 | 64 | 30 | 436 | 23 | **24** | 64/2517 |
+| FR 页眉碎片化页 | 530 | 367 | — | — | **247** | 0 |
+| FR 均块数 | 1.58 | 1.57 | — | — | 1.51 | 1.02 |
+| 300 文档 digest 变化 | — | 143 篇/1234 页（相对 base） | — | 195 篇/558 页（相对 V1） | 20 篇/49 页（相对 V1） | — |
+
+¹ V3 下 born `2col-justified` order 1.0000 → 0.4947、`2col-narrow-gutter` 1.0000 → 0.5116（两栏逐行交错）；其余单栏篇目不受影响。
+
+**结论**：V1 全面达标（PMC order ≥ 0.9600、PMC212689 ≥ 0.7456、EUR-Lex lev ≥ 0.9372 / order ≥ 0.9773、born 逐位不变、
+FR 误排 ≤ 64），故 `SPANNING_BANDS_PARTITION_ROWS` 定为 `true`——V2 的 float 语义在 PMC order（0.9596，跌破 ≥ 0.9600）、
+PMC212689（0.7434）、EUR-Lex（0.9357 / 0.9757，跌破底线）与 FR（436）四项全面劣于 V1；HANDOFF 预留的 V3 变体（单行 band 划行、
+多行 float）因 V1/V2 无互有胜负而不需要。**V4（V1 + D4）的全部 GT 分数与 V1 逐位相同**，只动 FR 碎片与 49 页页眉切分。
+
+### 阶段 3（V1）归因摘要（`ro34/attribution-v1.md` 的浓缩）
+
+**净收益**：EUR-Lex 29 涨 / 8 平 / 仅 3 跌（全 ≤ 0.005）；FR 误排 64 → 30（真修 38 页）；born/PMC 逐位不变；
+300 文档 digest 143 篇 / 1234 页变化 = 1005 页纯置换 + 229 页块集合变化，**文本零丢失**。1234 页分两类：
+
+- **1005 页纯置换（块集合不变、只换序）**：全量 right-before-left 逆序扫描 + 18 页抽样坐标核对，判定**全部良性**
+  （paint-order 修复 / 无栏页几何重排），正文层面 0 页栏序回归。975 页 band_inv 不变、28 页 V1 更少（含地图/财务表更几何）、
+  仅 2 页 V1 更多（`32006L0112_BG p8` 引导点 TOC 页码列先于条目、`govdocs1-00020 p19` 页眉日期戳先于标题，均外围家具级瑕疵）。
+  典型：OJ running header（最后绘制）从页尾移到页首（`32018R1725_BG p3`）；正确双栏 `32013R0575_PL/DE p17` 列主序、左先右后。
+- **229 页块集合变化（re-segmentation，非增删）**，按现象分 5 类：(a) 顶部整宽栏眉按栏距拆成"日期 | 刊名 | OJ 号"**52** 页；
+  (b) 底部页脚/脚注重切 **14** 页；(c) 正文原子化 MERGE **104** 页（其中 72 页是 EU 法规"(NN) 序号并入段落"）；
+  (d) 正文原子化 SPLIT **48** 页；(e) 等块数混合重切 **11** 页。整体 merge 111 / split 104 / eq 14。
+  **零文本丢失核实**：229/229 页词多重集相等且去空白字符多重集相等（异常 0 页）；另 4 页几何-only（`text` 逐字节相同）。
+
+**3 篇 EUR-Lex 退化定位**（全 ≤ 0.005；逐页 swap 累加与整篇 delta 吻合 < 2e-5）：
+
+| doc（整篇 Δorder） | 退化页 | 在 digest? | GT 期望 | V1 实际 | 规则 | 判断 |
+|---|---|---|---|---|---|---|
+| `32008L0048_EL`（−0.0033） | p21–23,26（SECCI 表单，> p20） | 否 | 行主序表 | 列主序，短右值甩到栏尾、与标签分离 | R2(+R4) | 可接受 / 表格识别缺口 |
+| `32013R0575_EL`（−0.0011） | **p0**（封面 + recital） | 是 | 列主序流 | 上/下 band 交错，(2) 与 (1) 续 印在 (1) 开头之前 | R4(≈R3) | **轻微 bug** |
+| `32008L0048_BG`（−0.0005） | p24,22（SECCI 表单，> p20） | 否 | 行主序表 | 列主序，值与标签分离 | R2(+R4) | 可接受 / 表格识别缺口 |
+
+关键修正：EL/BG 的退化**不在 digest 覆盖的前 20 页**，而在附件 SECCI 标签/值表单页；前 20 页那些"纯置换" recital 页对 order 的
+贡献恰为 0.0000（唯一被置换的是每页页眉，而 GT 剥掉页眉）。另 `PMC212319` lev −0.0004 是单篇微抖动，与 SECCI 无关。
+
+**FR 误排 64 → 30 的 "34 = 38 − 4"**：join 2492 个共有 (doc, page)——**38 页真修**（base `header_in_middle`、body_before = rank
+1–20 → V1 页眉沉为 row-0 spanning band 提到最前、body_before = 0）、**4 页新退化**（base 正确 rank0/bb0 → V1 把整宽页眉几何切进
+某列、排到该列若干正文块之后：`FR-2026-01-13 p144/p146`、`-01-15 p382`、`-01-20 p164`），64 − 38 + 4 = 30。V1 剩余 30 全是
+`header_in_middle`（0 header_last，页眉从不甩到页尾）、band_blocks 全 = 2（不属 D4 碎片）；其中 26 页是与 fitz 共同的难点（base 就
+误排、非阶段 3 造成），4 页恰是上述新退化（fitz 全对）。碎片化 530 → 367 与误排是**正交**的两轴（367 碎片页里 misplaced = 0、
+30 误排页里碎片 = 0，零重叠），碎片属 D4。
+
+### 阶段 4 数据与放弃理由（V3 = 阶段 3 + `90de9c5`）
+
+阶段 4 按 `ro34/stage4-spec.md` 让 region 内改按几何行序（`sort_region_lines`，主方向 cross 排行、行内仍 seq、保留 `.abs()`）。
+实测 V3：born `2col-justified` order 1.0000 → 0.4947、`2col-narrow-gutter` 1.0000 → 0.5116（两栏逐行交错）；PMC 0.9600 → 0.9357
+（`PMC176546` 0.9950 → 0.8628）；PMC212689 order 0.7456 → 0.7083；EUR-Lex order 0.9777 → 0.9637（`32011L0083_PL` −0.0993 等）；
+FR 误排 30 → 23（唯一收益，仅 7 页）；digest 相对 V1 195 篇 / 558 页变化。**根因**：HANDOFF §6 预警的风险成真——column cut 失败的
+双栏 region 在 region 内按几何行序发射后变成逐行交错（born 两栏、PMC 三栏 region 首当其冲）。收益（FR 7 页）远小于代价，**放弃阶段 4**：
+commit `90de9c5` 已从分支移除，本地保留 tag `ro-stage4-dropped` 仅供本记录复核。未来若重做，须先加"region 内无并列列结构"守卫
+（同一 y 行内出现 x 不相交的两条行即回退到 seq 序）再测。
+
+### 后续该修（按收益，均未实现）
+
+1. **限制 R3/R4 的横向 band 切分，不要把"两条实质并列的连续正文栏"切成堆叠 band**（最高收益）：同时修 `32013R0575_EL p0` 的
+   recital 交错，并大概率同源修掉 4 个 FR 新退化页。守卫：仅当 spanning 行覆盖整条谷带且宽度 ≳ 50 % 页宽（真通栏标题）才划行；
+   或当一次 band cut 的两半各自还能 column-cut 成同 L/R 结构时，把父 region 当单 column region（整左 → 整右）。
+2. **SECCI 标签/值表单检测**：命中"右栏多条短行与左栏共基线"时保单 region 共基线合并或行主序发射——修 `32008L0048_EL p21–26`、
+   `32008L0048_BG p22/p24`（收益小，且是与 fitz 共享的表序问题）。
+3. **D4 页眉行级去碎片剩余 247 页**（向 fitz 0 看齐；D4 已把 530 → 247）：`independent_run_gap` 等，D4 范围外。
+4. **PMC order 0.9605 / PMC212689 0.749 目标仍未达**：阶段 3 未触及 PLoS 三栏、中部通栏图注的 float vs 行划分语义（属 V2/V3 决策）。
+
+### D4（V4）49 页零丢失核实与复现资产
+
+D4 相对 V1 只改 20 篇 / 49 页、0 纯置换（`ro34/compare-v4.json` 经复核 = `ro_compare.py digest-v1 digest-v4` 的逐字节输出）——
+全部是"行不再被切开"（块数方向 eq 39 / merge 7 / split 3）。49 页**文本零丢失**：去空白字符多重集 **49/49** 页逐一相等；词多重集
+**41/49** 相等，另 8 页仅因 D4 不再于词内插空格（如页眉 "JOURNAL OF CLIMATE" V1 "O F" → V4 "OF"、"P A R T II" → "PART II"），
+字符多重集不变、无一字增删。核实用 `diag-v1/q2` 的多重集方法（`Counter(t.split())` 与 `Counter(''.join(t.split()))`）逐页比对
+V1/V4 digest 的 `text` 投影。
+
+复现资产（`/Volumes/ExternalSSD/tmp/ro34/`，不入库）：`summarize.py <tagA> [<tagB>]` 打印任意两 tag 的均值表与逐篇 Δ；
+`compare-v1.json` / `compare-v3.json` / `compare-v4.json`（`ro_compare.py` 300 文档逐页差分）；`fr-header-{base,v1,v2,v3,v4,fitz}.json`
+（FR 页眉指标）；`attribution-v1.md`（阶段 3 完整归因）；`stage3-spec.md` / `stage4-spec.md`（设计规格）；`diag-v1/`（归因脚本）；
+各变体 wheel 在 `wheels-{base,v1,v2,v3,v4}/`。门禁在分支上全绿：`cargo fmt --check` / `clippy -D warnings` / `test --workspace`、
+`pytest` 全量 1211 passed、`ruff`。
