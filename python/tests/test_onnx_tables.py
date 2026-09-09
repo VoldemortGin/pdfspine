@@ -146,6 +146,7 @@ def test_onnx_001_options_validation_and_mapping():
     assert default.layout_threshold == 0.5
     assert default.layout_size is None
     assert default.layout_variant == "auto"
+    assert default.skip_layout is False
     listed = _onnx.OnnxOptions(
         providers=["CPUExecutionProvider"],
         channel_order=" RGB ",
@@ -185,6 +186,7 @@ def test_onnx_001_options_validation_and_mapping():
         ({"crop_padding": 50}, ValueError, "crop_padding"),
         ({"layout_model": 5}, TypeError, "layout_model"),
         ({"ocr_if_no_text": 1}, TypeError, "ocr_if_no_text"),
+        ({"skip_layout": 1}, TypeError, "skip_layout must be a bool"),
         ({"ocr_engine": " "}, ValueError, "OCR engine"),
     ]:
         with pytest.raises(error, match=message):
@@ -1306,3 +1308,39 @@ def test_onnx_015_v3_read_order_and_footnote_html(monkeypatch):
     assert layout == [block for block, _ in expected]
     html = _onnx.get_layout_html(None, _runtime=_V3Runtime(mixed))
     assert html.startswith("<p>Second</p>\n<p>First</p>\n")
+
+
+# --------------------------------------------------------------------------- #
+# ONNX-016: skip_layout treats the clip as the sole table region
+# --------------------------------------------------------------------------- #
+class _NoLayoutRuntime(_TwoTableRuntime):
+    def detect_layout(self, _image, _options):
+        raise AssertionError("detect_layout must not run with skip_layout=True")
+
+
+def test_onnx_016_skip_layout_uses_clip_as_table_region(monkeypatch):
+    rendered = _rendered(
+        tokens=[
+            _token([10, 30, 60, 50], "L1", 0, 0, 0),
+            _token([110, 30, 160, 50], "R1", 0, 0, 1),
+            _token([230, 30, 280, 50], "L2", 1, 0, 0),
+            _token([330, 30, 380, 50], "R2", 1, 0, 1),
+        ]
+    )
+    monkeypatch.setattr(_onnx, "_render_page", lambda _page, _options: rendered)
+    # Page-space clip (0, 10, 90, 40) is the first table of ONNX-008 in
+    # image pixels (0, 20, 180, 80) at scale 2.
+    finder = _onnx.find_tables(
+        None,
+        clip=(0, 10, 90, 40),
+        options={"skip_layout": True, "crop_padding": 0, "ocr_if_no_text": False},
+        _runtime=_NoLayoutRuntime(),
+    )
+    assert len(finder) == 1
+    assert finder[0].extract() == [["L1", "R1"]]
+    assert finder[0].bbox == pytest.approx((0.0, 10.0, 90.0, 40.0))
+    assert finder[0].confidence == pytest.approx(0.9)
+    with pytest.raises(ValueError, match="skip_layout requires clip="):
+        _onnx.find_tables(
+            None, options={"skip_layout": True}, _runtime=_NoLayoutRuntime()
+        )

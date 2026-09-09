@@ -47,10 +47,17 @@ conformance/bench-results.json
 # Objective ground-truth eval (gt/): scripts + GT-REPORT*.md committed; corpora/cache/json not.
 conformance/gt/cache/
 conformance/gt/corpus-*/
+# corpus-finance/ is the hand-annotated financial eval set: its README, seed-subset
+# and annotation template ARE tracked (small, hand-written); the PDFs and the gold
+# files the user adds are not (unknown copyright — never commit source financials).
+!conformance/gt/corpus-finance/
+conformance/gt/corpus-finance/pdfs/
+conformance/gt/corpus-finance/annotations/
 conformance/gt/gt-*.json
 conformance/gt/render-results.json
 conformance/gt/ci-baseline-results.json
 conformance/gt/ci-typeset-results.json
+conformance/gt/ci-tables-eval-results.json
 conformance/gt/typeset-render-results.json
 conformance/gt/__pycache__/
 # CI regression gate (no-oracle): the tiny committed SSIM reference buffers and

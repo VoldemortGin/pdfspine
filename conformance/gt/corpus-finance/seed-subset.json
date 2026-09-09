@@ -1,0 +1,455 @@
+{
+  "schema": "pdfspine.table-eval.seed-subset.v1",
+  "generated": "2026-09-09T03:33:53+00:00",
+  "corpus": "conformance/gt/corpus-fintabnet",
+  "size": 40,
+  "selection_rule": "stratified: >= 4 pages per tag in TAG_VOCABULARY (rarest tag first, seed=0 shuffle), remaining slots by tag rarity (sum of 1/corpus_count over the page's tags), ties by document_id; `borderless` = strategy='lines' found no table",
+  "tag_counts": {
+    "plain": 4,
+    "borderless": 31,
+    "multi-header": 33,
+    "spanning": 36,
+    "wide": 13,
+    "tall": 15,
+    "multi-table": 16
+  },
+  "corpus_tag_counts": {
+    "plain": 45,
+    "borderless": 111,
+    "multi-header": 76,
+    "spanning": 105,
+    "wide": 13,
+    "tall": 22,
+    "multi-table": 28
+  },
+  "pages": [
+    {
+      "document_id": "ADBE_2011_page_118",
+      "n_tables": 1,
+      "tags": [
+        "spanning",
+        "wide"
+      ],
+      "lines_detected": true
+    },
+    {
+      "document_id": "ADI_2014_page_38",
+      "n_tables": 1,
+      "tags": [
+        "borderless",
+        "multi-header",
+        "spanning",
+        "wide"
+      ],
+      "lines_detected": false
+    },
+    {
+      "document_id": "AEE_2007_page_125",
+      "n_tables": 1,
+      "tags": [
+        "borderless",
+        "multi-header",
+        "spanning",
+        "tall"
+      ],
+      "lines_detected": false
+    },
+    {
+      "document_id": "AIG_2012_page_271",
+      "n_tables": 1,
+      "tags": [
+        "borderless",
+        "multi-header",
+        "spanning",
+        "tall"
+      ],
+      "lines_detected": false
+    },
+    {
+      "document_id": "AIG_2018_page_280",
+      "n_tables": 1,
+      "tags": [
+        "borderless",
+        "multi-header",
+        "spanning",
+        "wide"
+      ],
+      "lines_detected": false
+    },
+    {
+      "document_id": "AMP_2015_page_94",
+      "n_tables": 3,
+      "tags": [
+        "borderless",
+        "multi-header",
+        "spanning",
+        "wide",
+        "multi-table"
+      ],
+      "lines_detected": false
+    },
+    {
+      "document_id": "BAC_2016_page_172",
+      "n_tables": 1,
+      "tags": [
+        "borderless",
+        "spanning",
+        "wide",
+        "tall"
+      ],
+      "lines_detected": false
+    },
+    {
+      "document_id": "BBY_2008_page_27",
+      "n_tables": 2,
+      "tags": [
+        "borderless",
+        "multi-header",
+        "spanning",
+        "tall",
+        "multi-table"
+      ],
+      "lines_detected": false
+    },
+    {
+      "document_id": "BIIB_2008_page_47",
+      "n_tables": 2,
+      "tags": [
+        "borderless",
+        "multi-header",
+        "spanning",
+        "multi-table"
+      ],
+      "lines_detected": false
+    },
+    {
+      "document_id": "CF_2015_page_32",
+      "n_tables": 2,
+      "tags": [
+        "borderless",
+        "multi-header",
+        "spanning",
+        "wide",
+        "multi-table"
+      ],
+      "lines_detected": false
+    },
+    {
+      "document_id": "DISCA_2011_page_51",
+      "n_tables": 1,
+      "tags": [
+        "multi-header",
+        "spanning",
+        "tall"
+      ],
+      "lines_detected": true
+    },
+    {
+      "document_id": "ETR_2011_page_370",
+      "n_tables": 1,
+      "tags": [
+        "multi-header",
+        "spanning",
+        "tall"
+      ],
+      "lines_detected": true
+    },
+    {
+      "document_id": "ETR_2013_page_29",
+      "n_tables": 3,
+      "tags": [
+        "borderless",
+        "multi-header",
+        "spanning",
+        "multi-table"
+      ],
+      "lines_detected": false
+    },
+    {
+      "document_id": "EXR_2018_page_28",
+      "n_tables": 2,
+      "tags": [
+        "borderless",
+        "multi-header",
+        "spanning",
+        "multi-table"
+      ],
+      "lines_detected": false
+    },
+    {
+      "document_id": "FLIR_2010_page_73",
+      "n_tables": 1,
+      "tags": [
+        "plain",
+        "borderless"
+      ],
+      "lines_detected": false
+    },
+    {
+      "document_id": "FLS_2012_page_67",
+      "n_tables": 1,
+      "tags": [
+        "borderless",
+        "multi-header",
+        "spanning",
+        "tall"
+      ],
+      "lines_detected": false
+    },
+    {
+      "document_id": "GD_2004_page_48",
+      "n_tables": 1,
+      "tags": [
+        "multi-header",
+        "spanning",
+        "tall"
+      ],
+      "lines_detected": true
+    },
+    {
+      "document_id": "GE_2018_page_19",
+      "n_tables": 1,
+      "tags": [
+        "plain",
+        "borderless"
+      ],
+      "lines_detected": false
+    },
+    {
+      "document_id": "HPQ_2006_page_111",
+      "n_tables": 2,
+      "tags": [
+        "borderless",
+        "multi-header",
+        "spanning",
+        "wide",
+        "multi-table"
+      ],
+      "lines_detected": false
+    },
+    {
+      "document_id": "IRM_2010_page_116",
+      "n_tables": 2,
+      "tags": [
+        "borderless",
+        "multi-header",
+        "spanning",
+        "multi-table"
+      ],
+      "lines_detected": false
+    },
+    {
+      "document_id": "IRM_2016_page_107",
+      "n_tables": 3,
+      "tags": [
+        "borderless",
+        "multi-header",
+        "spanning",
+        "multi-table"
+      ],
+      "lines_detected": false
+    },
+    {
+      "document_id": "IVZ_2017_page_133",
+      "n_tables": 1,
+      "tags": [
+        "multi-header",
+        "spanning",
+        "tall"
+      ],
+      "lines_detected": true
+    },
+    {
+      "document_id": "JKHY_2017_page_25",
+      "n_tables": 2,
+      "tags": [
+        "borderless",
+        "multi-header",
+        "spanning",
+        "multi-table"
+      ],
+      "lines_detected": false
+    },
+    {
+      "document_id": "MKTX_2011_page_65",
+      "n_tables": 1,
+      "tags": [
+        "multi-header",
+        "spanning",
+        "wide",
+        "tall"
+      ],
+      "lines_detected": true
+    },
+    {
+      "document_id": "MKTX_2018_page_134",
+      "n_tables": 3,
+      "tags": [
+        "multi-header",
+        "spanning",
+        "wide",
+        "multi-table"
+      ],
+      "lines_detected": true
+    },
+    {
+      "document_id": "MNST_2015_page_100",
+      "n_tables": 1,
+      "tags": [
+        "plain",
+        "borderless"
+      ],
+      "lines_detected": false
+    },
+    {
+      "document_id": "MSCI_2012_page_76",
+      "n_tables": 1,
+      "tags": [
+        "borderless",
+        "multi-header",
+        "spanning",
+        "wide"
+      ],
+      "lines_detected": false
+    },
+    {
+      "document_id": "NEM_2008_page_65",
+      "n_tables": 1,
+      "tags": [
+        "plain",
+        "borderless"
+      ],
+      "lines_detected": false
+    },
+    {
+      "document_id": "NEM_2008_page_75",
+      "n_tables": 1,
+      "tags": [
+        "borderless",
+        "multi-header",
+        "spanning",
+        "wide"
+      ],
+      "lines_detected": false
+    },
+    {
+      "document_id": "NTRS_2017_page_94",
+      "n_tables": 1,
+      "tags": [
+        "borderless",
+        "multi-header",
+        "spanning",
+        "tall"
+      ],
+      "lines_detected": false
+    },
+    {
+      "document_id": "PNC_2015_page_192",
+      "n_tables": 3,
+      "tags": [
+        "borderless",
+        "multi-header",
+        "spanning",
+        "multi-table"
+      ],
+      "lines_detected": false
+    },
+    {
+      "document_id": "RE_2007_page_61",
+      "n_tables": 1,
+      "tags": [
+        "borderless",
+        "multi-header",
+        "spanning",
+        "wide"
+      ],
+      "lines_detected": false
+    },
+    {
+      "document_id": "RE_2010_page_125",
+      "n_tables": 2,
+      "tags": [
+        "borderless",
+        "multi-header",
+        "spanning",
+        "multi-table"
+      ],
+      "lines_detected": false
+    },
+    {
+      "document_id": "SNPS_2011_page_77",
+      "n_tables": 3,
+      "tags": [
+        "borderless",
+        "multi-header",
+        "spanning",
+        "multi-table"
+      ],
+      "lines_detected": false
+    },
+    {
+      "document_id": "UNP_2012_page_64",
+      "n_tables": 3,
+      "tags": [
+        "multi-header",
+        "spanning",
+        "multi-table"
+      ],
+      "lines_detected": true
+    },
+    {
+      "document_id": "V_2009_page_105",
+      "n_tables": 1,
+      "tags": [
+        "borderless",
+        "multi-header",
+        "spanning",
+        "tall"
+      ],
+      "lines_detected": false
+    },
+    {
+      "document_id": "XEL_2009_page_163",
+      "n_tables": 2,
+      "tags": [
+        "borderless",
+        "spanning",
+        "tall",
+        "multi-table"
+      ],
+      "lines_detected": false
+    },
+    {
+      "document_id": "XEL_2013_page_98",
+      "n_tables": 1,
+      "tags": [
+        "borderless",
+        "multi-header",
+        "spanning",
+        "tall"
+      ],
+      "lines_detected": false
+    },
+    {
+      "document_id": "ZBH_2003_page_69",
+      "n_tables": 1,
+      "tags": [
+        "borderless",
+        "multi-header",
+        "spanning",
+        "wide"
+      ],
+      "lines_detected": false
+    },
+    {
+      "document_id": "ZION_2017_page_111",
+      "n_tables": 1,
+      "tags": [
+        "multi-header",
+        "spanning",
+        "tall"
+      ],
+      "lines_detected": true
+    }
+  ]
+}

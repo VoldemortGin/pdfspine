@@ -2838,6 +2838,28 @@ ruled fixture as ground truth.
 | `ONNX-013` | `_resolve_providers`: `auto` prefers CUDA then CPU, never CoreML; explicit unavailable provider raises `PdfUnsupportedError` | ONNX runtime contract | green |
 | `ONNX-014` | `_layout_input` plain square resize, RGB `[0, 1]` NCHW float32 without padding or mean/std, `scale_factor=(size/h, size/w)`; `_input_edge` reads the static square edge of the `image` input only; `_variant_from_name` / `_layout_variant` precedence (option > file name > default V3; `LAYOUT_INPUT_SIZES` 800 for V3, 640 for L); `detect_layout` feeds `image`/`im_shape`/`scale_factor` by name, honours `layout_size`, takes the box count from the second output and rejects models without an `image` input | PP-DocLayout pre-processing | green |
 | `ONNX-015` | PP-DocLayoutV3 `read_order` keys order `find_layout` / `get_layout_html` ahead of geometry (ties fall back to y/x, any missing key falls back to `_reading_order`); raw `footnote` renders as `<p class="footnote">`, `vision_footnote` as `table_footnote` | layout HTML contract | green |
+| `ONNX-016` | `skip_layout=True` bypasses the layout detector and feeds the page-space `clip=` straight to SLANet as the sole table region (gold-crop TSR-only scoring, ADR 0002); `clip=None` raises `ValueError` | ONNX end-to-end contract | green |
+
+### Table-structure eval set — `TBLEVAL-*`
+
+Tests live in `python/tests/test_table_eval.py`; they load
+`conformance/gt/table_metrics.py` and `conformance/gt/table_gold.py` by path
+(the eval harness is not part of the shipped package). Everything is built in
+`tmp_path` — no corpus, no model and no network, so the cases run offline.
+Scoring semantics are shared with `conformance/gt/grits.py`: a cell is
+`{"row_nums", "column_nums", "cell_text", "bbox"}` with spans expanded to the
+full index list.
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `TBLEVAL-001` | `cells_to_structure_tree` builds `table → tr → td[span]`: a plain 2x2, a `colspan`/`rowspan` table, a row-spanning cell emitted only at its starting row, an empty table (root only), and within-row ordering by first column | table eval set | green |
+| `TBLEVAL-002` | Zhang-Shasha `tree_edit_distance` against known answers: identical trees 0, one relabel 1, one added leaf 1, bare root vs n nodes = n-1, the textbook example = 2, and symmetry | table eval set | green |
+| `TBLEVAL-003` | `teds_struct`: identical = 1.0, cell text ignored, one merged cell = 1 - 2/N, empty vs empty = 1.0, empty vs full = 1/N; `max_nodes` overflow and `timeout_s=0` return `None`, `timeout_s=None` never times out | table eval set | green |
+| `TBLEVAL-004` | `cell_alignment`: exact match P/R/F1 = 1; half-overlap misses at IoU 0.5 and hits at a lower threshold; greedy one-to-one pairing (a duplicated prediction counts once); `require_text_match` compares whitespace-normalised casefolded text; a side with no bbox at all returns `None` plus `skipped_reason`; individual bbox-less cells only lose matching; empty/empty = 1.0, one-sided empty = 0.0 | table eval set | green |
+| `TBLEVAL-005` | `cells_from_html`: `colspan`, `rowspan` occupancy pushing later rows' column indices right, `<th>` flagged as header, entity and `<br>` handling, no-table input returns empty; `cells_to_html` round-trips structure, text and header, preserving geometry through `data-bbox`; multiple `<table>` elements parse | table eval set | green |
+| `TBLEVAL-006` | `load_gold_table_file`: the `row_nums`/`column_nums` and the `row`/`col`/`rowspan`/`colspan` hand-annotation spellings load equivalently (header, bbox, shape and declared tags); `.gold.html` loads; an unknown extension raises `ValueError` | table eval set | green |
+| `TBLEVAL-007` | `load_manifest` path repair: a stale absolute `annotation`/`pdf` falls back to `<manifest dir>/annotations\|pdfs/<name>`; a missing PDF yields `pdf=None`; a missing annotation is skipped and recorded; `exclude_for_structure` tables are dropped; `json_text_content` wins over `pdf_text_content`, and bbox/licence/page index pass through | table eval set | green |
+| `TBLEVAL-008` | `page_tags`: plain, spanning, multi-header (a second header row or a spanning header cell), wide (>=8 cols) and tall (>=20 rows) at their boundary values, multi-table, and borderless only when `lines_detected=False`; output follows the tag vocabulary order | table eval set | green |
 
 ### M7 — optional content (`pdf_core::ocg` / `pdf_edit::ocg`) — `OCG-READ-*` / `OCG-ADD-*` / `OCG-TOGGLE-*` / `OCG-BIND-*` / `OCG-VIS-*` / `OCG-LAYER-*` / `OCG-DEFAULT-*` / `OCG-OCMD-SET-*`
 

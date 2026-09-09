@@ -610,8 +610,10 @@ oracle-cross-checked against real PyMuPDF 1.24.14 (`.venv-oracle`) with zero reg
     `tatr/v1.1-pub`, `tableformer/accurate`, `tableformer/fast`, or any raw HF repo id / local path);
     pip extras by runtime family (`tatr`, `tableformer`, `tables-all`), never by model.
   - **Sub-tasks (in order):**
-    1. `tables_diff.py --gold` gains a **gold-crop TSR-only mode** (crop with the gold bbox, score the
-       structure stage alone) so numbers are comparable with Microsoft's published ~0.98 GriTS.
+    1. ~~`tables_diff.py --gold` gains a **gold-crop TSR-only mode**~~ — **✅ DONE (2026-09-08)**, as a
+       separate harness: `conformance/gt/eval_tables.py --mode gold-crop` crops with the gold bbox and
+       scores the structure stage alone (ONNX via the new `OnnxOptions.skip_layout`), so numbers are
+       comparable with Microsoft's published ~0.98 GriTS. `--mode e2e` keeps the whole-pipeline view.
     2. **Rerun the vision score** on the recovered 150-page / 186-table FinTabNet.c slice
        (`tables_diff.py --gold ... --strategy vision`), both end-to-end and TSR-only, for `v1.1-all`.
     3. **TableFormer backend** (`docling-ibm-models` `TFPredictor.multi_table_predict`, pdfspine
@@ -630,8 +632,13 @@ oracle-cross-checked against real PyMuPDF 1.24.14 (`.venv-oracle`) with zero reg
     exports, onnxruntime only, no torch; weights downloaded separately via `PDFSPINE_ONNX_MODELS`) — plus `Page.find_layout()` /
     `Page.get_layout_html()` (semantic HTML, text 100 % from the text layer), all in
     `python/pdfspine/_onnx.py`; user docs in [`docs/guide/layout-html.md`](guide/layout-html.md). The models
-    are **not yet validated on an evaluation set**. Follow-up sub-tasks: (a) build the 30–50-page financial
-    evaluation set with hand-written correct HTML and a TEDS / cell-alignment scorer; (b) decide priorities
+    are **not yet validated on an evaluation set**. Follow-up sub-tasks: (a) ~~build the 30–50-page financial
+    evaluation set with hand-written correct HTML and a TEDS / cell-alignment scorer~~ — **✅ scorer + seed set
+    DONE (2026-09-08)**: `conformance/gt/eval_tables.py` scores GriTS_Top/Con + TEDS-Struct + cell-alignment F1
+    over the 150-page FinTabNet.c slice in both modes, with a 40-page recommended subset in
+    `conformance/gt/corpus-finance/seed-subset.json`; hand-annotating the user's own insurance-report pages
+    into `corpus-finance/` (format, tags and a `draft-gold` bootstrap in its README) is the remaining half;
+    (b) decide priorities
     from the numbers (XY-cut reading order, `rows`/`cols` approximation, table detection cropping to the
     numeric block, model fine-tune / swap); (c) fold the backend into the ADR 0002 `TableStructureBackend`
     Protocol once that refactor happens (it is the end-to-end "third backend" revisit trigger named there).
