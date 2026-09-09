@@ -632,7 +632,10 @@ oracle-cross-checked against real PyMuPDF 1.24.14 (`.venv-oracle`) with zero reg
     exports, onnxruntime only, no torch; weights downloaded separately via `PDFSPINE_ONNX_MODELS`) — plus `Page.find_layout()` /
     `Page.get_layout_html()` (semantic HTML, text 100 % from the text layer), all in
     `python/pdfspine/_onnx.py`; user docs in [`docs/guide/layout-html.md`](guide/layout-html.md). The models
-    are **not yet validated on an evaluation set**. Follow-up sub-tasks: (a) ~~build the 30–50-page financial
+    are now **scored on the 150-page / 186-table FinTabNet.c slice (2026-09-08)**: structure-stage
+    GriTS_Top **0.863** / GriTS_Con **0.766** / TEDS-Struct **0.836**, but cell-alignment F1 only **0.371**
+    (grid broadly right, cell boxes not), and end-to-end detection P/R **0.703**/**0.892** — full table in
+    `docs/BENCHMARKS.md` §3 and `conformance/gt/GT-REPORT-tables-eval.md`. Follow-up sub-tasks: (a) ~~build the 30–50-page financial
     evaluation set with hand-written correct HTML and a TEDS / cell-alignment scorer~~ — **✅ scorer + seed set
     DONE (2026-09-08)**: `conformance/gt/eval_tables.py` scores GriTS_Top/Con + TEDS-Struct + cell-alignment F1
     over the 150-page FinTabNet.c slice in both modes, with a 40-page recommended subset in

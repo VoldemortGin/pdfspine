@@ -29,7 +29,13 @@ feature-complete, but the public API and on-disk formats may still change.
   tag vocabulary, and a `draft-gold` bootstrap that pre-fills a draft from
   pdfspine's own output); a 40-page recommended subset of the FinTabNet.c slice
   ships as `seed-subset.json`. Baselines in `docs/BENCHMARKS.md` §3 and
-  `conformance/gt/GT-REPORT-tables-eval.md`.
+  `conformance/gt/GT-REPORT-tables-eval.md`: the ONNX backend reaches GriTS_Con
+  **0.766** / TEDS-Struct **0.836** on the structure stage but only **0.371**
+  cell-alignment F1, while the heuristic `lines`/`text` strategies stay at
+  fitz parity (~0.045) because FinTabNet is borderless. `tables_diff.py` now
+  also rebuilds cells from fitz's row/cell bbox grid — fitz exposes neither
+  `spans` nor `to_html`, so every fitz table previously reached a cell-level
+  scorer as an empty prediction.
 - `markdown_to_pdf()` now writes clickable **link annotations** (`links=True`,
   default): `[text](https://…)`, `<autolinks>` and `<user@host>` become `/Link`
   annotations with a URI action; `[text](#anchor)` becomes a GoTo destination
