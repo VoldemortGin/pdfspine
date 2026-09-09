@@ -159,6 +159,27 @@ get_text('blocks', sort=True)       5/5       5/5
 不建议将 `sort` 默认值改为 `True`——PyMuPDF 默认为 `False`，
 改默认会破坏 drop-in 兼容承诺，而兼容性正是 pdfspine 的核心价值主张。
 
+## 附：刻意偏离 PyMuPDF 的语义（非缺陷）
+
+以下行为 pdfspine 按 ISO 32000-1 实现，与 MuPDF / PyMuPDF 不同，属有意为之，不作为兼容缺陷处理，
+也不会为了 drop-in 一致而回退。判定代码在 `crates/pdf-core/src/ocg.rs`（模块头
+"Deliberate divergences from MuPDF / PyMuPDF" 注释是权威说明）；测试 id 见 `docs/test-case-catalog.md`。
+
+| # | 场景 | PyMuPDF 行为 | pdfspine 行为 | 依据 | 覆盖测试 |
+|---|---|---|---|---|---|
+| 1 | OCMD `/OCGs [A B] /P /AllOn`（或 `/AnyOff`），成员状态不一 | MuPDF 1.28 对 AllOn / AnyOff 的求值有误 | 按规范求值：AllOn 需全部 ON 才可见，AnyOff 任一 OFF 即可见 | ISO 32000-1 §8.11.2.2 | `OCG-VIS-OCMD-POLICIES`、`OCG-INTERP-OCMD-POLICY`、`OCG-WRITE-OCMD` |
+| 2 | OCMD 带 `/VE` 可见性表达式 | 忽略 `/VE`，只按 `/OCGs` + `/P` | 求值 `/VE`（`/And` / `/Or` / `/Not` 可嵌套），且 `/VE` 优先于 `/OCGs` + `/P` | ISO 32000-1 §8.11.2.2 | `OCG-VIS-OCMD-VE`、`OCG-INTERP-OCMD-VE`、`OCG-VIS-USAGE-OCMD` |
+| 3 | OCG 在活动配置中 OFF（或 `/BaseState /OFF`），但 `/Usage /View /ViewState /ON`，且活动配置的 `/AS` 有 `/Event /View`、`/Category` 含 `/View` 的条目列出该 OCG | 隐藏——MuPDF 完全忽略 `/AS`（`pdf-layer.c` 有 FIXME 承认应处理） | 显示——usage application dict 决定状态；面板 override OFF 仍可压过它 | ISO 32000-1 §8.11.4.4 | `OCG-VIS-USAGE-AS-PROMOTE`、`OCG-VIS-USAGE-AS-CONFIG`、`OCG-VIS-USAGE-OVERRIDE` |
+
+说明：
+
+- 第 3 条之外的 `/Usage` 判定与 PyMuPDF 一致：`/ViewState /OFF` 无条件隐藏（面板 override ON 也不例外）；
+  `/Print` / `/Export` 不参与；`/AS` 只读活动配置（`/D` 或选中的 `/Configs[n]`）；`get_ocgs()` /
+  `layer_ui_configs()` / `ocg_state()` 只反映配置 ON/OFF（`OCG-VIS-USAGE-VIEWSTATE-OFF`、
+  `OCG-VIS-USAGE-PRINT-EXPORT`、`OCG-VIS-USAGE-REPORT`；判定表其余各行已用真 PyMuPDF 1.27.2 逐行核对，
+  `oc=` 写入侧由 `PYOCG-046` / `PYOCG-047` 双向 oracle 覆盖）。
+- 尚未覆盖的缺口：`/Intent` 不匹配时的隐藏（MuPDF 仅在配置带非空 `/Intent` 时隐藏）。
+
 ## 验证方式
 
 修复后建议以本语料回归：16 份中文财务年报 PDF，断言
