@@ -152,7 +152,15 @@ same-class NMS since the RT-DETR head applies none of its own; `None`
 disables it), `table_size` (488), `table_min_score` (0.0; drops tables whose
 mean structure-token score is lower), `channel_order` (`"bgr"`, the PaddleOCR
 convention, affects SLANet-plus only; `"rgb"` is available), `crop_padding`
-(10 pixels), `layout_model` / `table_model` (explicit paths), `providers`, and the same `ocr_if_no_text` / `ocr_engine` /
+(10 pixels), `cell_postprocess` (`True`; master switch for the four cell
+clean-up rules that follow, `False` restores the plain overlap → centre →
+nearest-box word assignment), `merge_symbol_columns` (`True`; a column holding
+only `$`-style symbols is folded into its right neighbour, `%`-style into its
+left), `strip_dot_leaders` (`True`; removes `. . . .` / `......` leader tokens
+from cell text), `band_word_assignment` (`False`, opt-in; words are placed by
+row band × column band, whole visual lines per row band so wrapped labels stay
+together), `verify_spans` (`False`, opt-in; splits a predicted `rowspan` /
+`colspan` whose covered bands hold their own words), `layout_model` / `table_model` (explicit paths), `providers`, and the same `ocr_if_no_text` / `ocr_engine` /
 `ocr_language` page-level OCR fallback as TATR (it triggers only when the page
 has no text layer at all).
 
