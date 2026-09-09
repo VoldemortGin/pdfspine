@@ -2,14 +2,14 @@
 //! and per-method defaults, plain text, get_textbox, blocks, words, dict and
 //! rawdict tree, json and rawjson. Self-built glyph lists in PDF user space via
 //! `textpage_from_glyphs` (no PyMuPDF files). Catalog IDs: TEXTFLAGS-*,
-//! SERIAL-TEXT-*, SERIAL-TEXTBOX-*, SERIAL-BLOCKS-*, SERIAL-WORDS-*, DICT-*,
-//! RAWDICT-*, JSON-*.
+//! SERIAL-TEXT-*, SERIAL-TEXTBOX-*, SERIAL-CLIP-*, SERIAL-BLOCKS-*,
+//! SERIAL-WORDS-*, DICT-*, RAWDICT-*, JSON-*.
 
 use pdf_core::geom::{Matrix, Point, Rect};
 use pdf_text::model::{Block, BlockKind, ImageBlock, WritingDir};
 use pdf_text::serialize::{
-    defaults, get_textbox, textflags, to_blocks, to_dict, to_dict_with_images, to_json, to_text,
-    to_words, DictBlock, ImageResolver, ResolvedImage,
+    clip_textpage, defaults, get_textbox, textflags, to_blocks, to_dict, to_dict_with_images,
+    to_json, to_text, to_words, DictBlock, ImageResolver, ResolvedImage,
 };
 use pdf_text::{textpage_from_glyphs, ImageRef, PositionedGlyph, TextPage};
 use smol_str::SmolStr;
@@ -201,6 +201,193 @@ fn serial_textbox_002_clip_outside() {
     let tp = textpage_from_glyphs(&gs, &[], letter(), 0);
     let clip = Rect::new(0.0, 400.0, 50.0, 450.0);
     assert_eq!(get_textbox(&tp, clip), "");
+}
+
+// === clip_textpage (PyMuPDF `get_textpage(clip=)`) =======================
+
+/// The device-space bbox of the `idx`-th char of the first span on the page.
+fn char_bbox(tp: &TextPage, idx: usize) -> Rect {
+    tp.blocks[0].lines[0].spans[0].chars[idx].bbox
+}
+
+#[test]
+fn serial_clip_001_strict_overlap_touch_is_out() {
+    // SERIAL-CLIP-001: a glyph the clip merely touches is out; a glyph the
+    // clip cuts into (however little) is kept whole.
+    let gs = line_glyphs("abc", 100.0, 700.0, 12.0, 7.0);
+    let tp = textpage_from_glyphs(&gs, &[], letter(), 0);
+    let b = char_bbox(&tp, 1);
+
+    let touching = clip_textpage(&tp, Rect::new(0.0, 0.0, b.x0, 150.0));
+    assert_eq!(touching.blocks[0].lines[0].spans[0].text, "a");
+
+    let sliver = clip_textpage(&tp, Rect::new(0.0, 0.0, b.x0 + 0.01, 150.0));
+    assert_eq!(sliver.blocks[0].lines[0].spans[0].text, "ab");
+
+    let deep = clip_textpage(&tp, Rect::new(0.0, 0.0, b.x0 + 0.9 * b.width(), 150.0));
+    assert_eq!(deep.blocks[0].lines[0].spans[0].text, "ab");
+    assert_eq!(deep.blocks[0].lines[0].spans[0].chars.len(), 2);
+    // Kept glyphs are not clamped to the clip.
+    assert!((deep.blocks[0].lines[0].spans[0].bbox.x1 - b.x1).abs() < EPS);
+}
+
+#[test]
+fn serial_clip_002_no_overlap_is_empty() {
+    // SERIAL-CLIP-002: a clip meeting no glyph yields an empty TextPage with
+    // the clip's size; an empty or inverted clip (not normalized, as in
+    // MuPDF) keeps nothing and reports 0 × 0.
+    let gs = line_glyphs("hi", 100.0, 700.0, 12.0, 7.0);
+    let tp = textpage_from_glyphs(&gs, &[], letter(), 0);
+
+    let away = clip_textpage(&tp, Rect::new(0.0, 400.0, 50.0, 450.0));
+    assert!(away.blocks.is_empty());
+    assert!(to_words(&away, defaults::WORDS).is_empty());
+    assert_eq!(to_text(&away, defaults::TEXT), "");
+    assert!((away.width - 50.0).abs() < EPS && (away.height - 50.0).abs() < EPS);
+
+    let empty = clip_textpage(&tp, Rect::new(0.0, 0.0, 0.0, 0.0));
+    assert!(empty.blocks.is_empty());
+    assert!(empty.width.abs() < EPS && empty.height.abs() < EPS);
+
+    let inverted = clip_textpage(&tp, Rect::new(612.0, 150.0, 0.0, 0.0));
+    assert!(inverted.blocks.is_empty());
+    assert!(inverted.width.abs() < EPS && inverted.height.abs() < EPS);
+}
+
+#[test]
+fn serial_clip_003_rebuilds_bbox_and_numbering() {
+    // SERIAL-CLIP-003: a block / line kept by the clip is renumbered from 0
+    // and its bbox is the union of the kept chars.
+    let mut gs = line_glyphs("top", 100.0, 700.0, 12.0, 7.0);
+    gs.extend(line_glyphs("bot", 100.0, 500.0, 12.0, 7.0));
+    let tp = textpage_from_glyphs(&gs, &[], letter(), 0);
+    assert_eq!(tp.blocks.len(), 2);
+    assert_eq!(tp.blocks[1].number, 1);
+    assert_eq!(tp.blocks[1].lines[0].number, 1);
+
+    // Device y: bottom line near y≈292. Clip the lower band.
+    let clipped = clip_textpage(&tp, Rect::new(0.0, 250.0, 612.0, 350.0));
+    assert_eq!(clipped.blocks.len(), 1);
+    let block = &clipped.blocks[0];
+    assert_eq!(block.number, 0);
+    assert_eq!(block.lines.len(), 1);
+    assert_eq!(block.lines[0].number, 0);
+    let span = &block.lines[0].spans[0];
+    assert_eq!(span.text, "bot");
+    let chars = &span.chars;
+    let expect = chars[0].bbox.union(&chars[1].bbox).union(&chars[2].bbox);
+    for (got, want) in [
+        (span.bbox, expect),
+        (block.lines[0].bbox, expect),
+        (block.bbox, expect),
+    ] {
+        assert!((got.x0 - want.x0).abs() < EPS && (got.y0 - want.y0).abs() < EPS);
+        assert!((got.x1 - want.x1).abs() < EPS && (got.y1 - want.y1).abs() < EPS);
+    }
+    let words = to_words(&clipped, defaults::WORDS);
+    assert_eq!(words.len(), 1);
+    assert_eq!((&words[0].4[..], words[0].5, words[0].6), ("bot", 0, 0));
+}
+
+#[test]
+fn serial_clip_004_width_height_are_the_clips() {
+    // SERIAL-CLIP-004: the clipped page reports the clip's size (fitz `dict`
+    // header rule), not the page's.
+    let gs = line_glyphs("hi", 100.0, 700.0, 12.0, 7.0);
+    let tp = textpage_from_glyphs(&gs, &[], letter(), 0);
+    let clipped = clip_textpage(&tp, Rect::new(10.0, 20.0, 110.0, 220.0));
+    assert!((clipped.width - 100.0).abs() < EPS);
+    assert!((clipped.height - 200.0).abs() < EPS);
+    let d = to_dict(&clipped, false, defaults::DICT);
+    assert!((d.width - 100.0).abs() < EPS);
+    assert!((d.height - 200.0).abs() < EPS);
+}
+
+#[test]
+fn serial_clip_005_image_block_kept_cut_or_dropped() {
+    // SERIAL-CLIP-005: an image block inside the clip is kept as is, one the
+    // clip crosses is cut to the overlap, one outside is dropped.
+    let img = ImageRef {
+        name: Some(SmolStr::new("Im0")),
+        inline: false,
+        ctm: Matrix::new(80.0, 0.0, 0.0, 80.0, 40.0, 40.0),
+        width: Some(8),
+        height: Some(9),
+    };
+    let gs = line_glyphs("hi", 100.0, 700.0, 12.0, 7.0);
+    let tp = textpage_from_glyphs(&gs, &[img], letter(), 0);
+    let image = tp
+        .blocks
+        .iter()
+        .find(|b| b.kind == BlockKind::Image)
+        .expect("image block");
+    let ib = image.bbox; // device: x 40..120, y 672..752
+
+    let inside = clip_textpage(&tp, Rect::new(0.0, 600.0, 612.0, 792.0));
+    assert_eq!(inside.blocks.len(), 1);
+    assert_eq!(inside.blocks[0].kind, BlockKind::Image);
+    assert_eq!(inside.blocks[0].bbox, ib);
+    assert_eq!(inside.blocks[0].number, 0);
+
+    let cut = clip_textpage(&tp, Rect::new(0.0, 700.0, 100.0, 792.0));
+    assert_eq!(cut.blocks.len(), 1);
+    let got = cut.blocks[0].bbox;
+    assert!((got.x0 - ib.x0).abs() < EPS && (got.y0 - 700.0).abs() < EPS);
+    assert!((got.x1 - 100.0).abs() < EPS && (got.y1 - ib.y1).abs() < EPS);
+
+    let dropped = clip_textpage(&tp, Rect::new(0.0, 0.0, 612.0, 150.0));
+    assert_eq!(dropped.blocks.len(), 1);
+    assert_eq!(dropped.blocks[0].kind, BlockKind::Text);
+    assert_eq!(dropped.blocks[0].lines[0].spans[0].text, "hi");
+}
+
+#[test]
+fn serial_clip_006_span_geometry_from_first_kept_char() {
+    // SERIAL-CLIP-006: the surviving span's origin / matrix / rendered_size
+    // come from its first kept char, its bbox from the kept chars only.
+    let gs = line_glyphs("abc", 100.0, 700.0, 12.0, 7.0);
+    let tp = textpage_from_glyphs(&gs, &[], letter(), 0);
+    let c = tp.blocks[0].lines[0].spans[0].chars[2].clone();
+
+    let clipped = clip_textpage(&tp, Rect::new(c.bbox.x0, 0.0, 612.0, 150.0));
+    let span = &clipped.blocks[0].lines[0].spans[0];
+    assert_eq!(span.text, "c");
+    assert_eq!(span.chars.len(), 1);
+    assert_eq!(span.origin, c.origin);
+    assert_eq!(span.matrix, c.matrix);
+    assert!((span.rendered_size - c.rendered_size).abs() < EPS);
+    assert_eq!(span.seq, c.seq);
+    assert_eq!(span.bbox, c.bbox);
+    assert_eq!(clipped.blocks[0].bbox, c.bbox);
+    assert_eq!(span.quad, c.quad);
+}
+
+#[test]
+fn serial_clip_007_full_page_clip_is_identity() {
+    // SERIAL-CLIP-007: clipping to the whole page reproduces every serializer
+    // output of the unclipped page.
+    let mut gs = line_glyphs("top line", 100.0, 700.0, 12.0, 7.0);
+    gs.extend(line_glyphs("bot", 100.0, 500.0, 12.0, 7.0));
+    let tp = textpage_from_glyphs(&gs, &[], letter(), 0);
+    let clipped = clip_textpage(&tp, letter());
+    assert!((clipped.width - tp.width).abs() < EPS);
+    assert!((clipped.height - tp.height).abs() < EPS);
+    assert_eq!(
+        to_text(&clipped, defaults::TEXT),
+        to_text(&tp, defaults::TEXT)
+    );
+    assert_eq!(
+        to_words(&clipped, defaults::WORDS),
+        to_words(&tp, defaults::WORDS)
+    );
+    assert_eq!(
+        to_blocks(&clipped, defaults::BLOCKS),
+        to_blocks(&tp, defaults::BLOCKS)
+    );
+    assert_eq!(
+        to_json(&clipped, true, defaults::RAWJSON),
+        to_json(&tp, true, defaults::RAWJSON)
+    );
 }
 
 // === blocks ==============================================================

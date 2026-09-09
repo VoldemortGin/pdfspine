@@ -17,24 +17,27 @@
 use pdf_core::error::{Error, Result};
 use pdf_core::filters::flate;
 use pdf_core::geom::Rect;
-use pdf_core::object::{Dict, Name, Object, StreamObj};
+use pdf_core::object::{Dict, Name, ObjRef, Object, StreamObj};
 use pdf_core::DocumentStore;
 
-use crate::content::{fmt_num, PageContent};
+use crate::content::{check_optional_content, fmt_num, PageContent};
 
 /// Inserts a **JPEG** image (passed through as `/DCTDecode`) into the page at
 /// `page_index`, placed to fill `rect` (PyMuPDF top-left space). Returns the
-/// chosen `/XObject` resource name.
+/// chosen `/XObject` resource name. A non-zero `oc` (an OCG / OCMD xref) is
+/// written as the image XObject's `/OC` entry (PyMuPDF `insert_image(oc=)`).
 ///
 /// # Errors
 ///
 /// [`Error::Unsupported`] if `jpeg` is not a parseable JPEG (no re-encode is
-/// attempted); never panics.
+/// attempted); [`Error::InvalidArgument`] for an `oc` that is not an existing
+/// OCG / OCMD; never panics.
 pub fn insert_image_jpeg(
     doc: &DocumentStore,
     page_index: usize,
     rect: Rect,
     jpeg: &[u8],
+    oc: u32,
 ) -> Result<String> {
     let info = jpeg_info(jpeg).ok_or(Error::Unsupported("insert_image: not a parseable JPEG"))?;
 
@@ -68,16 +71,19 @@ pub fn insert_image_jpeg(
         page_index,
         rect,
         StreamObj::new_encoded(dict, jpeg.to_vec()),
+        oc,
     )
 }
 
 /// Inserts a **raw RGB** image (`width×height` 8-bit RGB triples) into the page,
 /// Flate-compressed as a `/DeviceRGB` XObject, placed to fill `rect`. Returns
-/// the chosen `/XObject` resource name.
+/// the chosen `/XObject` resource name. A non-zero `oc` (an OCG / OCMD xref)
+/// is written as the image XObject's `/OC` entry (PyMuPDF `insert_image(oc=)`).
 ///
 /// # Errors
 ///
-/// [`Error::Unsupported`] if `pixels.len() != width*height*3`.
+/// [`Error::Unsupported`] if `pixels.len() != width*height*3`;
+/// [`Error::InvalidArgument`] for an `oc` that is not an existing OCG / OCMD.
 pub fn insert_image_rgb(
     doc: &DocumentStore,
     page_index: usize,
@@ -85,6 +91,7 @@ pub fn insert_image_rgb(
     width: u32,
     height: u32,
     pixels: &[u8],
+    oc: u32,
 ) -> Result<String> {
     let expected = (width as usize)
         .checked_mul(height as usize)
@@ -120,18 +127,28 @@ pub fn insert_image_rgb(
         page_index,
         rect,
         StreamObj::new_encoded(dict, compressed),
+        oc,
     )
 }
 
 /// Registers `image` under `/Resources /XObject` and appends a
 /// `q cm /Img Do Q` chunk placing it at `rect` (top-left space → user space).
+/// A non-zero `oc` lands on the XObject dict as `/OC` (no marked content — the
+/// interpreter honours XObject `/OC` directly).
 fn place_image(
     doc: &DocumentStore,
     page_index: usize,
     rect: Rect,
-    image: StreamObj,
+    mut image: StreamObj,
+    oc: u32,
 ) -> Result<String> {
     let pc = PageContent::new(doc, page_index)?;
+    if oc != 0 {
+        check_optional_content(doc, oc)?;
+        image
+            .dict
+            .insert(Name::new("OC"), Object::Reference(ObjRef::new(oc, 0)));
+    }
     let img_ref = doc.add_object(Object::Stream(image))?;
     let name = pc.add_resource("XObject", "Img", Object::Reference(img_ref))?;
 

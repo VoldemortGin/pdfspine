@@ -28,6 +28,10 @@
 
 ---
 
+## Spine 家族 / Spine family
+
+本仓库是 Spine 家族的成员之一（角色：L1 引擎（含 pdf-typeset / pdf-fonts 被 git dep））。家族全部成员、分层、依赖方向、依赖形式与当前差距见 [`docs/spine-family.md`](docs/spine-family.md)；该文件在每个家族仓库中的副本内容相同，真源在家族根目录 `~/startup/spine/docs/spine-family.md`，用根目录 `make family-doc-sync` 同步。
+
 ## Why pdfspine?
 
 PyMuPDF is excellent, but it is **AGPL-3.0** (or a commercial license from
@@ -254,6 +258,12 @@ one façade crate, and core logic is split into independently testable units.
 python scripts/quality_gate.py --help
 python conformance/run_validation.py …       # real-corpus accuracy harness
 ```
+
+The gate runs `rust → extension → python → drift → artifacts`. The `extension`
+phase fingerprints the Rust inputs (`crates/**`, `Cargo.toml`, `Cargo.lock`,
+`pyproject.toml`, `rust-toolchain*`) against `.gate/extension.stamp` and re-runs
+`maturin develop --release` when they differ, so pytest never runs against a stale
+`_core`. Skip it with `--skip-extension-check` or `PDFSPINE_GATE_SKIP_EXTENSION=1`.
 
 pdfspine is built strictly **test-first** (red → green → refactor → harden); the
 per-function test plan is in [`docs/test-case-catalog.md`](https://github.com/VoldemortGin/pdfspine/blob/main/docs/test-case-catalog.md).

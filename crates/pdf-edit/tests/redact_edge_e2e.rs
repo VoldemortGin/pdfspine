@@ -12,7 +12,7 @@ mod common;
 
 use common::{
     ascii_font, assemble_classic, decompress_corpus, dict, first_image_pixels, name_obj, open,
-    rref, save_bytes, simple_text_page,
+    page_content_bytes, page_glyphs, rref, save_bytes, simple_text_page,
 };
 
 use pdf_core::error::Error;
@@ -215,6 +215,164 @@ fn redact_text_009_contents_array_two_streams() {
         "1st stream text survives: {text:?}"
     );
     assert!(!text.contains("SECRETARR"));
+}
+
+/// The user-space origin of the first glyph of `word` on page 0 (`None` when
+/// absent). Glyphs come in content order and the test font maps one ASCII
+/// char per glyph, so the char index into the concatenated unicode is the
+/// glyph index.
+fn word_origin(doc: &pdf_core::DocumentStore, word: &str) -> Option<(f64, f64)> {
+    let glyphs = page_glyphs(doc, 0);
+    let text: String = glyphs.iter().map(|g| g.unicode.as_str()).collect();
+    let g = &glyphs[text.find(word)?];
+    Some((g.origin.x, g.origin.y))
+}
+
+/// Asserts `word` is shown on page 0 with its first glyph at `(x, y)`.
+fn assert_origin(doc: &pdf_core::DocumentStore, word: &str, x: f64, y: f64) {
+    let got = word_origin(doc, word).unwrap_or_else(|| panic!("{word} absent"));
+    assert!(
+        (got.0 - x).abs() < 0.01 && (got.1 - y).abs() < 0.01,
+        "{word} expected at ({x}, {y}), got {got:?}"
+    );
+}
+
+/// Asserts `word` survives the redaction at exactly its original origin.
+fn assert_unshifted(before: &pdf_core::DocumentStore, after: &pdf_core::DocumentStore, word: &str) {
+    let b = word_origin(before, word).unwrap_or_else(|| panic!("{word} absent before redaction"));
+    assert_origin(after, word, b.0, b.1);
+}
+
+/// How many times `needle` occurs in `haystack` (non-overlapping byte search).
+fn count(haystack: &[u8], needle: &[u8]) -> usize {
+    haystack
+        .windows(needle.len())
+        .filter(|w| *w == needle)
+        .count()
+}
+
+#[test]
+fn redact_text_010_quote_operator_keeps_line_advance() {
+    // Three lines: `Tj`, then two `'` (T* + show). The secret sits on the
+    // middle `'` line next to a kept run. The rewriter used to emit the `'`
+    // show as a bare `TJ` and lose the implicit line advance, so survivors
+    // (and every later line) fell onto the previous baseline.
+    let body = b"BT /F1 12 Tf 14 TL 1 0 0 1 72 700 Tm (LINEONE) Tj \
+                 (KEEPB SECRETL) ' (LINETHR) ' ET"
+        .to_vec();
+    let before = open(&simple_text_page(body.clone()));
+    assert_origin(&before, "LINETHR", 72.0, 672.0);
+
+    let doc = open(&simple_text_page(body));
+    // Line 2 baseline y=686; "SECRETL" spans x 115.2..165.6 → top-left rect.
+    add_redact_annot(&doc, 0, Rect::new(114.0, 96.0, 167.0, 108.0), None, None).unwrap();
+    assert_eq!(apply_redactions(&doc, 0).unwrap(), 1);
+
+    let out = save_bytes(&doc);
+    assert!(!contains(&decompress_corpus(&out), b"SECRETL"));
+    let after = open(&out);
+    for word in ["LINEONE", "KEEPB", "LINETHR"] {
+        assert_unshifted(&before, &after, word);
+    }
+    let content = page_content_bytes(&after, 0);
+    assert_eq!(
+        count(&content, b"T*"),
+        2,
+        "each `'` must become an explicit T*: {}",
+        String::from_utf8_lossy(&content)
+    );
+}
+
+#[test]
+fn redact_text_011_dquote_operator_keeps_spacing() {
+    // `aw ac (s) "` sets Tw/Tc for the rest of the text object: the following
+    // `'` line inherits them, so dropping the operands (the old bare-`TJ`
+    // rewrite) would re-space "LINE THR" as well as misplace the line.
+    let body = b"BT /F1 12 Tf 14 TL 1 0 0 1 72 700 Tm (LINEONE) Tj \
+                 3 1 (KEEPB SECRETL) \" (LINE THR) ' ET"
+        .to_vec();
+    let before = open(&simple_text_page(body.clone()));
+    // Tc=1, Tw=3: "LINE " = 4·8.2 + 11.2 → "THR" starts at x=116 (108 without).
+    assert_origin(&before, "THR", 116.0, 672.0);
+
+    let doc = open(&simple_text_page(body));
+    // Line 2 baseline y=686; "SECRETL" spans x 124.2..181.6 → top-left rect.
+    add_redact_annot(&doc, 0, Rect::new(123.0, 96.0, 183.0, 108.0), None, None).unwrap();
+    assert_eq!(apply_redactions(&doc, 0).unwrap(), 1);
+
+    let out = save_bytes(&doc);
+    assert!(!contains(&decompress_corpus(&out), b"SECRETL"));
+    let after = open(&out);
+    for word in ["LINEONE", "KEEPB", "LINE", "THR"] {
+        assert_unshifted(&before, &after, word);
+    }
+    let content = page_content_bytes(&after, 0);
+    let shown = String::from_utf8_lossy(&content);
+    assert!(contains(&content, b"3 Tw"), "aw re-emitted as Tw: {shown}");
+    assert!(contains(&content, b"1 Tc"), "ac re-emitted as Tc: {shown}");
+    assert_eq!(
+        count(&content, b"T*"),
+        2,
+        "`\"` and `'` each become a T*: {shown}"
+    );
+}
+
+#[test]
+fn redact_text_012_mixed_show_operators_dropped_line() {
+    // `Tj` / `'` / `"` mixed, with untouched runs on both sides of a `'` line
+    // that is dropped *entirely* (nothing survives to emit a TJ): the explicit
+    // T* alone must still carry the advance so lines four and five keep their
+    // baselines, and the untouched `'` / `"` runs are preserved as-is.
+    let body = b"BT /F1 12 Tf 14 TL 1 0 0 1 72 700 Tm (LINEONE) Tj \
+                 (LINETWO) ' (SECRETL) ' 2 1 (LINEFOR) \" (LINEFIV) ' ET"
+        .to_vec();
+    let before = open(&simple_text_page(body.clone()));
+    assert_origin(&before, "LINEFIV", 72.0, 644.0);
+
+    let doc = open(&simple_text_page(body));
+    // Line 3 baseline y=672 → top-left y 110..122; cover the whole line.
+    add_redact_annot(&doc, 0, Rect::new(70.0, 110.0, 200.0, 122.0), None, None).unwrap();
+    assert_eq!(apply_redactions(&doc, 0).unwrap(), 1);
+
+    let out = save_bytes(&doc);
+    assert!(!contains(&decompress_corpus(&out), b"SECRETL"));
+    let after = open(&out);
+    assert_eq!(page_text(&after), "LINEONELINETWOLINEFORLINEFIV");
+    for word in ["LINEONE", "LINETWO", "LINEFOR", "LINEFIV"] {
+        assert_unshifted(&before, &after, word);
+    }
+    let content = page_content_bytes(&after, 0);
+    let shown = String::from_utf8_lossy(&content);
+    assert_eq!(
+        count(&content, b"T*"),
+        4,
+        "three `'` and one `\"` → four explicit T*: {shown}"
+    );
+    assert!(contains(&content, b"2 Tw"), "{shown}");
+    assert!(contains(&content, b"1 Tc"), "{shown}");
+}
+
+#[test]
+fn redact_text_013_quote_operators_unmapped_font_keep_advance() {
+    // `'` / `"` shown with a font missing from resources take the verbatim
+    // `Tj` path: the line advance and spacing operands must be expanded there
+    // too, so the unmappable text is preserved *and* stays on its lines.
+    let body = b"BT /FZ 12 Tf 14 TL 1 0 0 1 72 700 Tm (NOMAPONE) Tj \
+                 (NOMAPTWO) ' 4 2 (NOMAPTHR) \" ET"
+        .to_vec();
+    let doc = open(&simple_text_page(body));
+    add_redact_annot(&doc, 0, Rect::new(10.0, 10.0, 20.0, 20.0), None, None).unwrap();
+    assert_eq!(apply_redactions(&doc, 0).unwrap(), 1);
+
+    let after = open(&save_bytes(&doc));
+    let content = page_content_bytes(&after, 0);
+    let shown = String::from_utf8_lossy(&content);
+    assert!(contains(&content, b"T*\n(NOMAPTWO) Tj"), "{shown}");
+    assert!(
+        contains(&content, b"4 Tw\n2 Tc\nT*\n(NOMAPTHR) Tj"),
+        "{shown}"
+    );
+    assert!(contains(&content, b"(NOMAPONE) Tj"), "{shown}");
 }
 
 // === REDACT-FORM (Form XObject recursion) =================================

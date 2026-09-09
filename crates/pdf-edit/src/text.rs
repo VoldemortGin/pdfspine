@@ -26,7 +26,7 @@ use pdf_fonts::std_widths;
 use pdf_fonts::widths::normalize_standard_font;
 
 use crate::color::Color;
-use crate::content::{escape_pdf_literal, fmt_num, PageContent};
+use crate::content::{escape_pdf_literal, fmt_num, oc_bdc, oc_emc, PageContent};
 use crate::fontfile::EmbeddedFont;
 
 /// Default line-leading factor (line height = `fontsize * LEADING`), matching
@@ -62,6 +62,9 @@ pub struct TextOptions<'a> {
     pub fontfile: Option<&'a [u8]>,
     /// Box alignment (textbox only).
     pub align: Align,
+    /// Optional-content xref (an OCG or OCMD) the text is wrapped in as a
+    /// `/OC /MCn BDC … EMC` marked-content section; `0` (default) for none.
+    pub oc: u32,
 }
 
 impl<'a> Default for TextOptions<'a> {
@@ -72,6 +75,7 @@ impl<'a> Default for TextOptions<'a> {
             color: Color::BLACK,
             fontfile: None,
             align: Align::Left,
+            oc: 0,
         }
     }
 }
@@ -158,6 +162,7 @@ pub fn insert_text(
     opts: &TextOptions,
 ) -> Result<usize> {
     let pc = PageContent::new(doc, page_index)?;
+    let oc_name = optional_content(&pc, opts.oc)?;
     let origin = pc.to_user_space(point);
     let lines: Vec<&str> = text.split('\n').collect();
     let leading = opts.fontsize * LEADING;
@@ -178,7 +183,7 @@ pub fn insert_text(
         }
         let font_ref = font.write_type0(doc, &used)?;
         let name = pc.add_resource("Font", "F", Object::Reference(font_ref))?;
-        let chunk = build_text_chunk(&name, opts, leading, origin, &shows);
+        let chunk = build_text_chunk(&name, opts, leading, origin, &shows, oc_name.as_deref());
         pc.append_content(&chunk)?;
     } else {
         let std_name = resolve_base14(opts.fontname);
@@ -193,25 +198,40 @@ pub fn insert_text(
             })
             .collect();
         let name = pc.add_resource("Font", "F", base14_font_object(std_name))?;
-        let chunk = build_text_chunk(&name, opts, leading, origin, &shows);
+        let chunk = build_text_chunk(&name, opts, leading, origin, &shows, oc_name.as_deref());
         pc.append_content(&chunk)?;
     }
     Ok(lines.len())
 }
 
+/// Registers `oc` (an OCG / OCMD xref) under the page's `/Resources
+/// /Properties` and returns the `/MCn` property name, or `None` for `oc == 0`.
+fn optional_content(pc: &PageContent, oc: u32) -> Result<Option<String>> {
+    if oc == 0 {
+        Ok(None)
+    } else {
+        pc.add_optional_content(oc).map(Some)
+    }
+}
+
 /// Builds a complete `q BT … ET Q` content chunk: select the font (`Tf`), set
 /// the fill color and leading, position at `origin` (`Tm`), then show each
 /// pre-rendered line operand (`Tj`) with `T*` line advances. `show` operands are
-/// already `( … )` or `< … >` strings.
+/// already `( … )` or `< … >` strings. With an optional-content property `oc`
+/// the text object is bracketed by `/OC /MCn BDC` … `EMC` just inside the
+/// `q` / `Q` (PyMuPDF `insert_text(oc=)`).
 fn build_text_chunk(
     font_name: &str,
     opts: &TextOptions,
     leading: f64,
     origin: Point,
     shows: &[Vec<u8>],
+    oc: Option<&str>,
 ) -> Vec<u8> {
     let mut out = Vec::new();
-    out.extend_from_slice(b"q\nBT\n");
+    out.extend_from_slice(b"q\n");
+    out.extend_from_slice(oc_bdc(oc).as_bytes());
+    out.extend_from_slice(b"BT\n");
     out.extend_from_slice(format!("/{} {} Tf\n", font_name, fmt_num(opts.fontsize)).as_bytes());
     out.extend_from_slice(format!("{}\n", opts.color.fill_op()).as_bytes());
     out.extend_from_slice(format!("{} TL\n", fmt_num(leading)).as_bytes());
@@ -225,7 +245,9 @@ fn build_text_chunk(
         out.extend_from_slice(operand);
         out.extend_from_slice(b" Tj\n");
     }
-    out.extend_from_slice(b"ET\nQ\n");
+    out.extend_from_slice(b"ET\n");
+    out.extend_from_slice(oc_emc(oc).as_bytes());
+    out.extend_from_slice(b"Q\n");
     out
 }
 
@@ -244,6 +266,7 @@ pub fn insert_textbox(
     opts: &TextOptions,
 ) -> Result<f64> {
     let pc = PageContent::new(doc, page_index)?;
+    let oc_name = optional_content(&pc, opts.oc)?;
     let user_rect = pc.rect_to_user_space(rect);
     let std_name = resolve_base14(opts.fontname);
 
@@ -308,9 +331,13 @@ pub fn insert_textbox(
     }
 
     let mut chunk = Vec::new();
-    chunk.extend_from_slice(b"q\nBT\n");
+    chunk.extend_from_slice(b"q\n");
+    chunk.extend_from_slice(oc_bdc(oc_name.as_deref()).as_bytes());
+    chunk.extend_from_slice(b"BT\n");
     chunk.extend_from_slice(&inner);
-    chunk.extend_from_slice(b"ET\nQ\n");
+    chunk.extend_from_slice(b"ET\n");
+    chunk.extend_from_slice(oc_emc(oc_name.as_deref()).as_bytes());
+    chunk.extend_from_slice(b"Q\n");
     pc.append_content(&chunk)?;
 
     // Unused height (positive) when it fits; negative overflow otherwise.

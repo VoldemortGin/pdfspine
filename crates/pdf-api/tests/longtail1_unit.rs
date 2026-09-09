@@ -326,7 +326,8 @@ fn lt1_009_show_pdf_page_places_form() {
     let dst = Document::open_bytes(multi_page_doc(&["DST"])).unwrap();
     let src = Document::open_bytes(multi_page_doc(&["SRC"])).unwrap();
     let dst_page = dst.load_page(0).unwrap();
-    let name = page_show_pdf_page(&dst_page, Rect::new(10.0, 10.0, 110.0, 110.0), &src, 0).unwrap();
+    let name =
+        page_show_pdf_page(&dst_page, Rect::new(10.0, 10.0, 110.0, 110.0), &src, 0, 0).unwrap();
     assert!(name.starts_with("Fm"));
     // The destination page now references the form.
     let xobjs = get_xobjects(&dst_page);
@@ -343,7 +344,7 @@ fn lt1_010_show_pdf_page_roundtrips() {
     let dst = Document::open_bytes(multi_page_doc(&["DST"])).unwrap();
     let src = Document::open_bytes(multi_page_doc(&["SRC"])).unwrap();
     let dst_page = dst.load_page(0).unwrap();
-    page_show_pdf_page(&dst_page, Rect::new(10.0, 10.0, 110.0, 110.0), &src, 0).unwrap();
+    page_show_pdf_page(&dst_page, Rect::new(10.0, 10.0, 110.0, 110.0), &src, 0, 0).unwrap();
     let bytes = dst
         .save_to_bytes(&pdf_core::SaveOptions::default().with_garbage(1))
         .unwrap();
@@ -358,5 +359,5 @@ fn lt1_011_show_pdf_page_out_of_range() {
     let dst = Document::open_bytes(multi_page_doc(&["DST"])).unwrap();
     let src = Document::open_bytes(multi_page_doc(&["SRC"])).unwrap();
     let dst_page = dst.load_page(0).unwrap();
-    assert!(page_show_pdf_page(&dst_page, Rect::new(0.0, 0.0, 50.0, 50.0), &src, 9).is_err());
+    assert!(page_show_pdf_page(&dst_page, Rect::new(0.0, 0.0, 50.0, 50.0), &src, 9, 0).is_err());
 }

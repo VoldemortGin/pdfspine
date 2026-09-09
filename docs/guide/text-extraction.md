@@ -35,7 +35,10 @@ xml = page.get_text("xml")
 
 ### Options
 
-- `clip` — a `Rect` (or 4-sequence) limiting extraction to a sub-region.
+- `clip` — a `Rect` (or 4-sequence) limiting extraction to a sub-region. As in
+  PyMuPDF the clip is applied per character (a glyph whose bbox overlaps the
+  rectangle is kept whole), `html` / `xhtml` / `xml` ignore it, and a supplied
+  `textpage` wins over it.
 - `sort` — when `True`, orders blocks top-to-bottom, left-to-right by `(y, x)`.
 - `flags` — PyMuPDF text-extraction flag bits.
 - `textpage` — reuse a previously built [`TextPage`](#textpage) to avoid

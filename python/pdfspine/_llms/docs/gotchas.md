@@ -46,6 +46,7 @@
 - **渲染/文本是 near-parity 而非逐字节相同**：渲染 SSIM 0.984 均值 / 0.989 中位（2026-06-21 实测）；文本在 born-digital 上 parity，Arabic/RTL 更好。像素级/字节级完全一致不要假设。
 - **redaction 是破坏性的**：`apply_redactions()` 真正删除被覆盖内容，不可逆。
 - **camelCase 别名存在但建议用 snake_case**：`getToC`/`insertPDF`/`getPixmap`/`newPage` 等保留以兼容旧代码，新代码用 `get_toc`/`insert_pdf`/`get_pixmap`/`new_page`。
+- **OCG 可见性按 ISO 32000-1 求值，有三处刻意偏离 MuPDF/PyMuPDF**（影响渲染 / `get_text` / `get_drawings`，不影响 `get_ocgs()` 等报告值）：(1) OCMD `/P /AllOn` 与 `/AnyOff` 按 §8.11.2.2 求值（MuPDF 1.28 算错）；(2) OCMD `/VE` 表达式被求值且优先于 `/OCGs` + `/P`（MuPDF 忽略 `/VE`）；(3) 配置里 OFF、但 `/Usage /View /ViewState /ON` 且被活动配置 `/AS`（`/Event /View`）条目列出的 OCG，pdfspine **显示**，MuPDF/PyMuPDF 忽略 `/AS` 而**隐藏**（§8.11.4.4）。其余判定行（含 `/ViewState /OFF` 无条件隐藏、`/Print`/`/Export` 忽略）已与 PyMuPDF 1.27.2 实测一致；`/Intent` 不匹配时的隐藏尚未实现。清单见 `docs/pymupdf-compat-findings.md` 附录。
 
 ## 7. open() 的行为细节
 

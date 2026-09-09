@@ -202,7 +202,16 @@ fn draw_width_001() {
     let doc = open(&blank_page(612, 792));
     let mut s = Shape::new(&doc, 0).unwrap();
     s.draw_line(Point::new(0.0, 0.0), Point::new(50.0, 50.0));
-    s.finish(Some(Color::BLACK), None, 3.5, Some("[3 2] 0"), false, false);
+    s.finish(
+        Some(Color::BLACK),
+        None,
+        3.5,
+        Some("[3 2] 0"),
+        false,
+        false,
+        0,
+    )
+    .unwrap();
     s.commit().unwrap();
     let c = content_after(&doc);
     assert!(c.contains("3.5 w"), "no width op: {c}");
@@ -220,7 +229,8 @@ fn shape_001_accumulate_commit() {
     s.draw_line(Point::new(0.0, 0.0), Point::new(10.0, 10.0));
     s.draw_rect(Rect::new(20.0, 20.0, 40.0, 40.0));
     s.draw_circle(Point::new(80.0, 80.0), 15.0);
-    s.finish(Some(Color::BLACK), None, 1.0, None, false, false);
+    s.finish(Some(Color::BLACK), None, 1.0, None, false, false, 0)
+        .unwrap();
     s.commit().unwrap();
 
     let c = content_after(&doc);
@@ -245,7 +255,9 @@ fn shape_002_multi_finish() {
         None,
         false,
         false,
-    );
+        0,
+    )
+    .unwrap();
     s.draw_circle(Point::new(100.0, 100.0), 20.0);
     s.finish(
         Some(Color::new(0.0, 0.0, 1.0)),
@@ -254,7 +266,9 @@ fn shape_002_multi_finish() {
         None,
         false,
         false,
-    );
+        0,
+    )
+    .unwrap();
     s.commit().unwrap();
 
     let c = content_after(&doc);

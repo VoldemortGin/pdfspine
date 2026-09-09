@@ -44,6 +44,10 @@ from .document import (
     markdown_to_pdf as markdown_to_pdf,
     open as open,
 )
+from ._onnx import (
+    LayoutBlock as LayoutBlock,
+    OnnxOptions as OnnxOptions,
+)
 from .geometry import (
     IRect as IRect,
     Matrix as Matrix,
@@ -101,6 +105,8 @@ __all__ = [
     "Shape",
     "Table",
     "TableFinder",
+    "LayoutBlock",
+    "OnnxOptions",
     "Link",
     "linkDest",
     "Outline",

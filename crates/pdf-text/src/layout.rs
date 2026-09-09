@@ -1731,14 +1731,14 @@ fn build_line(glyphs: &[&DevGlyph], seq: usize, inhibit_spaces: bool) -> Line {
 /// In device space (y down) with an upright `dir = (1, 0)` the minimum cross is
 /// the top edge, so collapsing reproduces `Quad::from_rect(&bbox)` exactly.
 #[derive(Clone, Copy, Debug)]
-struct DirEnvelope {
+pub(crate) struct DirEnvelope {
     dir: (f64, f64),
     along: (f64, f64),
     cross: (f64, f64),
 }
 
 impl DirEnvelope {
-    fn new(dir: (f64, f64)) -> Self {
+    pub(crate) fn new(dir: (f64, f64)) -> Self {
         DirEnvelope {
             dir,
             along: (f64::INFINITY, f64::NEG_INFINITY),
@@ -1746,7 +1746,7 @@ impl DirEnvelope {
         }
     }
 
-    fn add(&mut self, q: &Quad) {
+    pub(crate) fn add(&mut self, q: &Quad) {
         let (dx, dy) = self.dir;
         for p in [q.ul, q.ur, q.ll, q.lr] {
             let a = dx * p.x + dy * p.y;
@@ -1759,7 +1759,7 @@ impl DirEnvelope {
     /// Maps the accumulated `(along, cross)` extremes back into device space.
     /// Corner roles follow [`Quad`]: `ul` is (min along, min cross), i.e. the
     /// reading-start / top corner in the span's own frame.
-    fn collapse(self) -> Quad {
+    pub(crate) fn collapse(self) -> Quad {
         if !self.along.0.is_finite() || !self.cross.0.is_finite() {
             return Quad::default();
         }

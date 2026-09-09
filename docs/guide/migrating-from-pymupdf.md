@@ -121,7 +121,7 @@ also sequences, so `r[0]`, `tuple(r)`, and unpacking all behave like PyMuPDF.
 | Redaction | `add_redact_annot`, `apply_redactions` | same | ✅ Implemented |
 | Sanitize | `scrub`, `bake` | same | ✅ Implemented (subset of toggles) |
 | Embedded files | `embfile_*` | same | ✅ Implemented |
-| OCG / layers | `get_ocgs`, `add_ocg`, `get_layer`, `set_layer`, `set_oc`, `get_layers`, `add_layer`, `switch_layer`, `set_layer_ui_config`, `get_oc`, `get_ocmd`, `set_ocmd` | same | ✅ Implemented (read + add/toggle/bind + layer-object ops; render & text honour the active layer view) |
+| OCG / layers | `get_ocgs`, `add_ocg`, `get_layer`, `set_layer`, `set_oc`, `get_layers`, `add_layer`, `switch_layer`, `set_layer_ui_config`, `get_oc`, `get_ocmd`, `set_ocmd`; `oc=` on `insert_text` / `insert_textbox` / `insert_image` / `show_pdf_page` / `draw_*` / `Shape.finish` / `TextWriter.write_text` | same | ✅ Implemented (read + add/toggle/bind + layer-object ops; `oc=` on every content writer with PyMuPDF's BDC/EMC + `/Properties` layout; render & text honour the active layer view plus `/Usage /ViewState` and config `/AS` — see "What differs") |
 | OCR | `get_textpage_ocr`, `pdfocr_save` / `pdfocr_tobytes` | + `engine="paddle"` (default, pure-Rust PaddleOCR) or `"tesseract"` | ✅ Implemented |
 | xref read | `xref_object`, `xref_stream`, `xref_get_key`, … | same | ✅ Implemented |
 
@@ -136,6 +136,15 @@ also sequences, so `r[0]`, `tuple(r)`, and unpacking all behave like PyMuPDF.
   `setMetadata` style names are provided as aliases where they existed, so legacy
   code keeps working.
 - **`to_html()` on tables** — an pdfspine extra beyond PyMuPDF.
+- **Optional-content visibility follows ISO 32000-1 where MuPDF does not** —
+  OCMD `/P /AllOn` / `/AnyOff` are evaluated correctly, `/VE` expressions are
+  evaluated (and win over `/OCGs` + `/P`), and an OCG that the configuration
+  turns OFF but whose `/Usage /View /ViewState` is `/ON` and which a `/Event
+  /View` entry in the configuration's `/AS` lists is *shown* (PyMuPDF ignores
+  `/AS` and hides it). Everything else in the visibility table, `/ViewState
+  /OFF` hiding included, matches PyMuPDF; `get_ocgs()` / `layer_ui_configs()` /
+  `ocg_state()` report the configuration state only, as PyMuPDF does. Details
+  and test ids: `docs/pymupdf-compat-findings.md`.
 
 ## What is not yet implemented
 

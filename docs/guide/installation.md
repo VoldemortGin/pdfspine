@@ -62,6 +62,51 @@ usable runtime raises `PdfUnsupportedError`.
     CPU-only installation instructions first if download or environment size is
     important; then install `pdfspine[tatr]`.
 
+### Optional ONNX layout/table backend
+
+A torch-free vision backend (PP-DocLayout layout detection + SLANet-plus
+table structure, both Apache-2.0 PaddlePaddle models running as RapidAI ONNX
+exports on onnxruntime) is also opt-in:
+
+```bash
+pip install "pdfspine[onnx]"
+```
+
+It adds `onnxruntime`, `numpy`, and `Pillow`. The model files are not in the
+wheel: download the layout detector and `slanet-plus.onnx` into a directory
+and point `PDFSPINE_ONNX_MODELS` at it (or pass `layout_model` /
+`table_model` paths in `vision_options`). Two layout variants are supported,
+selected with `vision_options={"layout_variant": ...}`:
+
+- `pp_doc_layoutv3.onnx` — PP-DocLayoutV3, the default
+  (`layout_variant="pp_doclayoutv3"`): it also predicts the reading order,
+  has a dedicated `vision_footnote` class and, on the baseline pages, detects
+  every table;
+- `pp_doclayout_l.onnx` — PP-DocLayout-L (`layout_variant="pp_doclayout_l"`),
+  an optional, faster variant (640 x 640 input) that misses or duplicates
+  some tables on the baseline pages.
+
+See [Tables](../reference/tables.md#vision-onnx-pp-doclayout-slanet-plus) for
+the download commands and the [Layout HTML guide](layout-html.md) for usage
+and the variant comparison.
+
+**Model attribution.** PP-DocLayout (PP-DocLayout-L and PP-DocLayoutV3) —
+Copyright (c) PaddlePaddle Authors, Apache-2.0,
+<https://github.com/PaddlePaddle/PaddleX>; ONNX conversion by RapidAI
+(<https://www.modelscope.cn/models/RapidAI/RapidLayout>,
+<https://www.modelscope.cn/models/RapidAI/RapidDoc>), Apache-2.0. SLANet-plus —
+Copyright (c) PaddlePaddle Authors, Apache-2.0,
+<https://github.com/PaddlePaddle/PaddleOCR>; ONNX conversion by RapidAI
+(<https://www.modelscope.cn/models/RapidAI/RapidTable>), Apache-2.0. These
+weights are downloaded by the user and are not part of the wheel, so they are
+not listed in the repository `NOTICE` file.
+
+For CUDA, install `onnxruntime-gpu` instead of `onnxruntime`; the default
+`providers="auto"` then picks `CUDAExecutionProvider` automatically. `auto`
+never selects `CoreMLExecutionProvider`: it crashed the process ("Error in
+building plan") with onnxruntime 1.29 on macOS, so Apple-silicon machines run
+on CPU.
+
 ## Build from source
 
 Clone the repository and build the extension in place:

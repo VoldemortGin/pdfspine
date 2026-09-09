@@ -116,7 +116,10 @@ def test_docpy_030_annot_setters_getters_aliases() -> None:
         assert isinstance(annot.vertices, list)
         assert isinstance(annot.has_ap(), bool)
         assert isinstance(annot.apn_bbox(), pdfspine.Rect)
-        assert annot.get_text().startswith("Hello")
+        # The icon rect (20, 20)-(38, 40) lies above the text, so the default
+        # clip sees nothing (as in PyMuPDF); a page-wide clip sees the text.
+        assert annot.get_text() == ""
+        assert annot.get_text(clip=page.rect).startswith("Hello")
         assert isinstance(annot.get_textpage(), pdfspine.TextPage)
         assert repr(annot).startswith("<pdfspine.Annot ")
 
@@ -439,6 +442,47 @@ def test_docpy_037_remove_rotation_rewrites_links(rot: int) -> None:
         links = page.get_links()
         assert len(links) == 1
         assert links[0]["uri"] == "https://a.b"
+
+
+# PyMuPDF 1.28.2 widget /Rect after remove_rotation (400×600 page, widget at
+# user-space [20 540 120 570]); 270° is omitted because PyMuPDF itself writes an
+# off-page rect ([-170 -180 -140 -80]) there.
+_WIDGET_RECT_ORACLE = {
+    0: (20.0, 540.0, 120.0, 570.0),
+    90: (540.0, 280.0, 570.0, 380.0),
+    180: (280.0, 30.0, 380.0, 60.0),
+}
+
+
+@pytest.mark.parametrize("rot", [0, 90, 180, 270])
+def test_docpy_037_remove_rotation_rewrites_widget_rects(rot: int) -> None:
+    """Widgets and plain annots move with the content (user-space `/Rect * mat`)."""
+    with pdfspine.open() as doc:
+        page = doc.new_page(width=400, height=600)
+        page.set_rotation(rot)
+        for name, rect in (("t1", (20, 30, 120, 60)), ("cb", (200, 300, 220, 320))):
+            w = pdfspine.Widget()
+            w.field_name = name
+            w.field_type = pdfspine.PDF_WIDGET_TYPE_TEXT
+            w.rect = pdfspine.Rect(*rect)
+            page.add_widget(w)
+        page.add_rect_annot(pdfspine.Rect(10, 10, 60, 40))
+        page = doc[0]
+        before = {a.xref: a.rect for a in page.annots()}
+        inv = page.remove_rotation()
+        mat = ~inv
+        assert page.rotation == 0
+        widgets = page.widgets()
+        assert [w.field_name for w in widgets] == ["t1", "cb"]
+        for a in list(page.annots()) + widgets:
+            r = a.rect
+            assert tuple(r) == pytest.approx(tuple(before[a.xref] * mat), abs=1e-6)
+            pr = page.rect  # 不再飞出页面
+            assert pr.x0 <= r.x0 <= r.x1 <= pr.x1 and pr.y0 <= r.y0 <= r.y1 <= pr.y1
+        if rot in _WIDGET_RECT_ORACLE:
+            assert tuple(widgets[0].rect) == pytest.approx(
+                _WIDGET_RECT_ORACLE[rot], abs=0.5
+            )
 
 
 def test_docpy_037_remove_rotation_zero_is_identity() -> None:

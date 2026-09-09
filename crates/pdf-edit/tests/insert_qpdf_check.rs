@@ -49,6 +49,7 @@ fn build_mixed() -> Vec<u8> {
         0,
         Rect::new(100.0, 200.0, 300.0, 350.0),
         &synthetic_jpeg(16, 16),
+        0,
     )
     .unwrap();
     draw_rect(

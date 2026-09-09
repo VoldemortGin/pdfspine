@@ -162,6 +162,18 @@ for a in page.annots():
 page.delete_annot(annot)
 ```
 
+**Coordinate space of annotation rects.** `Annot.rect`, `Widget.rect` and
+`link["from"]` are the raw `/Rect` in PDF user space (y up, unrotated), the same
+space the content stream draws in; PyMuPDF reports them in y-down page space.
+Convert with `rect * page.transformation_matrix` when a page-space rect is needed
+(`get_text(clip=)`, `search_for(clip=)`, comparing against text `bbox`es;
+`Annot.get_text` / `Annot.get_textpage` already do this). `Page.remove_rotation()`
+follows the same convention: annotation, widget and link rects move by the content
+derotation matrix (the inverse of its return value, `~inv`), so they stay inside
+`page.rect` for every angle, and a single-stream `/AP /N` gets its `/Matrix`
+composed with the same matrix instead of being regenerated. Widget `/Rect`s match
+PyMuPDF 1.28 for 0°/90°/180°; PyMuPDF itself writes an off-page rect at 270°.
+
 ## Content & vector insertion
 
 ```python
@@ -184,6 +196,42 @@ shape.draw_rect(pdfspine.Rect(10, 20, 100, 60))
 shape.finish(color=(0, 0, 0), width=2)
 shape.commit()
 ```
+
+### Optional content (`oc=`)
+
+Every content writer takes `oc=`, the xref of an optional-content group or OCMD,
+exactly as in PyMuPDF; `doc.add_ocg()` returns such an xref:
+
+```python
+layer = doc.add_ocg("Draft watermark", on=False)      # xref of the new OCG
+
+page.insert_text((72, 72), "DRAFT", fontsize=48, oc=layer)
+page.insert_textbox(pdfspine.Rect(72, 300, 300, 400), "Hidden note", oc=layer)
+page.insert_image(pdfspine.Rect(72, 72, 200, 200), filename="stamp.png", oc=layer)
+page.draw_rect(pdfspine.Rect(72, 90, 200, 140), color=(1, 0, 0), oc=layer)
+
+shape = page.new_shape()
+shape.draw_circle((140, 200), 40)
+shape.finish(color=(1, 0, 0), oc=layer)   # per finish() block; commit() has no oc=
+shape.commit()
+```
+
+Text and vector chunks are wrapped in `q` / `/OC /MCn BDC` … `EMC` / `Q`, with
+`/MCn` registered under the page's `/Resources /Properties` (smallest free index;
+the same xref reuses its key). `insert_image` and `show_pdf_page` write no marked
+content and put `/OC` on the XObject instead. `TextWriter.write_text(page, oc=)`
+and the `page.write_text(writers=, oc=)` fast path behave like `insert_text`.
+A xref that is not an OCG/OCMD raises `ValueError("bad optional content: 'oc'")`,
+a nonexistent one `RuntimeError("bad xref")`, and nothing is written.
+
+Whether such content shows up in `get_text` / `get_drawings` / `get_pixmap`
+follows the active layer view (`switch_layer`, `set_layer_ui_config`,
+`set_layer`) plus the OCG's `/Usage /View /ViewState` (`/OFF` hides it
+unconditionally, even over a panel override) and the active configuration's
+`/AS` usage-application entries. One row differs from MuPDF / PyMuPDF on
+purpose: an OCG that is OFF in the configuration but has `/ViewState /ON` and is
+listed by an `/Event /View` entry in `/AS` is shown here and hidden there (ISO
+32000-1 §8.11.4.4) — see the divergence table in `docs/pymupdf-compat-findings.md`.
 
 ## Forms (AcroForm)
 

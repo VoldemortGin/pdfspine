@@ -490,6 +490,7 @@ fn doc_edit_002_shape_handle_commit() {
         dashes: Some("[3] 0".to_string()),
         even_odd: false,
         close_path: true,
+        oc: 0,
     });
     // A second, unfinished block picks up the default black stroke at commit.
     shape.draw_line(Point::new(30.0, 30.0), Point::new(60.0, 60.0));

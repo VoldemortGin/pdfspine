@@ -4,6 +4,7 @@ import os
 from typing import Any, Iterator, Mapping, Sequence
 
 from . import _core
+from ._onnx import LayoutBlock
 from .geometry import IRect, Matrix, Point, Quad, Rect
 from .models import FilledRectangle, ImageBlock, LinkAnnotation, TextBlock
 
@@ -172,6 +173,7 @@ class TextWriter:
         opacity: float | None = ...,
         color: _Color = ...,
         overlay: bool = ...,
+        oc: int = ...,
         **_ignored: Any,
     ) -> None: ...
     def writeText(self, page: Page, **kw: Any) -> None: ...
@@ -370,6 +372,7 @@ class Shape:
         dashes: Any = ...,
         even_odd: bool = ...,
         closePath: bool = ...,
+        oc: int = ...,
         **_ignored: Any,
     ) -> None: ...
     def commit(self, overlay: bool = ...) -> None: ...
@@ -382,6 +385,7 @@ class Shape:
         fontsize: float = ...,
         color: _Color = ...,
         fontfile: Any = ...,
+        oc: int = ...,
         **_ignored: Any,
     ) -> int: ...
     def insert_textbox(
@@ -394,6 +398,7 @@ class Shape:
         color: _Color = ...,
         align: int = ...,
         fontfile: Any = ...,
+        oc: int = ...,
         **_ignored: Any,
     ) -> float: ...
     @property
@@ -603,7 +608,13 @@ class Page:
     def get_texttrace(self) -> list[dict[str, Any]]: ...
     def get_bboxlog(self, *args: Any, **kwargs: Any) -> list[tuple[Any, ...]]: ...
     def show_pdf_page(
-        self, rect: _Rect, src: Document, pno: int = ..., *args: Any, **kwargs: Any
+        self,
+        rect: _Rect,
+        src: Document,
+        pno: int = ...,
+        *args: Any,
+        oc: int = ...,
+        **kwargs: Any,
     ) -> str: ...
     def get_pixmap(
         self,
@@ -627,6 +638,8 @@ class Page:
         clip: _Rect | None = ...,
         **_ignored: Any,
     ) -> TableFinder: ...
+    def find_layout(self, **vision_options: Any) -> list[LayoutBlock]: ...
+    def get_layout_html(self, **vision_options: Any) -> str: ...
     def get_svg_image(
         self, matrix: _Matrix | None = ..., *, text_as_path: bool = ..., **_ignored: Any
     ) -> str: ...
@@ -683,6 +696,7 @@ class Page:
         fontsize: float = ...,
         color: _Color = ...,
         fontfile: str | None = ...,
+        oc: int = ...,
         **_ignored: Any,
     ) -> int: ...
     def insert_textbox(
@@ -695,6 +709,7 @@ class Page:
         color: _Color = ...,
         align: int = ...,
         fontfile: str | None = ...,
+        oc: int = ...,
         **_ignored: Any,
     ) -> float: ...
     def insert_image(
@@ -706,6 +721,7 @@ class Page:
         pixmap: Pixmap | None = ...,
         width: int = ...,
         height: int = ...,
+        oc: int = ...,
         **_ignored: Any,
     ) -> None: ...
     def draw_line(
@@ -715,6 +731,7 @@ class Page:
         *,
         color: _Color = ...,
         width: float = ...,
+        oc: int = ...,
         **_ignored: Any,
     ) -> None: ...
     def draw_rect(
@@ -724,6 +741,7 @@ class Page:
         color: _Color = ...,
         fill: _Color = ...,
         width: float = ...,
+        oc: int = ...,
         **_ignored: Any,
     ) -> None: ...
     def draw_circle(
@@ -734,6 +752,7 @@ class Page:
         color: _Color = ...,
         fill: _Color = ...,
         width: float = ...,
+        oc: int = ...,
         **_ignored: Any,
     ) -> None: ...
     def draw_oval(
@@ -743,6 +762,7 @@ class Page:
         color: _Color = ...,
         fill: _Color = ...,
         width: float = ...,
+        oc: int = ...,
         **_ignored: Any,
     ) -> None: ...
     def draw_bezier(
@@ -754,6 +774,7 @@ class Page:
         *,
         color: _Color = ...,
         width: float = ...,
+        oc: int = ...,
         **_ignored: Any,
     ) -> None: ...
     def draw_polyline(
@@ -762,8 +783,68 @@ class Page:
         *,
         color: _Color = ...,
         width: float = ...,
+        oc: int = ...,
         **_ignored: Any,
     ) -> None: ...
+    def draw_curve(
+        self,
+        p1: _Point,
+        p2: _Point,
+        p3: _Point,
+        *,
+        color: _Color = ...,
+        fill: _Color = ...,
+        width: float = ...,
+        closePath: bool = ...,
+        oc: int = ...,
+        **_ignored: Any,
+    ) -> Point: ...
+    def draw_quad(
+        self,
+        quad: Any,
+        *,
+        color: _Color = ...,
+        fill: _Color = ...,
+        width: float = ...,
+        oc: int = ...,
+        **_ignored: Any,
+    ) -> Point: ...
+    def draw_sector(
+        self,
+        center: _Point,
+        point: _Point,
+        beta: float,
+        *,
+        color: _Color = ...,
+        fill: _Color = ...,
+        fullSector: bool = ...,
+        width: float = ...,
+        closePath: bool = ...,
+        oc: int = ...,
+        **_ignored: Any,
+    ) -> Point: ...
+    def draw_squiggle(
+        self,
+        p1: _Point,
+        p2: _Point,
+        breadth: float = ...,
+        *,
+        color: _Color = ...,
+        width: float = ...,
+        oc: int = ...,
+        **_ignored: Any,
+    ) -> Point: ...
+    def draw_zigzag(
+        self,
+        p1: _Point,
+        p2: _Point,
+        breadth: float = ...,
+        *,
+        color: _Color = ...,
+        width: float = ...,
+        oc: int = ...,
+        **_ignored: Any,
+    ) -> Point: ...
     def new_shape(self) -> Shape: ...
     def add_text_annot(
         self, point: _Point, text: str, *, icon: str = ..., **_ignored: Any

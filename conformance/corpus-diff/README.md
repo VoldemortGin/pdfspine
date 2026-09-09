@@ -26,7 +26,14 @@ python conformance/gt/born_digital.py         # born-digital（合成）
 
 # 1) 精确重建已冻结语料；缺文件或 SHA-256 不同会立即失败
 python conformance/corpus-diff/build_corpus.py \
-  --manifest conformance/corpus-diff/baselines/glyph-geometry-2026-09-05-manifest.json
+  --manifest conformance/corpus-diff/baselines/glyph-geometry-2026-09-05b-manifest.json
+
+# 仓库内 fixture 被有意改动（sha256 过期）时：不要手改旧 manifest，用 --refresh-stale
+# 冻结一份继承旧文件的新 manifest（只更新过期条目，旧哈希留在 previous_*，顶层 supersedes 指回旧文件）
+python conformance/corpus-diff/build_corpus.py \
+  --manifest conformance/corpus-diff/baselines/glyph-geometry-2026-09-05b-manifest.json \
+  --refresh-stale \
+  --freeze conformance/corpus-diff/baselines/glyph-geometry-<date>-manifest.json
 
 # 只有有意刷新基线时才按目录重新选样，并写出新的可入库 manifest
 python conformance/corpus-diff/build_corpus.py --cap 300 \
@@ -61,8 +68,13 @@ python conformance/corpus-diff/sample_span_seams.py  # → span-seams.json
 `words_only`（text 模式完整、仅 words 模式拆）/ `unknown`，并与
 `stream_flags.json`（`Tc≠0`、Descent 符号等页级特征）交叉。
 
-`baselines/glyph-geometry-2026-09-05-manifest.json` 是可入库的精确 300 文档清单；每项
+`baselines/glyph-geometry-2026-09-05b-manifest.json` 是当前可入库的精确 300 文档清单；每项
 记录仓库相对路径、source ID、上游 ID、大小和 SHA-256，顶层记录来源 URL/生成器及版本。
+它由 `--refresh-stale` 从 `glyph-geometry-2026-09-05-manifest.json` 派生：`32e6232` 改了
+`fixtures/typeset/typeset-lo-slide.pdf`，只有这一条的 sha256/size 更新（旧值保留在该条目的
+`previous_sha256` / `previous_size`），其余 299 条逐字节相同；顶层 `supersedes` 记录旧文件名和
+旧指纹 `87804b5a…`。旧 manifest 原样保留，仍是 `*-summary.json` 与 C–G 报告所引用的语料指纹
+（用 `git show 32e6232^:fixtures/typeset/typeset-lo-slide.pdf` 可取回旧 fixture 复核）。
 同目录的 `*-summary.json` 保存可入库的聚合验收值，不包含 oracle 原始输出。
 
 ## 已知基线
@@ -71,6 +83,12 @@ python conformance/corpus-diff/sample_span_seams.py  # → span-seams.json
 斜杠两侧的版本映射和 oracle 版本均未随报告保留，因此该数字不能作为新清单的逐值验收线。
 新运行以同一指纹清单上的 baseline/current/oracle 三侧对照为准。
 改动 `get_text` 词切分相关逻辑后应复跑，**不得退化**。
+
+`glyph-geometry-2026-09-05-summary.json` 的 `word_boundary` 是旧指纹 `87804b5a…` 上的 C 阶段
+验收值。2026-09-05 在派生的 `…-05b` 清单上用 PyPI `pdfspine==0.7.1` wheel 对 PyMuPDF 1.28.2
+复跑，全部聚合值逐项相同：over 137（alpha 73 / punct 17）、under 329（alpha 184）、mixed 130、
+1887 页、1246 content-equal 页、双侧 0 错误；与本机 post-G 缓存逐文档对比 299/300 JSON 一致，
+仅 `typeset-lo-slide.pdf` 的词框坐标随行距变化（text 与词串不变）。
 
 ## 注意
 

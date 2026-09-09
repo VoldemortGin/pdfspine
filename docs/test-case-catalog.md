@@ -877,7 +877,7 @@ drive the seldom-used parameters, error branches and camelCase aliases of the
 | `DOCPY-034` | `Shape` curve/oval/sector/squiggle/zigzag/angle/text | PRD §8.8 | green |
 | `DOCPY-035` | `Page` draw + annotation camelCase aliases | PRD §9.5 | green |
 | `DOCPY-036` | `cluster_drawings` neighbor-join + clip/drawings args | PRD §8.6 | green |
-| `DOCPY-037` | `remove_rotation` rewrites links (90/180/270 + identity) | PRD §8.9 | green |
+| `DOCPY-037` | `remove_rotation` rewrites links (90/180/270 + identity) and moves widget / annot `/Rect` by the content matrix in PDF user space (`rewrites_widget_rects[0/90/180/270]`: no `PdfUnsupportedError` on a page with widgets, rects stay inside `page.rect`, 0/90/180 match the PyMuPDF 1.28.2 widget rect within 0.5 pt; PyMuPDF writes an off-page rect at 270) | PRD §8.9 | green |
 | `DOCPY-038` | `write_text` composed multi-writer / rotate path | PRD §8.8 | green |
 | `DOCPY-039` | `text_in_rect` / `content_blocks` / `filled_rectangles` / `link_annotations` | PRD §7 | green |
 | `DOCPY-040` | `get_text_blocks`/`get_textbox`/`get_text_selection` clipping | PRD §9.4 | green |
@@ -1346,6 +1346,23 @@ glyph lists via `textpage_from_glyphs` (no PyMuPDF files). Tests live in
 | `SERIAL-TEXTBOX-001` | clip rect selects only intersecting lines | PRD §8.6.2 | green |
 | `SERIAL-TEXTBOX-002` | clip outside all content → empty string | PRD §8.6.2 | green |
 
+### clip_textpage (`serialize.rs`) — `SERIAL-CLIP-*`
+
+PyMuPDF `get_textpage(clip=)` semantics (measured on PyMuPDF 1.28.2): the clip
+is applied per character at TextPage build time, strict bbox overlap (a glyph the
+clip touches is out, one it cuts into is kept whole and unclamped); MuPDF tests
+the glyph *ink* box while pdfspine has the glyph cell, the one known divergence.
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `SERIAL-CLIP-001` | strict overlap: a touched glyph is out, a glyph cut into (0.01 pt or 90 %) is kept whole, not clamped | PRD-NEXT §0 (clip fix) | green |
+| `SERIAL-CLIP-002` | no overlapping glyph → empty TextPage (`""`, no words) with the clip's size; an empty or inverted clip (not normalized, as in MuPDF) → empty, 0 × 0 | PRD-NEXT §0 (clip fix) | green |
+| `SERIAL-CLIP-003` | kept block / line renumbered from 0; span, line and block bbox = union of the kept chars; words carry the new numbers | PRD-NEXT §0 (clip fix) | green |
+| `SERIAL-CLIP-004` | `width` / `height` of the clipped page (and of `to_dict`) are the clip's | PRD-NEXT §0 (clip fix) | green |
+| `SERIAL-CLIP-005` | image block inside the clip kept as is, one the clip crosses cut to the overlap, one outside dropped | PRD-NEXT §0 (clip fix) | green |
+| `SERIAL-CLIP-006` | surviving span's `origin` / `matrix` / `rendered_size` / `seq` come from its first kept char; bbox and quad from the kept chars only | PRD-NEXT §0 (clip fix) | green |
+| `SERIAL-CLIP-007` | a whole-page clip reproduces `to_text` / `to_words` / `to_blocks` / `to_json` of the unclipped page | PRD-NEXT §0 (clip fix) | green |
+
 ### blocks (`serialize.rs`) — `SERIAL-BLOCKS-*`
 
 | ID | feature | spec ref | status |
@@ -1465,6 +1482,8 @@ methods, and the **M2 accuracy exit gate**. Self-generated fixtures only
 | `TEXTPAGE-REUSE-001` | `Page::textpage` builds once; reused by get_text + search | PRD §9.4 | green |
 | `TEXTPAGE-REUSE-002` | reused TextPage yields identical text to a fresh build | PRD §9.4 | green |
 | `TEXTPAGE-REUSE-003` | search over a reused TextPage equals a fresh search | PRD §9.4 | green |
+| `TEXTPAGE-CLIP-001` | `textpage(page, flags, Some(clip))` keeps the glyphs overlapping the clip (`"Hel"` for a clip 3 pt into the first `l`; `"He"` when it ends exactly there; empty when it meets none) and reports the clip's size | PRD-NEXT §0 (clip fix) | green |
+| `TEXTPAGE-CLIP-002` | `search` with `clip` runs on the clipped model: a needle straddling the clip edge is no hit, the kept prefix is one; same through a pre-built clipped TextPage | PRD-NEXT §0 (clip fix) | green |
 
 ### Python text surface (`test_text.py`) — `PYTEXT-*` / `PYSEARCH-*` / `PYINV-*`
 
@@ -1481,6 +1500,15 @@ methods, and the **M2 accuracy exit gate**. Self-generated fixtures only
 | `PYTEXT-009` | `sort=True` orders blocks by (y, x) | PRD §9.4 | green |
 | `PYTEXT-010` | `sort=True` orders plain-text lines by (y, x), including lines sharing one block; `sort=False` stays unchanged | compatibility findings P2 | green |
 | `PYTEXT-011` | `TEXT_INHIBIT_SPACES` reaches the layout: a `-600`-kerned `TJ` yields `ABCD` / `["ABCD"]` with the flag and `AB CD` without; a literal space glyph is kept either way | PRD §8.6.2 | green |
+| `PYTEXT-012` | `clip=` restricts text / words / blocks / dict / rawdict / json / rawjson alike; block and line numbers restart at 0; dict / json `width`/`height` are the clip's | PRD-NEXT §0 (clip fix) | green |
+| `PYTEXT-013` | per-character strict overlap: a glyph the clip cuts into (30 % or 0.01 pt) is kept whole with its full box, one it touches is out (the preceding space glyph stays) | PRD-NEXT §0 (clip fix) | green |
+| `PYTEXT-014` | empty rect, `Rect()`, a rect outside the page, an inverted rect → `""` / `[]` / no blocks; dict size is the clip's (0×0 for an empty or inverted one) | PRD-NEXT §0 (clip fix) | green |
+| `PYTEXT-015` | `html` / `xhtml` / `xml` ignore `clip`; a supplied `textpage=` wins over `clip=` | PRD-NEXT §0 (clip fix) | green |
+| `PYTEXT-016` | `get_textpage(clip=)` is clipped for every `flags` (`None`, 0, `TEXTFLAGS_TEXT`); `extractText` / `extractWORDS` / `extractDICT` / `get_text(textpage=)` / `search_for(textpage=)` see only the region | PRD-NEXT §0 (clip fix) | green |
+| `PYTEXT-017` | `search_for(clip=)` searches the clipped TextPage: a needle straddling the clip edge is no hit; unclipped search unchanged | PRD-NEXT §0 (clip fix) | green |
+| `PYTEXT-018` | `sort=True` orders what the clip kept (text and blocks); the block outside the clip never appears | PRD-NEXT §0 (clip fix) | green |
+| `PYTEXT-019` | real-PyMuPDF parity of the clipped text / word tuples / dict size / straddling search (skipped unless run with `pytest -p pymupdf`) | PRD-NEXT §0 (clip fix) | green |
+| `PYTEXT-020` | `Annot.get_text` / `Annot.get_textpage` clip by the annotation rect converted to page space via `page.transformation_matrix` (`Annot.rect` is PDF user space); a rect over the text sees it, one elsewhere sees nothing | PRD-NEXT §0 (clip fix) | green |
 | `PYSEARCH-001` | `search_for` returns Rect overlapping the known location | PRD §9.4 | green |
 | `PYSEARCH-002` | `quads=True` returns `Quad`s | PRD §9.4 | green |
 | `PYSEARCH-003` | `hit_max` caps results | PRD §9.4 | green |
@@ -2249,6 +2277,10 @@ Tests live in `crates/pdf-edit/tests/{redact_e2e.rs,drawings_e2e.rs}`.
 | `REDACT-TEXT-007` | full text-state operator set (`Tc`/`Tw`/`Tz`/`TL`/`Ts`/`Td`/`TD`/`T*`/`'`/`"`) + repeat `Tf`; a middle line redacted, the rest survive | PRD §8.8 | green |
 | `REDACT-TEXT-008` | `Tj` literal with no/missing font re-emitted verbatim; every string escape (`\\ ( ) \n \r \t`) round-trips through `escape_show` | PRD §8.8 | green |
 | `REDACT-TEXT-009` | page whose `/Contents` is an array of two streams: concatenated, redacted across, and every old content object freed | PRD §8.8 | green |
+| `REDACT-TEXT-010` | `'` lines: the implicit line advance is re-emitted as an explicit `T*` before the rewritten `TJ`; survivors on the clipped line and every later line keep their baselines | PRD §8.8 | green |
+| `REDACT-TEXT-011` | `"` lines: `aw` / `ac` re-emitted as `Tw` / `Tc` before the `T*`, so the following `'` line inherits the spacing and every survivor keeps its origin | PRD §8.8 | green |
+| `REDACT-TEXT-012` | mixed `Tj` / `'` / `"` with an entirely dropped `'` line: the bare `T*` still carries the advance, untouched `'` / `"` runs are preserved, later lines unshifted | PRD §8.8 | green |
+| `REDACT-TEXT-013` | `'` / `"` under an unmappable font take the verbatim `Tj` path with the `T*` / `Tw` / `Tc` expansion kept | PRD §8.8 | green |
 
 ### Image redaction — `REDACT-IMAGE-*`
 
@@ -2393,6 +2425,7 @@ Tests live in `python/tests/test_m4.py`.
 |---|---|---|---|
 | `PYM4-REDACT-001` | `add_redact_annot` over a secret → `apply_redactions()` → save to tmp → reopen → `get_text()` lacks the secret; neighbouring text intact | PRD §12 M4 | green |
 | `PYM4-REDACT-002` | `apply_redactions` on a page with no redaction annots → returns 0 (no-op) | PRD §8.8 | green |
+| `PYM4-REDACT-003` | real-PyMuPDF oracle (skipped when absent): a page typeset with `Tj` / `'` / `"` redacted by both engines → the survivors' `get_text("words")` boxes agree within 0.5 pt and the renders' SSIM ≥ 0.99 | PRD §8.8 | green |
 
 ### Forms / Widget — `PYM4-WIDGET-*`
 
@@ -2778,6 +2811,34 @@ deterministic model-output fixtures.
 | `TATR-070` | `find_tables` adaptive cropping expands a truncated detection twice | TATR evidence-fusion contract | green |
 | `TATR-071` | `find_tables` vector-line guidance overrides the detector crop | TATR evidence-fusion contract | green |
 
+### ONNX vision layout/tables — `ONNX-*`
+
+Offline tests live in `python/tests/test_onnx_tables.py`; they do not install
+onnxruntime, load a model, or access the network. Both models (PP-DocLayout
+RT-DETR layout — `pp_doclayout_l` / `pp_doclayoutv3` — and SLANet-plus tables)
+are replaced by fakes injected through `_runtime=`; `ONNX-014` alone runs the
+real preprocessing with numpy/Pillow when they are importable and skips
+otherwise. The end-to-end case uses the native `strategy="lines"` result on a
+ruled fixture as ground truth.
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `ONNX-001` | `OnnxOptions` validation (types, ranges, channel order, providers, `layout_variant` casefold + allowed set, `layout_size` int-or-None) and `from_mapping` unknown-key rejection; defaults `layout_threshold=0.5`, `layout_nms_iou=0.6` | pdfspine vision extension | green |
+| `ONNX-002` | model path resolution: explicit path > `PDFSPINE_ONNX_MODELS` > bare filename, per-variant default file name (`pp_doc_layoutv3.onnx` for the default `pp_doclayoutv3`, `pp_doclayout_l.onnx` for the optional `pp_doclayout_l`); missing model file and missing runtime raise `PdfUnsupportedError` with the variant's file name + download URL (V3 URL by default) / `pdfspine[onnx]` hint | ONNX runtime contract | green |
+| `ONNX-003` | `_decode_structure` greedy token decoding stops at `<eos>`, skips `<sos>`, and turns the 8-point quad of every `<td` token into a scaled axis-aligned rect | SLANet-plus post-processing | green |
+| `ONNX-004` | `_structure_to_cells` builds the occupancy grid with `colspan`/`rowspan` and flags `<thead>` cells as headers | SLANet-plus post-processing | green |
+| `ONNX-005` | `_assign_words` overlap → centre → nearest-cell fallback never drops a word; multi-line cells keep line order | text-layer fill contract | green |
+| `ONNX-006` | `_decode_layout` reads RT-DETR `[cls, score, x0, y0, x1, y1(, read_order)]` rows in original-image pixels (clamped), skips padding (`cls < 0`), sub-threshold and zero-area rows, truncates to `count`, maps model classes to pdfspine labels per variant (`label` + `raw_label`, V3 `footnote`/`vision_footnote`), same-class NMS vs `_nms(per_class=False)`; class-id order pinned (L 23, V3 25; `LAYOUT_LABELS` aliases the default V3 list); labels from metadata `names`/`character` | PP-DocLayout post-processing | green |
+| `ONNX-007` | `backend="onnx"` dispatches to `_onnx.find_tables`; `backend=None` stays TATR; `find_layout`/`get_layout_html` forward `vision_options` | API contract | green |
+| `ONNX-008` | fake runtime with two table regions: page-space `clip=` keeps only the intersecting table | ONNX end-to-end contract | green |
+| `ONNX-009` | stubbed models replay the native `lines` grid of a ruled fixture: `extract()` matches cell for cell, `source == "onnx"`, `to_html()` well-formed | ONNX end-to-end contract | green |
+| `ONNX-010` | `_reading_order` bands + two columns; `get_layout_html` tag mapping (h2/p/class/figure/abandon/table fallback); `LayoutBlock.raw_label` surfaced by `find_layout` (defaults to `label`) | layout HTML contract | green |
+| `ONNX-011` | `_split_table_outputs` identifies bbox/structure tensors by last dimension in either order and rejects unexpected shapes | SLANet-plus post-processing | green |
+| `ONNX-012` | `_grid_boxes` derives row/column bands from cells; runtime cache is keyed by model paths + providers + layout variant (the default V3 runtime — 25 labels, V3 label map, `pp_doc_layoutv3.onnx`, 800 edge — and the explicit L runtime — 23 labels, L label map, `pp_doclayout_l.onnx`, 640 edge — are separate entries), evicts at 4 entries and `clear_model_cache` empties it | ONNX runtime contract | green |
+| `ONNX-013` | `_resolve_providers`: `auto` prefers CUDA then CPU, never CoreML; explicit unavailable provider raises `PdfUnsupportedError` | ONNX runtime contract | green |
+| `ONNX-014` | `_layout_input` plain square resize, RGB `[0, 1]` NCHW float32 without padding or mean/std, `scale_factor=(size/h, size/w)`; `_input_edge` reads the static square edge of the `image` input only; `_variant_from_name` / `_layout_variant` precedence (option > file name > default V3; `LAYOUT_INPUT_SIZES` 800 for V3, 640 for L); `detect_layout` feeds `image`/`im_shape`/`scale_factor` by name, honours `layout_size`, takes the box count from the second output and rejects models without an `image` input | PP-DocLayout pre-processing | green |
+| `ONNX-015` | PP-DocLayoutV3 `read_order` keys order `find_layout` / `get_layout_html` ahead of geometry (ties fall back to y/x, any missing key falls back to `_reading_order`); raw `footnote` renders as `<p class="footnote">`, `vision_footnote` as `table_footnote` | layout HTML contract | green |
+
 ### M7 — optional content (`pdf_core::ocg` / `pdf_edit::ocg`) — `OCG-READ-*` / `OCG-ADD-*` / `OCG-TOGGLE-*` / `OCG-BIND-*` / `OCG-VIS-*` / `OCG-LAYER-*` / `OCG-DEFAULT-*` / `OCG-OCMD-SET-*`
 
 Tests live in `crates/pdf-core/tests/ocg_unit.rs` (read) and
@@ -2838,6 +2899,20 @@ Tests live in `crates/pdf-core/tests/ocg_unit.rs` (read) and
 | `OCG-OCMD-SET-REPLACE` | replacing writes the whole dictionary (previous `/OCGs` / `/P` dropped) | PRD §7 | green |
 | `OCG-OCMD-SET-BAD-XREF` | `set_ocmd` on a non-OCMD xref → `InvalidArgument("bad xref or not an OCMD")` | PRD §7 | green |
 | `OCG-TOGGLE-RESETS-VIEW` | `set_layer` after `select_layer_config(Some(0))` resets the view to `/D` | PRD §7 | green |
+| `OCG-VIS-USAGE-NONE` | `OcVisibility`: ON OCG without `/Usage` (or an empty one) → visible | ISO §8.11.4.4 | green |
+| `OCG-VIS-USAGE-VIEWSTATE-OFF` | ON + `/Usage /View /ViewState /OFF`, no `/AS` → hidden (MuPDF parity, unconditional) | ISO §8.11.4.4 | green |
+| `OCG-VIS-USAGE-VIEWSTATE-OFF-AS` | ON + ViewState OFF + `/AS` View entry listing the OCG → hidden | ISO §8.11.4.4 | green |
+| `OCG-VIS-USAGE-VIEWSTATE-OFF-AS-MISS` | ON + ViewState OFF + `/AS` with `/Event /Print` only or `/OCGs []` → hidden | ISO §8.11.4.4 | green |
+| `OCG-VIS-USAGE-VIEWSTATE-ON` | ON + ViewState ON → visible | ISO §8.11.4.4 | green |
+| `OCG-VIS-USAGE-AS-ABSENT` | OFF + ViewState ON with no applicable `/AS` entry (absent / `/Event /Print` / `/Category` without `/View` / lists another OCG) → hidden | ISO §8.11.4.4 | green |
+| `OCG-VIS-USAGE-AS-PROMOTE` | OFF (or `/BaseState /OFF`) + ViewState ON + `/AS` View entry listing the OCG → **visible**, OCMD over it too — deliberate divergence from MuPDF / PyMuPDF (hidden; ignores `/AS`) | ISO §8.11.4.4 | green |
+| `OCG-VIS-USAGE-PRINT-EXPORT` | `/Print /PrintState /OFF` and `/Export /ExportState /OFF` leave an ON OCG visible; `/PrintState /ON` + `/AS` Print entry does not promote an OFF one | ISO §8.11.4.4 | green |
+| `OCG-VIS-USAGE-OCMD` | ViewState OFF reached through OCMD `/OCGs [ocg]` → hidden; `/VE [/Not ocg]` → visible (evaluated per OCG, OCMD inherits) | ISO §8.11.4.4 | green |
+| `OCG-VIS-USAGE-OVERRIDE` | ViewState OFF beats a layer-panel override ON; an override OFF beats an `/AS` promotion; no write | ISO §8.11.4.4 | green |
+| `OCG-VIS-USAGE-BOGUS` | unrecognised `/ViewState` name / string value / `/View <<>>` / `/Usage` without `/View` → configuration state, never promoted | ISO §8.11.4.4 | green |
+| `OCG-VIS-USAGE-AS-CONFIG` | `/AS` read from the active configuration only: `/D`'s `/AS` does not leak into a selected `/Configs[n]`; the alternate's own `/AS` applies when selected | ISO §8.11.4.4 | green |
+| `OCG-VIS-USAGE-INDIRECT` | `/Usage`, `/View`, `/AS`, its entries, `/Category` and `/OCGs` all indirect → resolved on both the hide and the promote path | ISO §8.11.4.4 | green |
+| `OCG-VIS-USAGE-REPORT` | `ocg_state` / `get_ocgs` / `layer_ui_configs` reflect only the configuration ON/OFF state, untouched by `/ViewState` or `/AS` (PyMuPDF parity) | ISO §8.11.4.4 | green |
 
 ### M7 follow-up — optional content in the interpreter (`pdf_text::interp`) — `OCG-INTERP-*`
 
@@ -2857,6 +2932,27 @@ sections, XObject `/OC`, OCMDs, driven through the store's in-memory layer view)
 | `OCG-INTERP-UNBALANCED-EMC` | a stray `EMC` inside a form neither underflows nor unhides the page's later section | PRD §8.6 | green |
 | `OCG-INTERP-NON-OC-BDC` | a non-`/OC` `BDC` (`/Span <</MCID 0>>`) hides nothing | PRD §8.6 | green |
 | `OCG-INTERP-RENDER` | the ordered render-op stream honours OC (hidden text → no `RenderOp::Text`; toggle brings it back) | PRD §8.6 | green |
+
+### M7 follow-up — `oc=` on the content writers (`pdf_edit`) — `OCG-WRITE-*`
+
+Tests live in `crates/pdf-edit/tests/ocg_writers_e2e.rs` (PRD-NEXT §0 item 6). PyMuPDF parity
+for the optional-content parameter: text / shape writers wrap their chunk in `/OC /MCn BDC` …
+`EMC` registered under `/Resources /Properties` (`MC<i>`, smallest free index, existing entry
+for the same xref reused); image / form writers put `/OC` on the XObject dict. The M2
+interpreter is the visibility oracle after save → reopen.
+
+| ID | Feature | Spec ref | Status |
+|---|---|---|---|
+| `OCG-WRITE-TEXT-BDC` | `insert_text(oc=)` emits `q` / `/OC /MC0 BDC` / `BT … ET` / `EMC` / `Q` byte-exactly; `/Properties /MC0` references the OCG; OFF hides the glyphs, ON shows them after reopen | PRD-NEXT §0.6 | green |
+| `OCG-WRITE-TEXTBOX-BDC` | `insert_textbox(oc=)` wraps the text object the same way; OFF hides the wrapped lines | PRD-NEXT §0.6 | green |
+| `OCG-WRITE-PROPS-REUSE` | the same OCG twice reuses `/MC0`; a second OCG gets `/MC1`; one `/Properties` entry per OCG survives reopen | PRD-NEXT §0.6 | green |
+| `OCG-WRITE-PROPS-EXISTING` | a pre-existing unrelated `/MC0` pushes the next OCG to `/MC1`; an existing entry referencing the OCG under another key is reused | PRD-NEXT §0.6 | green |
+| `OCG-WRITE-OCMD` | an OCMD xref is accepted like an OCG; `AllOn` over an OFF member hides the text | PRD-NEXT §0.6 | green |
+| `OCG-WRITE-SHAPE-FINISH` | every `Shape::finish(oc=)` block is its own `q` / BDC … EMC / `Q`; blocks without `oc` and the default trailing block stay unwrapped; hidden fill / stroke absent from `drawings` | PRD-NEXT §0.6 | green |
+| `OCG-WRITE-IMAGE-OC` | `insert_image_jpeg(oc=)` / `insert_image_rgb(oc=)` put `/OC` on the image XObject, no BDC, no `/Properties`; hidden image not inventoried after reopen | PRD-NEXT §0.6 | green |
+| `OCG-WRITE-FORM-OC` | `show_pdf_page(oc=)` puts `/OC` on the Form XObject, no BDC; OFF hides the placed page's text | PRD-NEXT §0.6 | green |
+| `OCG-WRITE-BAD-OC` | non-OCG/OCMD `oc` → `InvalidArgument("bad optional content: 'oc'")`, nonexistent xref → `InvalidArgument("bad xref")` on every writer; failure leaves the page untouched | PRD-NEXT §0.6 | green |
+| `OCG-WRITE-ZERO-UNCHANGED` | `oc == 0` leaves the text / drawing / image chunks byte-identical to the plain writers; no `/Properties`, no XObject `/OC` | PRD-NEXT §0.6 | green |
 
 ### M7 — SVG export (`pdf_render::svg`) — `SVG-BASIC-*` / `SVG-EMPTY-*` / `SVG-ESCAPE-*` / `SVG-PROP-*` / `SVGTRM-*`
 
@@ -2921,11 +3017,14 @@ Tests live in `python/tests/test_m7.py`.
 | `PYFITZ-M7-003` | `fitz` `addOCG`/`getOCGs`/`layerUIConfigs`/`setLayer` aliases | PRD §9.5 | green |
 | `PYFITZ-M7-004` | `pymupdf.open(...).find_tables().tables[0].to_markdown()` works | PRD §9.5 | green |
 
-### M7 follow-up — Python OCG layer configurations / OCMD / hidden content — `PYOCG-004`…`PYOCG-038`
+### M7 follow-up — Python OCG layer configurations / OCMD / hidden content — `PYOCG-004`…`PYOCG-056`
 
 Tests live in `python/tests/test_ocg_layers.py`. Expected values are hard-coded from a real
-PyMuPDF 1.28.2 oracle; `PYOCG-037`/`038` additionally run real PyMuPDF in a subprocess
-(skipped when it is not importable there) for a bidirectional parity check.
+PyMuPDF 1.27.2 oracle; `PYOCG-037`/`038`, `046`/`047` and `056` additionally run real PyMuPDF
+in a subprocess (`.venv-oracle` next to the repo, or `PDFSPINE_ORACLE_PYTHON`; skipped when it
+is not importable there) for a bidirectional parity check. `PYOCG-048`…`056` cover the
+`/Usage /View /ViewState` + configuration `/AS` visibility rows (ISO §8.11.4.4) through the
+Python API; `PYOCG-053`/`056` pin the deliberate `/AS` promotion divergence from MuPDF.
 
 | ID | feature | spec ref | status |
 |---|---|---|---|
@@ -2967,6 +3066,24 @@ PyMuPDF 1.28.2 oracle; `PYOCG-037`/`038` additionally run real PyMuPDF in a subp
 | `PYOCG-036` | `get_oc(image)` / `get_oc(form)` / `get_ocmd(AllOn)` / `get_ocmd(VE)` on the layered page | PRD §9.5 | green |
 | `PYOCG-037` | live oracle: pdfspine-authored file read by real PyMuPDF → identical `get_layers` / `get_ocmd` / UI ON states + `get_layer(n)` | PRD §9.5 | green |
 | `PYOCG-038` | live oracle: PyMuPDF-authored `/OC … BDC` file → identical `get_layers` / `get_ocmd` / `get_text` under default, panel toggle and `switch_layer` | PRD §9.5 | green |
+| `PYOCG-039` | `insert_text(oc=)` → byte-exact `q` / `/OC /MC0 BDC` / `BT … ET` / `EMC` / `Q`; `/MC0` reused for the same OCG, `/MC1` for the next; OFF hides, panel ON reveals after reopen | PRD-NEXT §0.6 | green |
+| `PYOCG-040` | `insert_textbox(oc=)` / `Shape.insert_text(oc=)` / `Shape.insert_textbox(oc=)` wrap identically; `oc=0` writes no marked content | PRD-NEXT §0.6 | green |
+| `PYOCG-041` | `insert_image(oc=)` → `/OC` on the image XObject (`get_oc` / `xref_get_key`), no BDC, no `/Properties`; hidden image block absent until the layer is ON | PRD-NEXT §0.6 | green |
+| `PYOCG-042` | `Shape.finish(oc=)` wraps each block; `page.draw_rect/circle/line(oc=)` one-shots route through the shape; `get_drawings` hides the OFF blocks | PRD-NEXT §0.6 | green |
+| `PYOCG-043` | non-OCG/OCMD `oc` → `ValueError("bad optional content: 'oc'")`, nonexistent xref → `RuntimeError("bad xref")` on every writer (`Shape.finish` at `commit`); nothing written; an OCMD is accepted | PRD-NEXT §0.6 | green |
+| `PYOCG-044` | `show_pdf_page(oc=)` → `/OC` on the Form XObject, no BDC; OFF hides the placed page's text | PRD-NEXT §0.6 | green |
+| `PYOCG-045` | `TextWriter.write_text(oc=)` and the `page.write_text(writers=, oc=)` fast path wrap every segment, reusing `/MCn` | PRD-NEXT §0.6 | green |
+| `PYOCG-046` | live oracle: pdfspine-written `oc=` text / textbox / image / shape → real PyMuPDF hides them under default `/D`, shows them after `set_layer(on=)` + reopen, reads the image `/OC`; identical BDC skeleton and `/MCn` reuse for the same writer calls | PRD-NEXT §0.6 | green |
+| `PYOCG-047` | live oracle: PyMuPDF-written `oc=` text / pixmap image / form / shapes → pdfspine reads the same `get_oc` bindings, `get_text`, `get_drawings` and image blocks under default and panel-ON | PRD-NEXT §0.6 | green |
+| `PYOCG-048` | config ON + `/Usage /View /ViewState /OFF` on a `BDC`-gated OCG → `get_text` hides it (`/AS` View entry does not rescue it) | ISO §8.11.4.4 | green |
+| `PYOCG-049` | ViewState OFF reached through an OCMD `/OCGs [ocg]` in `/Properties` → hidden | ISO §8.11.4.4 | green |
+| `PYOCG-050` | config OFF + ViewState ON, no `/AS` → still hidden | ISO §8.11.4.4 | green |
+| `PYOCG-051` | ON + `/Usage /Print /PrintState /OFF` → visible (only the View usage is evaluated) | ISO §8.11.4.4 | green |
+| `PYOCG-052` | bogus `/ViewState`, `/View <<>>` or `/Usage <<>>` fall through to the configuration state (ON visible, OFF hidden) | ISO §8.11.4.4 | green |
+| `PYOCG-053` | OFF + ViewState ON + `/AS [<</Event /View /Category [/View] /OCGs [ocg]>>]` → **visible** in pdfspine (deliberate divergence: MuPDF / PyMuPDF hide it) | ISO §8.11.4.4 | green |
+| `PYOCG-054` | `/AS` with only `/Event /Print`, or an `/AS` View entry without ViewState ON, does not promote an OFF OCG → hidden | ISO §8.11.4.4 | green |
+| `PYOCG-055` | `get_ocgs()["on"]` / `layer_ui_configs()["on"]` reflect the configuration state only, untouched by `/Usage` (ON + ViewState OFF → on; OFF + ViewState ON + `/AS` → off) | ISO §8.11.4.4 | green |
+| `PYOCG-056` | live oracle: every `/Usage` / `/AS` fixture read by real PyMuPDF → identical `get_text` and `layer_ui_configs` ON states, except the hard-coded `/AS` promotion cell (pdfspine visible, PyMuPDF hidden) | ISO §8.11.4.4 | green |
 
 ---
 
