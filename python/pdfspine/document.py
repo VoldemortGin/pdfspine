@@ -1215,9 +1215,15 @@ class Shape:
         dashes=None,
         even_odd: bool = False,
         closePath: bool = False,  # noqa: N803  (PyMuPDF uses camelCase here)
+        oc: int = 0,
         **_ignored,
     ) -> None:
-        """Styles and closes the current drawing path (PyMuPDF ``shape.finish``)."""
+        """Styles and closes the current drawing path (PyMuPDF ``shape.finish``).
+
+        A non-zero ``oc`` (an OCG / OCMD xref) wraps the block in an
+        ``/OC /MCn BDC`` … ``EMC`` marked-content section; it is validated at
+        :meth:`commit`.
+        """
         self._shape.finish(
             color=_color(color),
             fill=_color(fill),
@@ -1225,6 +1231,7 @@ class Shape:
             dashes=dashes,
             even_odd=bool(even_odd),
             close_path=bool(closePath),
+            oc=int(oc),
         )
 
     def commit(self, overlay: bool = True) -> None:
@@ -1245,12 +1252,13 @@ class Shape:
         fontsize: float = 11.0,
         color=(0, 0, 0),
         fontfile=None,
+        oc: int = 0,
         **_ignored,
     ) -> int:
         """Writes ``text`` at ``point`` (PyMuPDF ``shape.insert_text``).
 
         Returns the number of lines written. ``text`` may be a string or a
-        list/tuple of lines.
+        list/tuple of lines. ``oc`` wraps the text in optional content.
         """
         if self._page is None:
             raise PdfUnsupportedError("Shape.insert_text() needs an owning Page")
@@ -1263,6 +1271,7 @@ class Shape:
             fontsize=float(fontsize),
             color=color,
             fontfile=fontfile,
+            oc=oc,
         )
 
     def insert_textbox(
@@ -1275,12 +1284,14 @@ class Shape:
         color=(0, 0, 0),
         align: int = 0,
         fontfile=None,
+        oc: int = 0,
         **_ignored,
     ) -> float:
         """Fills ``rect`` with wrapped ``buffer`` (PyMuPDF ``shape.insert_textbox``).
 
         Returns the unused (or, if negative, deficit) vertical space, like
-        PyMuPDF. Also extends the shape's accumulated :attr:`rect`.
+        PyMuPDF. Also extends the shape's accumulated :attr:`rect`. ``oc``
+        wraps the text in optional content.
         """
         if self._page is None:
             raise PdfUnsupportedError("Shape.insert_textbox() needs an owning Page")
@@ -1294,6 +1305,7 @@ class Shape:
             color=color,
             align=int(align),
             fontfile=fontfile,
+            oc=oc,
         )
         self.update_rect(rect)
         return more
@@ -2251,11 +2263,12 @@ class Page:
         return self._page.get_bboxlog(*args, **kwargs)
 
     def show_pdf_page(
-        self, rect, src: "Document", pno: int = 0, *_args, **_kwargs
+        self, rect, src: "Document", pno: int = 0, *_args, oc: int = 0, **_kwargs
     ) -> str:
         """Places ``src``'s page ``pno`` onto this page as a Form XObject filling
-        ``rect`` (PyMuPDF ``page.show_pdf_page``). Returns the XObject name."""
-        return self._page.show_pdf_page(_rt(rect), src._doc, int(pno))
+        ``rect`` (PyMuPDF ``page.show_pdf_page``). Returns the XObject name. A
+        non-zero ``oc`` (an OCG / OCMD xref) becomes the form's ``/OC``."""
+        return self._page.show_pdf_page(_rt(rect), src._doc, int(pno), oc=int(oc))
 
     # --- get_pixmap (PRD §3.3 / §8.10) ---
     def get_pixmap(
@@ -2877,12 +2890,15 @@ class Page:
         fontsize: float = 11.0,
         color=(0, 0, 0),
         fontfile=None,
+        oc: int = 0,
         **_ignored,
     ) -> int:
         """Writes ``text`` at ``point`` (PyMuPDF ``page.insert_text``).
 
-        Returns the number of lines written. Extra PyMuPDF kwargs
-        (``rotate``/``render_mode``/``encoding``/…) are accepted and ignored.
+        Returns the number of lines written. A non-zero ``oc`` (an OCG / OCMD
+        xref) wraps the text in an ``/OC /MCn BDC`` … ``EMC`` marked-content
+        section. Extra PyMuPDF kwargs (``rotate``/``render_mode``/``encoding``/…)
+        are accepted and ignored.
         """
         return self._page.insert_text(
             _pt(point),
@@ -2891,6 +2907,7 @@ class Page:
             fontsize=float(fontsize),
             color=_color(color),
             fontfile=fontfile,
+            oc=int(oc),
         )
 
     def insert_textbox(
@@ -2903,11 +2920,13 @@ class Page:
         color=(0, 0, 0),
         align: int = 0,
         fontfile=None,
+        oc: int = 0,
         **_ignored,
     ) -> float:
         """Fills ``rect`` with wrapped ``text`` (PyMuPDF ``page.insert_textbox``).
 
-        Returns the remaining vertical space (negative if overflowed).
+        Returns the remaining vertical space (negative if overflowed). A
+        non-zero ``oc`` wraps the text in optional content.
         """
         return self._page.insert_textbox(
             _rt(rect),
@@ -2917,6 +2936,7 @@ class Page:
             color=_color(color),
             align=int(align),
             fontfile=fontfile,
+            oc=int(oc),
         )
 
     def insert_image(
@@ -2928,13 +2948,15 @@ class Page:
         pixmap=None,
         width: int = 0,
         height: int = 0,
+        oc: int = 0,
         **_ignored,
     ) -> None:
         """Places an image in ``rect`` (PyMuPDF ``page.insert_image``).
 
         Supply the image as ``stream=`` bytes or ``filename=`` (read to bytes).
         A JPEG stream is detected automatically; pass ``width=``/``height=`` for
-        raw RGB pixel data. ``pixmap=`` is not yet supported.
+        raw RGB pixel data. A non-zero ``oc`` (an OCG / OCMD xref) becomes the
+        image XObject's ``/OC``. ``pixmap=`` is not yet supported.
         """
         if pixmap is not None:
             raise PdfUnsupportedError(
@@ -2948,20 +2970,48 @@ class Page:
             raise ValueError("insert_image() requires stream= or filename=")
         if width and height:
             self._page.insert_image(
-                _rt(rect), stream=bytes(stream), width=int(width), height=int(height)
+                _rt(rect),
+                stream=bytes(stream),
+                width=int(width),
+                height=int(height),
+                oc=int(oc),
             )
         else:
-            self._page.insert_image(_rt(rect), stream=bytes(stream))
+            self._page.insert_image(_rt(rect), stream=bytes(stream), oc=int(oc))
 
     # --- vector drawing (PRD §8.8) ---
-    def draw_line(self, p1, p2, *, color=(0, 0, 0), width: float = 1.0, **_ignored):
+    # The one-shot ``draw_*`` take the Rust fast path; a non-zero ``oc`` (an
+    # OCG / OCMD xref wrapping the drawing in optional content) routes through
+    # ``new_shape()`` so the block is emitted by ``Shape.finish(oc=)``.
+    def draw_line(
+        self, p1, p2, *, color=(0, 0, 0), width: float = 1.0, oc: int = 0, **_ignored
+    ):
         """Draws a line segment (PyMuPDF ``page.draw_line``)."""
+        if oc:
+            shape = self.new_shape()
+            shape.draw_line(p1, p2)
+            shape.finish(color=color, width=float(width), oc=oc)
+            shape.commit()
+            return
         self._page.draw_line(_pt(p1), _pt(p2), color=_color(color), width=float(width))
 
     def draw_rect(
-        self, rect, *, color=(0, 0, 0), fill=None, width: float = 1.0, **_ignored
+        self,
+        rect,
+        *,
+        color=(0, 0, 0),
+        fill=None,
+        width: float = 1.0,
+        oc: int = 0,
+        **_ignored,
     ):
         """Draws a rectangle (PyMuPDF ``page.draw_rect``)."""
+        if oc:
+            shape = self.new_shape()
+            shape.draw_rect(rect)
+            shape.finish(color=color, fill=fill, width=float(width), oc=oc)
+            shape.commit()
+            return
         self._page.draw_rect(
             _rt(rect), color=_color(color), fill=_color(fill), width=float(width)
         )
@@ -2974,9 +3024,16 @@ class Page:
         color=(0, 0, 0),
         fill=None,
         width: float = 1.0,
+        oc: int = 0,
         **_ignored,
     ):
         """Draws a circle (PyMuPDF ``page.draw_circle``)."""
+        if oc:
+            shape = self.new_shape()
+            shape.draw_circle(center, radius)
+            shape.finish(color=color, fill=fill, width=float(width), oc=oc)
+            shape.commit()
+            return
         self._page.draw_circle(
             _pt(center),
             float(radius),
@@ -2986,23 +3043,59 @@ class Page:
         )
 
     def draw_oval(
-        self, rect, *, color=(0, 0, 0), fill=None, width: float = 1.0, **_ignored
+        self,
+        rect,
+        *,
+        color=(0, 0, 0),
+        fill=None,
+        width: float = 1.0,
+        oc: int = 0,
+        **_ignored,
     ):
         """Draws an ellipse inscribed in ``rect`` (PyMuPDF ``page.draw_oval``)."""
+        if oc:
+            shape = self.new_shape()
+            shape.draw_oval(rect)
+            shape.finish(color=color, fill=fill, width=float(width), oc=oc)
+            shape.commit()
+            return
         self._page.draw_oval(
             _rt(rect), color=_color(color), fill=_color(fill), width=float(width)
         )
 
     def draw_bezier(
-        self, p1, p2, p3, p4, *, color=(0, 0, 0), width: float = 1.0, **_ignored
+        self,
+        p1,
+        p2,
+        p3,
+        p4,
+        *,
+        color=(0, 0, 0),
+        width: float = 1.0,
+        oc: int = 0,
+        **_ignored,
     ):
         """Draws a cubic Bézier curve (PyMuPDF ``page.draw_bezier``)."""
+        if oc:
+            shape = self.new_shape()
+            shape.draw_bezier(p1, p2, p3, p4)
+            shape.finish(color=color, width=float(width), oc=oc)
+            shape.commit()
+            return
         self._page.draw_bezier(
             _pt(p1), _pt(p2), _pt(p3), _pt(p4), color=_color(color), width=float(width)
         )
 
-    def draw_polyline(self, points, *, color=(0, 0, 0), width: float = 1.0, **_ignored):
+    def draw_polyline(
+        self, points, *, color=(0, 0, 0), width: float = 1.0, oc: int = 0, **_ignored
+    ):
         """Draws a connected polyline (PyMuPDF ``page.draw_polyline``)."""
+        if oc:
+            shape = self.new_shape()
+            shape.draw_polyline(points)
+            shape.finish(color=color, width=float(width), oc=oc)
+            shape.commit()
+            return
         self._page.draw_polyline(
             [_pt(p) for p in points], color=_color(color), width=float(width)
         )
@@ -3017,25 +3110,35 @@ class Page:
         fill=None,
         width: float = 1.0,
         closePath: bool = False,
+        oc: int = 0,
         **_ignored,
     ) -> Point:  # noqa: N803
         """Draws a special Bézier curve from ``p1`` to ``p3`` with control points
         derived from ``p2`` (PyMuPDF ``page.draw_curve``)."""
         shape = self.new_shape()
         q = shape.draw_curve3(p1, p2, p3)
-        shape.finish(color=color, fill=fill, width=float(width), closePath=closePath)
+        shape.finish(
+            color=color, fill=fill, width=float(width), closePath=closePath, oc=oc
+        )
         shape.commit()
         return q
 
     def draw_quad(
-        self, quad, *, color=(0, 0, 0), fill=None, width: float = 1.0, **_ignored
+        self,
+        quad,
+        *,
+        color=(0, 0, 0),
+        fill=None,
+        width: float = 1.0,
+        oc: int = 0,
+        **_ignored,
     ) -> Point:
         """Draws a quadrilateral (PyMuPDF ``page.draw_quad``)."""
         ul_x, ul_y, ur_x, ur_y, ll_x, ll_y, lr_x, lr_y = _quad(quad)
         q_obj = Quad((ul_x, ul_y), (ur_x, ur_y), (ll_x, ll_y), (lr_x, lr_y))
         shape = self.new_shape()
         q = shape.draw_quad(q_obj)
-        shape.finish(color=color, fill=fill, width=float(width))
+        shape.finish(color=color, fill=fill, width=float(width), oc=oc)
         shape.commit()
         return q
 
@@ -3050,13 +3153,16 @@ class Page:
         fullSector: bool = True,
         width: float = 1.0,  # noqa: N803
         closePath: bool = False,
+        oc: int = 0,
         **_ignored,
     ) -> Point:  # noqa: N803
         """Draws a circle sector / pie wedge from ``point`` sweeping ``beta``
         degrees around ``center`` (PyMuPDF ``page.draw_sector``)."""
         shape = self.new_shape()
         q = shape.draw_sector(_pt(center), _pt(point), beta, fullSector=fullSector)
-        shape.finish(color=color, fill=fill, width=float(width), closePath=closePath)
+        shape.finish(
+            color=color, fill=fill, width=float(width), closePath=closePath, oc=oc
+        )
         shape.commit()
         return q
 
@@ -3068,13 +3174,14 @@ class Page:
         *,
         color=(0, 0, 0),
         width: float = 1.0,
+        oc: int = 0,
         **_ignored,
     ) -> Point:
         """Draws a wavy / squiggly line from ``p1`` to ``p2`` (PyMuPDF
         ``page.draw_squiggle``)."""
         shape = self.new_shape()
         q = shape.draw_squiggle(_pt(p1), _pt(p2), breadth=float(breadth))
-        shape.finish(color=color, width=float(width))
+        shape.finish(color=color, width=float(width), oc=oc)
         shape.commit()
         return q
 
@@ -3086,12 +3193,13 @@ class Page:
         *,
         color=(0, 0, 0),
         width: float = 1.0,
+        oc: int = 0,
         **_ignored,
     ) -> Point:
         """Draws a zig-zag line from ``p1`` to ``p2`` (PyMuPDF ``page.draw_zigzag``)."""
         shape = self.new_shape()
         q = shape.draw_zigzag(_pt(p1), _pt(p2), breadth=float(breadth))
-        shape.finish(color=color, width=float(width))
+        shape.finish(color=color, width=float(width), oc=oc)
         shape.commit()
         return q
 
@@ -3679,7 +3787,9 @@ class Page:
             raise ValueError("need at least one TextWriter")
         if isinstance(writers, TextWriter):
             if rotate == 0 and rect is None:
-                writers.write_text(self, opacity=opacity, color=color, overlay=overlay)
+                writers.write_text(
+                    self, opacity=opacity, color=color, overlay=overlay, oc=oc
+                )
                 return
             writers = (writers,)
         clip = writers[0].text_rect
@@ -4092,9 +4202,11 @@ class TextWriter:
         return overflow
 
     def write_text(
-        self, page, *, opacity=None, color=None, overlay=True, **_ignored
+        self, page, *, opacity=None, color=None, overlay=True, oc: int = 0, **_ignored
     ) -> None:
-        """Renders the accumulated text onto ``page`` (PyMuPDF ``tw.write_text``)."""
+        """Renders the accumulated text onto ``page`` (PyMuPDF ``tw.write_text``).
+        A non-zero ``oc`` (an OCG / OCMD xref) wraps every segment in optional
+        content."""
         col = _color(color) if color is not None else None
         for (px, py), text, fontname, fontsize, seg_color in self._segments:
             page.insert_text(
@@ -4103,6 +4215,7 @@ class TextWriter:
                 fontname=fontname,
                 fontsize=fontsize,
                 color=(col if col is not None else seg_color),
+                oc=oc,
             )
 
     # PyMuPDF alias.

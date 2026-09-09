@@ -2933,6 +2933,27 @@ sections, XObject `/OC`, OCMDs, driven through the store's in-memory layer view)
 | `OCG-INTERP-NON-OC-BDC` | a non-`/OC` `BDC` (`/Span <</MCID 0>>`) hides nothing | PRD §8.6 | green |
 | `OCG-INTERP-RENDER` | the ordered render-op stream honours OC (hidden text → no `RenderOp::Text`; toggle brings it back) | PRD §8.6 | green |
 
+### M7 follow-up — `oc=` on the content writers (`pdf_edit`) — `OCG-WRITE-*`
+
+Tests live in `crates/pdf-edit/tests/ocg_writers_e2e.rs` (PRD-NEXT §0 item 6). PyMuPDF parity
+for the optional-content parameter: text / shape writers wrap their chunk in `/OC /MCn BDC` …
+`EMC` registered under `/Resources /Properties` (`MC<i>`, smallest free index, existing entry
+for the same xref reused); image / form writers put `/OC` on the XObject dict. The M2
+interpreter is the visibility oracle after save → reopen.
+
+| ID | Feature | Spec ref | Status |
+|---|---|---|---|
+| `OCG-WRITE-TEXT-BDC` | `insert_text(oc=)` emits `q` / `/OC /MC0 BDC` / `BT … ET` / `EMC` / `Q` byte-exactly; `/Properties /MC0` references the OCG; OFF hides the glyphs, ON shows them after reopen | PRD-NEXT §0.6 | green |
+| `OCG-WRITE-TEXTBOX-BDC` | `insert_textbox(oc=)` wraps the text object the same way; OFF hides the wrapped lines | PRD-NEXT §0.6 | green |
+| `OCG-WRITE-PROPS-REUSE` | the same OCG twice reuses `/MC0`; a second OCG gets `/MC1`; one `/Properties` entry per OCG survives reopen | PRD-NEXT §0.6 | green |
+| `OCG-WRITE-PROPS-EXISTING` | a pre-existing unrelated `/MC0` pushes the next OCG to `/MC1`; an existing entry referencing the OCG under another key is reused | PRD-NEXT §0.6 | green |
+| `OCG-WRITE-OCMD` | an OCMD xref is accepted like an OCG; `AllOn` over an OFF member hides the text | PRD-NEXT §0.6 | green |
+| `OCG-WRITE-SHAPE-FINISH` | every `Shape::finish(oc=)` block is its own `q` / BDC … EMC / `Q`; blocks without `oc` and the default trailing block stay unwrapped; hidden fill / stroke absent from `drawings` | PRD-NEXT §0.6 | green |
+| `OCG-WRITE-IMAGE-OC` | `insert_image_jpeg(oc=)` / `insert_image_rgb(oc=)` put `/OC` on the image XObject, no BDC, no `/Properties`; hidden image not inventoried after reopen | PRD-NEXT §0.6 | green |
+| `OCG-WRITE-FORM-OC` | `show_pdf_page(oc=)` puts `/OC` on the Form XObject, no BDC; OFF hides the placed page's text | PRD-NEXT §0.6 | green |
+| `OCG-WRITE-BAD-OC` | non-OCG/OCMD `oc` → `InvalidArgument("bad optional content: 'oc'")`, nonexistent xref → `InvalidArgument("bad xref")` on every writer; failure leaves the page untouched | PRD-NEXT §0.6 | green |
+| `OCG-WRITE-ZERO-UNCHANGED` | `oc == 0` leaves the text / drawing / image chunks byte-identical to the plain writers; no `/Properties`, no XObject `/OC` | PRD-NEXT §0.6 | green |
+
 ### M7 — SVG export (`pdf_render::svg`) — `SVG-BASIC-*` / `SVG-EMPTY-*` / `SVG-ESCAPE-*` / `SVG-PROP-*` / `SVGTRM-*`
 
 Tests live in `crates/pdf-render/tests/svg.rs`.
@@ -2996,11 +3017,14 @@ Tests live in `python/tests/test_m7.py`.
 | `PYFITZ-M7-003` | `fitz` `addOCG`/`getOCGs`/`layerUIConfigs`/`setLayer` aliases | PRD §9.5 | green |
 | `PYFITZ-M7-004` | `pymupdf.open(...).find_tables().tables[0].to_markdown()` works | PRD §9.5 | green |
 
-### M7 follow-up — Python OCG layer configurations / OCMD / hidden content — `PYOCG-004`…`PYOCG-038`
+### M7 follow-up — Python OCG layer configurations / OCMD / hidden content — `PYOCG-004`…`PYOCG-056`
 
 Tests live in `python/tests/test_ocg_layers.py`. Expected values are hard-coded from a real
-PyMuPDF 1.28.2 oracle; `PYOCG-037`/`038` additionally run real PyMuPDF in a subprocess
-(skipped when it is not importable there) for a bidirectional parity check.
+PyMuPDF 1.27.2 oracle; `PYOCG-037`/`038`, `046`/`047` and `056` additionally run real PyMuPDF
+in a subprocess (`.venv-oracle` next to the repo, or `PDFSPINE_ORACLE_PYTHON`; skipped when it
+is not importable there) for a bidirectional parity check. `PYOCG-048`…`056` cover the
+`/Usage /View /ViewState` + configuration `/AS` visibility rows (ISO §8.11.4.4) through the
+Python API; `PYOCG-053`/`056` pin the deliberate `/AS` promotion divergence from MuPDF.
 
 | ID | feature | spec ref | status |
 |---|---|---|---|
@@ -3042,6 +3066,24 @@ PyMuPDF 1.28.2 oracle; `PYOCG-037`/`038` additionally run real PyMuPDF in a subp
 | `PYOCG-036` | `get_oc(image)` / `get_oc(form)` / `get_ocmd(AllOn)` / `get_ocmd(VE)` on the layered page | PRD §9.5 | green |
 | `PYOCG-037` | live oracle: pdfspine-authored file read by real PyMuPDF → identical `get_layers` / `get_ocmd` / UI ON states + `get_layer(n)` | PRD §9.5 | green |
 | `PYOCG-038` | live oracle: PyMuPDF-authored `/OC … BDC` file → identical `get_layers` / `get_ocmd` / `get_text` under default, panel toggle and `switch_layer` | PRD §9.5 | green |
+| `PYOCG-039` | `insert_text(oc=)` → byte-exact `q` / `/OC /MC0 BDC` / `BT … ET` / `EMC` / `Q`; `/MC0` reused for the same OCG, `/MC1` for the next; OFF hides, panel ON reveals after reopen | PRD-NEXT §0.6 | green |
+| `PYOCG-040` | `insert_textbox(oc=)` / `Shape.insert_text(oc=)` / `Shape.insert_textbox(oc=)` wrap identically; `oc=0` writes no marked content | PRD-NEXT §0.6 | green |
+| `PYOCG-041` | `insert_image(oc=)` → `/OC` on the image XObject (`get_oc` / `xref_get_key`), no BDC, no `/Properties`; hidden image block absent until the layer is ON | PRD-NEXT §0.6 | green |
+| `PYOCG-042` | `Shape.finish(oc=)` wraps each block; `page.draw_rect/circle/line(oc=)` one-shots route through the shape; `get_drawings` hides the OFF blocks | PRD-NEXT §0.6 | green |
+| `PYOCG-043` | non-OCG/OCMD `oc` → `ValueError("bad optional content: 'oc'")`, nonexistent xref → `RuntimeError("bad xref")` on every writer (`Shape.finish` at `commit`); nothing written; an OCMD is accepted | PRD-NEXT §0.6 | green |
+| `PYOCG-044` | `show_pdf_page(oc=)` → `/OC` on the Form XObject, no BDC; OFF hides the placed page's text | PRD-NEXT §0.6 | green |
+| `PYOCG-045` | `TextWriter.write_text(oc=)` and the `page.write_text(writers=, oc=)` fast path wrap every segment, reusing `/MCn` | PRD-NEXT §0.6 | green |
+| `PYOCG-046` | live oracle: pdfspine-written `oc=` text / textbox / image / shape → real PyMuPDF hides them under default `/D`, shows them after `set_layer(on=)` + reopen, reads the image `/OC`; identical BDC skeleton and `/MCn` reuse for the same writer calls | PRD-NEXT §0.6 | green |
+| `PYOCG-047` | live oracle: PyMuPDF-written `oc=` text / pixmap image / form / shapes → pdfspine reads the same `get_oc` bindings, `get_text`, `get_drawings` and image blocks under default and panel-ON | PRD-NEXT §0.6 | green |
+| `PYOCG-048` | config ON + `/Usage /View /ViewState /OFF` on a `BDC`-gated OCG → `get_text` hides it (`/AS` View entry does not rescue it) | ISO §8.11.4.4 | green |
+| `PYOCG-049` | ViewState OFF reached through an OCMD `/OCGs [ocg]` in `/Properties` → hidden | ISO §8.11.4.4 | green |
+| `PYOCG-050` | config OFF + ViewState ON, no `/AS` → still hidden | ISO §8.11.4.4 | green |
+| `PYOCG-051` | ON + `/Usage /Print /PrintState /OFF` → visible (only the View usage is evaluated) | ISO §8.11.4.4 | green |
+| `PYOCG-052` | bogus `/ViewState`, `/View <<>>` or `/Usage <<>>` fall through to the configuration state (ON visible, OFF hidden) | ISO §8.11.4.4 | green |
+| `PYOCG-053` | OFF + ViewState ON + `/AS [<</Event /View /Category [/View] /OCGs [ocg]>>]` → **visible** in pdfspine (deliberate divergence: MuPDF / PyMuPDF hide it) | ISO §8.11.4.4 | green |
+| `PYOCG-054` | `/AS` with only `/Event /Print`, or an `/AS` View entry without ViewState ON, does not promote an OFF OCG → hidden | ISO §8.11.4.4 | green |
+| `PYOCG-055` | `get_ocgs()["on"]` / `layer_ui_configs()["on"]` reflect the configuration state only, untouched by `/Usage` (ON + ViewState OFF → on; OFF + ViewState ON + `/AS` → off) | ISO §8.11.4.4 | green |
+| `PYOCG-056` | live oracle: every `/Usage` / `/AS` fixture read by real PyMuPDF → identical `get_text` and `layer_ui_configs` ON states, except the hard-coded `/AS` promotion cell (pdfspine visible, PyMuPDF hidden) | ISO §8.11.4.4 | green |
 
 ---
 

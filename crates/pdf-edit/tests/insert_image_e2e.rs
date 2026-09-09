@@ -46,7 +46,7 @@ fn synthetic_jpeg(width: u16, height: u16, components: u8) -> Vec<u8> {
 fn insert_image_001_jpeg_dctdecode() {
     let jpeg = synthetic_jpeg(64, 48, 3);
     let doc = open(&blank_page(612, 792));
-    insert_image_jpeg(&doc, 0, Rect::new(100.0, 100.0, 300.0, 250.0), &jpeg).unwrap();
+    insert_image_jpeg(&doc, 0, Rect::new(100.0, 100.0, 300.0, 250.0), &jpeg, 0).unwrap();
     let re = save_reopen(&doc);
 
     let d = first_xobject_dict(&re, 0);
@@ -82,7 +82,7 @@ fn insert_image_002_placement_ctm() {
     let jpeg = synthetic_jpeg(10, 10, 1);
     let doc = open(&blank_page(612, 792));
     // Top-left rect (100,100)-(300,250) → user space y flips on a 792-high page.
-    insert_image_jpeg(&doc, 0, Rect::new(100.0, 100.0, 300.0, 250.0), &jpeg).unwrap();
+    insert_image_jpeg(&doc, 0, Rect::new(100.0, 100.0, 300.0, 250.0), &jpeg, 0).unwrap();
     let re = save_reopen(&doc);
 
     let images = page_images(&re, 0);
@@ -102,7 +102,7 @@ fn insert_image_002_placement_ctm() {
 fn insert_image_003_xobject_and_do() {
     let jpeg = synthetic_jpeg(8, 8, 3);
     let doc = open(&blank_page(612, 792));
-    let name = insert_image_jpeg(&doc, 0, Rect::new(0.0, 0.0, 100.0, 100.0), &jpeg).unwrap();
+    let name = insert_image_jpeg(&doc, 0, Rect::new(0.0, 0.0, 100.0, 100.0), &jpeg, 0).unwrap();
     let re = save_reopen(&doc);
     let content = String::from_utf8_lossy(&page_content_bytes(&re, 0)).to_string();
     assert!(content.contains(" Do"), "no Do operator in {content}");
@@ -120,7 +120,7 @@ fn insert_image_004_raw_rgb() {
     let (w, h) = (4u32, 3u32);
     let pixels = vec![0x80u8; (w * h * 3) as usize];
     let doc = open(&blank_page(612, 792));
-    insert_image_rgb(&doc, 0, Rect::new(10.0, 10.0, 50.0, 40.0), w, h, &pixels).unwrap();
+    insert_image_rgb(&doc, 0, Rect::new(10.0, 10.0, 50.0, 40.0), w, h, &pixels, 0).unwrap();
     let re = save_reopen(&doc);
 
     let d = first_xobject_dict(&re, 0);
@@ -153,12 +153,21 @@ fn insert_image_005_bad_input_rejected() {
     let doc = open(&blank_page(612, 792));
     let not_jpeg = vec![0u8; 20];
     assert!(
-        insert_image_jpeg(&doc, 0, Rect::new(0.0, 0.0, 10.0, 10.0), &not_jpeg).is_err(),
+        insert_image_jpeg(&doc, 0, Rect::new(0.0, 0.0, 10.0, 10.0), &not_jpeg, 0).is_err(),
         "non-JPEG should be rejected"
     );
     // RGB buffer with the wrong length.
     assert!(
-        insert_image_rgb(&doc, 0, Rect::new(0.0, 0.0, 10.0, 10.0), 4, 4, &[0u8; 10]).is_err(),
+        insert_image_rgb(
+            &doc,
+            0,
+            Rect::new(0.0, 0.0, 10.0, 10.0),
+            4,
+            4,
+            &[0u8; 10],
+            0
+        )
+        .is_err(),
         "short RGB buffer should be rejected"
     );
 }

@@ -225,7 +225,9 @@ doc.get_oc(xref) -> int                                    # 图像/表单 XObje
 doc.get_ocmd(xref) -> dict                                 # {"xref","ocgs","policy","ve"}
 doc.set_ocmd(xref=0, ocgs=None, policy=None, ve=None) -> int   # 创建/整体替换一个 OCMD，返回其 xref
 ```
-> 内存中的"图层视图"（选中配置 + 面板覆盖）会影响渲染与文本抽取：隐藏的 XObject `/OC` 及 `/OC …BDC/EMC` 段落不产出内容，OCMD 按 `/P` 策略与 `/VE` 求值；`get_ocgs()` / `layer_ui_configs()` / `ocg_state()` 反映当前活动视图。局限：`Page.insert_text(oc=)` / `insert_image(oc=)` / Shape `oc=` 尚未写入 `BDC/EMC` 包裹（仅 XObject 的 `set_oc` 可把内容绑定到图层）。
+> 内存中的"图层视图"（选中配置 + 面板覆盖）会影响渲染与文本抽取：隐藏的 XObject `/OC` 及 `/OC …BDC/EMC` 段落不产出内容，OCMD 按 `/P` 策略与 `/VE` 求值；`get_ocgs()` / `layer_ui_configs()` / `ocg_state()` 反映当前活动视图（只看配置 ON/OFF，不含下述 `/Usage`）。
+> 可见性还会评估 OCG 的 `/Usage /View /ViewState`（`/OFF` 无条件隐藏，面板 override ON 也不例外）和活动配置的 `/AS`（`/Event /View` 且 `/Category` 含 `/View` 的条目所列 OCG，若 `/ViewState /ON`，即使配置 OFF 也显示）；`/Print` / `/Export` 忽略。`/AS` 这一条是刻意偏离 MuPDF/PyMuPDF（它们忽略 `/AS` 而隐藏，见 gotchas §6）；`/Intent` 不匹配时的隐藏尚未实现。
+> `oc=` 写入：`page.insert_text / insert_textbox / insert_image / show_pdf_page(..., oc=xref)`、`page.draw_*(..., oc=)`、`Shape.finish / insert_text / insert_textbox(oc=)`、`tw.write_text(page, oc=)` / `page.write_text(writers=, oc=)` 都接受 OCG 或 OCMD 的 xref（`doc.add_ocg()` 的返回值）。文本/图形写成 `q` `/OC /MCn BDC` … `EMC` `Q`（`/Resources /Properties` 的 `MCn` 取最小空闲编号，同一 xref 复用同一 key），图片与 `show_pdf_page` 不写 BDC、只在 XObject 字典上写 `/OC`——与 PyMuPDF 相同；`Shape.commit` 没有 `oc`。非 OCG/OCMD 的 xref → `ValueError("bad optional content: 'oc'")`，不存在的 xref → `RuntimeError("bad xref")`，失败时不写入任何内容。
 
 ### Journalling（撤销/重做）
 ```python
@@ -521,14 +523,17 @@ page.to_markdown(*, clip=None, tables=True, table_strategy="lines",
 
 ### 文本/图片/绘图写入
 ```python
-page.insert_text(point, text, *, fontname="helv", fontsize=11, color=None, fontfile=None, **_) -> int
-page.insert_textbox(rect, text, *, fontname="helv", fontsize=11, color=None, align=0, fontfile=None, **_) -> float
-page.insert_image(rect, *, stream=None, filename=None, pixmap=None, width=0, height=0, **_) -> None
+page.insert_text(point, text, *, fontname="helv", fontsize=11, color=None, fontfile=None, oc=0, **_) -> int
+page.insert_textbox(rect, text, *, fontname="helv", fontsize=11, color=None, align=0, fontfile=None, oc=0, **_) -> float
+page.insert_image(rect, *, stream=None, filename=None, pixmap=None, width=0, height=0, oc=0, **_) -> None
 #   提供 stream=（图片字节，JPEG 自动识别）或 filename= 或 pixmap=
-page.draw_line(p1, p2, *, color=None, width=1, **_)        # 及 draw_rect/draw_circle/draw_oval/draw_bezier/draw_polyline
+page.draw_line(p1, p2, *, color=None, width=1, oc=0, **_)  # 及 draw_rect/draw_circle/draw_oval/draw_bezier/draw_polyline/
+                                                           #    draw_curve/draw_quad/draw_sector/draw_squiggle/draw_zigzag，均接受 oc=
 page.new_shape() -> Shape                                  # 别名 newShape
-page.show_pdf_page(rect, src: Document, pno=0, ...) -> str
+page.show_pdf_page(rect, src: Document, pno=0, ..., oc=0) -> str
+page.write_text(*, writers=..., oc=0, **_) -> None         # TextWriter 快路径
 ```
+- `oc=`：OCG / OCMD 的 xref（`doc.add_ocg()` 返回值），把写入内容绑定到该图层；0 表示不绑定。详见上文 "OCG / 图层"。
 - camelCase 别名：`insertText`/`insertTextbox`/`insertImage`/`drawLine`/`drawRect`/`drawCircle`/`drawOval`/`drawBezier`/`drawPolyline`。
 
 ### 注释 (Annot)
@@ -674,10 +679,10 @@ s.draw_oval(rect)->Rect ; s.draw_bezier(p1,p2,p3,p4)->Point ; s.draw_polyline(po
 s.draw_curve(points)->Point ; s.draw_quad(quad)->Point ; s.draw_curve3(p1,p2,p3)->Point
 s.draw_sector(center,point,angle,fullSector=False)->Point
 s.draw_squiggle(p1,p2,breadth=...)->Point ; s.draw_zigzag(p1,p2,breadth=...)->Point
-s.finish(color=None, fill=None, width=1, dashes=None, even_odd=False, closePath=True, **_)
-s.commit(overlay=True) -> None
-s.insert_text(point, text, *, fontname="helv", fontsize=11, color=None, fontfile=None, **_) -> int
-s.insert_textbox(rect, buffer, *, fontname="helv", fontsize=11, color=None, align=0, fontfile=None, **_) -> float
+s.finish(color=None, fill=None, width=1, dashes=None, even_odd=False, closePath=True, oc=0, **_)  # oc= 按 finish 块绑定图层
+s.commit(overlay=True) -> None                             # 没有 oc=（与 PyMuPDF 一致）；坏 oc 在 commit 时报错
+s.insert_text(point, text, *, fontname="helv", fontsize=11, color=None, fontfile=None, oc=0, **_) -> int
+s.insert_textbox(rect, buffer, *, fontname="helv", fontsize=11, color=None, align=0, fontfile=None, oc=0, **_) -> float
 s.rect / s.width / s.height / s.x / s.y / s.doc / s.page
 ```
 
@@ -687,7 +692,7 @@ tw = pdfspine.TextWriter(page_rect, opacity=1, color=None)
 tw.append(pos, text, font=None, fontsize=11, *, language=None, **_) -> tuple[TextWriter, Point]
 tw.appendv(pos, text, font=None, fontsize=11, **_) -> tuple[TextWriter, Point]
 tw.fill_textbox(rect, text, *, font=None, fontsize=11, align=0, **_) -> list[str]
-tw.write_text(page, *, opacity=None, color=None, overlay=True, **_) -> None   # 别名 writeText
+tw.write_text(page, *, opacity=None, color=None, overlay=True, oc=0, **_) -> None   # 别名 writeText；oc= 绑定 OCG/OCMD
 tw.text_rect -> Rect ; tw.last_point -> Point ; tw.clean_rtl(text) -> str
 ```
 

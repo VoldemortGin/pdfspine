@@ -144,23 +144,11 @@ impl<'a> PageContent<'a> {
         // Resolve (or create) the page's `/Resources` dict. We materialize a
         // *direct* dict on the leaf so we own it (no risk of mutating a shared
         // indirect resources object).
-        let mut resources = match leaf.get(&Name::new("Resources")) {
-            Some(Object::Dictionary(d)) => d.clone(),
-            Some(Object::Reference(r)) => {
-                self.doc.resolve(*r)?.as_dict().cloned().unwrap_or_default()
-            }
-            _ => Dict::new(),
-        };
+        let mut resources = self.sub_dict(leaf.get(&Name::new("Resources")))?;
 
         // The category sub-dict (e.g. `/Font`, `/XObject`, `/ExtGState`).
         let cat_name = Name::new(category);
-        let mut cat = match resources.get(&cat_name) {
-            Some(Object::Dictionary(d)) => d.clone(),
-            Some(Object::Reference(r)) => {
-                self.doc.resolve(*r)?.as_dict().cloned().unwrap_or_default()
-            }
-            _ => Dict::new(),
-        };
+        let mut cat = self.sub_dict(resources.get(&cat_name))?;
 
         let name = fresh_name(&cat, prefix);
         cat.insert(Name::new(&name), resource);
@@ -169,6 +157,47 @@ impl<'a> PageContent<'a> {
         self.doc
             .update_object(self.leaf, Object::Dictionary(leaf))?;
         Ok(name)
+    }
+
+    /// Registers the optional-content group / membership dictionary `oc` under
+    /// `/Resources /Properties` and returns its property name, the operand of
+    /// the `/OC /<name> BDC` marked-content operator (PyMuPDF
+    /// `Page._get_optional_content`). The name is `MC<i>` for the smallest
+    /// `i >= 0` not already used as a `/Properties` key; an existing entry that
+    /// already references `oc` is **reused** (the same OCG inserted twice yields
+    /// the same `/MCn`).
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidArgument`] (`"bad xref"`) when `oc` is not an existing
+    /// object, or (`"bad optional content: 'oc'"`) when it is neither a
+    /// `/Type /OCG` nor a `/Type /OCMD` dictionary; propagates resolve / update
+    /// errors.
+    pub fn add_optional_content(&self, oc: u32) -> Result<String> {
+        check_optional_content(self.doc, oc)?;
+        let leaf = self.leaf_dict()?;
+        let resources = self.sub_dict(leaf.get(&Name::new("Resources")))?;
+        let props = self.sub_dict(resources.get(&Name::new("Properties")))?;
+        let existing = props.iter().find_map(|(k, v)| match v {
+            Object::Reference(r) if r.num == oc => k.as_str().map(str::to_owned),
+            _ => None,
+        });
+        match existing {
+            Some(name) => Ok(name),
+            None => self.add_resource("Properties", "MC", Object::Reference(ObjRef::new(oc, 0))),
+        }
+    }
+
+    /// A direct or indirect dictionary entry, cloned (an absent / non-dict
+    /// entry yields an empty dict).
+    fn sub_dict(&self, entry: Option<&Object>) -> Result<Dict> {
+        Ok(match entry {
+            Some(Object::Dictionary(d)) => d.clone(),
+            Some(Object::Reference(r)) => {
+                self.doc.resolve(*r)?.as_dict().cloned().unwrap_or_default()
+            }
+            _ => Dict::new(),
+        })
     }
 
     /// Whether the content stream `r` decodes to an empty / whitespace-only body
@@ -209,6 +238,47 @@ pub(crate) fn make_stream(data: Vec<u8>) -> StreamObj {
         Dict::from_iter([(Name::new("Length"), Object::Integer(data.len() as i64))]),
         data,
     )
+}
+
+/// Validates an `oc` xref for the `oc=` writers: `0` is never accepted here
+/// (callers skip optional content entirely for `0`), a missing object is a
+/// `"bad xref"`, and anything but a `/Type /OCG` / `/Type /OCMD` dictionary is
+/// `"bad optional content: 'oc'"` (PyMuPDF's messages).
+pub(crate) fn check_optional_content(doc: &DocumentStore, oc: u32) -> Result<()> {
+    if oc == 0 {
+        return Err(Error::InvalidArgument("bad xref"));
+    }
+    let obj = match doc.get_object(oc, 0) {
+        Ok(obj) => obj,
+        Err(Error::MissingObject { .. }) => return Err(Error::InvalidArgument("bad xref")),
+        Err(e) => return Err(e),
+    };
+    let is_oc = obj.as_dict().is_some_and(|d| {
+        d.get(&Name::new("Type"))
+            .and_then(Object::as_name)
+            .is_some_and(|n| matches!(n.as_bytes(), b"OCG" | b"OCMD"))
+    });
+    if is_oc {
+        Ok(())
+    } else {
+        Err(Error::InvalidArgument("bad optional content: 'oc'"))
+    }
+}
+
+/// The `/OC /<name> BDC` opener for an optional-content property `name`
+/// (empty when there is no optional content).
+pub(crate) fn oc_bdc(name: Option<&str>) -> String {
+    name.map(|n| format!("/OC /{n} BDC\n")).unwrap_or_default()
+}
+
+/// The `EMC` closer matching [`oc_bdc`] (empty when there is no optional
+/// content).
+pub(crate) fn oc_emc(name: Option<&str>) -> &'static str {
+    if name.is_some() {
+        "EMC\n"
+    } else {
+        ""
+    }
 }
 
 /// Allocates a resource name `"{prefix}{n}"` not already present in `dict`,

@@ -2741,6 +2741,9 @@ pub struct FinishParams {
     pub even_odd: bool,
     /// Close the current sub-path before painting.
     pub close_path: bool,
+    /// Optional-content xref (OCG / OCMD) wrapping the block in `/OC /MCn BDC`
+    /// … `EMC`; `0` for none (PyMuPDF `Shape.finish(oc=)`).
+    pub oc: u32,
 }
 
 /// A path/paint builder over one page (PyMuPDF `Shape`). Because
@@ -2829,6 +2832,7 @@ impl ShapeHandle {
                     dashes: None,
                     even_odd: false,
                     close_path: false,
+                    oc: 0,
                 },
             ));
         }
@@ -2858,7 +2862,8 @@ impl ShapeHandle {
                 params.dashes.as_deref(),
                 params.even_odd,
                 params.close_path,
-            );
+                params.oc,
+            )?;
         }
         shape.commit()?;
         Ok(())
@@ -2872,12 +2877,13 @@ impl ShapeHandle {
 // `pdf_edit::*` with `page.document()` + `page.number()`.
 
 /// Inserts `text` at `point` (PyMuPDF `Page.insert_text`), returning the number
-/// of lines written.
+/// of lines written. A non-zero `oc` (OCG / OCMD xref) wraps the text in an
+/// `/OC /MCn BDC` … `EMC` marked-content section.
 ///
 /// # Errors
 ///
 /// A typed [`Error`] from the content-insert path (e.g. an unparseable
-/// `fontfile`).
+/// `fontfile`, or an `oc` that is not an existing OCG / OCMD).
 #[allow(clippy::too_many_arguments)]
 pub fn page_insert_text(
     page: &Page,
@@ -2887,6 +2893,7 @@ pub fn page_insert_text(
     fontsize: f64,
     color: (f64, f64, f64),
     fontfile: Option<&[u8]>,
+    oc: u32,
 ) -> Result<usize> {
     let opts = pdf_edit::TextOptions {
         fontname,
@@ -2894,6 +2901,7 @@ pub fn page_insert_text(
         color: Color::new(color.0, color.1, color.2),
         fontfile,
         align: Align::Left,
+        oc,
     };
     Ok(pdf_edit::insert_text(
         page.document(),
@@ -2905,7 +2913,8 @@ pub fn page_insert_text(
 }
 
 /// Inserts wrapped, aligned `text` into `rect` (PyMuPDF `Page.insert_textbox`),
-/// returning the unused height (positive) or overflow (negative).
+/// returning the unused height (positive) or overflow (negative). A non-zero
+/// `oc` wraps the text in an `/OC /MCn BDC` … `EMC` marked-content section.
 ///
 /// # Errors
 ///
@@ -2920,6 +2929,7 @@ pub fn page_insert_textbox(
     color: (f64, f64, f64),
     align: Align,
     fontfile: Option<&[u8]>,
+    oc: u32,
 ) -> Result<f64> {
     let opts = pdf_edit::TextOptions {
         fontname,
@@ -2927,6 +2937,7 @@ pub fn page_insert_textbox(
         color: Color::new(color.0, color.1, color.2),
         fontfile,
         align,
+        oc,
     };
     Ok(pdf_edit::insert_textbox(
         page.document(),
@@ -2938,32 +2949,38 @@ pub fn page_insert_textbox(
 }
 
 /// Inserts a JPEG image filling `rect` (PyMuPDF `Page.insert_image`), returning
-/// the chosen XObject resource name.
+/// the chosen XObject resource name. A non-zero `oc` (OCG / OCMD xref) is
+/// written as the image XObject's `/OC` entry.
 ///
 /// # Errors
 ///
-/// [`Error::Unsupported`] when `jpeg` is not a parseable JPEG.
-pub fn page_insert_image_jpeg(page: &Page, rect: Rect, jpeg: &[u8]) -> Result<String> {
+/// [`Error::Unsupported`] when `jpeg` is not a parseable JPEG; a typed
+/// [`Error`] for an `oc` that is not an existing OCG / OCMD.
+pub fn page_insert_image_jpeg(page: &Page, rect: Rect, jpeg: &[u8], oc: u32) -> Result<String> {
     Ok(pdf_edit::insert_image_jpeg(
         page.document(),
         page.number(),
         rect,
         jpeg,
+        oc,
     )?)
 }
 
 /// Inserts a raw 8-bit RGB image filling `rect` (PyMuPDF `Page.insert_image`),
-/// returning the chosen XObject resource name.
+/// returning the chosen XObject resource name. A non-zero `oc` (OCG / OCMD
+/// xref) is written as the image XObject's `/OC` entry.
 ///
 /// # Errors
 ///
-/// [`Error::Unsupported`] when `pixels.len() != width * height * 3`.
+/// [`Error::Unsupported`] when `pixels.len() != width * height * 3`; a typed
+/// [`Error`] for an `oc` that is not an existing OCG / OCMD.
 pub fn page_insert_image_rgb(
     page: &Page,
     rect: Rect,
     width: u32,
     height: u32,
     pixels: &[u8],
+    oc: u32,
 ) -> Result<String> {
     Ok(pdf_edit::insert_image_rgb(
         page.document(),
@@ -2972,6 +2989,7 @@ pub fn page_insert_image_rgb(
         width,
         height,
         pixels,
+        oc,
     )?)
 }
 
@@ -3742,17 +3760,20 @@ pub fn page_read_contents(page: &Page) -> Vec<u8> {
 ///
 /// Useful for n-up / watermark / stamp composition. The placement maps the
 /// source page's media box onto `rect`; rotation of the source page is honored
-/// by baking its `/Rotate` into the form's matrix.
+/// by baking its `/Rotate` into the form's matrix. A non-zero `oc` (OCG / OCMD
+/// xref in `page`'s document) is written as the form XObject's `/OC` entry.
 ///
 /// # Errors
 ///
 /// [`Error::Syntax`] for an out-of-range destination page or `src_pno`;
-/// propagates graft / content-edit errors.
+/// propagates graft / content-edit errors (including an `oc` that is not an
+/// existing OCG / OCMD).
 pub fn page_show_pdf_page(
     page: &Page,
     rect: Rect,
     src: &Document,
     src_pno: usize,
+    oc: u32,
 ) -> Result<String> {
     let leaf = page_leaf(page)?;
     Ok(pdf_edit::show_pdf_page(
@@ -3761,6 +3782,7 @@ pub fn page_show_pdf_page(
         &src.store,
         src_pno,
         rect,
+        oc,
     )?)
 }
 

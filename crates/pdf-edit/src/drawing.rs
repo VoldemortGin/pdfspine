@@ -17,7 +17,7 @@ use pdf_core::geom::{Point, Rect};
 use pdf_core::DocumentStore;
 
 use crate::color::Color;
-use crate::content::{fmt_num, PageContent};
+use crate::content::{fmt_num, oc_bdc, oc_emc, PageContent};
 
 /// The cubic-Bézier circle constant: κ = 4/3·(√2 − 1) ≈ 0.5523 (PRD §8.8).
 const KAPPA: f64 = 0.552_284_749_830_793_4;
@@ -256,9 +256,15 @@ impl<'a> Shape<'a> {
     /// - both set → `B` (fill + stroke);
     /// - neither → `n` (no paint — path discarded but state applied).
     ///
-    /// The state + paint are wrapped in a `q … Q` so they don't leak. Returns
-    /// `self` for chaining. (PyMuPDF allows multiple `finish` blocks before a
-    /// single `commit`.)
+    /// The state + paint are wrapped in a `q … Q` so they don't leak. (PyMuPDF
+    /// allows multiple `finish` blocks before a single `commit`.) A non-zero
+    /// `oc` (an OCG / OCMD xref) brackets the block in `/OC /MCn BDC` … `EMC`
+    /// just inside the `q` / `Q` (PyMuPDF `Shape.finish(oc=)`).
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidArgument`](pdf_core::error::Error::InvalidArgument) for
+    /// an `oc` that is not an existing OCG / OCMD; propagates resolve errors.
     #[allow(clippy::too_many_arguments)]
     pub fn finish(
         &mut self,
@@ -268,13 +274,20 @@ impl<'a> Shape<'a> {
         dashes: Option<&str>,
         even_odd: bool,
         close_path: bool,
-    ) {
+        oc: u32,
+    ) -> Result<()> {
+        let oc_name = if oc == 0 {
+            None
+        } else {
+            Some(self.pc.add_optional_content(oc)?)
+        };
         // Pull out the path constructed since the previous finish/start. A
         // finished group starts a fresh subpath (PyMuPDF resets last_point).
         let path = std::mem::take(&mut self.buf);
         self.last = None;
         let mut block = Vec::new();
         block.extend_from_slice(b"q\n");
+        block.extend_from_slice(oc_bdc(oc_name.as_deref()).as_bytes());
         block.extend_from_slice(format!("{} w\n", fmt_num(width)).as_bytes());
         if let Some(d) = dashes {
             block.extend_from_slice(format!("{d} d\n").as_bytes());
@@ -309,11 +322,13 @@ impl<'a> Shape<'a> {
         };
         block.extend_from_slice(paint.as_bytes());
         block.push(b'\n');
+        block.extend_from_slice(oc_emc(oc_name.as_deref()).as_bytes());
         block.extend_from_slice(b"Q\n");
         // Stash the finished block back into `buf` (committed blocks accumulate).
         // We tag committed blocks by moving them to a separate area: reuse `buf`
         // as the running output, and continue accumulating new path ops after.
         self.committed.extend_from_slice(&block);
+        Ok(())
     }
 
     /// Appends the accumulated finished blocks to the page as one content chunk.
@@ -357,7 +372,7 @@ pub fn draw_line(
 ) -> Result<()> {
     let mut s = Shape::new(doc, page)?;
     s.draw_line(p1, p2);
-    s.finish(Some(color), None, width, None, false, false);
+    s.finish(Some(color), None, width, None, false, false, 0)?;
     s.commit()
 }
 
@@ -375,7 +390,7 @@ pub fn draw_rect(
 ) -> Result<()> {
     let mut s = Shape::new(doc, page)?;
     s.draw_rect(rect);
-    s.finish(color, fill, width, None, false, false);
+    s.finish(color, fill, width, None, false, false, 0)?;
     s.commit()
 }
 
@@ -394,7 +409,7 @@ pub fn draw_circle(
 ) -> Result<()> {
     let mut s = Shape::new(doc, page)?;
     s.draw_circle(center, r);
-    s.finish(color, fill, width, None, false, false);
+    s.finish(color, fill, width, None, false, false, 0)?;
     s.commit()
 }
 
@@ -412,7 +427,7 @@ pub fn draw_oval(
 ) -> Result<()> {
     let mut s = Shape::new(doc, page)?;
     s.draw_oval(rect);
-    s.finish(color, fill, width, None, false, false);
+    s.finish(color, fill, width, None, false, false, 0)?;
     s.commit()
 }
 
@@ -433,7 +448,7 @@ pub fn draw_bezier(
 ) -> Result<()> {
     let mut s = Shape::new(doc, page)?;
     s.draw_bezier(p1, p2, p3, p4);
-    s.finish(Some(color), None, width, None, false, false);
+    s.finish(Some(color), None, width, None, false, false, 0)?;
     s.commit()
 }
 
@@ -450,7 +465,7 @@ pub fn draw_polyline(
 ) -> Result<()> {
     let mut s = Shape::new(doc, page)?;
     s.draw_polyline(points);
-    s.finish(Some(color), None, width, None, false, false);
+    s.finish(Some(color), None, width, None, false, false, 0)?;
     s.commit()
 }
 
@@ -467,6 +482,6 @@ pub fn draw_curve(
 ) -> Result<()> {
     let mut s = Shape::new(doc, page)?;
     s.draw_curve(points);
-    s.finish(Some(color), None, width, None, false, false);
+    s.finish(Some(color), None, width, None, false, false, 0)?;
     s.commit()
 }
