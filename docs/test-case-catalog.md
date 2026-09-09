@@ -1209,6 +1209,26 @@ self-built PDFs (reuse `tests/common`). No PyMuPDF files.
 | `LAYOUT-ORDER-005` | two-column prose at prose leading stays column-major | PRD §8.6.2 | green |
 | `LAYOUT-ORDER-006` | fully paired two-column layout stays column-major | PRD §8.6.2 | green |
 
+### Reading order + CropBox clipping (`reading_order_round1.rs`) — `READORDER-*` / `CROPCLIP-*`
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `READORDER-001` | two-column page reads the whole left column, then the right | PRD §8.6.2 | green |
+| `READORDER-002` | full-width header precedes a two-column body and does not collapse it | PRD §8.6.2 | green |
+| `READORDER-003` | a single column is not split into columns | PRD §8.6.2 | green |
+| `READORDER-004` | two columns starting with the same sentence are not de-duplicated | PRD §8.6.2 | green |
+| `READORDER-005` | no spurious blank lines between column regions | PRD §8.6.2 | green |
+| `READORDER-006` | three columns painted right-to-left still read A→B→C | docs/reading-order-root-cause.md §e | green |
+| `READORDER-007` | spanning header and footer painted last still bracket the columns | docs/reading-order-root-cause.md §e | green |
+| `READORDER-008` | a paragraph gap wider than the gutter keeps each column contiguous | docs/reading-order-root-cause.md §e | green |
+| `READORDER-009` | a line starting inside the gutter valley stays in its own column | docs/reading-order-root-cause.md stage 3 | green |
+| `READORDER-010` | a spanning band partitions the columns into rows (L→R→band→L→R) | docs/reading-order-root-cause.md stage 3 | green |
+| `READORDER-011` | a page with no column structure reads geometrically, not in paint order | docs/reading-order-root-cause.md stage 3 | green |
+| `READORDER-012` | a valid column cut beats a wider band gap | docs/reading-order-root-cause.md stage 3 | green |
+| `CROPCLIP-001` | a glyph string outside the CropBox is excluded from `get_text("text")` | PRD §8.6.2 | green |
+| `CROPCLIP-002` | without a clip rect nothing is dropped | PRD §8.6.2 | green |
+| `CROPCLIP-003` | a glyph whose origin sits exactly on the crop edge is kept | PRD §8.6.2 | green |
+
 ### PyMuPDF block compatibility — `COMPAT-BLOCK-*`
 
 | ID | feature | spec ref | status |
@@ -1498,7 +1518,7 @@ methods, and the **M2 accuracy exit gate**. Self-generated fixtures only
 | `PYTEXT-007` | html/xhtml/xml return `str` | PRD §9.4 | green |
 | `PYTEXT-008` | `get_textpage()` handle reused via `textpage=` | PRD §9.4 | green |
 | `PYTEXT-009` | `sort=True` orders blocks by (y, x) | PRD §9.4 | green |
-| `PYTEXT-010` | `sort=True` orders plain-text lines by (y, x), including lines sharing one block; `sort=False` stays unchanged | compatibility findings P2 | green |
+| `PYTEXT-010` | `sort=True` orders plain-text lines by (y, x), including lines sharing one block; `sort=False` is geometric between blocks and paint-ordered only inside one | compatibility findings P2; reading-order stage 3 | green |
 | `PYTEXT-011` | `TEXT_INHIBIT_SPACES` reaches the layout: a `-600`-kerned `TJ` yields `ABCD` / `["ABCD"]` with the flag and `AB CD` without; a literal space glyph is kept either way | PRD §8.6.2 | green |
 | `PYTEXT-012` | `clip=` restricts text / words / blocks / dict / rawdict / json / rawjson alike; block and line numbers restart at 0; dict / json `width`/`height` are the clip's | PRD-NEXT §0 (clip fix) | green |
 | `PYTEXT-013` | per-character strict overlap: a glyph the clip cuts into (30 % or 0.01 pt) is kept whole with its full box, one it touches is out (the preceding space glyph stays) | PRD-NEXT §0 (clip fix) | green |

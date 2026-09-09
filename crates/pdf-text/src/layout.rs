@@ -118,19 +118,27 @@ const BLOCK_BASELINE_FAR: f64 = 1.5;
 /// an indented paragraph when the baseline movement is in the middle band.
 const BLOCK_INDENT_EPSILON: f64 = 0.5;
 
-/// Two disjoint regions are treated as side-by-side columns when they overlap
-/// by at least this fraction of the shorter region's vertical extent.
-const COLUMN_REGION_OVERLAP_FRAC: f64 = 0.5;
+/// A line whose bbox reaches this far past both edges of the gutter valley is
+/// a genuinely spanning line; anything else is a column line that merely dips
+/// into the valley (a right-column paragraph number, a hanging indent).
+const SPANNING_VALLEY_MARGIN: f64 = 0.5;
 
-/// A column line narrower than this fraction of its column (a page number, a
-/// date, a rotated marginal string) does not bound the column body when the
-/// spanning lines of a column cut are placed above or below the columns.
-const SPANNING_COLUMN_LINE_MIN_WIDTH_FRAC: f64 = 0.5;
+/// Whether the spanning bands of a column cut partition the columns into rows
+/// (`true`, the reading-order semantics: row 0 left, row 0 right, band 0, row 1
+/// left, …) or float between two whole columns (`false`, the pre-stage-3
+/// semantics: above, whole left column, middle, whole right column, below).
+///
+/// Kept as a compile-time switch because the two readings disagree on a real
+/// class of pages — a spanning sub-heading between column rows wants row
+/// partitioning, a full-width figure caption in the middle of a journal column
+/// flow wants floating — and the corpus evidence for the default lives in
+/// `docs/reading-order-root-cause.md`.
+const SPANNING_BANDS_PARTITION_ROWS: bool = true;
 
-/// A band no taller than this many typical line heights that holds a spanning
-/// line is a header or footer row; the column lines it carries (fragments of a
-/// header cut at the gutters) do not bound the column body either.
-const SPANNING_MARGIN_ROW_MAX_HEIGHT: f64 = 2.0;
+/// A column line counts as belonging below a spanning band once its top edge
+/// has cleared the band's bottom by all but this fraction of its own height, so
+/// a column line sharing the band's row stays with the row above it.
+const SPANNING_ROW_ASSIGN_FRAC: f64 = 0.5;
 
 /// Minimum evidence required before bypassing XY-cut for a dense table. Tables
 /// need same-row cells to remain together; cutting them into vertical regions
@@ -1797,95 +1805,38 @@ fn is_synth_ws(c: char) -> bool {
 /// horizontal gutter splits stacked regions like a full-width header above a
 /// two-column body). Within each leaf region the lines are grouped into
 /// paragraph blocks by vertical proximity, so a block never straddles a column.
+///
+/// Since stage 3 the XY-cut's emission order *is* the page's reading order:
+/// every region is atomic and regions come out in the cut's depth-first order
+/// (spanning band → column → y). Paint order survives only inside a region,
+/// where the lines are still taken in content sequence — it decides nothing
+/// about how two regions relate.
 fn group_blocks_columned(lines: Vec<Line>, width: f64, height: f64) -> Vec<Block> {
     if lines.is_empty() {
         return Vec::new();
     }
     let idxs: Vec<usize> = (0..lines.len()).collect();
-    let table_dominant = is_table_dominant(&lines);
     let mut regions: Vec<Vec<usize>> = Vec::new();
-    let root_column_cut = if table_dominant {
+    if is_table_dominant(&lines) {
+        // A dense grid must keep its same-row cells together: cutting it into
+        // column regions fragments every row. Leave it as one region.
         regions.push(idxs);
-        false
     } else {
-        cut_lines(&lines, &idxs, width, height, &mut regions)
-    };
+        cut_lines(&lines, &idxs, width, height, &mut regions);
+    }
 
-    // When the page root is a column cut, region order is geometric — the
-    // XY-cut's left-to-right, top-to-bottom emission order — and every region
-    // is one atomic group: columns are read left to right regardless of the
-    // order the content stream painted them (a right column or a running
-    // header painted first), each column whole.
-    //
-    // Any other root keeps the content-sequence order below. A root Y-cut over
-    // a multi-column body can slice both columns into stacked bands (paragraph
-    // gaps wider than the gutter), and there the paint order is the only
-    // signal that keeps each column contiguous; it also repairs a leaf region
-    // that still mixes two columns, which an atomic group would carry along.
-    // Keying on the axis the root cut chose is a stop-gap; the geometric
-    // `band → column → y` order for every root is future work.
-    //
-    // A fine paragraph split inside both halves of a multi-column layout would
-    // make the content-order sort interleave the columns line-by-line.
-    // Identify only genuinely side-by-side regions here; single-column and
-    // vertically stacked regions keep the fine compatibility grouping.
-    let region_boxes: Vec<Rect> = regions
-        .iter()
-        .map(|region| {
-            region
-                .iter()
-                .fold(Rect::default(), |bbox, &i| bbox.union(&lines[i].bbox))
-                .normalize()
-        })
-        .collect();
-    let side_by_side: Vec<bool> = region_boxes
-        .iter()
-        .enumerate()
-        .map(|(i, bbox)| {
-            region_boxes
-                .iter()
-                .enumerate()
-                .any(|(j, other)| i != j && regions_are_side_by_side(bbox, other))
-        })
-        .collect();
-
-    // Each ordinary block is one order group. A side-by-side column is an atomic
-    // group: its fine-grained blocks stay contiguous and top-to-bottom instead
-    // of being interleaved with the neighbouring column by content sequence.
-    let mut order_groups: Vec<(usize, Vec<Block>)> = Vec::new();
     // `lines` is consumed region-by-region: move each line out exactly once.
     let mut slots: Vec<Option<Line>> = lines.into_iter().map(Some).collect();
-    for (region_index, region) in regions.into_iter().enumerate() {
-        // Take the region's lines (top-to-bottom) and split into paragraphs.
+    let mut blocks: Vec<Block> = Vec::new();
+    for region in regions {
         let mut region_lines: Vec<Line> = region
             .iter()
             .map(|&i| slots[i].take().expect("each line placed once"))
             .collect();
         region_lines.sort_by_key(|line| line.seq);
-        let mut region_blocks = Vec::new();
-        group_region_paragraphs(region_lines, &mut region_blocks);
-        if root_column_cut {
-            order_groups.push((region_index, region_blocks));
-        } else if side_by_side[region_index] {
-            let order_key = region_blocks
-                .iter()
-                .map(|block| block.seq)
-                .min()
-                .unwrap_or(usize::MAX);
-            order_groups.push((order_key, region_blocks));
-        } else {
-            order_groups.extend(
-                region_blocks
-                    .into_iter()
-                    .map(|block| (block.seq, vec![block])),
-            );
-        }
+        group_region_paragraphs(region_lines, &mut blocks);
     }
-    order_groups.sort_by_key(|(order_key, _)| *order_key);
-    order_groups
-        .into_iter()
-        .flat_map(|(_, blocks)| blocks)
-        .collect()
+    blocks
 }
 
 /// Detects a page region dominated by a seeded grid. Three-or-more same-row
@@ -2035,16 +1986,6 @@ fn line_has_visible_text(line: &Line) -> bool {
         .iter()
         .flat_map(|span| span.chars.iter())
         .any(|ch| !ch.c.is_whitespace())
-}
-
-/// Whether two region boxes form horizontally disjoint columns with substantial
-/// vertical overlap. Touching edges count as disjoint; glyph bboxes from two
-/// columns do not need a rounded-coordinate gap to prove separation.
-fn regions_are_side_by_side(a: &Rect, b: &Rect) -> bool {
-    let horizontally_disjoint = a.x1 <= b.x0 || b.x1 <= a.x0;
-    let vertical_overlap = (a.y1.min(b.y1) - a.y0.max(b.y0)).max(0.0);
-    let shorter_height = a.height().min(b.height()).max(f64::EPSILON);
-    horizontally_disjoint && vertical_overlap >= shorter_height * COLUMN_REGION_OVERLAP_FRAC
 }
 
 /// Groups one column region's (y-sorted) lines into paragraph blocks by baseline,
@@ -2219,83 +2160,66 @@ fn line_starts_with_plausible_bullet(line: &Line) -> bool {
 
 /// Recursive XY-cut over **lines** into column / band regions.
 ///
-/// At each node it considers the single widest *empty gutter* on each axis (a
-/// coordinate band that no line's projected interval crosses) and cuts on
-/// whichever gutter is wider. Cutting on the wider gutter is what lets a
-/// full-width header/title — which bridges the column gutter and would otherwise
-/// block a vertical cut — be peeled off by a horizontal cut first; the remaining
-/// pure multi-column body then yields a clean vertical (column) cut. A vertical
-/// gutter is a coverage valley at least `min_x_gut` wide (see [`column_gutter`]);
-/// a horizontal gutter must clear ~1.3 typical line heights (so paragraph/band
-/// gaps separate, but ordinary inter-line spacing does not). Regions are emitted
-/// in geometric reading order (left before right, top before bottom); whether
-/// [`group_blocks_columned`] keeps that order or falls back to content sequence
-/// depends on the returned flag, which is `true` when this node was split by a
-/// column cut.
-fn cut_lines(
-    lines: &[Line],
-    idxs: &[usize],
-    width: f64,
-    height: f64,
-    out: &mut Vec<Vec<usize>>,
-) -> bool {
+/// A **column cut always wins** over a band cut: a valid vertical cut carries a
+/// structural guarantee (both sides substantial, at most a tolerated handful of
+/// lines crossing the valley), while the widest horizontal gutter is only a
+/// measure of white space, so on a page whose paragraph spacing is wider than
+/// its column gutter the old "cut on the wider gutter" rule sliced a two-column
+/// body into full-width bands. A full-width header/title does not block the
+/// column cut: it is peeled off as a spanning line by [`find_column_cut`] and
+/// re-emitted by [`emit_column_cut`]. Only when no column cut validates does the
+/// node fall back to a horizontal cut on gutters of ~1.3 typical line heights
+/// (so paragraph/band gaps separate, but ordinary inter-line spacing does not).
+///
+/// Regions come out in geometric reading order — spanning band, then left, then
+/// right, top before bottom — and [`group_blocks_columned`] keeps exactly that
+/// order.
+fn cut_lines(lines: &[Line], idxs: &[usize], width: f64, height: f64, out: &mut Vec<Vec<usize>>) {
     if idxs.len() <= 1 {
         if !idxs.is_empty() {
             out.push(idxs.to_vec());
         }
-        return false;
+        return;
     }
     let typ_h = typical_line_height_idx(lines, idxs);
+
+    if let Some((_, left, right, spanning)) = find_column_cut(lines, idxs, typ_h) {
+        // Once an X-cut has established real columns, do not Y-cut inside a
+        // column: a large paragraph gap must not break the column into leaf
+        // regions. Paragraph grouping still performs its fine 1.5x splits
+        // inside each atomic column. Nested X-cuts remain supported for
+        // three-or-more columns.
+        emit_column_cut(lines, &left, &right, &spanning, width, height, out);
+        return;
+    }
+
     let min_y_gut = (typ_h * REGION_BAND_GAP_FRAC).max(1.0);
-
-    let column_cut = find_column_cut(lines, idxs, typ_h);
-    let best_x_width = column_cut.as_ref().map(|(width, _, _, _)| *width);
-    let best_y = widest_y_gutter(lines, idxs, min_y_gut);
-
-    // Cut on the axis whose widest empty gutter is larger. Ties prefer the
-    // vertical (column) cut so side-by-side columns separate before bands.
-    let prefer_x = match (best_x_width, best_y) {
-        (Some(xg), Some((yg, _))) => xg >= yg,
-        (Some(_), None) => true,
-        _ => false,
-    };
-
-    if prefer_x {
-        if let Some((_, left, right, spanning)) = column_cut {
-            // Once an X-cut has established real columns, do not Y-cut inside a
-            // column: a large paragraph gap must not break the column into leaf
-            // regions that later interleave by content sequence. Paragraph
-            // grouping still performs its fine 1.5x splits inside each atomic
-            // column. Nested X-cuts remain supported for three-or-more columns.
-            emit_column_cut(lines, &left, &right, &spanning, width, height, out);
-            return true;
+    let groups = split_y_bands(lines, idxs, min_y_gut);
+    // A horizontal cut that did not actually separate anything (one group)
+    // means the region is irreducible — emit it whole to avoid recursion.
+    if groups.len() <= 1 {
+        out.push(idxs.to_vec());
+    } else {
+        for g in groups {
+            cut_lines(lines, &g, width, height, out);
         }
     }
-
-    if best_y.is_some() {
-        let groups = split_y_bands(lines, idxs, min_y_gut);
-        // A horizontal cut that did not actually separate anything (one group)
-        // means the region is irreducible — emit it whole to avoid recursion.
-        if groups.len() <= 1 {
-            out.push(idxs.to_vec());
-        } else {
-            for g in groups {
-                cut_lines(lines, &g, width, height, out);
-            }
-        }
-        return false;
-    }
-
-    // No clean cut: this region is one column.
-    out.push(idxs.to_vec());
-    false
 }
 
-/// Emits the regions of one column cut in reading order. Spanning lines that
-/// sit entirely above both columns (a running header, a title) come first and
-/// lines entirely below both columns (a footer) come last; spanning lines that
-/// interrupt the columns (a caption between column rows) stay between the left
-/// and the right column subtree.
+/// Emits the regions of one column cut in reading order.
+///
+/// The spanning lines are stacked into bands (a running header, a full-width
+/// sub-heading, a footer), and those bands **partition the columns into rows**:
+/// row 0 of the left column, row 0 of the right column, band 0, row 1 left,
+/// row 1 right, band 1, … A header is simply the case where row 0 is empty and
+/// a footer the case where the last row is. A column line that shares a band's
+/// row — a header fragment the gutter cut into the columns — is assigned to the
+/// row *above* the band, so those fragments stay at the top of the page.
+///
+/// With [`SPANNING_BANDS_PARTITION_ROWS`] cleared the pre-stage-3 semantics
+/// apply instead: the spanning bands above the columns come first, then the
+/// whole left column, then the bands that interrupt the columns, then the whole
+/// right column, then the bands below.
 fn emit_column_cut(
     lines: &[Line],
     left: &[usize],
@@ -2305,83 +2229,107 @@ fn emit_column_cut(
     height: f64,
     out: &mut Vec<Vec<usize>>,
 ) {
-    let (above, middle, below) = partition_spanning(lines, left, right, spanning);
-    if !above.is_empty() {
-        cut_spanning(lines, &above, width, height, out);
+    if spanning.is_empty() {
+        cut_column_subtree(lines, left, width, height, out);
+        cut_column_subtree(lines, right, width, height, out);
+        return;
     }
-    cut_column_subtree(lines, left, width, height, out);
-    if !middle.is_empty() {
-        cut_spanning(lines, &middle, width, height, out);
+
+    let min_gap = (typical_line_height_idx(lines, spanning) * REGION_BAND_GAP_FRAC).max(1.0);
+    let bands = split_y_bands(lines, spanning, min_gap);
+
+    if !SPANNING_BANDS_PARTITION_ROWS {
+        let (above, middle, below) = float_spanning_bands(lines, left, right, &bands);
+        for band in above {
+            cut_spanning(lines, band, width, height, out);
+        }
+        cut_column_subtree(lines, left, width, height, out);
+        for band in middle {
+            cut_spanning(lines, band, width, height, out);
+        }
+        cut_column_subtree(lines, right, width, height, out);
+        for band in below {
+            cut_spanning(lines, band, width, height, out);
+        }
+        return;
     }
-    cut_column_subtree(lines, right, width, height, out);
-    if !below.is_empty() {
-        cut_spanning(lines, &below, width, height, out);
+
+    // The bottom edge of each band, top-to-bottom (`split_y_bands` orders them).
+    let band_bottoms: Vec<f64> = bands
+        .iter()
+        .map(|band| {
+            band.iter()
+                .fold(Rect::default(), |bbox, &i| bbox.union(&lines[i].bbox))
+                .normalize()
+                .y1
+        })
+        .collect();
+    let row_of = |i: usize| -> usize {
+        let bbox = lines[i].bbox.normalize();
+        let top = bbox.y0 + bbox.height() * SPANNING_ROW_ASSIGN_FRAC;
+        band_bottoms.iter().filter(|&&y1| top >= y1).count()
+    };
+    let rows_of = |side: &[usize]| -> Vec<Vec<usize>> {
+        let mut rows: Vec<Vec<usize>> = vec![Vec::new(); bands.len() + 1];
+        for &i in side {
+            rows[row_of(i)].push(i);
+        }
+        rows
+    };
+    let left_rows = rows_of(left);
+    let right_rows = rows_of(right);
+
+    for row in 0..=bands.len() {
+        if !left_rows[row].is_empty() {
+            cut_column_subtree(lines, &left_rows[row], width, height, out);
+        }
+        if !right_rows[row].is_empty() {
+            cut_column_subtree(lines, &right_rows[row], width, height, out);
+        }
+        if row < bands.len() {
+            cut_spanning(lines, &bands[row], width, height, out);
+        }
     }
 }
 
-/// Splits the spanning lines of a column cut into `(above, middle, below)`
-/// relative to the vertical extent of the columns' body. The body is bounded
-/// by the column lines at least [`SPANNING_COLUMN_LINE_MIN_WIDTH_FRAC`] of
-/// their column wide and outside header/footer rows (see
-/// [`SPANNING_MARGIN_ROW_MAX_HEIGHT`]): a page number or a date in the top
-/// margin must not demote the title under it to the middle, a rotated marginal
-/// string must not keep a footer from being last, and a header fragment that
-/// the gutter split into one column must not bound the body at its own row. A
-/// line that the gutter tolerance let through on the first body row (a recital
-/// number) stays in the middle.
-fn partition_spanning(
+/// 浮动语义下 spanning band 的三分结果：(两栏之上, 两栏之间, 两栏之下)。
+type SpanningBandSplit<'a> = (
+    Vec<&'a Vec<usize>>,
+    Vec<&'a Vec<usize>>,
+    Vec<&'a Vec<usize>>,
+);
+
+/// Splits the spanning bands of a column cut into `(above, middle, below)`
+/// relative to the vertical extent of the columns. Only used by the
+/// [`SPANNING_BANDS_PARTITION_ROWS`]`= false` (float) semantics.
+fn float_spanning_bands<'a>(
     lines: &[Line],
     left: &[usize],
     right: &[usize],
-    spanning: &[usize],
-) -> (Vec<usize>, Vec<usize>, Vec<usize>) {
-    // Column lines at least half their column wide are the body; page numbers,
-    // dates, recital numbers and rotated marginal strings do not bound it.
-    let mut body: Vec<usize> = Vec::new();
-    for side in [left, right] {
-        let min_width = region_width(lines, side) * SPANNING_COLUMN_LINE_MIN_WIDTH_FRAC;
-        body.extend(
-            side.iter()
-                .copied()
-                .filter(|&j| lines[j].bbox.normalize().width() >= min_width),
-        );
-    }
-    // A running header cut into per-column fragments at the gutters leaves
-    // body-wide fragments inside the columns on the header's own row. A thin
-    // band that holds a spanning line is such a margin row, not body.
-    let all: Vec<usize> = body.iter().chain(spanning).copied().collect();
-    let typ_h = typical_line_height_idx(lines, &all);
-    let min_gap = (typ_h * REGION_BAND_GAP_FRAC).max(1.0);
+    bands: &'a [Vec<usize>],
+) -> SpanningBandSplit<'a> {
     let mut body_top = f64::INFINITY;
     let mut body_bottom = f64::NEG_INFINITY;
-    for band in split_y_bands(lines, &all, min_gap) {
-        let bbox = band
-            .iter()
-            .fold(Rect::default(), |bbox, &i| bbox.union(&lines[i].bbox))
-            .normalize();
-        let margin_row = bbox.height() <= typ_h * SPANNING_MARGIN_ROW_MAX_HEIGHT
-            && band.iter().any(|i| spanning.contains(i));
-        if margin_row {
-            continue;
-        }
-        for &j in band.iter().filter(|j| !spanning.contains(j)) {
-            let column = lines[j].bbox.normalize();
-            body_top = body_top.min(column.y0);
-            body_bottom = body_bottom.max(column.y1);
-        }
+    for &i in left.iter().chain(right) {
+        let column = lines[i].bbox.normalize();
+        body_top = body_top.min(column.y0);
+        body_bottom = body_bottom.max(column.y1);
     }
     let mut above = Vec::new();
     let mut middle = Vec::new();
     let mut below = Vec::new();
-    for &i in spanning {
-        let span = lines[i].bbox.normalize();
-        let tolerance = span.height() * 0.5;
-        if span.y1 <= body_top + tolerance {
-            above.push(i);
-        } else if span.y0 >= body_bottom - tolerance {
-            below.push(i);
+    for band in bands {
+        let bbox = band
+            .iter()
+            .fold(Rect::default(), |bbox, &i| bbox.union(&lines[i].bbox))
+            .normalize();
+        let tolerance = bbox.height() * 0.5;
+        if bbox.y1 <= body_top + tolerance {
+            above.push(band);
+        } else if bbox.y0 >= body_bottom - tolerance {
+            below.push(band);
         } else {
-            middle.push(i);
+            middle.push(band);
         }
     }
     (above, middle, below)
@@ -2424,18 +2372,24 @@ fn find_column_cut(lines: &[Line], idxs: &[usize], typ_h: f64) -> Option<ColumnC
     // line-height floor with a small region-relative term.
     let min_x_gut = (typ_h * 1.2).max(region_w * 0.03);
     let (gutter_width, at) = column_gutter(lines, idxs, min_x_gut, region_w)?;
+    // Classify against the *whole* valley, not its midpoint. `column_gutter`
+    // tolerates a handful of lines crossing the valley, so a right-column line
+    // that merely starts inside it (an OJ recital number "(32)", a hanging
+    // indent) reaches past the midpoint without spanning the columns; only a
+    // line that clears both valley edges is genuinely full width.
+    let (lo, hi) = (at - gutter_width / 2.0, at + gutter_width / 2.0);
 
     let mut left = Vec::new();
     let mut right = Vec::new();
     let mut spanning = Vec::new();
     for &i in idxs {
         let bbox = lines[i].bbox.normalize();
-        if bbox.x1 <= at {
-            left.push(i);
-        } else if bbox.x0 >= at {
-            right.push(i);
-        } else {
+        if bbox.x0 < lo - SPANNING_VALLEY_MARGIN && bbox.x1 > hi + SPANNING_VALLEY_MARGIN {
             spanning.push(i);
+        } else if (bbox.x0 + bbox.x1) / 2.0 <= at {
+            left.push(i);
+        } else {
+            right.push(i);
         }
     }
     if is_substantial_column(lines, &left, region_w)
@@ -2590,31 +2544,6 @@ fn region_width(lines: &[Line], idxs: &[usize]) -> f64 {
     (x1 - x0).max(1.0)
 }
 
-/// The widest empty **horizontal** gutter (a y-band no line crosses) that clears
-/// `min_gap`, returning its width and the y at which it opens, or `None`.
-fn widest_y_gutter(lines: &[Line], idxs: &[usize], min_gap: f64) -> Option<(f64, f64)> {
-    let interval = |i: usize| -> (f64, f64) {
-        let b = lines[i].bbox.normalize();
-        (b.y0, b.y1)
-    };
-    let mut sorted = idxs.to_vec();
-    sorted.sort_by(|&a, &b| interval(a).0.total_cmp(&interval(b).0));
-
-    let mut best: Option<(f64, f64)> = None;
-    let mut cur_max = f64::NEG_INFINITY;
-    for &i in &sorted {
-        let (lo, hi) = interval(i);
-        if cur_max.is_finite() {
-            let gap = lo - cur_max;
-            if gap >= min_gap && best.is_none_or(|(bw, _)| gap > bw) {
-                best = Some((gap, cur_max));
-            }
-        }
-        cur_max = cur_max.max(hi);
-    }
-    best
-}
-
 /// Splits line indices into **horizontal bands** wherever a y-gap of at least
 /// `min_gap` separates consecutive lines. Groups come back top-to-bottom.
 fn split_y_bands(lines: &[Line], idxs: &[usize], min_gap: f64) -> Vec<Vec<usize>> {
@@ -2717,9 +2646,8 @@ fn push_text_blocks(mut lines: Vec<Line>, out: &mut Vec<Block>) {
 /// reading order (PRD §8.6.2).
 ///
 /// [`group_blocks_columned`] has already put the text blocks in reading order
-/// (geometric region order under a root column cut, content sequence
-/// otherwise) and [`textpage_core`] appended the image blocks after them; this
-/// only numbers, it does not sort.
+/// (the XY-cut's geometric region order) and [`textpage_core`] appended the
+/// image blocks after them; this only numbers, it does not sort.
 fn order_blocks(blocks: &mut [Block]) {
     for (i, b) in blocks.iter_mut().enumerate() {
         b.number = i;

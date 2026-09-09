@@ -352,9 +352,9 @@ fn readorder_007_spanning_header_and_footer_paint_order_independent() {
     assert!(at("R9") < at("FOOTER"), "footer not last: {lines:?}");
 }
 
-/// A two-column page whose paragraph gap is wider than the column gutter is
-/// split into horizontal bands first. Painted in reading order, each column
-/// must still read whole (the band cut must not interleave the columns).
+/// A two-column page whose paragraph gap is wider than the column gutter must
+/// still read one whole column at a time. Since stage 3 the column cut wins
+/// outright (see `readorder_012`); this locks the resulting block order.
 #[test]
 fn readorder_008_root_band_cut_keeps_columns_contiguous() {
     let size = 10.0;
@@ -375,6 +375,135 @@ fn readorder_008_root_band_cut_keeps_columns_contiguous() {
     let lines = extract(&gs);
     let joined = lines.join("|");
     let at = |needle: &str| joined.find(needle).unwrap();
+    assert!(
+        at("LA0") < at("LB0") && at("LB2") < at("RA0"),
+        "got {lines:?}"
+    );
+    assert!(at("RA0") < at("RB0"), "got {lines:?}");
+}
+
+/// A right-column line whose first glyph starts *inside* the gutter valley (an
+/// OJ recital number `(32)` set with a hanging indent) is a right-column line,
+/// not a spanning one: classification tests the whole valley band, not its
+/// midpoint.
+#[test]
+fn readorder_009_line_starting_inside_the_gutter_stays_in_its_column() {
+    let size = 10.0;
+    let mut gs = Vec::new();
+    for i in 0..4 {
+        let text = format!("L{i} left column line of prose that is wide");
+        lay_word_line(&mut gs, &text, 60.0, 700.0 - 14.0 * i as f64, size);
+    }
+    for i in 0..4 {
+        // R2 hangs into the gutter: it starts at x = 292, left of the valley
+        // midpoint (≈ 300) but right of the valley's left edge (≈ 280), so the
+        // midpoint rule read it as a spanning line and the valley rule does not.
+        let x = if i == 2 { 292.0 } else { 320.0 };
+        let text = format!("R{i} right column line of prose that is wide");
+        lay_word_line(&mut gs, &text, x, 700.0 - 14.0 * i as f64, size);
+    }
+
+    let lines = extract(&gs);
+    let joined = lines.join("|");
+    let at = |needle: &str| joined.find(needle).unwrap();
+    assert!(at("L3") < at("R0"), "columns interleaved: {lines:?}");
+    assert!(at("R0") < at("R2"), "hanging line hoisted: {lines:?}");
+    assert!(at("R2") < at("R3"), "hanging line demoted: {lines:?}");
+}
+
+/// A full-width sub-heading between two column rows partitions the columns into
+/// rows: the row above it reads left then right, then the heading, then the row
+/// below reads left then right.
+#[test]
+fn readorder_010_spanning_band_partitions_the_columns_into_rows() {
+    let size = 10.0;
+    let mut gs = Vec::new();
+    let rows = |gs: &mut Vec<PositionedGlyph>, tag: &str, top: f64| {
+        for i in 0..3 {
+            let text = format!("{tag}{i} column line of prose that is wide");
+            lay_word_line(
+                gs,
+                &text,
+                if tag.starts_with('L') { 60.0 } else { 320.0 },
+                top - 14.0 * i as f64,
+                size,
+            );
+        }
+    };
+    rows(&mut gs, "LA", 700.0);
+    rows(&mut gs, "RA", 700.0);
+    lay_word_line(
+        &mut gs,
+        "MIDHEADING spanning the full width of both columns of this page",
+        60.0,
+        620.0,
+        size,
+    );
+    rows(&mut gs, "LB", 560.0);
+    rows(&mut gs, "RB", 560.0);
+
+    let lines = extract(&gs);
+    let joined = lines.join("|");
+    let at = |needle: &str| joined.find(needle).unwrap();
+    assert!(at("LA2") < at("RA0"), "top row interleaved: {lines:?}");
+    assert!(at("RA2") < at("MIDHEADING"), "heading hoisted: {lines:?}");
+    assert!(at("MIDHEADING") < at("LB0"), "heading demoted: {lines:?}");
+    assert!(at("LB2") < at("RB0"), "bottom row interleaved: {lines:?}");
+}
+
+/// A page with no column structure reads in geometric order even when the
+/// footer is painted before the body: since stage 3 the XY-cut's region order
+/// *is* the reading order for every root, not only a column root.
+#[test]
+fn readorder_011_no_column_structure_reads_geometrically() {
+    let size = 10.0;
+    let mut gs = Vec::new();
+    lay_word_line(&mut gs, "FOOTER painted first", 60.0, 80.0, size);
+    for i in 0..6 {
+        let text = format!("B{i} single column body line of prose that is wide");
+        lay_word_line(&mut gs, &text, 60.0, 700.0 - 14.0 * i as f64, size);
+    }
+
+    let lines = extract(&gs);
+    let joined = lines.join("|");
+    let at = |needle: &str| joined.find(needle).unwrap();
+    assert!(at("B0") < at("B5"), "body out of order: {lines:?}");
+    assert!(at("B5") < at("FOOTER"), "footer not last: {lines:?}");
+}
+
+/// A two-column page whose paragraph gap is wider than its gutter, with a
+/// full-width heading painted last: a valid column cut always beats the band
+/// cut, so the page reads heading, whole left column, whole right column —
+/// never sliced into full-width bands.
+#[test]
+fn readorder_012_column_cut_beats_a_wider_band_gap() {
+    let size = 10.0;
+    let mut gs = Vec::new();
+    // The gutter is ≈ 73 pt wide (x 247..320); the paragraph gap between the
+    // two column rows is ≈ 93 pt, so the old "cut on the wider gutter" rule
+    // sliced this page into bands.
+    let paragraph = |gs: &mut Vec<PositionedGlyph>, tag: &str, x: f64, top: f64| {
+        for i in 0..3 {
+            let text = format!("{tag}{i} column paragraph line of prose");
+            lay_word_line(gs, &text, x, top - 14.0 * i as f64, size);
+        }
+    };
+    paragraph(&mut gs, "RA", 320.0, 660.0);
+    paragraph(&mut gs, "RB", 320.0, 530.0);
+    paragraph(&mut gs, "LA", 60.0, 660.0);
+    paragraph(&mut gs, "LB", 60.0, 530.0);
+    lay_word_line(
+        &mut gs,
+        "TOPHEADING spanning the full width of both columns of this page",
+        60.0,
+        720.0,
+        size,
+    );
+
+    let lines = extract(&gs);
+    let joined = lines.join("|");
+    let at = |needle: &str| joined.find(needle).unwrap();
+    assert!(at("TOPHEADING") < at("LA0"), "heading not first: {lines:?}");
     assert!(
         at("LA0") < at("LB0") && at("LB2") < at("RA0"),
         "got {lines:?}"
