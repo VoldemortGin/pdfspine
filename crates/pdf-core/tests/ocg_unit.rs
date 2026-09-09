@@ -1104,3 +1104,477 @@ fn ocg_vis_view() {
     assert!(!vis2.is_ocg_hidden(8), "B on in the alternate config");
     assert!(!doc.is_dirty());
 }
+
+// === OCG-VIS-USAGE-* ======================================================
+//
+// View usage fixtures (ISO 32000-1 §8.11.4.4): OCG 7 ("U") carries the
+// `/Usage` under test, OCG 8 ("B") is a plain control, OCMD 30 is
+// `/OCGs [7]`. `/D` is built from caller-supplied pairs (`ON` / `OFF` /
+// `BaseState` / `AS`); with no `/Order`, `layer_ui_configs` row 0 is OCG 7.
+
+/// `<< /View << /ViewState /<state> >> >>`.
+fn view_usage(state: &str) -> Object {
+    Object::Dictionary(dict([(
+        "View",
+        Object::Dictionary(dict([("ViewState", name_obj(state))])),
+    )]))
+}
+
+/// An OCG "U" with the given `/Usage` dictionary (or reference).
+fn ocg_usage(usage: Object) -> Object {
+    Object::Dictionary(dict([
+        ("Type", name_obj("OCG")),
+        ("Name", pdf_str("U")),
+        ("Usage", usage),
+    ]))
+}
+
+/// A usage-application dictionary for `/AS`.
+fn as_entry(event: &str, categories: &[&str], ocgs: Vec<Object>) -> Object {
+    Object::Dictionary(dict([
+        ("Event", name_obj(event)),
+        (
+            "Category",
+            Object::Array(categories.iter().map(|c| name_obj(c)).collect()),
+        ),
+        ("OCGs", Object::Array(ocgs)),
+    ]))
+}
+
+/// `/AS [<< /Event /View /Category [/View] /OCGs [7] >>]`.
+fn as_view7() -> (&'static str, Object) {
+    (
+        "AS",
+        Object::Array(vec![as_entry("View", &["View"], vec![rref(7, 0)])]),
+    )
+}
+
+fn on7() -> (&'static str, Object) {
+    ("ON", Object::Array(vec![rref(7, 0)]))
+}
+
+fn off7() -> (&'static str, Object) {
+    ("OFF", Object::Array(vec![rref(7, 0)]))
+}
+
+/// A doc with OCG 7 = `ocg7` (under test), OCG 8 = plain "B", `/D` = `d`,
+/// optional `/Configs`, OCMD 30 over `[7]`, plus `extra` objects.
+fn usage_doc(
+    ocg7: Object,
+    d: Vec<(&'static str, Object)>,
+    configs: Option<Vec<Object>>,
+    extra: Vec<(u32, Object)>,
+) -> Vec<u8> {
+    let mut ocp = vec![
+        ("OCGs", Object::Array(vec![rref(7, 0), rref(8, 0)])),
+        ("D", Object::Dictionary(dict(d))),
+    ];
+    if let Some(configs) = configs {
+        ocp.push(("Configs", Object::Array(configs)));
+    }
+    let mut objects = vec![
+        (7, ocg7),
+        (8, ocg_dict("B")),
+        (
+            30,
+            Object::Dictionary(dict([
+                ("Type", name_obj("OCMD")),
+                ("OCGs", Object::Array(vec![rref(7, 0)])),
+            ])),
+        ),
+    ];
+    objects.extend(extra);
+    build_doc(Object::Dictionary(dict(ocp)), objects)
+}
+
+/// Whether OCG 7 is hidden in a freshly opened `bytes`.
+fn hidden7(bytes: &[u8]) -> bool {
+    OcVisibility::read(&open(bytes)).is_ocg_hidden(7)
+}
+
+/// OCG-VIS-USAGE-NONE: an ON OCG without `/Usage` (or with an empty one) is
+/// visible — the usage rules add nothing.
+#[test]
+fn ocg_vis_usage_none() {
+    assert!(!hidden7(&usage_doc(
+        ocg_dict("U"),
+        vec![on7()],
+        None,
+        vec![]
+    )));
+    let empty = Object::Dictionary(dict([]));
+    assert!(!hidden7(&usage_doc(
+        ocg_usage(empty),
+        vec![on7()],
+        None,
+        vec![]
+    )));
+}
+
+/// OCG-VIS-USAGE-VIEWSTATE-OFF: config ON + `/View << /ViewState /OFF >>`,
+/// no `/AS` → hidden (MuPDF parity: `/ViewState /OFF` always hides).
+#[test]
+fn ocg_vis_usage_viewstate_off() {
+    let doc = open(&usage_doc(
+        ocg_usage(view_usage("OFF")),
+        vec![on7()],
+        None,
+        vec![],
+    ));
+    let vis = OcVisibility::read(&doc);
+    assert!(vis.hides_anything());
+    assert!(vis.is_ocg_hidden(7), "ViewState OFF hides an ON layer");
+    assert!(vis.is_hidden(&doc, &rref(7, 0)));
+    assert!(!vis.is_ocg_hidden(8), "control layer untouched");
+}
+
+/// OCG-VIS-USAGE-VIEWSTATE-OFF-AS: config ON + ViewState OFF, and an `/AS`
+/// View entry listing the OCG → still hidden (`/AS` never overrides
+/// `/ViewState /OFF`).
+#[test]
+fn ocg_vis_usage_viewstate_off_as() {
+    assert!(hidden7(&usage_doc(
+        ocg_usage(view_usage("OFF")),
+        vec![on7(), as_view7()],
+        None,
+        vec![],
+    )));
+}
+
+/// OCG-VIS-USAGE-VIEWSTATE-OFF-AS-MISS: config ON + ViewState OFF with an
+/// `/AS` that does not apply (`/Event /Print` only, or `/OCGs []`) → hidden.
+#[test]
+fn ocg_vis_usage_viewstate_off_as_miss() {
+    let print_only = (
+        "AS",
+        Object::Array(vec![as_entry("Print", &["Print"], vec![rref(7, 0)])]),
+    );
+    assert!(hidden7(&usage_doc(
+        ocg_usage(view_usage("OFF")),
+        vec![on7(), print_only],
+        None,
+        vec![],
+    )));
+    let empty_ocgs = (
+        "AS",
+        Object::Array(vec![as_entry("View", &["View"], vec![])]),
+    );
+    assert!(hidden7(&usage_doc(
+        ocg_usage(view_usage("OFF")),
+        vec![on7(), empty_ocgs],
+        None,
+        vec![],
+    )));
+}
+
+/// OCG-VIS-USAGE-VIEWSTATE-ON: config ON + `/ViewState /ON` → visible.
+#[test]
+fn ocg_vis_usage_viewstate_on() {
+    assert!(!hidden7(&usage_doc(
+        ocg_usage(view_usage("ON")),
+        vec![on7()],
+        None,
+        vec![],
+    )));
+}
+
+/// OCG-VIS-USAGE-AS-ABSENT: config OFF + `/ViewState /ON` stays hidden when
+/// no `/AS` View entry lists the OCG — absent `/AS`, a `/Print` event, a
+/// `/View` event whose `/Category` lacks `/View`, or an entry listing only
+/// another OCG.
+#[test]
+fn ocg_vis_usage_as_absent() {
+    let ocg = || ocg_usage(view_usage("ON"));
+    assert!(hidden7(&usage_doc(ocg(), vec![off7()], None, vec![])));
+    let cases = [
+        as_entry("Print", &["View"], vec![rref(7, 0)]),
+        as_entry("View", &["Print"], vec![rref(7, 0)]),
+        as_entry("View", &["View"], vec![rref(8, 0)]),
+    ];
+    for entry in cases {
+        let bytes = usage_doc(
+            ocg(),
+            vec![off7(), ("AS", Object::Array(vec![entry.clone()]))],
+            None,
+            vec![],
+        );
+        assert!(hidden7(&bytes), "no applicable /AS entry: {entry:?}");
+    }
+}
+
+/// OCG-VIS-USAGE-AS-PROMOTE: config OFF + `/ViewState /ON` + an `/AS` View
+/// entry listing the OCG → **visible** (ISO 32000-1 §8.11.4.4).
+///
+/// Deliberate divergence from MuPDF / PyMuPDF, which ignore `/AS` and keep
+/// this OCG hidden; a live-oracle comparison must not assert equality here.
+/// The OCMD over the OCG and a `/BaseState /OFF` configuration follow suit.
+#[test]
+fn ocg_vis_usage_as_promote() {
+    let doc = open(&usage_doc(
+        ocg_usage(view_usage("ON")),
+        vec![off7(), as_view7()],
+        None,
+        vec![],
+    ));
+    let vis = OcVisibility::read(&doc);
+    assert!(
+        !vis.is_ocg_hidden(7),
+        "/AS View promotes an OFF layer (spec)"
+    );
+    assert!(!vis.is_hidden(&doc, &rref(7, 0)));
+    assert!(
+        !vis.is_hidden(&doc, &rref(30, 0)),
+        "OCMD over it is visible too"
+    );
+
+    let base_off = ("BaseState", name_obj("OFF"));
+    assert!(!hidden7(&usage_doc(
+        ocg_usage(view_usage("ON")),
+        vec![base_off, as_view7()],
+        None,
+        vec![],
+    )));
+}
+
+/// OCG-VIS-USAGE-PRINT-EXPORT: only the View usage counts — `/Print
+/// /PrintState /OFF` and `/Export /ExportState /OFF` leave an ON layer
+/// visible, and `/PrintState /ON` + an `/AS` Print entry do not promote an
+/// OFF layer.
+#[test]
+fn ocg_vis_usage_print_export() {
+    let usage = |cat: &'static str, key: &'static str, state: &str| {
+        Object::Dictionary(dict([(
+            cat,
+            Object::Dictionary(dict([(key, name_obj(state))])),
+        )]))
+    };
+    assert!(!hidden7(&usage_doc(
+        ocg_usage(usage("Print", "PrintState", "OFF")),
+        vec![on7()],
+        None,
+        vec![],
+    )));
+    assert!(!hidden7(&usage_doc(
+        ocg_usage(usage("Export", "ExportState", "OFF")),
+        vec![on7()],
+        None,
+        vec![],
+    )));
+    let as_print = (
+        "AS",
+        Object::Array(vec![as_entry("Print", &["Print"], vec![rref(7, 0)])]),
+    );
+    assert!(hidden7(&usage_doc(
+        ocg_usage(usage("Print", "PrintState", "ON")),
+        vec![off7(), as_print],
+        None,
+        vec![],
+    )));
+}
+
+/// OCG-VIS-USAGE-OCMD: `/ViewState /OFF` reached through an OCMD `/OCGs [7]`
+/// (and a `/VE [/Not 7]`) is evaluated per OCG; the OCMD inherits it.
+#[test]
+fn ocg_vis_usage_ocmd() {
+    let not7 = Object::Dictionary(dict([
+        ("Type", name_obj("OCMD")),
+        ("VE", Object::Array(vec![name_obj("Not"), rref(7, 0)])),
+    ]));
+    let doc = open(&usage_doc(
+        ocg_usage(view_usage("OFF")),
+        vec![on7()],
+        None,
+        vec![(31, not7)],
+    ));
+    let vis = OcVisibility::read(&doc);
+    assert!(vis.is_hidden(&doc, &rref(30, 0)), "OCMD /OCGs [7] hidden");
+    assert!(!vis.is_hidden(&doc, &rref(31, 0)), "/VE [/Not 7] visible");
+}
+
+/// OCG-VIS-USAGE-OVERRIDE: `/ViewState /OFF` beats a layer-panel override
+/// that turns the layer ON; an override OFF beats an `/AS` promotion.
+#[test]
+fn ocg_vis_usage_override() {
+    let doc = open(&usage_doc(
+        ocg_usage(view_usage("OFF")),
+        vec![on7()],
+        None,
+        vec![],
+    ));
+    set_layer_ui_config(&doc, 0, 0).expect("override U on");
+    assert!(layer_ui_configs(&doc)[0].on, "panel reports the override");
+    assert!(
+        OcVisibility::read(&doc).is_ocg_hidden(7),
+        "ViewState OFF still hides over the override"
+    );
+
+    let doc = open(&usage_doc(
+        ocg_usage(view_usage("ON")),
+        vec![off7(), as_view7()],
+        None,
+        vec![],
+    ));
+    assert!(!OcVisibility::read(&doc).is_ocg_hidden(7), "promoted");
+    set_layer_ui_config(&doc, 0, 2).expect("override U off");
+    assert!(
+        OcVisibility::read(&doc).is_ocg_hidden(7),
+        "override OFF beats the /AS promotion"
+    );
+    assert!(!doc.is_dirty());
+}
+
+/// OCG-VIS-USAGE-BOGUS: an unrecognised `/ViewState` name, a string instead
+/// of a name, an empty `/View <<>>` or a `/Usage` without `/View` all fall
+/// through to the configuration state (ON → visible, OFF → hidden).
+#[test]
+fn ocg_vis_usage_bogus() {
+    let bogus: Vec<Object> = vec![
+        view_usage("Maybe"),
+        Object::Dictionary(dict([(
+            "View",
+            Object::Dictionary(dict([("ViewState", pdf_str("OFF"))])),
+        )])),
+        Object::Dictionary(dict([("View", Object::Dictionary(dict([])))])),
+        Object::Dictionary(dict([(
+            "Print",
+            Object::Dictionary(dict([("PrintState", name_obj("OFF"))])),
+        )])),
+    ];
+    for usage in bogus {
+        assert!(
+            !hidden7(&usage_doc(
+                ocg_usage(usage.clone()),
+                vec![on7()],
+                None,
+                vec![]
+            )),
+            "ON + {usage:?} -> visible"
+        );
+        assert!(
+            hidden7(&usage_doc(
+                ocg_usage(usage.clone()),
+                vec![off7()],
+                None,
+                vec![]
+            )),
+            "OFF + {usage:?} -> hidden"
+        );
+        // A bogus state never enables the /AS promotion either.
+        assert!(
+            hidden7(&usage_doc(
+                ocg_usage(usage.clone()),
+                vec![off7(), as_view7()],
+                None,
+                vec![]
+            )),
+            "OFF + /AS + {usage:?} -> hidden (no ViewState ON)"
+        );
+    }
+}
+
+/// OCG-VIS-USAGE-AS-CONFIG: `/AS` is read from the active configuration
+/// only — `/D`'s `/AS` does not leak into a selected `/Configs[n]` without
+/// one, and an alternate configuration's own `/AS` applies when selected.
+#[test]
+fn ocg_vis_usage_as_config() {
+    let alt_plain = Object::Dictionary(dict([("Name", pdf_str("plain")), off7()]));
+    let alt_as = Object::Dictionary(dict([("Name", pdf_str("as")), off7(), as_view7()]));
+    let doc = open(&usage_doc(
+        ocg_usage(view_usage("ON")),
+        vec![off7(), as_view7()],
+        Some(vec![alt_plain, alt_as]),
+        vec![],
+    ));
+    assert!(!OcVisibility::read(&doc).is_ocg_hidden(7), "/D promotes");
+
+    select_layer_config(&doc, Some(0)).expect("select plain alt");
+    assert!(
+        OcVisibility::read(&doc).is_ocg_hidden(7),
+        "/D's /AS must not leak into /Configs[0]"
+    );
+
+    select_layer_config(&doc, Some(1)).expect("select alt with /AS");
+    assert!(
+        !OcVisibility::read(&doc).is_ocg_hidden(7),
+        "/Configs[1]'s own /AS promotes"
+    );
+
+    select_layer_config(&doc, None).expect("back to /D");
+    assert!(!OcVisibility::read(&doc).is_ocg_hidden(7));
+    assert!(!doc.is_dirty());
+}
+
+/// OCG-VIS-USAGE-INDIRECT: `/Usage`, `/View`, `/AS`, its entries, their
+/// `/Category` and `/OCGs` may all be indirect; every level is resolved on
+/// both the hide (`/ViewState /OFF`) and the promote paths.
+#[test]
+fn ocg_vis_usage_indirect() {
+    // 40 = /Usage dict, 41 = /View dict, 42 = /AS array, 43 = the entry,
+    // 44 = its /Category, 45 = its /OCGs.
+    let indirect_usage = |state: &str| -> Vec<(u32, Object)> {
+        vec![
+            (40, Object::Dictionary(dict([("View", rref(41, 0))]))),
+            (
+                41,
+                Object::Dictionary(dict([("ViewState", name_obj(state))])),
+            ),
+            (42, Object::Array(vec![rref(43, 0)])),
+            (
+                43,
+                Object::Dictionary(dict([
+                    ("Event", name_obj("View")),
+                    ("Category", rref(44, 0)),
+                    ("OCGs", rref(45, 0)),
+                ])),
+            ),
+            (44, Object::Array(vec![name_obj("View")])),
+            (45, Object::Array(vec![rref(7, 0)])),
+        ]
+    };
+    assert!(
+        hidden7(&usage_doc(
+            ocg_usage(rref(40, 0)),
+            vec![on7()],
+            None,
+            indirect_usage("OFF"),
+        )),
+        "indirect /Usage -> /View -> /ViewState /OFF hides"
+    );
+    assert!(
+        !hidden7(&usage_doc(
+            ocg_usage(rref(40, 0)),
+            vec![off7(), ("AS", rref(42, 0))],
+            None,
+            indirect_usage("ON"),
+        )),
+        "indirect /AS chain promotes"
+    );
+}
+
+/// OCG-VIS-USAGE-REPORT: `ocg_state` / `get_ocgs` / `layer_ui_configs`
+/// reflect only the configuration ON/OFF state — neither `/ViewState /OFF`
+/// nor an `/AS` promotion changes what they report (PyMuPDF parity).
+#[test]
+fn ocg_vis_usage_report() {
+    let doc = open(&usage_doc(
+        ocg_usage(view_usage("OFF")),
+        vec![on7()],
+        None,
+        vec![],
+    ));
+    assert!(ocg_state(&doc, 7));
+    assert!(get_ocgs(&doc)[&7].on);
+    assert!(layer_ui_configs(&doc)[0].on);
+    assert!(OcVisibility::read(&doc).is_ocg_hidden(7));
+
+    let doc = open(&usage_doc(
+        ocg_usage(view_usage("ON")),
+        vec![off7(), as_view7()],
+        None,
+        vec![],
+    ));
+    assert!(!ocg_state(&doc, 7));
+    assert!(!get_ocgs(&doc)[&7].on);
+    assert!(!layer_ui_configs(&doc)[0].on);
+    assert!(!OcVisibility::read(&doc).is_ocg_hidden(7));
+}

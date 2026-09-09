@@ -69,6 +69,29 @@ feature-complete, but the public API and on-disk formats may still change.
   expressions taking precedence when present).
 - This moves the `Document` group to **136 / 150** implemented and lifts overall
   PyMuPDF-symbol coverage from **687 → 694** of **769** (deferred 16 → 9).
+- **`oc=` on the content writers.** `Page.insert_text` / `insert_textbox` /
+  `insert_image` / `show_pdf_page`, `Shape.finish` / `insert_text` /
+  `insert_textbox`, `TextWriter.write_text`, the `Page.write_text` fast path and
+  every `Page.draw_*` one-shot accept `oc=` (the xref of an OCG or OCMD), as in
+  PyMuPDF. Text and vector chunks are wrapped in `q` / `/OC /MCn BDC` … `EMC` /
+  `Q` with the `/MCn` key registered under the page's `/Resources /Properties`
+  (smallest free index, reused for the same xref); images and placed pages put
+  `/OC` on the XObject instead. A non-OCG/OCMD xref raises
+  `ValueError("bad optional content: 'oc'")`, a nonexistent one
+  `RuntimeError("bad xref")`; nothing is written on failure. Rust:
+  `pdf_edit::TextOptions.oc`, `Shape::finish(.., oc)`, `insert_image_jpeg` /
+  `insert_image_rgb(.., oc)`, `show_pdf_page(.., oc)`.
+- **Optional-content usage dictionaries are evaluated.** Rendering and text
+  extraction now honour an OCG's `/Usage /View /ViewState` (`/OFF` hides it
+  unconditionally, even over a layer-panel override ON) and the active
+  configuration's `/AS` usage-application entries (`/Event /View`, `/Category`
+  containing `/View`): a listed OCG with `/ViewState /ON` is shown even when the
+  configuration turns it OFF. `/Print` / `/Export` usage is ignored, and
+  `get_ocgs()` / `layer_ui_configs()` / `ocg_state()` keep reporting the
+  configuration state only, as PyMuPDF does. That `/AS` promotion is a
+  deliberate divergence from MuPDF / PyMuPDF, which ignore `/AS` and hide the
+  OCG (ISO 32000-1 §8.11.4.4; registered with the `/VE` / AllOn / AnyOff
+  divergences in `docs/pymupdf-compat-findings.md`).
 
 ### Fixed
 

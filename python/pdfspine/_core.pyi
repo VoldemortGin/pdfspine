@@ -229,6 +229,7 @@ class Shape:
         dashes: Any = ...,
         even_odd: bool = ...,
         close_path: bool = ...,
+        oc: int = ...,
     ) -> None: ...
     def commit(self, overlay: bool = ...) -> None: ...
 
@@ -482,6 +483,7 @@ class Page:
         fontsize: float = ...,
         color: _Color | None = ...,
         fontfile: str | None = ...,
+        oc: int = ...,
     ) -> int: ...
     def insert_textbox(
         self,
@@ -493,6 +495,7 @@ class Page:
         color: _Color | None = ...,
         align: int = ...,
         fontfile: str | None = ...,
+        oc: int = ...,
     ) -> float: ...
     def insert_image(
         self,
@@ -501,7 +504,11 @@ class Page:
         stream: bytes,
         width: int | None = ...,
         height: int | None = ...,
+        oc: int = ...,
     ) -> None: ...
+    def show_pdf_page(
+        self, rect: _Tuple4, src: Document, pno: int = ..., oc: int = ...
+    ) -> str: ...
     def draw_line(
         self,
         p1: tuple[float, float],

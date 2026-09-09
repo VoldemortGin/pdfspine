@@ -133,7 +133,16 @@ fn drawings_005_even_odd_and_close_path() {
         Point::new(35.0, 60.0),
     ]);
     // fill (even-odd) + close path.
-    s.finish(None, Some(Color::new(0.5, 0.5, 0.5)), 1.0, None, true, true);
+    s.finish(
+        None,
+        Some(Color::new(0.5, 0.5, 0.5)),
+        1.0,
+        None,
+        true,
+        true,
+        0,
+    )
+    .unwrap();
     s.commit().unwrap();
 
     let d = get_drawings(&doc, 0);
@@ -191,7 +200,9 @@ fn drawings_007_curve_item() {
         None,
         false,
         false,
-    );
+        0,
+    )
+    .unwrap();
     s.commit().unwrap();
 
     let d = get_drawings(&doc, 0);

@@ -23,7 +23,7 @@ use pdf_core::object::{Dict, Name, ObjRef, Object, StreamData, StreamObj};
 use pdf_core::pagetree;
 use pdf_core::{DocumentStore, Limits, SaveOptions};
 
-use crate::content::{fmt_num, PageContent};
+use crate::content::{check_optional_content, fmt_num, PageContent};
 use crate::page_ops::PageEditor;
 
 /// Options for [`insert_pdf`] (PRD §8.7). All fields default to "append every
@@ -133,18 +133,25 @@ pub fn extract_pages(src: &DocumentStore, indices: &[usize]) -> Result<Vec<u8>> 
 /// `/Resources /XObject` and invoked with a `q cm /Fm Do Q` chunk whose matrix
 /// maps the BBox to `rect` (PyMuPDF top-left page space). Source `/Rotate` is
 /// baked into the placement matrix. Returns the chosen XObject resource name.
+/// A non-zero `oc` (an OCG / OCMD xref in `dst`) is written as the form's `/OC`
+/// entry (PyMuPDF `show_pdf_page(oc=)`).
 ///
 /// # Errors
 ///
-/// [`Error::Unsupported`] for an out-of-range `src_pno`; resolution / object-edit
-/// errors propagate.
+/// [`Error::Unsupported`] for an out-of-range `src_pno`;
+/// [`Error::InvalidArgument`] for an `oc` that is not an existing OCG / OCMD;
+/// resolution / object-edit errors propagate.
 pub fn show_pdf_page(
     dst: &DocumentStore,
     dst_leaf: ObjRef,
     src: &DocumentStore,
     src_pno: usize,
     rect: Rect,
+    oc: u32,
 ) -> Result<String> {
+    if oc != 0 {
+        check_optional_content(dst, oc)?;
+    }
     let src_pages = pagetree::page_refs(src);
     let src_leaf = *src_pages.get(src_pno).ok_or(Error::Unsupported(
         "show_pdf_page: source page out of range",
@@ -185,6 +192,9 @@ pub fn show_pdf_page(
         ]),
     );
     form.insert(Name::new("Resources"), resources);
+    if oc != 0 {
+        form.insert(Name::new("OC"), Object::Reference(ObjRef::new(oc, 0)));
+    }
     let form_ref = dst.add_object(Object::Stream(StreamObj {
         dict: form,
         data: StreamData::Decoded(body.into()),

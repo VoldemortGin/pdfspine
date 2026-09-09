@@ -69,7 +69,7 @@
 | Branch / worktree | Commit | State | Handoff |
 |---|---|---|---|
 | `worktree-agent-ae07f5282e4af72f5` at `.claude/worktrees/agent-ae07f5282e4af72f5` | `2be80e5` (wip) | Reading order stages 3/4: baseline reproduced for PMC, born, PMC212689 and both FR runs; the EUR-Lex GT run was killed at 22/40 by a sub-agent that shared the worktree. Stage 3/4 specs are drafted (`stage3-spec.md`, `stage4-spec.md` in the worktree); no product code yet. Evidence and scripts in `/Volumes/ExternalSSD/tmp/ro34/`. | `HANDOFF-reading-order-3-4.md` |
-| `worktree-agent-a86bc39cb9edfca42` at `.claude/worktrees/agent-a86bc39cb9edfca42` | `ed79776` (wip) | OCG gaps, research only: PyMuPDF writes `/OC /MCn BDC … EMC` inside `q`/`Q` for text and shapes (keys `/MCn`, reused per xref) and puts `/OC` on the XObject for images; `/Usage /View /ViewState /OFF` hides regardless of `/AS`; MuPDF ignores `/AS`. Implementation, tests and docs not started. | `HANDOFF-ocg-gaps.md` |
+| `feat/ocg-gaps` (was `worktree-agent-a86bc39cb9edfca42`) | `c8170d3` (visibility), `3b7e3e5` (writers) | ✅ **Done 2026-09-08** — OCG gaps: `oc=` on every content writer (BDC/EMC + `/Properties`, XObject `/OC`) and `/Usage /View /ViewState` + config `/AS` visibility. See "Completed 2026-09-08: OCG gaps" below. Remaining: `--no-ff` merge into `main`, rebuild `.venv`, delete the worktree and branch. | folded into the completed section below (`HANDOFF-ocg-gaps.md` retired) |
 
 Resume procedure for each: `cd` into the worktree, read its HANDOFF file, `git merge
 main` (main moved to `ec798bd`; the redact and manifest changes must be picked up),
@@ -80,9 +80,10 @@ run the ruff check, push, and delete the worktree and branch.
 ### Next task queue
 
 1. **Push `main`** (`fix/get-text-clip` merged as `5a95731` and `fix/remove-rotation`
-   merged 2026-09-07; `.venv` rebuilt, `./ci.sh` green), then **finish the two
-   in-flight branches** in this order: reading order 3/4, OCG gaps. Each has a
-   HANDOFF with the exact remaining steps.
+   merged 2026-09-07; `.venv` rebuilt, `./ci.sh` green), then **merge
+   `feat/ocg-gaps`** (done 2026-09-08, see "Completed 2026-09-08: OCG gaps") and
+   **finish the remaining in-flight branch**, reading order 3/4; its HANDOFF has
+   the exact remaining steps.
 2. **govdocs1-00074 near-blank render** (fitz SSIM 0.2654 at baseline): not started;
    the agent was cut off while reading. Corpus is in `fixtures/corpus`.
 3. **Render, remaining cost:** first-seen glyph rasterization (~30% of text pages),
@@ -101,6 +102,50 @@ run the ruff check, push, and delete the worktree and branch.
    pre-existing `cargo fmt --check` violations in ocrspine; a CI check that warns
    30 days before the cargo-vet trust entries expire (2027-09-05).
 8. **Continue the existing roadmap** (§4–§6 below).
+
+### Completed 2026-09-08: OCG gaps (branch `feat/ocg-gaps`; `c8170d3` visibility, `3b7e3e5` writers)
+
+- **`oc=` on the content writers** (PyMuPDF parity; the old "queue item 6").
+  `Page.insert_text` / `insert_textbox` / `insert_image` / `show_pdf_page`,
+  `Shape.finish` / `insert_text` / `insert_textbox`, `TextWriter.write_text`, the
+  `Page.write_text` fast path and every `Page.draw_*` one-shot (`line` / `rect` /
+  `circle` / `oval` / `bezier` / `polyline` / `curve` / `quad` / `sector` /
+  `squiggle` / `zigzag`) accept `oc: int = 0`, the xref of an OCG or OCMD. Text
+  and shape chunks are written as `q\n/OC /MCn BDC\n…\nEMC\nQ\n` with the
+  `/Resources /Properties` key `MC<i>` at the smallest free index (an existing
+  entry for the same xref is reused, as PyMuPDF does); `insert_image` /
+  `show_pdf_page` write no BDC and put `/OC` on the XObject dictionary instead.
+  `Shape.commit` takes no `oc` (PyMuPDF has none either). A non-OCG/OCMD xref →
+  `ValueError("bad optional content: 'oc'")`, a nonexistent one →
+  `RuntimeError("bad xref")`; nothing is written on failure. Rust:
+  `pdf_edit::TextOptions.oc`, `Shape::finish(.., oc) -> Result<()>`,
+  `insert_image_jpeg` / `insert_image_rgb(.., oc)`, `show_pdf_page(.., oc)`,
+  `PageContent::add_optional_content`.
+- **Usage-application visibility** (`c8170d3`, `crates/pdf-core/src/ocg.rs`).
+  `OcVisibility::read` now evaluates the OCG `/Usage /View /ViewState` (`/OFF`
+  hides unconditionally, even over a panel override ON — MuPDF parity) and the
+  *active* configuration's `/AS` (entries with `/Event /View` whose `/Category`
+  contains `/View`: a listed OCG with `/ViewState /ON` is visible even when the
+  configuration says OFF). Only the View usage is evaluated; `/Print` /
+  `/Export` are ignored. `layer_ui_configs()` / `get_ocgs()` / `ocg_state()`
+  keep reporting the configuration ON/OFF state only (PyMuPDF parity).
+- **Deliberate divergence (one row):** configuration OFF + `/ViewState /ON` + an
+  `/AS` View entry listing the OCG → pdfspine shows it (ISO 32000-1 §8.11.4.4:
+  the usage application dictionary sets the state); MuPDF / PyMuPDF hide it
+  because MuPDF ignores `/AS` altogether (`pdf-layer.c` carries a FIXME
+  admitting it should be handled). Same treatment as the existing `/VE` /
+  AllOn / AnyOff divergences (`ocg.rs` "Deliberate divergences" header); all
+  three are registered in `docs/pymupdf-compat-findings.md` (附). Every other row
+  of the decision table was verified identical against real PyMuPDF 1.27.2.
+- **Remaining gap:** `/Intent`-mismatch hiding (MuPDF hides an OCG whose
+  `/Intent` does not meet the configuration's, and only when the configuration
+  carries a non-empty `/Intent`) is not evaluated.
+- Tests: `OCG-WRITE-*` (`crates/pdf-edit/tests/ocg_writers_e2e.rs`),
+  `OCG-VIS-USAGE-*` (`crates/pdf-core/tests/ocg_unit.rs`), `PYOCG-039`…`PYOCG-047`
+  (`python/tests/test_ocg_layers.py`, incl. live PyMuPDF oracles in both
+  directions). Docs: `CHANGELOG.md`, `docs/guide/editing.md` ("Optional content
+  (`oc=`)"), `docs/guide/migrating-from-pymupdf.md`,
+  `docs/pymupdf-compat-findings.md`, `python/pdfspine/_llms/docs/{api,gotchas}.md`.
 
 ### Completed 2026-09-07: `remove_rotation` moves widget / annot rects (branch `fix/remove-rotation`, merged 2026-09-07)
 
@@ -323,8 +368,8 @@ run the ruff check, push, and delete the worktree and branch.
   evaluated per ISO 32000-1 (MuPDF 1.28 ignores `/VE` and has AllOn/AnyOff bugs).
 - COMPAT: **694/769 = 90.2%**, deferred 16 → 9. `layer_ui_configs()` `number` is now
   the row index (parity fix).
-- Known gap: `insert_text` / `insert_image` / `Shape` with `oc=` still do not emit
-  BDC/EMC. Queue item 6.
+- Known gap (`insert_text` / `insert_image` / `Shape` with `oc=` did not emit
+  BDC/EMC) closed 2026-09-08 — see "Completed 2026-09-08: OCG gaps" above.
 
 ### Completed 2026-09-05: render performance (`23429fd`, `af728f0`, `2909490`, merge `64ea53d`)
 
@@ -645,10 +690,10 @@ oracle-cross-checked against real PyMuPDF 1.24.14 (`.venv-oracle`) with zero reg
 - **OCMD/layers (7) — ✅ DONE (2026-09-05; this batch):** `add_layer` / `get_layers` / `switch_layer` /
   `set_layer_ui_config` / `get_oc` / `get_ocmd` / `set_ocmd` land with an in-memory layer view that
   rendering AND text extraction honour (hidden XObject `/OC`, `/OC …BDC/EMC` sections, and OCMD `/P`
-  policies + `/VE` are evaluated). **Follow-up (small):** `Page.insert_text(oc=)` / `insert_image(oc=)` /
-  Shape `oc=` still do not write the `BDC/EMC` marked-content wrapper or the `/Properties` resource (only
-  `set_oc` on XObjects binds content to a layer), and hidden `/Usage` (`/ViewState /OFF`) + config `/AS`
-  usage-application dictionaries are not evaluated.
+  policies + `/VE` are evaluated). **Follow-up — ✅ DONE 2026-09-08 (`feat/ocg-gaps`):**
+  `oc=` on every content writer now emits the `BDC/EMC` wrapper + `/Properties` resource (XObjects get
+  `/OC`), and `/Usage /View /ViewState` + the active configuration's `/AS` are evaluated for rendering
+  and text extraction; the only remaining gap is `/Intent`-mismatch hiding (see §0).
 - **`Page.run`/`DisplayList.run`/`get_textpage` (device-callback replay),
   `Page.remove_rotation`, `Annot.get_textbox`, `convert_to_pdf` non-image:** genuinely blocked (need
   a device-replay engine, content-stream rewriting, annot-appearance textpage).

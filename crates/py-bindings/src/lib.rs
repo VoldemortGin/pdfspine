@@ -41,6 +41,22 @@ fn value_err(e: ApiError) -> PyErr {
     PyValueError::new_err(e.to_string())
 }
 
+/// Error mapping for the `oc=` writers (`insert_text` / `insert_textbox` /
+/// `insert_image` / `show_pdf_page` / `Shape.commit`): PyMuPDF raises
+/// `ValueError("bad optional content: 'oc'")` for an object that is neither an
+/// OCG nor an OCMD and `RuntimeError("bad xref")` for a nonexistent one; every
+/// other failure keeps the standard [`map_err`] mapping.
+fn oc_err(e: ApiError) -> PyErr {
+    let msg = e.to_string();
+    if msg.contains("bad optional content: 'oc'") {
+        PyValueError::new_err("bad optional content: 'oc'")
+    } else if msg.contains("bad xref") {
+        PyRuntimeError::new_err("bad xref")
+    } else {
+        map_err(e)
+    }
+}
+
 /// A `/VE` visibility expression as PyMuPDF's nested list (`["and", 5,
 /// ["not", 6]]`: lower-case operators, OCG xrefs as ints).
 fn ve_to_py<'py>(py: Python<'py>, ve: &pdf_api::VeExpr) -> PyResult<Bound<'py, PyAny>> {
@@ -1545,8 +1561,11 @@ impl PyShape {
         Ok(())
     }
 
-    /// Finishes the current styled block (PyMuPDF `Shape.finish`).
-    #[pyo3(signature = (color=None, fill=None, width=1.0, dashes=None, even_odd=false, close_path=false))]
+    /// Finishes the current styled block (PyMuPDF `Shape.finish`). A non-zero
+    /// `oc` (OCG / OCMD xref) wraps the block in `/OC /MCn BDC` … `EMC`; it is
+    /// validated at `commit`.
+    #[pyo3(signature = (color=None, fill=None, width=1.0, dashes=None, even_odd=false, close_path=false, oc=0))]
+    #[allow(clippy::too_many_arguments)]
     fn finish(
         &mut self,
         color: Option<(f64, f64, f64)>,
@@ -1555,6 +1574,7 @@ impl PyShape {
         dashes: Option<String>,
         even_odd: bool,
         close_path: bool,
+        oc: u32,
     ) -> PyResult<()> {
         self.handle()?.finish(FinishParams {
             color,
@@ -1563,6 +1583,7 @@ impl PyShape {
             dashes,
             even_odd,
             close_path,
+            oc,
         });
         Ok(())
     }
@@ -1576,7 +1597,7 @@ impl PyShape {
             .shape
             .take()
             .ok_or_else(|| PdfError::new_err("Shape already committed"))?;
-        py.detach(|| handle.commit()).map_err(map_err)
+        py.detach(|| handle.commit()).map_err(oc_err)
     }
 }
 
@@ -2387,19 +2408,21 @@ impl PyPage {
 
     /// Places another PDF's page onto this page as a Form XObject (PyMuPDF
     /// `page.show_pdf_page`). `rect` is the destination `(x0, y0, x1, y1)`;
-    /// `src` is the source document; `pno` is the 0-based source page index.
+    /// `src` is the source document; `pno` is the 0-based source page index;
+    /// a non-zero `oc` (OCG / OCMD xref) becomes the form XObject's `/OC`.
     /// Returns the chosen XObject resource name.
-    #[pyo3(signature = (rect, src, pno=0))]
+    #[pyo3(signature = (rect, src, pno=0, oc=0))]
     fn show_pdf_page(
         &self,
         py: Python<'_>,
         rect: (f64, f64, f64, f64),
         src: &PyDocument,
         pno: usize,
+        oc: u32,
     ) -> PyResult<String> {
         let r = rect_of(rect);
-        py.detach(|| pdf_api::page_show_pdf_page(&self.page, r, &src.doc, pno))
-            .map_err(map_err)
+        py.detach(|| pdf_api::page_show_pdf_page(&self.page, r, &src.doc, pno, oc))
+            .map_err(oc_err)
     }
 
     // --- get_pixmap (PRD §3.3 / §8.10) -----------------------------------
@@ -2681,8 +2704,9 @@ impl PyPage {
     // --- content insertion (PRD §8.8 / §9.4) -----------------------------
 
     /// Inserts `text` at `point` (PyMuPDF `Page.insert_text`). Heavy work runs
-    /// with the GIL released. Returns the number of lines written.
-    #[pyo3(signature = (point, text, *, fontname="helv", fontsize=11.0, color=(0.0,0.0,0.0), fontfile=None))]
+    /// with the GIL released. Returns the number of lines written. A non-zero
+    /// `oc` (OCG / OCMD xref) wraps the text in `/OC /MCn BDC` … `EMC`.
+    #[pyo3(signature = (point, text, *, fontname="helv", fontsize=11.0, color=(0.0,0.0,0.0), fontfile=None, oc=0))]
     #[allow(clippy::too_many_arguments)]
     fn insert_text(
         &self,
@@ -2693,6 +2717,7 @@ impl PyPage {
         fontsize: f64,
         color: (f64, f64, f64),
         fontfile: Option<Vec<u8>>,
+        oc: u32,
     ) -> PyResult<usize> {
         let page = self.page.clone();
         let text = text.to_string();
@@ -2706,14 +2731,16 @@ impl PyPage {
                 fontsize,
                 color,
                 fontfile.as_deref(),
+                oc,
             )
         })
-        .map_err(map_err)
+        .map_err(oc_err)
     }
 
     /// Inserts wrapped `text` into `rect` (PyMuPDF `Page.insert_textbox`).
-    /// `align`: 0=left, 1=center, 2=right, 3=justify. Returns free height.
-    #[pyo3(signature = (rect, text, *, fontname="helv", fontsize=11.0, color=(0.0,0.0,0.0), align=0, fontfile=None))]
+    /// `align`: 0=left, 1=center, 2=right, 3=justify. Returns free height. A
+    /// non-zero `oc` (OCG / OCMD xref) wraps the text in `/OC /MCn BDC` … `EMC`.
+    #[pyo3(signature = (rect, text, *, fontname="helv", fontsize=11.0, color=(0.0,0.0,0.0), align=0, fontfile=None, oc=0))]
     #[allow(clippy::too_many_arguments)]
     fn insert_textbox(
         &self,
@@ -2725,6 +2752,7 @@ impl PyPage {
         color: (f64, f64, f64),
         align: i32,
         fontfile: Option<Vec<u8>>,
+        oc: u32,
     ) -> PyResult<f64> {
         let page = self.page.clone();
         let text = text.to_string();
@@ -2740,15 +2768,17 @@ impl PyPage {
                 color,
                 align,
                 fontfile.as_deref(),
+                oc,
             )
         })
-        .map_err(map_err)
+        .map_err(oc_err)
     }
 
     /// Inserts an image into `rect` (PyMuPDF `Page.insert_image`). `stream` is
     /// the image bytes; JPEG is passthrough, otherwise raw RGB requires
-    /// `width`/`height`. Heavy work runs with the GIL released.
-    #[pyo3(signature = (rect, *, stream, width=None, height=None))]
+    /// `width`/`height`. A non-zero `oc` (OCG / OCMD xref) becomes the image
+    /// XObject's `/OC`. Heavy work runs with the GIL released.
+    #[pyo3(signature = (rect, *, stream, width=None, height=None, oc=0))]
     fn insert_image(
         &self,
         py: Python<'_>,
@@ -2756,20 +2786,21 @@ impl PyPage {
         stream: Vec<u8>,
         width: Option<u32>,
         height: Option<u32>,
+        oc: u32,
     ) -> PyResult<()> {
         let page = self.page.clone();
         py.detach(move || -> Result<(), ApiError> {
             match (width, height) {
                 (Some(w), Some(h)) => {
-                    pdf_api::page_insert_image_rgb(&page, rect_of(rect), w, h, &stream)?;
+                    pdf_api::page_insert_image_rgb(&page, rect_of(rect), w, h, &stream, oc)?;
                 }
                 _ => {
-                    pdf_api::page_insert_image_jpeg(&page, rect_of(rect), &stream)?;
+                    pdf_api::page_insert_image_jpeg(&page, rect_of(rect), &stream, oc)?;
                 }
             }
             Ok(())
         })
-        .map_err(map_err)
+        .map_err(oc_err)
     }
 
     // --- vector drawing (PRD §8.8) ---------------------------------------
