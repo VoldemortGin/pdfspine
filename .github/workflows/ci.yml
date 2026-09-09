@@ -37,6 +37,10 @@ jobs:
       - name: Install Python build and quality dependencies
         run: python -m pip install -e ".[test,quality]"
       - name: Run the authoritative repository gate
+        # The editable install above already built `_core` with the hosted
+        # interpreter (no venv), so skip the gate's venv-only extension rebuild.
+        env:
+          PDFSPINE_GATE_SKIP_EXTENSION: "1"
         run: ./ci.sh
 
   # ----------------------------------------------------------------- lint
