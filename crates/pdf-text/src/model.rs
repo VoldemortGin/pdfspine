@@ -400,11 +400,11 @@ pub struct Block {
     /// The reading-order block number (PyMuPDF block `number`).
     pub number: usize,
     /// Content-order key: the smallest source-glyph (paint) index among the
-    /// block's lines. When a page has no root column cut, [`crate::layout`]
-    /// orders side-by-side column regions by their smallest block `seq` and
-    /// every other block by its own `seq`; image blocks default to `usize::MAX`
-    /// and are appended after the text blocks without taking part in that
-    /// ordering.
+    /// block's lines. Blocks come out of [`crate::layout`] in geometric region
+    /// order (bands top to bottom, columns left to right); `seq` only orders
+    /// the lines inside one region before they are grouped into blocks. Image
+    /// blocks default to `usize::MAX` and are appended after the text blocks,
+    /// never sorted.
     pub seq: usize,
 }
 
