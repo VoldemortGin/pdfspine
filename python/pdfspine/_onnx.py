@@ -34,6 +34,7 @@ from html import escape
 import math
 import os
 from pathlib import Path
+import re
 import threading
 from typing import Any, Mapping, Sequence
 
@@ -266,6 +267,11 @@ class OnnxOptions:
     table_min_score: float = 0.0
     channel_order: str = "bgr"
     crop_padding: int = 10
+    cell_postprocess: bool = True
+    band_word_assignment: bool = False
+    merge_symbol_columns: bool = True
+    strip_dot_leaders: bool = True
+    verify_spans: bool = False
     ocr_if_no_text: bool = True
     ocr_engine: str = "paddle"
     ocr_language: str = "eng"
@@ -307,8 +313,16 @@ class OnnxOptions:
             object.__setattr__(self, "providers", tuple(self.providers))
         else:
             raise TypeError("ONNX providers must be 'auto' or a sequence of strings")
-        if type(self.ocr_if_no_text) is not bool:
-            raise TypeError("ONNX ocr_if_no_text must be a bool")
+        for name in (
+            "ocr_if_no_text",
+            "cell_postprocess",
+            "band_word_assignment",
+            "merge_symbol_columns",
+            "strip_dot_leaders",
+            "verify_spans",
+        ):
+            if type(getattr(self, name)) is not bool:
+                raise TypeError(f"ONNX {name} must be a bool")
         self._validate()
 
     @classmethod
@@ -1046,8 +1060,381 @@ def _assign_words(
         assigned += 1
         buckets.setdefault(best_index, []).append(dict(token))
     for index, cell in enumerate(cells):
+        cell["_words"] = buckets.get(index, [])
         cell["cell_text"] = "\n".join(_lines_text(buckets.get(index, [])))
     return assigned / len(tokens) if tokens else 0.0
+
+
+# --------------------------------------------------------------------------- #
+# Cell post-processing
+# --------------------------------------------------------------------------- #
+# Symbols that financial tables typeset in a column of their own. SLANet-plus
+# reliably predicts such a column as a real grid column; FinTabNet.c gold (and
+# every other human annotation) keeps "$ 1,234" as one cell. ``_LEFT_SYMBOLS``
+# belong to the cell on their left ("82 %", "(1,234 )"), the rest to the cell on
+# their right. Dashes are deliberately absent: an em-dash column is a real
+# value column meaning "nil".
+_LEFT_SYMBOLS = frozenset("%)]}")
+_RIGHT_SYMBOLS = frozenset("$€£¥₩₹([{")
+_SYMBOL_CHARS = _LEFT_SYMBOLS | _RIGHT_SYMBOLS
+# Dotted leaders ("Revenue . . . . 1,234") tokenise either as one long run of
+# dots or as a string of single-dot words.
+_DOT_RUN = re.compile(r"[.·•…]{3,}")
+_DOT_TOKEN = re.compile(r"^[.·•…]+$")
+
+
+def _strip_dot_leaders(line: str) -> str:
+    """Remove dotted-leader runs from one line of cell text.
+
+    Runs of three or more dots are deleted inside a token; whole tokens made of
+    dots are dropped when the line holds three or more of them (the ``. . . .``
+    spelling) or when they sit at either end of the line (a leader clipped by
+    the crop boundary). An interior lone dot is kept, so a decimal point
+    tokenised on its own never merges two numbers.
+    """
+
+    tokens = [token for token in (_DOT_RUN.sub("", t) for t in line.split()) if token]
+    dots = [index for index, token in enumerate(tokens) if _DOT_TOKEN.match(token)]
+    if len(dots) >= 3:
+        tokens = [t for index, t in enumerate(tokens) if index not in set(dots)]
+    else:
+        while tokens and _DOT_TOKEN.match(tokens[0]):
+            tokens.pop(0)
+        while tokens and _DOT_TOKEN.match(tokens[-1]):
+            tokens.pop()
+    return " ".join(tokens)
+
+
+def _apply_cell_text(cells: Sequence[dict[str, Any]], *, strip_leaders: bool) -> None:
+    """Rebuild ``cell_text`` from each cell's assigned words."""
+
+    for cell in cells:
+        words = list(cell.get("_words") or ())
+        lines = _lines_text(words)
+        if strip_leaders:
+            lines = [text for text in map(_strip_dot_leaders, lines) if text]
+        cell["cell_text"] = "\n".join(lines)
+
+
+def _cell_bands(
+    cells: Sequence[Mapping[str, Any]], *, axis: int
+) -> tuple[list[tuple[float, float]], list[tuple[float, float] | None]]:
+    """Contiguous bands and their text cores for one grid axis.
+
+    ``axis=1`` returns row bands (y), ``axis=0`` column bands (x). The first
+    element is a gap-free partition of the crop — band ``i`` runs from the
+    midpoint between band ``i-1``'s core and its own to the midpoint before
+    band ``i+1`` — and the second is each band's *core*, the extent actually
+    covered by cell boxes (``None`` when the grid index has no cell at all).
+    """
+
+    key = "row_nums" if axis else "column_nums"
+    low, high = (1, 3) if axis else (0, 2)
+    count = max((max(cell[key]) for cell in cells), default=-1) + 1
+    if count <= 0:
+        return [], []
+    cores: list[tuple[float, float] | None] = []
+    for index in range(count):
+        single = [cell for cell in cells if list(cell[key]) == [index]]
+        source = single or [cell for cell in cells if index in cell[key]]
+        cores.append(
+            (
+                min(cell["bbox"][low] for cell in source),
+                max(cell["bbox"][high] for cell in source),
+            )
+            if source
+            else None
+        )
+    filled: list[tuple[float, float]] = []
+    previous = (0.0, 0.0)
+    for core in cores:
+        previous = core if core is not None else (previous[1], previous[1])
+        filled.append(previous)
+    edges: list[float] = []
+    for index in range(1, count):
+        edge = (filled[index - 1][1] + filled[index][0]) / 2.0
+        edges.append(max(edge, edges[-1]) if edges else edge)
+    bands = [
+        (
+            edges[index - 1] if index else -math.inf,
+            edges[index] if index < len(edges) else math.inf,
+        )
+        for index in range(count)
+    ]
+    return bands, cores
+
+
+def _band_index(
+    value: float, bands: Sequence[tuple[float, float]], cores: Sequence[Any]
+) -> int:
+    """Index of the band holding ``value``, biased downwards inside a gap.
+
+    A value inside a band's core takes that band. A value in the whitespace
+    between two cores takes the *following* band: SLANet-plus boxes hug the
+    last line of a multi-line cell, so the extra lines of a two-line row label
+    sit above their own row and would otherwise be stolen by the row above.
+    """
+
+    for index, core in enumerate(cores):
+        if core is not None and core[0] <= value <= core[1]:
+            return index
+    for index, core in enumerate(cores):
+        if core is not None and value < core[0]:
+            return index
+    for index, (low, high) in enumerate(bands):
+        if low <= value < high:
+            return index
+    return max(len(bands) - 1, 0)
+
+
+def _assign_words_bands(
+    cells: list[dict[str, Any]], tokens: Sequence[Mapping[str, Any]]
+) -> float:
+    """Assign words to cells by row band x column band instead of nearest box.
+
+    Words are first grouped into visual lines; the whole line picks a row (so a
+    wrapped row label is not split across two rows), each word picks its column
+    independently. Returns the fraction of words that landed in a cell.
+    """
+
+    if not cells:
+        return 0.0
+    row_bands, row_cores = _cell_bands(cells, axis=1)
+    column_bands, column_cores = _cell_bands(cells, axis=0)
+    if not row_bands or not column_bands:
+        return _assign_words(cells, tokens)
+    by_slot: dict[tuple[int, int], int] = {}
+    for index, cell in enumerate(cells):
+        for row in cell["row_nums"]:
+            for column in cell["column_nums"]:
+                by_slot.setdefault((int(row), int(column)), index)
+    buckets: dict[int, list[dict[str, Any]]] = {}
+    assigned = 0
+    for line in _group_lines([dict(token) for token in tokens]):
+        boxes = [_box4(word["bbox"]) for word in line]
+        centre = (min(b[1] for b in boxes) + max(b[3] for b in boxes)) / 2.0
+        row = _band_index(centre, row_bands, row_cores)
+        for word, box in zip(line, boxes):
+            column = _band_index((box[0] + box[2]) / 2.0, column_bands, column_cores)
+            index = by_slot.get((row, column))
+            if index is None:
+                index = next(
+                    (
+                        by_slot[(row, other)]
+                        for other in sorted(
+                            range(len(column_bands)),
+                            key=lambda c: abs(c - column),
+                        )
+                        if (row, other) in by_slot
+                    ),
+                    None,
+                )
+            if index is None:
+                centre_point = ((box[0] + box[2]) / 2.0, (box[1] + box[3]) / 2.0)
+                index = min(
+                    range(len(cells)),
+                    key=lambda i: _rect_distance(centre_point, cells[i]["bbox"]),
+                )
+            assigned += 1
+            buckets.setdefault(index, []).append(word)
+    for index, cell in enumerate(cells):
+        cell["_words"] = buckets.get(index, [])
+    return assigned / len(tokens) if tokens else 0.0
+
+
+def _split_unsupported_spans(
+    cells: list[dict[str, Any]], tokens: Sequence[Mapping[str, Any]]
+) -> bool:
+    """Break up merged cells whose covered slots hold text of their own.
+
+    A genuine ``rowspan``/``colspan`` swallows empty grid slots. When a covered
+    band carries words that lie outside the merged cell's own box, the merge is
+    a structure-model hallucination and the cell is split back into one cell per
+    band. Returns ``True`` when anything changed.
+    """
+
+    changed = False
+    for axis, key, other_key in (
+        (1, "row_nums", "column_nums"),
+        (0, "column_nums", "row_nums"),
+    ):
+        bands, cores = _cell_bands(cells, axis=axis)
+        if not bands:
+            continue
+        low, high = (1, 3) if axis else (0, 2)
+        other_low, other_high = (0, 2) if axis else (1, 3)
+        for cell in list(cells):
+            indexes = sorted(int(v) for v in cell[key])
+            if len(indexes) < 2:
+                continue
+            box = _box4(cell["bbox"])
+            anchor = max(
+                indexes,
+                key=lambda i: min(box[high], bands[i][1]) - max(box[low], bands[i][0]),
+            )
+            others = [i for i in indexes if i != anchor and cores[i] is not None]
+            if not any(
+                _band_has_foreign_words(
+                    tokens, bands[i], (box[other_low], box[other_high]), box, axis
+                )
+                for i in others
+            ):
+                continue
+            # One piece per band, sized by the band's own text extent. A band
+            # whose only cell is this one has no extent of its own, so the
+            # pieces would overlap: leave such a span alone.
+            slices = [cores[i] or (box[low], box[high]) for i in indexes]
+            if any(hi - lo <= 0 for lo, hi in slices) or any(
+                left[1] > right[0]
+                for left, right in zip(sorted(slices), sorted(slices)[1:])
+            ):
+                continue
+            cells.remove(cell)
+            for index, (lo, hi) in zip(indexes, slices):
+                piece = dict(cell)
+                piece[key] = [index]
+                piece[other_key] = list(cell[other_key])
+                piece["bbox"] = (
+                    [box[0], lo, box[2], hi] if axis else [lo, box[1], hi, box[3]]
+                )
+                piece["_words"] = []
+                cells.append(piece)
+            changed = True
+    return changed
+
+
+def _band_has_foreign_words(
+    tokens: Sequence[Mapping[str, Any]],
+    band: tuple[float, float],
+    across: tuple[float, float],
+    box: Sequence[float],
+    axis: int,
+) -> bool:
+    """True when ``band`` x ``across`` holds a word centre outside ``box``."""
+
+    for token in tokens:
+        tb = _box4(token["bbox"])
+        centre = ((tb[0] + tb[2]) / 2.0, (tb[1] + tb[3]) / 2.0)
+        along, sideways = (centre[1], centre[0]) if axis else (centre[0], centre[1])
+        if not band[0] <= along < band[1] or not across[0] <= sideways <= across[1]:
+            continue
+        if not (box[0] <= centre[0] <= box[2] and box[1] <= centre[1] <= box[3]):
+            return True
+    return False
+
+
+def _symbol_column(cells: Sequence[Mapping[str, Any]], column: int) -> str | None:
+    """``"left"``/``"right"`` when every word in ``column`` is a bare symbol."""
+
+    seen = False
+    direction = "right"
+    for cell in cells:
+        if list(cell["column_nums"]) != [column]:
+            continue
+        text = "".join(str(word["text"]) for word in cell.get("_words") or ())
+        text = "".join(text.split())
+        if not text:
+            continue
+        if any(character not in _SYMBOL_CHARS for character in text):
+            return None
+        seen = True
+        if any(character in _LEFT_SYMBOLS for character in text):
+            direction = "left"
+    return direction if seen else None
+
+
+def _merge_column(cells: list[dict[str, Any]], column: int, direction: str) -> bool:
+    """Fold grid ``column`` into its neighbour, renumbering the columns."""
+
+    target = column + 1 if direction == "right" else column - 1
+    last = max(max(cell["column_nums"]) for cell in cells)
+    if not 0 <= target <= last:
+        return False
+    pairs: list[tuple[dict[str, Any], dict[str, Any] | None]] = []
+    for cell in cells:
+        if list(cell["column_nums"]) != [column]:
+            continue
+        partner = next(
+            (
+                other
+                for other in cells
+                if other is not cell
+                and target in other["column_nums"]
+                and list(other["row_nums"]) == list(cell["row_nums"])
+            ),
+            None,
+        )
+        if partner is None and (cell.get("_words") or cell.get("cell_text")):
+            return False  # would drop text: leave the column alone
+        pairs.append((cell, partner))
+    if not pairs:
+        return False
+    for cell, partner in pairs:
+        if partner is not None:
+            partner["bbox"] = [
+                min(partner["bbox"][0], cell["bbox"][0]),
+                min(partner["bbox"][1], cell["bbox"][1]),
+                max(partner["bbox"][2], cell["bbox"][2]),
+                max(partner["bbox"][3], cell["bbox"][3]),
+            ]
+            partner["_words"] = list(partner.get("_words") or ()) + list(
+                cell.get("_words") or ()
+            )
+            partner["column_nums"] = sorted(
+                set(partner["column_nums"]) | set(cell["column_nums"])
+            )
+        cells.remove(cell)
+    shift = column + 1 if direction == "right" else column
+    for cell in cells:
+        cell["column_nums"] = sorted(
+            {(c - 1 if c >= shift else c) for c in cell["column_nums"]}
+        )
+    return True
+
+
+def _merge_symbol_columns(cells: list[dict[str, Any]]) -> int:
+    """Repeatedly fold symbol-only columns into their neighbour."""
+
+    merged = 0
+    while cells:
+        last = max(max(cell["column_nums"]) for cell in cells)
+        if last < 1:
+            break
+        for column in range(last + 1):
+            direction = _symbol_column(cells, column)
+            if direction is not None and _merge_column(cells, column, direction):
+                merged += 1
+                break
+        else:
+            break
+    return merged
+
+
+def _postprocess_cells(
+    cells: list[dict[str, Any]],
+    tokens: Sequence[Mapping[str, Any]],
+    options: OnnxOptions,
+) -> float:
+    """Fill ``cell_text`` from the text layer and clean up the predicted grid."""
+
+    enabled = options.cell_postprocess
+    # The overlap rule runs first even when the band rule is on: it is the one
+    # that keeps a lone "$" out of the neighbouring number's cell, which is what
+    # makes a symbol-only column recognisable. Band assignment then runs on the
+    # cleaned-up grid, where the merged column is wide enough to catch the
+    # right-aligned percentages that used to land in the "$" column.
+    coverage = _assign_words(cells, tokens)
+    if enabled and options.merge_symbol_columns:
+        _merge_symbol_columns(cells)
+    split = enabled and options.verify_spans and _split_unsupported_spans(cells, tokens)
+    if enabled and options.band_word_assignment:
+        coverage = _assign_words_bands(cells, tokens)
+    elif split:
+        coverage = _assign_words(cells, tokens)
+    _apply_cell_text(cells, strip_leaders=enabled and options.strip_dot_leaders)
+    for cell in cells:
+        cell.pop("_words", None)
+    return coverage
 
 
 def _grid_boxes(
@@ -1127,7 +1514,7 @@ def _table_from_region(
     structure_score = sum(scores) / len(scores) if scores else 0.0
     if structure_score < options.table_min_score:
         return None
-    _assign_words(cells, crop.tokens)
+    _postprocess_cells(cells, crop.tokens, options)
     for cell in cells:
         cell["bbox"] = _crop_box_to_page(cell["bbox"], crop, rendered)
     row_boxes, column_boxes = _grid_boxes(cells)
