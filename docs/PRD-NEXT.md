@@ -68,7 +68,7 @@
 
 | Branch / worktree | Commit | State | Handoff |
 |---|---|---|---|
-| `worktree-agent-ae07f5282e4af72f5` at `.claude/worktrees/agent-ae07f5282e4af72f5` | `2be80e5` (wip) | Reading order stages 3/4: baseline reproduced for PMC, born, PMC212689 and both FR runs; the EUR-Lex GT run was killed at 22/40 by a sub-agent that shared the worktree. Stage 3/4 specs are drafted (`stage3-spec.md`, `stage4-spec.md` in the worktree); no product code yet. Evidence and scripts in `/Volumes/ExternalSSD/tmp/ro34/`. | `HANDOFF-reading-order-3-4.md` |
+| `feat/reading-order-stage3` (was `worktree-agent-ae07f5282e4af72f5`) | `61847e1` | ✅ **Stage 3 done 2026-09-08** — geometric block order on every page (valley-band column classification, column cut beats band cut, spanning bands partition the columns into rows, every region atomic). EUR-Lex 40 docs order 0.9814 → 0.9821 = fitz, `≥ fitz` 27/40 → 35/40; govinfo FR misplaced headers 52 → 23 (fitz 52); PMC/born unchanged. **Stage 4 was implemented, measured and rejected** (born order 1.0000 → 0.8312 on mixed-column leaf regions) and is rolled back — see `docs/reading-order-root-cause.md` "Stage 3 results (2026-09-08)" / "Stage 4 … 已回滚". Remaining: `--no-ff` merge into `main`, then D4 (FR header fragmentation) as its own item. | `docs/reading-order-root-cause.md` (the Mac Studio `HANDOFF-reading-order-3-4.md` is superseded) |
 | `feat/ocg-gaps` (was `worktree-agent-a86bc39cb9edfca42`) | `c8170d3` (visibility), `3b7e3e5` (writers) | ✅ **Done 2026-09-08** — OCG gaps: `oc=` on every content writer (BDC/EMC + `/Properties`, XObject `/OC`) and `/Usage /View /ViewState` + config `/AS` visibility. See "Completed 2026-09-08: OCG gaps" below. Remaining: `--no-ff` merge into `main`, rebuild `.venv`, delete the worktree and branch. | folded into the completed section below (`HANDOFF-ocg-gaps.md` retired) |
 
 Resume procedure for each: `cd` into the worktree, read its HANDOFF file, `git merge
@@ -82,8 +82,11 @@ run the ruff check, push, and delete the worktree and branch.
 1. **Push `main`** (`fix/get-text-clip` merged as `5a95731` and `fix/remove-rotation`
    merged 2026-09-07; `.venv` rebuilt, `./ci.sh` green), then **merge
    `feat/ocg-gaps`** (done 2026-09-08, see "Completed 2026-09-08: OCG gaps") and
-   **finish the remaining in-flight branch**, reading order 3/4; its HANDOFF has
-   the exact remaining steps.
+   **merge `feat/reading-order-stage3`** (stage 3 done 2026-09-08, `61847e1`;
+   stage 4 measured and rejected, see the branch table above). Reading order's
+   open follow-ups are now D4 (FR header fragmentation, `split_on_gutter`
+   should cut only when the run's own gap covers the gutter valley) and a
+   redesigned stage 4.
 2. **govdocs1-00074 near-blank render** (fitz SSIM 0.2654 at baseline): not started;
    the agent was cut off while reading. Corpus is in `fixtures/corpus`.
 3. **Render, remaining cost:** first-seen glyph rasterization (~30% of text pages),

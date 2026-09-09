@@ -138,6 +138,19 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ### Changed
 
+- **Reading order is now geometric on every page** (stage 3). Text blocks come
+  out in the XY-cut's own emission order — spanning band, then column, then y —
+  instead of falling back to content-stream paint order whenever the page's
+  root cut was not a column cut. A valid column cut now always beats a band
+  cut (a two-column page whose paragraph spacing exceeds its gutter is no
+  longer sliced into full-width bands), a line is classified against the whole
+  gutter valley rather than its midpoint (a hanging-indent paragraph number
+  stays in its column), and full-width bands partition the columns into rows.
+  Measured against PyMuPDF 1.27.2: EUR-Lex 40 documents reading-order score
+  0.9814 → 0.9821 (matching fitz), `pdfspine ≥ fitz` 27/40 → 35/40; Federal
+  Register misplaced running headers 52 → 23 over 2123 pages (fitz 52); PMC and
+  born-digital unchanged. `get_text(sort=False)` therefore no longer preserves
+  paint order between blocks — only between fragments sharing a line.
 - **`get_ocgs()` / `layer_ui_configs()` / `ocg_state()` now report the active
   layer view** — the in-memory selected configuration + panel overrides —
   matching PyMuPDF's in-memory state, instead of only the on-disk default.

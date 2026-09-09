@@ -558,3 +558,153 @@ robustness(govdocs1) 23 篇、`fixtures/corpus/usgs-fs20183024` 1 篇、fintabne
 `ro_fr_header.py`（FR 页眉秩）、`ro_probe.py` / `ro_probe2.py`（阶段 2 探针）、`gt-*-{before,after,b,d,e}.json`、
 `compare-{after,b,d,e}.json`、`fr-header-{base,after,b,d,e,fitz}.json`、`govinfo-fr/`（12 期 FR PDF + manifest）。
 逐页摘要目录与各变体 wheel 已按任务要求删除。
+
+## Stage 3 results (2026-09-08)
+
+分支 `feat/reading-order-stage3`（基于 `main` `72b1d4a`）。**阶段 3 已落地；阶段 4 实现后被数据否决、
+已回滚**，见下两节。
+设计稿是 Mac Studio 缓存分支 `macstudio/ae07f5282e4af72f5` 的 `HANDOFF-reading-order-3-4.md`
+（阶段 3 = 该文档 §3，阶段 4 = §6）；`/Volumes/ExternalSSD/tmp/ro34/` 的现场脚本本机没有，
+基线用仓库内语料与 `conformance/gt/run_gt.py` 重新建立，FR 页眉指标改由入库脚本
+`conformance/gt/fr_header_order.py` 产出（见下）。
+
+### 方法与命令
+
+打分在 Mac mini（`mini` remote，16 GB / 10 核）上做，三个隔离 venv 各装一个 release wheel：
+`base` = `main` `72b1d4a`，`v1` = 阶段 3（= 本分支落地的版本），`v2` = 阶段 3 + 阶段 4（已回滚，
+只留数据）。oracle 是主仓库
+`.venv-oracle` 的 PyMuPDF 1.27.2，只以子进程参照运行、输出不入库。
+
+```bash
+# 每个变体一次 wheel
+CARGO_BUILD_JOBS=6 .venv/bin/maturin build --release --out wheels-<tag>
+uv venv --python 3.12 .venv-<tag> && uv pip install ocrspine-models wheels-<tag>/pdfspine-*.whl
+
+# GT 三语料（pmc 12 篇、born 6 篇、eurlex 40 篇 = 5 部法规 × 8 语言）
+for c in pmc born eurlex; do
+  .venv/bin/python conformance/gt/run_gt.py \
+    --manifest conformance/gt/corpus-$c/manifest.json \
+    --report ro-out/GT-$c-<tag>.md --json ro-out/gt-$c-<tag>.json \
+    --python $PWD/.venv-<tag>/bin/python \
+    --oracle-python ~/startup/spine/pdfspine/.venv-oracle/bin/python \
+    --timeout 180 --min-order 0.0
+done
+
+# FR 页眉秩（govinfo 10 期、2123 页，无 GT 文本，走独立脚本）
+.venv-<tag>/bin/python conformance/gt/fr_header_order.py \
+  --manifest conformance/gt/corpus-govinfo/manifest.json --json ro-out/fr-header-<tag>.json
+~/startup/spine/pdfspine/.venv-oracle/bin/python conformance/gt/fr_header_order.py \
+  --engine fitz --manifest conformance/gt/corpus-govinfo/manifest.json --json ro-out/fr-header-fitz.json
+```
+
+EUR-Lex 的 40 篇清单与 2026-09-05 那轮（10 部 × 4 语言）不是同一套，所以绝对值与设计稿的
+0.9372 / 0.9773 不可比；本节所有 EUR-Lex 数字都在同一套清单上前后对照。PMC 与 born 与设计稿
+逐位一致（PMC 0.7439 / 0.7808 / 0.6101 / 0.9600，born 0.9803 / 1.0000），基线确认复现。
+
+### GT 三语料（lev / f1 / jaccard / order，均值）
+
+| 语料 | 引擎 | lev | f1 | jaccard | order |
+|---|---|---|---|---|---|
+| PMC（12 篇，5 篇错配已隔离） | base | 0.7439 | 0.7808 | 0.6101 | 0.9600 |
+| | **阶段 3（v1，已落地）** | 0.7438 | 0.7807 | 0.6100 | 0.9600 |
+| | 阶段 3+4（v2，已回滚） | 0.7253 | 0.7806 | 0.6093 | 0.9357 |
+| | fitz | 0.7445 | 0.7809 | 0.6125 | 0.9605 |
+| born（6 篇） | base | 0.9803 | 0.9803 | 0.9652 | 1.0000 |
+| | **阶段 3（v1，已落地）** | 0.9803 | 0.9803 | 0.9652 | 1.0000 |
+| | 阶段 3+4（v2，已回滚） | 0.8130 | 0.9803 | 0.9652 | 0.8312 |
+| | fitz | 0.9803 | 0.9803 | 0.9652 | 1.0000 |
+| EUR-Lex（40 篇） | base | 0.9290 | 0.9684 | 0.9430 | 0.9814 |
+| | **阶段 3（v1，已落地）** | 0.9295 | 0.9684 | 0.9430 | **0.9821** |
+| | fitz | 0.9292 | 0.9681 | 0.9411 | 0.9821 |
+
+EUR-Lex 上 `pdfspine ≥ fitz (order)` 从 **27/40 (67.5%) 升到 35/40 (87.5%)**，order 均值与 fitz
+持平（0.9821），lev 均值反超（0.9295 vs 0.9292）。PMC / born 四位不变（PMC 的 −0.0001 见下）。
+born 的 6 篇逐位不变，满足设计稿的硬约束。
+
+### FR 页眉秩（govinfo 10 期 / 2123 页）
+
+| 指标 | base | 阶段 3 | fitz | 含义 |
+|---|---|---|---|---|
+| `header_pages` | 2075 | 2075 | 2095 | 页眉带里能被正则认出页眉块的页数（越高越好） |
+| `misplaced` | 52 | **23** | 52 | 有正文块排在页眉块之前的页数（越低越好） |
+| `fragmented` | 790 | **935** | 292 | 页眉带被切成多个块的页数（越低越好） |
+
+`misplaced` 52 → 23，**反超 fitz 的 52**：这正是阶段 3 的目标——页眉最后绘制、跨两栏，旧的
+`min(seq)` 区域排序把它排到正文之后。`fragmented` 790 → 935 是**已知退化**，根因是 D4（行级
+`split_on_gutter` 在页眉的普通词距处切行），阶段 3 的 row 划分让这些碎片各自成区、于是块数更多；
+D4 未在本分支处理，见"未做的部分"。
+
+### 逐篇回归分析
+
+EUR-Lex 40 篇里 34 篇分数有变化（|Δ| ≥ 0.0001），**29 篇变好、5 篇轻微变差**：
+
+- **最大赢面：`32011L0083_*` 全部 8 个语言版本，order +0.0013 ~ +0.0036、lev +0.0012 ~ +0.0035**
+  （`_EN` 最大：lev 0.9712 → 0.9747）。就是设计稿点名的 `32011L0083_BG p10` 形态：消费者权利
+  指令的段间距宽于栏距，旧的 `prefer_x = xg >= yg` 把双栏页横切成通栏 band，两栏被逐带交错；
+  阶段 3 让合法 column cut 无条件优先，整页恢复"整左栏 → 整右栏"。
+- **次一档：`32014R0596_*`、`32018R1725_*`、`32006L0112_*` 各语言 +0.0001 ~ +0.0004**，来自
+  谷带分类（OJ 序号 "(32)" 之类悬挂缩进行不再被误判为 spanning）与 row 划分（通栏小标题不再
+  把整栏截断）。
+- **退化 5 篇，全部 −0.0001 / −0.0002 lev**：`32006L0112_FR`（−0.0002，order 也 −0.0001）、
+  `32016R0679_{BG,EN,IT,ES}`（各 −0.0001，但 order 反而 **+0.0001 ~ +0.0002**）。
+  即 5 篇里 4 篇是"顺序变好、字符级 lev 因几个块的换行位置移动而掉了万分之一"，
+  只有 `32006L0112_FR` 是真退化，量级 2e-4，远低于设计稿 0.005 的硬约束。
+- **PMC：仅 `PMC212319` lev 0.7536 → 0.7532（−0.0004），order 不变**（0.9966）。该篇是 PLoS
+  三栏 + 中部通栏图注，属于设计稿点名的"中间 spanning band 语义未定"那一类：row 划分把图注
+  插进栏流。绝对量级 4e-4，且 order 不动，接受；`SPANNING_BANDS_PARTITION_ROWS = false` 一行
+  即可切回 float 语义复现对照。
+- **PMC212689**（设计稿的重点残差篇）：lev 0.7003 / order 0.7456 前后**逐位不变**。阶段 3 没有
+  碰到它的失效形态（碎片化的块边界，不是块序），这与设计稿 §7.4 "残差诊断未做出结论"一致。
+
+### 目标语义的取舍（已按设计稿落定）
+
+- **全页几何序**：绘制序只保留在同一 region 内共行的片段之间。代价是 `sort=False` 在"页脚先画的
+  单栏页"上与 fitz 不同（`readorder_011` 锁住），`PYTEXT-010` 已按此改写为 `Right < Left < Bottom`。
+- **中间 spanning band 走行划分**（`SPANNING_BANDS_PARTITION_ROWS = true`，编译期常量）：EUR-Lex 上通栏小标题
+  的收益（`32011L0083_*`、`32014R0596_*`）远大于 PMC 图注的 −0.0004 代价，数据支持行划分。
+  float 语义作为编译期开关保留，翻一行即可打对照 wheel。
+
+## Stage 4 (2026-09-08) — 实现后被数据否决，已回滚
+
+阶段 4 = region 内行序也改几何：取 region 的主方向 `(wmode, dir)`，按
+`paragraph_line_metrics().baseline_origin · (−dir.1, dir.0)` 排序，落在
+`LINE_TOL_FRAC × max(effective_size)` 内的行视为同一行、**行内保留 `seq`**（这一条本意是保住
+`PYTEXT-010` 的共基线片段与表格同行单元格）。`group_region_paragraphs` 的 `.abs()` 按设计稿保留。
+实现是一个 `sort_region_lines(Vec<Line>) -> Vec<Line>`，取代 `region_lines.sort_by_key(|l| l.seq)`。
+
+**Rust 测试全绿（21 个测试二进制），但语料上是明确退化，触发设计稿"born 逐位不变"的硬约束，
+因此不合入。**
+
+| 语料 | 指标 | 阶段 3 | 阶段 3+4 |
+|---|---|---|---|
+| born（6 篇） | order | 1.0000 | **0.8312** |
+| born | lev | 0.9803 | **0.8130** |
+| born `2col-justified` | lev / order | 0.9911 / 1.0000 | **0.4903 / 0.4947** |
+| born `2col-narrow-gutter` | lev / order | 0.9921 / 1.0000 | **0.5076 / 0.5116** |
+| PMC（12 篇） | order | 0.9600 | **0.9357** |
+| PMC | lev | 0.7438 | **0.7253** |
+
+失效形态与设计稿 §6 的风险预判一致，但比预期严重：`2col-justified` / `2col-narrow-gutter`
+掉到约 0.49 —— 这正是"column cut 没做出来的混栏叶子 region"，`seq` 序原本还能把两栏各自保持
+连续，几何行序把它们逐行交错，文本长度对了、顺序全乱。设计稿以为阶段 3 的"column cut 优先"
+会让这类叶子变少，实测在窄栏距/两端对齐的合成页上依然存在。另一条独立缺陷是行容差取
+`LINE_TOL_FRAC × region 内最大字号`：region 里只要有一个大字号标题，容差就宽到把相邻正文行
+并成同一"行"、再按 `seq` 打乱。
+
+**结论**：阶段 4 的目标（region 内不再依赖绘制序、旋转/竖排页按自己的阅读轴排行）方向正确，
+但前提是先把"混栏叶子 region"消灭干净——需要的是更强的分栏判据（或对叶子 region 再做一次
+带 fallback 的列检测），而不是在现有叶子上换排序。已把实现与数据留在本节，重做时不必再走一遍。
+
+### 未做的部分（留给后续）
+
+- **阶段 4 · region 内几何行序**：见上，实现已验证会退化，重做前先解决混栏叶子 region；
+  行容差不要用 region 最大字号。
+- **D4 · FR 页眉碎片化**（`fragmented` 935 vs fitz 292，`header_pages` 2075 vs 2095）：根因在行级
+  `split_on_gutter`（`layout.rs`），页眉整行在栏距 x 处恰有词间空格即被切。设计稿 §6 的方案是让
+  `detect_page_gutters` 返回谷带 `(lo, hi)` 而非中点，`split_on_gutter` 仅当本 run 自己的空白覆盖
+  谷带（`gap ≥ 0.8·(hi − lo)`）才切。与阶段 3/4 正交，单独立项。
+- **PMC212689 残差**（order 0.7456）：形态是块边界碎片化而非块序，阶段 3 前后逐位不变，仍未定位。
+- **300 文档 digest 三方归因**：设计稿的 `ro34/ro_compare.py` / `ro_threeway.py` 在外接盘上、本机
+  没有，本轮改用 EUR-Lex 逐篇 Δ + FR 页眉三项计数做归因。若要恢复整套逐页差分，需要重写这两个脚本。
+  `conformance/corpus-diff/` 的 300 文档冻结清单只按 SHA-256 校验语料文件，本分支没有改动任何
+  fixture，清单不受影响、无需刷新。
