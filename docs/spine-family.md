@@ -59,7 +59,7 @@
 | `docspine/` | `VoldemortGin/docspine` | Rust + PyO3 + maturin | `docspine`，tag v0.5.1（Cargo 内长期 0.0.1 占位） | 已发 PyPI | L2 文档引擎 | 2026-07-30 / 29 | 停滞 |
 | `pptspine/` | `VoldemortGin/pptspine` | Rust + PyO3 + maturin | `pptspine`，tag v0.5.1（Cargo 内 0.0.1 占位） | 已发 PyPI | L2 文档引擎 | 2026-07-30 / 37 | 停滞 |
 | `spinestudio/` | `VoldemortGin/spinestudio` | Python（FastAPI）+ TS（Next.js 16）+ Python SDK | `spinestudio` 0.3.1、`spinestudio-sdk` 0.2.1、`spinestudio-web` 0.1.0（private） | 有 `dist/` 与 tag，**无 release CI**，大概率未上 PyPI | L3 应用 | 2026-07-30 / 46 | 停滞 |
-| `pdfspine-studio/` | **无远程**（纯本地仓） | Rust 2024 + Tauri 2 + Vite/React/TS | workspace 0.1.0，私有 | 未发布 | L3 应用（GUI） | 2026-07-22 / 6 | 停滞，且当前构建不了 |
+| `pdfspine-studio/` | `VoldemortGin/pdfspine-studio`（private，2026-09-09 新建） | Rust 2024 + Tauri 2 + Vite/React/TS | workspace 0.1.0，私有 | 未发布 | L3 应用（GUI） | 2026-07-22 / 6 | 停滞，且当前构建不了 |
 | `rag-spine-web/` | `VoldemortGin/rag-spine-web` | TS（pnpm + Turborepo + Next.js 16 + Fumadocs） | `@rag-spine/*` 四个 app，不发布 | 部署到 Cloudflare Pages | 旁路：文档站 | 2026-07-20 / 33 | 明显偏冷 |
 | `examples/` | `VoldemortGin/spine-examples` | Python 脚本 | 无包 | 未发布 | 旁路：示例 | 2026-06-23 / 1 | 只有 1 个 commit |
 
@@ -349,7 +349,7 @@ L0 底座     corespine (deps=[])        ocrspine (crate, 零依赖)
 - **被谁依赖**：无人；全家族 grep `pdfspine-studio` 0 处外部引用。
 - **家族相关文档在哪**：`README.md:1-6`（"reuses the sibling `../pdfspine/crates/pdf-api` crate through the Studio `adapters` layer"）；`CLAUDE.md` 只讲工程宪章，不提家族。
   家族根 README / CLAUDE.md 成员表**均未列出它**。
-- **当前状态与注意事项**：**无远程**（`git remote -v` 空），6 commits，2026-07-22 后停更。`=0.4.1` 与 pdfspine 当前 0.7.1 **不匹配，当前构建不了**
+- **当前状态与注意事项**：远程 `VoldemortGin/pdfspine-studio`（private，2026-09-09 新建并推送 main；此前为纯本地仓），2026-07-22 后停更。`=0.4.1` 与 pdfspine 当前 0.7.1 **不匹配，当前构建不了**
   （Cargo.lock 仍锁 0.4.1）。定位未在家族层被确认。
 
 ### 5.10 rag-spine-web
@@ -398,7 +398,7 @@ L0 底座     corespine (deps=[])        ocrspine (crate, 零依赖)
 - 建议：把铁律改写为"Rust 侧 git dep + rev；Python 侧 PyPI 下限 + uv path，发布 CI `--no-sources`"，或者反过来让 Python 侧也钉 rev——二选一并记 ADR。
 
 **G3 · pdfspine-studio 构建断裂、定位未确认**
-- 现象：`pdfspine-studio/Cargo.toml:39` path 依赖 `=0.4.1`，pdfspine 已 0.7.1；无远程；家族 README / CLAUDE.md 未列；测试硬读兄弟仓 fixture。
+- 现象：`pdfspine-studio/Cargo.toml:39` path 依赖 `=0.4.1`，pdfspine 已 0.7.1；家族 README / CLAUDE.md 未列；测试硬读兄弟仓 fixture。
 - 影响：当前 `cargo build` 不可能通过；无人引用、无 CI、无备份。
 - 建议：三选一——(a) 补远程、收进家族表、改 git dep + rev；(b) 明确为实验仓并在根 CLAUDE.md 标注；(c) 归档。
 
