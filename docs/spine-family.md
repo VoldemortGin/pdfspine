@@ -4,7 +4,7 @@
 > `~/startup/spine/docs/spine-family.md`，用根目录 `make family-doc-sync` 同步、`make family-doc-check` 校验；
 > 修改请改真源再同步，不要只改某一个副本。
 >
-> 数据截至 **2026-09-07**，由代码与配置实测得出（`pyproject.toml` / `Cargo.toml` / `Cargo.lock` / `uv.lock` /
+> 数据截至 **2026-09-10**，由代码与配置实测得出（`pyproject.toml` / `Cargo.toml` / `Cargo.lock` / `uv.lock` /
 > 真实 `import` 与 `use` / `git log`），**不是仅凭意图文档**。证据路径写作 `<repo>/相对路径:行号`。
 
 **本文回答的问题**
@@ -390,6 +390,7 @@ L0 底座     corespine (deps=[])        ocrspine (crate, 零依赖)
 - 影响：docspine/pptspine 钉的 pdfspine 停在 0.3.1~0.4 时代，落后 4 个 minor；ocrspine 两 rev 相差 10 个 commit，含 `fix(paddle): pad recognizer crops with mid-gray`
   这类**会改变 OCR 输出**的修复——docspine/pptspine 的 OCR 结果与 pdfspine 已不一致。pdfspine 的 5 个 worktree 还钉旧 `732975f`。
 - 建议：在家族根加一个 rev 清单（或以本文 §4 为准）+ 定期 bump 流程；bump 时 docspine/pptspine 对齐同一 pdfspine rev。
+- → 见 §6.15 第 2 条。
 
 **G2 · "跨仓一律 git dep + 钉死 rev" 只在 Rust 侧成立**
 - 现象：Python 四仓（corespine / ragspine / spineagent / spinestudio）之间全是 PyPI 版本约束 + `[tool.uv.sources]` path editable，无一条 `git+…@rev`。
@@ -401,6 +402,7 @@ L0 底座     corespine (deps=[])        ocrspine (crate, 零依赖)
 - 现象：`pdfspine-studio/Cargo.toml:39` path 依赖 `=0.4.1`，pdfspine 已 0.8.0；家族 README / CLAUDE.md 未列；测试硬读兄弟仓 fixture。
 - 影响：当前 `cargo build` 不可能通过；无人引用、无 CI、无备份。
 - 建议：三选一——(a) 补远程、收进家族表、改 git dep + rev；(b) 明确为实验仓并在根 CLAUDE.md 标注；(c) 归档。
+- → 见 §6.15 第 1 条。
 
 **G4 · 版本下限严重滞后**
 - 现象：ragspine `corespine>=0.1.1`（实际 0.5.1，ADR 0002/0003 提升进核的 `ProviderError` / `BlobStore` 在该下限不存在）；
@@ -408,6 +410,7 @@ L0 底座     corespine (deps=[])        ocrspine (crate, 零依赖)
 - 证据：`ragspine/pyproject.toml:39,85`、`ragspine/src/ragspine/extraction/extractors/pdf_scanned_extractor.py` 注释、`spinestudio/backend/pyproject.toml`。
 - 影响：path editable 掩盖了问题，按 PyPI 安装时得到的是跑不动的组合。
 - 建议：每次发布新 minor 时把消费者下限抬到实际用到的 API 所在版本；spinestudio 补 release CI。
+- → 见 §6.15 第 5、6 条。
 
 **G5 · ragspine 的"自研引擎"覆盖不完整、内部路由不一致**
 - 现象：`extraction/registry.py:108` `.pdf` → docling 封装，`ingestion/structured/ingestion.py:609` → pdfspine，两条路默认不同；`.pptx` 默认 python-pptx（pptspine opt-in）；PDF 叙事默认 pypdfium2。
@@ -426,6 +429,7 @@ L0 底座     corespine (deps=[])        ocrspine (crate, 零依赖)
 - 证据：`git -C pdfspine ls-files | grep -i claude` 为空；`ragspine/CLAUDE.md` grep `spine|family` 只命中路径。
 - 影响：agent 在这三个仓工作时读不到家族约束。
 - 建议：pdfspine 补 CLAUDE.md；ragspine / pdfspine-studio 的 CLAUDE.md 加一段路由到根 CLAUDE.md 与本文件。
+- → 见 §6.15 第 7 条（ragspine / pdfspine-studio 两处已于 2026-09-10 关闭，仅余 pdfspine）。
 
 **G8 · corespine 违反自己的 rule of three**
 - 现象：`credential` 缝 0 消费者（spinestudio 明确拒用，`auth/api_key_store.py:5`）；`trigger` 只有 spinestudio 一家；`queue` 只有 ragspine 一家。ADR 0004/0005 的证据本身只列了 spinestudio。
@@ -435,11 +439,13 @@ L0 底座     corespine (deps=[])        ocrspine (crate, 零依赖)
 **G9 · rag-spine-web 内容落后两个版本、无 ocrspine / spinestudio 站、无同步机制**
 - 现象：站上 ragspine 0.11.0 vs 实际 0.13.0；`DOC-AUDIT-HANDOFF.md:38` 记录的 rev `7ccee8a` 已失效；4 站覆盖 6/11 成员；全靠人工审计。
 - 建议：至少加一个 drift guard（比对各仓 `pyproject`/CHANGELOG 版本号与站内声明）；决定是否为 ocrspine / spinestudio 建站。
+- → 见 §6.15 第 4 条。
 
 **G10 · docspine 单仓两个 pdfspine rev**
 - 现象：`pdf-typeset` 走 workspace `509a932e`，dev-dep `pdf-fonts` 在 `crates/doc-render/Cargo.toml` 单独钉 `93214453`，Cargo.lock 锁两份。
 - 影响：全量重复编译一遍 pdfspine 树；注释"复用已拉取的 checkout"失实。
 - 建议：改成 pptspine 的做法（`pdf-fonts.workspace = true`，同 rev）。
+- → 见 §6.15 第 2 条。
 
 **G11 · pptspine 测试对 pdfspine 的未声明依赖**
 - 现象：`python/tests/test_pdf_export.py:16`、`test_ssim_gate.py` `import pdfspine`，`[test]` extra 只有 pytest。
@@ -455,11 +461,74 @@ L0 底座     corespine (deps=[])        ocrspine (crate, 零依赖)
 - 现象：`models/` 有 `ppocrv5_rec_th.onnx` + `tests/thai_eval.rs`，`packages/ocrspine-models/hatch_build.py:12` 刻意不打包。
 - 影响：pip 安装的 pdfspine / docspine / pptspine 拿不到泰文能力。
 - 建议：明确是"暂不发布"还是"永不发布"，写进 ocrspine README。
+- → 见 §6.15 第 5 条。
 
 **G14 · 文档滞后的小项**
 - pdfspine `packages/pdfspine-ocr-models/` 旧伴随包残留（仅第 3 顺位回退）；ocrspine `Cargo.toml:9` / README 仍写 path dependency；
   `pptspine/crates/ppt-ocr/Cargo.toml:15` 注释停留在 path；spineagent `release.yml:12` 写 `corespine>=0.1.1`；examples docstring 旧路径 `/Users/linhan/workspace/spine`。
 - 建议：随下一次各仓提交顺手清理。
+- → 见 §6.15 第 3 条（examples docstring 旧路径）、第 5 条（ocrspine path 注释）。
+
+### 6.15 下一阶段家族待办（2026-09-10，有序）
+
+> 跨仓有序待办，2026-09-10 逐仓核实。每条字段：目标 / 证据（文件:行 或数字）/ 涉及仓库与文件 / 验收 / 规模 S-M-L / 关联既有 G 条。按优先级排。注：各仓 2026-09-10 的最近提交多为家族文档同步提交，本节"停更"一律指实质功能提交（见 §2）。跨仓改动按 §7"跨仓不写入"铁律由各自仓库执行，本节只做登记与优先级。
+
+**1. pdfspine-studio 构建断裂修复（关联 G3）**
+- 目标：解除 pdfspine-studio 对 pdfspine `pdf-api` 的裸 path + `=0.4.1` 精确钉版与 pdfspine 0.8.0 的冲突，恢复可编译。
+- 证据：`pdfspine-studio/Cargo.toml:38` `pdf-api = { path = "../pdfspine/crates/pdf-api", version = "=0.4.1", default-features = false }`；pdfspine 现为 0.8.0（`pdfspine` main `d0f679b`、tag `v0.8.0`@`f1f6ab4`，2026-09-10）；`crates/adapters/src/pdfspine.rs:6` `use pdf_api::{…}`；`crates/adapters/tests/pdfspine_repository.rs:11` 硬读 `../../../pdfspine/fixtures/born/render-fixture.pdf`（另 L25/48 同源、L61/96/140 读 `reading-order.pdf`）。
+- 涉及：pdfspine-studio（`Cargo.toml`、`Cargo.lock`、`crates/adapters/src/pdfspine.rs`、`crates/adapters/tests/pdfspine_repository.rs`）；pdfspine 侧需先给出 `pdf-api` 稳定版本/发布策略（见 `pdfspine/docs/PRD-NEXT.md` §0 "Family-level items"）。
+- 验收：pdfspine-studio `cargo check` 通过；测试不再硬读兄弟仓工作树 fixture（改为仓内自带或显式声明的测试数据）；依赖形式与家族铁律一致（git dep + rev，或 pdfspine 提供的稳定版本）。
+- 规模：M。
+
+**2. docspine / pptspine 的 pdfspine git rev bump 与门禁重跑（关联 G1、G10）**
+- 目标：把 docspine、pptspine 对 `pdf-typeset` / `pdf-fonts` 的 git rev 从 2026-07 旧 rev bump 到 v0.8.0 对应 commit，重跑门禁确认未被 pdfspine 的 API/语义变化弄坏。
+- 证据：docspine `Cargo.toml:39` `pdf-typeset` rev `509a932e`（2026-07-13）、`crates/doc-render/Cargo.toml:22` dev-dep `pdf-fonts` 单独钉 rev `93214453`（2026-07-08，未走 workspace）、`Cargo.toml:31` ocrspine `732975f`；pptspine `Cargo.toml:33`/`:36` `pdf-typeset` + `pdf-fonts` 同 rev `5f1640cb`（2026-07-13）、`:28` ocrspine `732975f`。两仓实质停更 2026-07-30（§2），钉的 pdfspine 停在 0.3.1~0.4 时代。pdfspine 0.8.0 把 `get_text` 在 `sort=False` 下的块序改为几何 XY-cut（`pdfspine/CHANGELOG.md [0.8.0]`、`pdfspine/docs/reading-order-root-cause.md` 2026-09-09 段），`pdf-typeset` 又引入 FontIndependent 行高规则——都可能改变 docx/pptx→PDF 导出。
+- 涉及：docspine（`Cargo.toml`、`crates/doc-render/Cargo.toml`、`Cargo.lock`）、pptspine（`Cargo.toml`、`Cargo.lock`）；pdfspine 侧提供目标 rev/tag。
+- 验收：两仓 `pdf-typeset`/`pdf-fonts` rev 对齐到同一 v0.8.0 对应 commit；各自门禁（cargo test/clippy/fmt + SSIM 导出门）通过；docspine 顺带把 `pdf-fonts` 改为 `workspace = true` 同 rev（关 G10）；记录块序/几何序变化对导出 SSIM 的影响。
+- 规模：M。
+
+**3. examples `spine_family_e2e.py` 在 pdfspine 0.8.0 / corespine 0.5.1 / spineagent 0.3.1 下重跑（关联 G14）**
+- 目标：在当前已发布版本下离线重跑端到端示例，记录块序语义变化带来的输出差异。
+- 证据：`examples/spine_family_e2e.py`（324 行）串 corespine（`:28`）、pdfspine（`:33`）、ragspine（`:36`）、spineagent（`:46`）；docstring 运行路径仍是旧路径 `/Users/linhan/workspace/spine`（`:15`，当前家族根是 `~/startup/spine`）；仓内 `.venv` editable 钉的是远旧版本（corespine 0.1.0 / rag_spine 0.3.0 / spineagent 0.0.3 / pdfspine 0.0.1，§5.11）；pdfspine 0.8.0 的 `get_text` `sort=False` 块序改为几何序可能改变抽取文本顺序。
+- 涉及：examples（`spine_family_e2e.py`、仓内 `.venv`）；只读消费 corespine/pdfspine/ragspine/spineagent。
+- 验收：离线跑通（§5.11 已粗判各包顶层导出仍在）；把输出差异（尤其块序/抽取文本）记录到示例仓或本文件；顺带修正 docstring 旧路径。
+- 规模：S。
+
+**4. rag-spine-web 文档站更新（关联 G9）**
+- 目标：把 pdfspine 0.8.0 新能力与落后的版本号补上文档站并部署。
+- 证据：站点实质停更 2026-07-20（§2；2026-09-10 仅家族文档同步提交）；`apps/web/content/docs/index.mdx:68` 仍写 ragspine `0.11.0`（实际 0.13.0，虽已加注"source-tree version"）；`apps/` 仅 `web`/`corespine`/`spineagent`/`pdfspine` 四站，无 ocrspine/spinestudio/pdfspine-studio 站（§5.10）；pdfspine 0.8.0 新增 OCG 图层面、ONNX 版面/表格后端、PDF→Markdown `to_markdown()`、`get_text("layout")` 等（`pdfspine/CHANGELOG.md [0.8.0]`）未上站。
+- 涉及：rag-spine-web（`apps/pdfspine/content/docs/…`、`apps/web/content/docs/index.mdx`、`.github/workflows/deploy.yml`）。
+- 验收：Cloudflare Pages 部署成功；pdfspine 站存在 0.8.0 新能力对应页面；站内版本号与各仓实际一致（或加 drift guard，关 G9）。
+- 规模：M。
+
+**5. ocrspine 卫生（关联 G13、G14）**
+- 目标：清 cargo fmt 违规、为 cargo-vet 信任到期加预警、核对数据包版本与消费者下限。
+- 证据：`pdfspine/docs/PRD-NEXT.md` §0 backlog 第 7 条登记"ocrspine crates 里 5 处既有 `cargo fmt --check` 违规（跨仓，只登记不在 pdfspine 改）"与"cargo-vet 信任条目 2027-09-05 到期、需提前 30 天 CI 预警"（该 5 处违规的唯一记录处；ocrspine 仓自身无 CHANGELOG、docs 内无此条，勿自己跑 cargo）；`ocrspine-models` 版本 0.0.3（`ocrspine/packages/ocrspine-models/pyproject.toml:17`），三家消费者 pdfspine `pyproject.toml:43` / docspine `:41` / pptspine `:38` 均钉 `ocrspine-models>=0.0.1,<0.1`（0.0.3 在范围内，下限当前无 G4 式滞后）。
+- 涉及：ocrspine（crates 源码、`.github/workflows/ci.yml`、`supply-chain/`、README）。
+- 验收：ocrspine `cargo fmt --check` 0 违规；CI 有一个在 vet-trust 到期前预警的作业；README 写清 `ocrspine-models` 版本策略与泰文权重不打包（关 G13）、去掉 `Cargo.toml:9`/README 的旧 "path dependency" 措辞（关 G14）。
+- 规模：S。
+
+**6. spinestudio 发布链路（关联 G4）**
+- 目标：决定 spinestudio 是否发布 PyPI；若发布，补 release workflow 并抬消费者下限。
+- 证据：`spinestudio/.github/workflows/` 只有 `ci.yml`、无 `release.yml`（§5.8）；有 git tag `v0.2.0`/`v0.3.0`/`v0.3.1` 但无发布 CI，大概率未上 PyPI（当前工作树亦无 `dist/`）；消费者下限远旧于开发环境（`rag-spine>=0.10.0` vs 0.13.0、`spineagent>=0.2.0` vs 0.3.1、`corespine>=0.4.0` vs 0.5.1，§5.8）。
+- 涉及：spinestudio（`.github/workflows/`、`backend/pyproject.toml`）。
+- 验收：做出发布/不发布的决定并记 ADR；若发布，补 `release.yml`（Trusted Publishing + `--no-sources` 隔离 path editable）、把消费者下限抬到实际版本（关 G4）。
+- 规模：M。
+
+**7. CLAUDE.md 路由补齐（关联 G7）**
+- 目标：给 pdfspine 补一份含家族路由的 CLAUDE.md（家族内唯一缺口）。
+- 证据：pdfspine（最大仓，339 commits）仍无 CLAUDE.md（`git -C pdfspine ls-files | grep -i claude` 为空）；`ragspine/CLAUDE.md:3` 与 `pdfspine-studio/CLAUDE.md:21` 现已各有一行"家族关系与依赖：先读 `docs/spine-family.md`"，即 G7 的这两处已于 2026-09-10 关闭（§5.2、§5.9 的旧描述"不提家族"是 2026-09-07 快照，已被更新取代）。
+- 涉及：pdfspine（新建 `CLAUDE.md`）；同时登记于 `pdfspine/docs/PRD-NEXT.md` §0 backlog（跨仓不重复，本条只追踪家族层状态）。
+- 验收：pdfspine 有 `CLAUDE.md`，含仓库结构、门禁命令、路由到 `docs/spine-family.md` 与根 CLAUDE.md，与 §7 一致；G7 的 pdfspine 缺口关闭。
+- 规模：S。
+
+**8. §6 已登记、未被上列条目覆盖、仍未关闭的差距（逐条建议动作，不新造事实）**
+- G2（铁律只在 Rust 侧成立）：把铁律改写成分语言两套（Rust=git dep+rev；Python=PyPI 下限+uv path、发布 CI `--no-sources`）或让 Python 侧也钉 rev，二选一并记 ADR。
+- G5（ragspine 自研引擎覆盖不全、registry 与 ingestion 的 PDF 默认不一致）：统一 `extraction/registry.py` 与 `ingestion/structured/ingestion.py` 的 PDF 默认；决定 pptspine 是否从 opt-in 转正、PDF 叙事是否切 pdfspine。
+- G6（ADR 0001 规范路径是旧 agentspine 版、内容在 `.bak-local`；家族根目录不入 git）：合并两份为一份带 Supersede 记录的 ADR；考虑让家族根成为只含 docs/Makefile/CLAUDE.md 的小仓（子仓仍独立）。
+- G8（corespine 违反 rule of three：`credential` 0 消费者、`trigger`/`queue` 各 1 家）：为 `credential` 找第二消费者或标 deprecated；`trigger`/`queue` 在第二家出现前视为试验性。
+- G11（pptspine 测试对 pdfspine 未声明依赖）：`pptspine/python/tests/test_pdf_export.py:16` `import pdfspine`，而 `pyproject.toml:46` `test` extra 只有 `pytest>=8`——加进 `test` extra，或测试内 `pytest.importorskip("pdfspine")`。
+- G12（docspine/pptspine 重复代码）：按既有优先级 ① 统一 SSIM conformance 工具 → ② `image_table` 下沉 → ③ OCR 桥 + `ooxml-pkg` 薄 crate（`doc-render`/`ppt-render` 不宜合并）。
 
 ---
 
@@ -469,7 +538,7 @@ L0 底座     corespine (deps=[])        ocrspine (crate, 零依赖)
 
 - 真源：`~/startup/spine/docs/spine-family.md`。每个成员仓的 `docs/spine-family.md` 是内容完全相同的副本。
 - 同步：在家族根运行 `make family-doc-sync`（把真源复制到每个含 `.git` 的子目录的 `docs/`）；校验：`make family-doc-check`（逐仓比对副本与真源）。
-  截至 2026-09-07 根 `Makefile` 只有 `status / fetch / pull / push / sync` 五个目标，这两个目标需随本文件一起补进根 `Makefile`。
+  截至 2026-09-10 这两个目标已并入根 `Makefile`（与 `status / fetch / pull / push / sync` 并列；`PROJECTS` 由 `*/.git` 自动发现，共 11 仓）。
 - 建议每次家族级 `make sync` 前先跑 `make family-doc-check`，副本不一致就先 `make family-doc-sync`。
 - 修改流程：改真源 → `make family-doc-sync` → 各仓随其他改动一起提交。**不要只改某一个副本**。
 

@@ -12,7 +12,8 @@
 ### Repository facts
 
 - **Repository:** `/Users/linhan/startup/spine/pdfspine`, branch `main`, HEAD
-  **`f1f6ab4`** (`chore(release): prepare v0.8.0`). No other branches or
+  **`d0f679b`** (`docs(family): pdfspine 0.8.0 released, single main branch`) —
+  one commit past the release tag (see below). No other branches or
   worktrees are checked out here. Confirm with
   `git -C /Users/linhan/startup/spine/pdfspine log --oneline --first-parent -6`.
 - **Released vs unreleased.** The published release is **`v0.8.0`** (annotated
@@ -247,6 +248,67 @@
     fail (the failure `0a27d31` introduced). **Locally the opposite holds:**
     leave the opt-out unset so the gate rebuilds the extension on any Rust
     change. Keep this documented if the CI build steps change.
+
+- [ ] **11. Backfill the gate / test numbers in README and the docs.**
+  - *Goal:* replace the stale 0.7.0-era test counts and gate label with the
+    real numbers from one full 0.8.0 gate run.
+  - *Why / evidence:* `README.md:19–20` still reads "**1,702 Rust tests + 814
+    Python tests** passing in the 0.7.0 release gate", and `README.md:81` is
+    "### Glyph geometry (0.7.0)" — both stale (the 2026-09-09 branch gate already
+    showed **pytest 1211 passed**, History). Meanwhile `docs/index.md:68–71` and
+    `PARITY.md:40,44–47,82` already agree with `COMPAT.toml [meta]` at 694/769 =
+    90.2% implemented, deferred 9 — so only the README lags.
+  - *Where:* `README.md` (the test-count line ~19–20 and the "(0.7.0)" headings
+    ~81), plus any `docs/index.md` / `PARITY.md` / `_llms` number that cites a
+    gate version. Derive counts from one full `./ci.sh` run (the `cargo test
+    --workspace` total + the pytest total), not by hand.
+  - *Acceptance:* README / `docs/index.md` / `PARITY.md` test-and-gate numbers
+    are mutually consistent, cite the 0.8.0 gate, and trace to a named gate run;
+    `.venv/bin/python scripts/check_docs_coverage.py` stays 316/316.
+  - *Size:* **S**.
+
+- [ ] **12. Write pdfspine's own `CLAUDE.md`.**
+  - *Goal:* add a repo-root `CLAUDE.md` — pdfspine currently has none.
+  - *Why / evidence:* `git -C … ls-files | grep -i claude` is empty; pdfspine is
+    the largest repo (339 commits) yet the only family member with no CLAUDE.md
+    (`docs/spine-family.md` §5.4, G7). ragspine and pdfspine-studio already route
+    to the family doc from their CLAUDE.md (`ragspine/CLAUDE.md:3`,
+    `pdfspine-studio/CLAUDE.md:21`), so pdfspine is the remaining gap.
+  - *Where:* a new `CLAUDE.md` at the repo root — repo structure (the 13 crates +
+    `python/`), the gate commands (`./ci.sh`, the pre-push hook, ruff **0.14.14**,
+    `.venv` / `.venv-oracle`, `target/` symlink, `TMPDIR` on the external SSD),
+    and a family-routing block pointing at `docs/spine-family.md` and the root
+    CLAUDE.md — consistent with `docs/spine-family.md` §7.
+  - *Acceptance:* `CLAUDE.md` exists and its gate/environment section matches this
+    §0 and its routing block matches `docs/spine-family.md` §7; the family doc's
+    G7 pdfspine gap (`docs/spine-family.md` §6.15 item 7) closes.
+  - *Size:* **S**.
+
+- [ ] **13. Family-level items (pointer — pdfspine-side decisions only).**
+  - *Goal:* keep the cross-repo backlog out of this file, but record the pieces
+    of it that pdfspine itself must decide.
+  - *Why / evidence:* the cross-repo work (pdfspine-studio's `=0.4.1` path dep,
+    the docspine/pptspine git-rev bump to v0.8.0, the examples e2e re-run, the
+    doc-site update, ocrspine hygiene, the spinestudio release) is registered in
+    `docs/spine-family.md` §6.15 and is handled by each repo under the family
+    "跨仓不写入" rule (`docs/spine-family.md` §7) — do not duplicate it here.
+  - *pdfspine-side actions (these do belong in this repo):*
+    - **Give pdfspine-studio a stable `pdf-api` to depend on.** It pins
+      `pdf-api = { path = "../pdfspine/crates/pdf-api", version = "=0.4.1" }`
+      (`pdfspine-studio/Cargo.toml:38`) while all 13 crates are `publish = false`.
+      Decide whether to publish `pdf-api` (crates.io or a tagged git dep) or
+      expose a stable `pdf-api` version, and document the supported version so the
+      sibling can move off `=0.4.1` (family §6.15 item 1).
+    - **Pick the `pdf-typeset` / `pdf-fonts` git-dep target for downstreams.**
+      docspine/pptspine pin 2026-07 revs (`509a932e` / `93214453` / `5f1640cb`);
+      publish a v0.8.0-aligned rev or a **git tag** they can track so their bump
+      (family §6.15 item 2) has a stable target, and record it in
+      `docs/RELEASE-PYPI.md`.
+  - *Acceptance:* the pdfspine-side release/version decisions for `pdf-api` and
+    `pdf-typeset` / `pdf-fonts` are recorded (in `docs/RELEASE-PYPI.md` or an
+    ADR); cross-repo execution stays tracked in `docs/spine-family.md` §6.15, not
+    duplicated here.
+  - *Size:* **S** (decision + doc; the downstream bumps are family-side).
 
 ### Working rules for the next agent
 
