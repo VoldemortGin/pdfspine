@@ -305,3 +305,164 @@ fn layout_e2e_006_full_width_header_word_gap_at_gutter_stays_one_line() {
         "column body rows merged across the gutter: {lines:?}"
     );
 }
+
+/// A full-width title can prevent the page-level column cut. The fallback
+/// horizontal sweep must not split the continuous body at its paragraph gap.
+#[test]
+fn layout_e2e_007_title_above_columns_with_shared_paragraph_gap() {
+    let mut content = String::from("BT /F1 10 Tf ");
+    for row in 0..5 {
+        let y = 750 - row * 12;
+        content.push_str(&format!(
+            "1 0 0 1 90 {y} Tm (FULL WIDTH TITLE EXTENDING ACROSS BOTH BODY COLUMNS) Tj "
+        ));
+    }
+    for (prefix, x) in [("LEFT", 40), ("RIGHT", 330)] {
+        for row in 0..12 {
+            let y = 650 - row * 12 - if row >= 6 { 30 } else { 0 };
+            content.push_str(&format!(
+                "1 0 0 1 {x} {y} Tm ({prefix} {row:02} continuous body paragraph text) Tj "
+            ));
+        }
+    }
+    content.push_str("ET");
+    let lines = line_texts(&helvetica_page(content.as_bytes()));
+    assert_eq!(lines.len(), 29);
+    assert!(lines[..5]
+        .iter()
+        .all(|s| s == "FULL WIDTH TITLE EXTENDING ACROSS BOTH BODY COLUMNS"));
+    let left_last = lines.iter().position(|s| s.starts_with("LEFT 11")).unwrap();
+    let right_first = lines
+        .iter()
+        .position(|s| s.starts_with("RIGHT 00"))
+        .unwrap();
+    assert!(
+        left_last < right_first,
+        "body columns interleaved: {lines:?}"
+    );
+    assert_eq!(lines.iter().filter(|s| s.starts_with("LEFT")).count(), 12);
+    assert_eq!(lines.iter().filter(|s| s.starts_with("RIGHT")).count(), 12);
+}
+
+/// A centered heading remains a boundary between independent column sections,
+/// even when its text is shorter than half the page width.
+#[test]
+fn layout_e2e_008_short_heading_separates_column_sections() {
+    let mut content = String::from("BT /F1 10 Tf ");
+    for row in 0..5 {
+        let y = 750 - row * 12;
+        content.push_str(&format!(
+            "1 0 0 1 90 {y} Tm (FULL WIDTH TITLE EXTENDING ACROSS BOTH BODY COLUMNS) Tj "
+        ));
+    }
+    for (section, top) in [("UPPER", 650), ("LOWER", 440)] {
+        for (side, x) in [("LEFT", 40), ("RIGHT", 330)] {
+            for row in 0..6 {
+                let y = top - row * 12;
+                content.push_str(&format!(
+                    "1 0 0 1 {x} {y} Tm ({section} {side} {row} body paragraph text) Tj "
+                ));
+            }
+        }
+    }
+    content.push_str("1 0 0 1 255 530 Tm (SECTION TWO) Tj ET");
+    let lines = line_texts(&helvetica_page(content.as_bytes()));
+    let upper = lines
+        .iter()
+        .position(|s| s.starts_with("UPPER RIGHT 5"))
+        .unwrap();
+    let heading = lines.iter().position(|s| s == "SECTION TWO").unwrap();
+    let lower = lines
+        .iter()
+        .position(|s| s.starts_with("LOWER LEFT 0"))
+        .unwrap();
+    assert!(
+        upper < heading && heading < lower,
+        "heading boundary lost: {lines:?}"
+    );
+    assert_eq!(lines.len(), 30);
+}
+
+/// A two-to-three-column transition must stay in top-to-bottom section order.
+#[test]
+fn layout_e2e_009_changed_column_structure_keeps_band_boundary() {
+    let mut content = String::from("BT /F1 10 Tf ");
+    for row in 0..5 {
+        let y = 750 - row * 12;
+        content.push_str(&format!(
+            "1 0 0 1 90 {y} Tm (FULL WIDTH TITLE EXTENDING ACROSS BOTH BODY COLUMNS) Tj "
+        ));
+    }
+    for (side, x) in [("LEFT", 40), ("RIGHT", 330)] {
+        for row in 0..6 {
+            let y = 650 - row * 12;
+            content.push_str(&format!(
+                "1 0 0 1 {x} {y} Tm (UPPER {side} {row} body paragraph text) Tj "
+            ));
+        }
+    }
+    for (side, x) in [("LEFT", 40), ("MIDDLE", 230), ("RIGHT", 420)] {
+        for row in 0..6 {
+            let y = 500 - row * 12;
+            content.push_str(&format!(
+                "1 0 0 1 {x} {y} Tm (LOWER {side} {row} column text) Tj "
+            ));
+        }
+    }
+    content.push_str("ET");
+    let lines = line_texts(&helvetica_page(content.as_bytes()));
+    let upper = lines
+        .iter()
+        .position(|s| s.starts_with("UPPER RIGHT 5"))
+        .unwrap();
+    let lower = lines
+        .iter()
+        .position(|s| s.starts_with("LOWER LEFT 0"))
+        .unwrap();
+    assert!(upper < lower, "column-count boundary lost: {lines:?}");
+    assert_eq!(lines.len(), 35);
+}
+
+/// Sparse form values must not be merged across a later label/value row just
+/// because both row bands admit geometric two-column cuts.
+#[test]
+fn layout_e2e_010_sparse_form_values_keep_their_row_band() {
+    let mut content = String::from("BT /F1 10 Tf ");
+    for row in 0..5 {
+        let y = 750 - row * 12;
+        content.push_str(&format!(
+            "1 0 0 1 90 {y} Tm (FULL WIDTH TITLE EXTENDING ACROSS BOTH BODY COLUMNS) Tj "
+        ));
+    }
+    for row in 0..6 {
+        let y = 650 - row * 12;
+        content.push_str(&format!(
+            "1 0 0 1 40 {y} Tm (UPPER LABEL {row} description and contact details) Tj "
+        ));
+    }
+    content.push_str("1 0 0 1 330 650 Tm (Name) Tj 1 0 0 1 330 626 Tm (Actual address of the lender for the customer) Tj ");
+    for (side, x) in [("LABEL", 40), ("VALUE", 330)] {
+        for row in 0..3 {
+            let y = 520 - row * 12;
+            content.push_str(&format!(
+                "1 0 0 1 {x} {y} Tm (LOWER {side} {row} commercial register information) Tj "
+            ));
+        }
+    }
+    content.push_str("ET");
+    let lines = line_texts(&helvetica_page(content.as_bytes()));
+    let name = lines.iter().position(|s| s == "Name").unwrap();
+    let next_label = lines
+        .iter()
+        .position(|s| s.starts_with("LOWER LABEL 0"))
+        .unwrap();
+    let address = lines
+        .iter()
+        .position(|s| s == "Actual address of the lender for the customer")
+        .unwrap();
+    assert!(
+        name < address && address < next_label,
+        "form value moved after next row: {lines:?}"
+    );
+    assert_eq!(lines.len(), 19);
+}

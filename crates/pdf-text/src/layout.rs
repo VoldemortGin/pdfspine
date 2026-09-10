@@ -2224,15 +2224,62 @@ fn cut_lines(lines: &[Line], idxs: &[usize], width: f64, height: f64, out: &mut 
         if groups.len() <= 1 {
             out.push(idxs.to_vec());
         } else {
-            for g in groups {
-                cut_lines(lines, &g, width, height, out);
+            let mut pending = Vec::new();
+            for group in groups {
+                if !pending.is_empty() && !same_body_columns(lines, &pending, &group) {
+                    cut_lines(lines, &pending, width, height, out);
+                    pending.clear();
+                }
+                pending.extend(group);
             }
+            cut_lines(lines, &pending, width, height, out);
         }
         return;
     }
 
     // No clean cut: this region is one column.
     out.push(idxs.to_vec());
+}
+
+/// Adjacent horizontal bands may be paragraphs in the same two-column body.
+/// Require clean, non-nested column cuts in both bands and their union, with
+/// every line retaining its side. Titles, spanning captions, and incompatible
+/// column structures therefore remain boundaries.
+fn same_body_columns(lines: &[Line], above: &[usize], below: &[usize]) -> bool {
+    let clean_cut = |idxs: &[usize]| {
+        let typ_h = typical_line_height_idx(lines, idxs);
+        let (_, left, right, spanning) = find_column_cut(lines, idxs, typ_h)?;
+        if !spanning.is_empty()
+            || [&left, &right].iter().any(|side| {
+                // Two broad lines provide minimal paragraph evidence. A short
+                // form value plus one wide address spans a substantial bbox,
+                // but must stay with its own label band (SECCI DE p22).
+                let min_body_width = region_width(lines, side) * 0.5;
+                let body_lines = side
+                    .iter()
+                    .filter(|&&i| lines[i].bbox.normalize().width() >= min_body_width)
+                    .take(2)
+                    .count();
+                body_lines < 2
+                    || find_column_cut(lines, side, typical_line_height_idx(lines, side)).is_some()
+            })
+        {
+            return None;
+        }
+        Some((left, right))
+    };
+    let Some((above_left, above_right)) = clean_cut(above) else {
+        return false;
+    };
+    let Some((below_left, below_right)) = clean_cut(below) else {
+        return false;
+    };
+    let combined: Vec<usize> = above.iter().chain(below).copied().collect();
+    let Some((left, right)) = clean_cut(&combined) else {
+        return false;
+    };
+    above_left.iter().chain(&below_left).eq(left.iter())
+        && above_right.iter().chain(&below_right).eq(right.iter())
 }
 
 /// Emits the regions of one column cut in reading order. Without spanning

@@ -11,6 +11,15 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Reading order below full-width titles.** A shared paragraph gap no longer
+  splits a continuous two-column body into stacked bands when the title blocks
+  the initial column cut. Compatible adjacent body bands retain whole-column
+  order; headings, spanning captions, and changes in column structure retain
+  their section boundaries. Fixes the recital interleave on the Greek, German,
+  and Polish `32013R0575` cover pages, with no text added or removed.
+
 ## [0.8.0] — 2026-09-10
 
 ### Added
