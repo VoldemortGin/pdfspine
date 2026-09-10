@@ -11,8 +11,40 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-09-10
+
 ### Added
 
+- **ONNX vision backend for `find_tables` (opt-in, torch-free).**
+  `page.find_tables(strategy="vision", backend="onnx", vision_options=…)` detects
+  table regions with **PP-DocLayout** and each region's cell structure with
+  **SLANet-plus** — both Apache-2.0 (PaddleOCR / PaddleX upstream, ONNX-exported by
+  RapidAI). As with the existing TATR backend the models only decide *where* the
+  cells are; cell **text always comes from the PDF's native text layer**, never
+  OCR. It runs on the `onnxruntime` Python package (no PyTorch): the new
+  **`pdfspine[onnx]`** extra pulls `onnxruntime>=1.17`, `numpy>=1.26` and `Pillow`
+  (also folded into `[all]`). The ONNX weights are **not** bundled in the wheel —
+  they resolve from the `PDFSPINE_ONNX_MODELS` directory or explicit `layout_model`
+  / `table_model` paths, and a missing weight or runtime raises `PdfUnsupportedError`
+  with the download / install hint. `find_tables` defaults are unchanged
+  (`strategy="lines"`; the vision default backend stays `"tatr"`), so existing
+  callers are unaffected; the ONNX path returns the same `TableFinder` / `Table`
+  surface (`table.source == "onnx"`).
+- **Whole-page layout and semantic-HTML extraction** (pdfspine-original extension,
+  outside the fitz-compat surface; `COMPAT.toml` unchanged). Two new `Page` methods
+  on the same ONNX backend: `Page.find_layout(**vision_options)` returns the page's
+  layout blocks in reading order as `pdfspine.LayoutBlock` (`bbox`, `label`,
+  `score`, `raw_label`; the detector's classes are normalized onto pdfspine's ten
+  canonical layout labels), and `Page.get_layout_html(**vision_options)` renders the
+  page as semantic HTML (`<h2>` / `<p>` / `<table>` with `rowspan` / `colspan`,
+  `<figure>` placeholders, and unclaimed words appended as `<pre class="unclaimed">`).
+  The tunables live in the frozen `pdfspine.OnnxOptions` dataclass; both value types
+  are re-exported at the top level. The default detector is **PP-DocLayoutV3**
+  (800×800, per-box reading order), with **PP-DocLayout-L** as a faster optional
+  variant (`layout_variant="pp_doclayout_l"`); `providers="auto"` selects CUDA when
+  the installed `onnxruntime` offers it and CPU otherwise (never CoreML). The
+  backend is new and opt-in, and its accuracy is **not yet benchmarked against a
+  ground-truth corpus** (an initial by-eye baseline only).
 - `markdown_to_pdf()` now writes clickable **link annotations** (`links=True`,
   default): `[text](https://…)`, `<autolinks>` and `<user@host>` become `/Link`
   annotations with a URI action; `[text](#anchor)` becomes a GoTo destination
@@ -188,6 +220,24 @@ feature-complete, but the public API and on-disk formats may still change.
   derivative (fingerprint `6c7126de…`, 299 entries byte-identical); the original
   `…-2026-09-05-manifest.json` (fingerprint `87804b5a…`) is kept verbatim as the
   corpus the committed summary and the C–G reports refer to.
+
+### Performance
+
+- **Page rendering is faster on text- and clip-heavy pages, with byte-identical
+  output.** Each distinct glyph's anti-aliased coverage mask is now rasterized once
+  per page and blitted for every repeat (53–88% of glyph rasterizations on
+  text-heavy pages were exact repeats), and the `q` / `Q` clip stack holds the
+  device-size clip mask behind an `Arc` with copy-on-write, so a `save` that never
+  modifies the clip no longer clones the whole buffer (≈136 MB of per-page mask
+  clones removed on one 82-save page). Pixel output is unchanged.
+- **`get_text("dict"/"rawdict")` geometry costs much less memory and time.** The
+  0.7.0 glyph-geometry fields carried a large `rawdict` overhead (0.7.0 measured
+  +49% retained peak RSS and +66% streamed time versus the pre-geometry baseline on
+  the 118-page EUR-Lex sample). Sharing geometry floats per span, interning the dict
+  keys, untracking the plain-float geometry tuples from CPython's cyclic GC, and
+  building the tree straight from the `TextPage` model cut that to **+14.7% RSS /
+  +45% time** (430.7 → 331.5 MiB) with byte-identical output (0 differences over the
+  frozen 300-document text/dict/rawdict manifest).
 
 
 ## [0.7.1] — 2026-09-05
@@ -728,7 +778,8 @@ published wheel's version is set from the `v0.1.0` git tag at build time.
   2858 ms → 819 ms). `rayon` is a feature-gated (`paddle-ocr`) optional dep and
   is not in the lean base wheel.
 
-[Unreleased]: https://github.com/VoldemortGin/pdfspine/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/VoldemortGin/pdfspine/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/VoldemortGin/pdfspine/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/VoldemortGin/pdfspine/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/VoldemortGin/pdfspine/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/VoldemortGin/pdfspine/compare/v0.6.0...v0.6.1
