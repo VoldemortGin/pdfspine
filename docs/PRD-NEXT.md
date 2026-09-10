@@ -11,10 +11,10 @@
 
 ### Repository facts
 
-- **Repository:** `/Users/linhan/startup/spine/pdfspine`, branch `main`, HEAD
-  **`d0f679b`** (`docs(family): pdfspine 0.8.0 released, single main branch`) —
-  one commit past the release tag (see below). No other branches or
-  worktrees are checked out here. Confirm with
+- **Repository:** `/Users/linhan/startup/spine/pdfspine`, branch `main`.
+  The reading-order follow-up below started at **`93298af`** (the 2026-09-10
+  backlog update); use the log for the current post-fix HEAD. No other branches
+  or worktrees remain after the per-item merge. Confirm with
   `git -C /Users/linhan/startup/spine/pdfspine log --oneline --first-parent -6`.
 - **Released vs unreleased.** The published release is **`v0.8.0`** (annotated
   tag at commit `f1f6ab4`, 2026-09-10; on PyPI as `pdfspine` 0.8.0 — **6 files**:
@@ -26,8 +26,8 @@
   ONNX vision layout/table backend (PP-DocLayoutV3 default + SLANet-plus),
   reading-order stage 3 + D4 (geometric XY-cut block order), `remove_rotation`
   widget/annot rects, `get_text(clip=)`, and the `pdf-typeset` FontIndependent
-  line-height rule. **`CHANGELOG.md` `[Unreleased]` is now empty** — the next
-  change opens a fresh section.
+  line-height rule. **`CHANGELOG.md` `[Unreleased]` now records the reading-order
+  band fix** below; that fix is not part of the published 0.8.0 release.
 - **Gate.** `./ci.sh` runs `scripts/quality_gate.py`, phases in order
   `rust → extension → python → drift → artifacts`. The `extension` phase
   fingerprints `crates/**`, `Cargo.toml`, `Cargo.lock`, `pyproject.toml` and
@@ -64,7 +64,7 @@
 1. **This §0** — the backlog and working rules below, then the **History**
    section for what each recent branch actually changed.
 2. `CHANGELOG.md` `## [0.8.0] — 2026-09-10` — the surface shipped in 0.8.0;
-   `[Unreleased]` is now empty.
+   `[Unreleased]` records the subsequent reading-order band fix.
 3. `docs/reading-order-root-cause.md`, the **2026-09-09** section (the
    base/V1/V2/V3/V4 variant table, the stage-3 attribution, "阶段 4 数据与放弃
    理由", and "后续该修") — required before touching reading order.
@@ -98,24 +98,31 @@
   **The next open backlog item is #1.**
 
 - [ ] **1. Reading-order follow-ups** (from the 2026-09-09 stage-3 attribution;
-  none started).
+  sub-item 1 completed below).
   - *Goal:* close the four residual reading-order gaps left after stage 3 + D4.
   - *Why / evidence:* `docs/reading-order-root-cause.md` "后续该修" + the variant
     table. The hard bars are met at HEAD (PMC 7 order 0.9600 vs fitz 0.9605;
-    EUR-Lex 40 lev 0.9375 / order 0.9777; FR misplaced 24/2492 vs fitz 64/2517;
-    FR fragmented 247 pages vs fitz 0) but four gaps remain.
+    EUR-Lex 40 lev 0.9377 / order 0.9779; FR misplaced 24/2493 vs fitz 64/2517;
+    FR fragmented 247 pages vs fitz 0). Sub-item 1 is now fixed; the other
+    three follow-ups remain open.
   - *Where:* `crates/pdf-text/src/layout.rs` — `find_column_cut`, `cut_lines`,
     `emit_column_cut` / `SPANNING_BANDS_PARTITION_ROWS`, `group_blocks_columned`,
     `detect_page_gutters` / `split_on_gutter`.
   - *Sub-items, by payoff:*
-    1. **Guard the R3/R4 horizontal band cut** so two genuinely side-by-side
-       body columns are not split into stacked bands — the one real bug
-       (`32013R0575_EL p0` recital interleave) and probably the 4 newly-regressed
-       FR pages (`FR-2026-01-13 p144/p146`, `-01-15 p382`, `-01-20 p164`). Split
-       a spanning row into rows only when it covers the whole gutter valley and
-       is ≳ 50% page width (a true full-width heading); or treat a parent region
-       as a single column region when both halves of a band cut still column-cut
-       to the same L/R structure.
+    1. **Guard the R3/R4 horizontal band cut — done (2026-09-10).**
+       The reproduced failure was the fallback `split_y_bands` sweep: a title
+       prevented the whole-page column cut, then a shared paragraph gap split
+       a continuous two-column body into independently emitted bands. Adjacent
+       bands now coalesce only when each and their union have a clean,
+       non-nested two-column cut, each side has at least two body-width lines,
+       and every line retains its column assignment.
+       Titles / spanning captions and incompatible column structures remain
+       boundaries; spanning-band and in-region `seq` semantics are unchanged.
+       This fixes `32013R0575_EL p0` and the same DE/PL cover-page interleave.
+       FR output is unchanged (24 misplaced / 2493 detected header pages,
+       247 fragmented; the old 2492 was the historical base/V1 join count).
+       Evidence and the final corpus/gate run are in the **2026-09-10** section
+       of `docs/reading-order-root-cause.md`. Sub-item **2** is next.
     2. **SECCI label/value form detection:** keep row-major (single region /
        shared baseline) when a right column of short lines shares baselines with
        the left column — fixes `32008L0048_EL p21–26` and `_BG p22/p24` (small; a

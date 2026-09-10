@@ -698,3 +698,101 @@ V1/V4 digest 的 `text` 投影。
 （FR 页眉指标）；`attribution-v1.md`（阶段 3 完整归因）；`stage3-spec.md` / `stage4-spec.md`（设计规格）；`diag-v1/`（归因脚本）；
 各变体 wheel 在 `wheels-{base,v1,v2,v3,v4}/`。门禁在分支上全绿：`cargo fmt --check` / `clippy -D warnings` / `test --workspace`、
 `pytest` 全量 1211 passed、`ruff`。
+
+## 2026-09-10 连续双栏的横向 band 守卫（§0 #1.1）
+
+基线：`93298af`（0.8.0 之后的文档提交，阅读序仍为 V4）。最终打分 tag：
+`bandguard-v2-final`，资产均位于 `/Volumes/ExternalSSD/tmp/ro34/`；
+`score-band.sh` 是修正旧工作树路径、指向当前 main checkout 的 `score.sh` 副本。
+
+### 复现与修复
+
+`32013R0575_EL p0` 的真实故障不在 `emit_column_cut` 的窄 spanning 行判断。
+Rust 逐层 trace 表明：封面标题令全页 `find_column_cut` 失败，回退的
+`split_y_bands` 一次切出所有空白带，包括正文 y=564–582 的共同段落空隙。
+该空隙上下两段各自都具有合法、无 spanning 的双栏结构，却被分别发射，成为
+左上 → 右上（含第 (1) 条续文与第 (2) 条）→ 左下（第 (1) 条开头）→ 右下。
+只限制 spanning 行宽度无法处理这条回退路径。
+
+`cut_lines` 现在先合并相邻且兼容的双栏正文 band，再递归发射。
+`same_body_columns` 要求上下两段及其合集都存在无 spanning、无嵌套栏的双栏切分，
+并且每条行在合集内仍归原来的左/右侧。每个候选栏还须至少有两行达到该栏宽度的
+一半，以提供最小正文段落证据：一个短名称加一条宽地址虽可撑出宽 bbox，却不是连续正文。
+标题、通栏图注及不兼容栏结构阻断合并；
+允许保留列归属的轻微栏位偏移。只处理明确双栏，三栏嵌套语义保持原状。
+成员归属用保序 iterator equality 线性核对，不使用逐行 `Vec::contains`。
+没有翻转 `SPANNING_BANDS_PARTITION_ROWS`，也没有恢复被弃用的 stage 4；region 内仍按 `seq`。
+
+新增端到端合成 PDF 测试（无需外部语料）：
+
+- `layout_e2e_007`：5 行整宽标题阻止整页 column cut，正文共同段距仍须整左 → 整右。
+  改动前 red 明确复现上下 band 交错；改动后 green，29 行完整、前 5 行标题保持原序。
+- `layout_e2e_008`：短居中标题仍隔开上下双栏章节。
+- `layout_e2e_009`：双栏 → 三栏转换仍保持章节上下顺序。
+- `layout_e2e_010`：稀疏表单值栏不能跨下一条标签/值 band 合并；在初版守卫上 red，
+  补正文行证据后 green。
+
+原 `readorder_009–012`、`layout_e2e_006` 保持通过。独立代码与三语言实际输出审查通过：
+DE 原先两次提前插入右栏正文，EL/PL 把右栏第 (1) 条续文和第 (2) 条置于左栏第 (1) 条之前；
+三者现在均先读完整左栏，再读右栏。
+
+### Corpus 验证口径
+
+最终源码重新构建 extension 后重新运行 GT / FR / digest，未以旧 JSON 代替重打分。
+`band-v2-final-build.json` 保存源码 SHA-256、extension fingerprint 与基线提交；
+`band-born-before.json` / `band-born-v2-final.json` 验证 born 6 篇全文与改动前安装的 extension
+逐字节相同。其余结果见 `gt-{pmc,born,eurlex}-bandguard-v2-final.json`、
+`fr-header-bandguard-v2-final.json`、`compare-bandguard-v2-final.json`。
+
+300 文档历史 digest manifest 中，299 篇可核对输入（每篇最多前 20 页，共 1886 页），只有
+`32013R0575_DE/EL/PL` 各自 p0 改变，全部为既有 24 个块的纯置换；块文本多重集不变，
+没有字符/词增删或块重分。剩余 `fixtures/typeset/typeset-lo-slide.pdf` 被历史 manifest
+报 `SHA_MISMATCH`，不纳入有效比较；未修改 fixture 或冻结 manifest。
+该文件不是 born 6 篇验收集的一员。
+
+前 20 页 digest 不是全文保证：初版守卫的全文 GT 发现 `32008L0048_DE` order
+0.9653 → 0.9652。用历史 V4 wheel 对同一输入逐页核对，定位到 p22 的 28 个表单块纯置换：
+姓名/地址值被推到下一条商业登记标签之后，是真实语义回归，因此未接受初版结果。
+加入上述正文行证据并补 `layout_e2e_010` 后，对 EUR-Lex **40 篇全部 3365 页**做同输入
+SHA-256 校验与逐块比较（`band-eurlex-full-v4.json`、`band-eurlex-full-v2-compare.json`），
+只剩 `32013R0575_DE/EL/PL p0` 三页各 24 块的正确纯置换；其它 3362 页完全相同，
+包括 DE 表单 p22 恢复 V4。该保守证据不是通用表单识别：两条长值仍可满足条件，
+SECCI 识别继续留在 §0 #1.2，不宣称本轮解决它。
+
+FR 全部 records 与 V4 **逐条相同**：24 misplaced、247 fragmented、2493 detected header pages。
+先前 §0 的 2492 是历史 base/V1 共有页 join 数；存档 `fr-header-v4.json` 的实际分母即 2493。
+四个候选 FR 页没有本轮改善，不把这项双栏修复计作 D4 收益。
+
+### 最终硬门槛结果（`bandguard-v2-final`）
+
+| 指标 | V4 | 本轮最终 | 验收 |
+|---|---:|---:|---|
+| PMC 干净 7 篇 order | 0.9600 | 0.9600 | ≥ 0.9600 |
+| PMC212689 order | 0.7456 | 0.7456 | ≥ 0.7456 |
+| EUR-Lex 40 篇 lev | 0.9375 | 0.9377 | ≥ 0.9372 |
+| EUR-Lex 40 篇 order | 0.9777 | 0.9779 | ≥ 0.9773 |
+| born 6 篇 | 基线全文 | 逐字节相同 | bit-identical |
+| FR misplaced / detected header pages | 24/2493 | 24/2493 | ≤ 24 |
+| FR fragmented pages | 247 | 247 | 本轮未改善 |
+
+EUR-Lex 40/40 篇评分、0 跳过，37 篇全部指标不变，3 篇提升、0 篇下降：
+`32013R0575_EL` order 0.9922 → 0.9955、PL 0.9922 → 0.9947、DE 0.9889 → 0.9909。
+`32008L0048_DE` 最终恢复 V4 的 order 0.9653。
+最终完整评分的逐篇进度保存在 `gt-eurlex-bandguard-v2-final.log`；
+用 `summarize.py v4 bandguard-v2-final` 可重汇总，但重新验收须先运行 `score-band.sh`。
+
+### 门禁
+
+最终 Rust 与 extension / Python / drift / artifacts 五个阶段全部通过。
+完整门禁按两次互补 phase 调用运行，日志为 `band-v2-gate-rust.log` 与
+`band-v2-gate-rest.log`，两者均以 `QUALITY GATE PASSED` 结束。
+Rust 汇总 1903 passed / 1 ignored（172 个 test-result 段，含 doc tests）；
+Python 1227 passed / 66 skipped；fmt、clippy `-D warnings`、cargo-deny、
+ruff、mypy、drift guards 均通过，最终 wheel 和 sdist 安装后 smoke 均通过。
+运行 PATH 优先 `.venv/bin:/Users/linhan/.cargo/bin`，以使用 pinned Rust 1.96.0，
+避免 Homebrew Rust 1.90.0 抢先；`TMPDIR=/Volumes/ExternalSSD/tmp`。
+
+最后补强 `layout_e2e_010` 的完整地址顺序断言后，该测试再次通过，extension phase
+再次刷新输入 stamp（`band-v2-test-stamp.log`）；core `.so` SHA-256 与启动最终评分时
+**逐字节相同**（`band-v2-scoring-core.json` / `band-v2-final-build.json`），
+因此全文评分、最终源码及最终安装产物无版本歧义。
