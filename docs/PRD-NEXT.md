@@ -1,115 +1,301 @@
 # PRD-NEXT — Remaining Work Roadmap (live restart entry)
 
-> **Use this file first when resuming pdfspine.** This top section is the current
-> checkpoint as of 2026-09-09; it supersedes the 2026-09-06 pause checkpoint (which
-> had four branches in flight — all now resolved) and the earlier 2026-09-05
-> checkpoints. Older dated snapshots and completed phase records remain below for
-> history; they do not override this queue.
+> **Use this file first when resuming pdfspine.** This top section (§0) is the
+> current checkpoint as of **2026-09-10**, rewritten as a from-zero-context
+> start-here guide for the next agent. It supersedes the 2026-09-09 checkpoint
+> (reading order stage 3 + D4 is now merged) and every earlier snapshot. The
+> dated completion records are preserved below under **History**, and the
+> original phased roadmap in **§1–§10**; neither overrides this queue.
 
-## 0. Restart here (2026-09-09)
+## 0. Start here (2026-09-10)
 
-### Repository and release checkpoint
+### Repository facts
 
-- Repository: `/Users/linhan/startup/spine/pdfspine`. The published release is still
-  `v0.7.1` at `9da7ca6` (annotated tag, GitHub Release, PyPI wheels and sdist all
-  unchanged). Nothing since has been released.
-- `main` is at `72b1d4a` plus one spine-family documentation commit — that
-  `72b1d4a` wheel is the `base` this round's reading-order scoring ran against. The
-  three branches in flight at the 2026-09-06 pause are all resolved:
-  `fix/get-text-clip` (`get_text(clip=)`), `fix/remove-rotation` and `feat/ocg-gaps`
-  were merged on another machine and their worktrees / branches deleted here (their
-  completion records are below). The reading-order branch is finished this round
-  (see "Completed 2026-09-09: reading order stage 3 + D4" below) and is the last one
-  to `--no-ff` merge. Verify the exact state with `git status -sb` and
-  `git log --oneline -6` before pushing.
-- `.venv` extension rule: the gate now detects and rebuilds the extension itself
-  (`scripts/quality_gate.py` `extension` phase: it fingerprints the content of
-  `crates/**`, `Cargo.toml`, `Cargo.lock`, `pyproject.toml` and `rust-toolchain*`,
-  compares it with `.gate/extension.stamp`, and runs `maturin develop --release`
-  on any mismatch before pytest; `--skip-extension-check` or
-  `PDFSPINE_GATE_SKIP_EXTENSION=1` opts out). No manual `maturin develop` is needed
-  before `git push`. Still run `.venv/bin/python -m ruff format --check
-  python/pdfspine python/tests scripts` before pushing; branches formatted with
-  another ruff fail the gate.
-- Environment: `target/` is a symlink to `/Volumes/Cargo/target/pdfspine` (`/target`
-  is in `.gitignore`); the Homebrew python3.14 on `PATH` has no `ruff`; LibreOffice
-  26.8.0.3 (brew cask) is installed for the typeset oracle. The pre-push gate's
-  `cargo test` was SIGKILLed once while six agents were building concurrently; the
-  rerun passed. Bench corpora live in `fixtures/corpus` and `conformance/gt/corpus-*`
-  (gitignored).
-- Quota: the session limit was hit at 20:40 and again at 01:40 America/Los_Angeles on
-  2026-09-05/06. Agents that stop with a 429 keep their worktree; resume them after
-  the reset rather than restarting. One agent per worktree: two sub-agents sharing a
-  worktree deleted each other's venv and killed a scoring run.
+- **Repository:** `/Users/linhan/startup/spine/pdfspine`, branch `main`, HEAD
+  **`ef7e667`** (`ci(gate): skip the venv-only extension rebuild in the hosted
+  CI job`). No other branches or worktrees are checked out here. Confirm with
+  `git -C /Users/linhan/startup/spine/pdfspine log --oneline --first-parent -6`.
+- **Released vs unreleased.** The published release is **`v0.7.1`** (annotated
+  tag at commit `9da7ca6`; on PyPI as `pdfspine` 0.7.1; `Cargo.toml`
+  `version = "0.7.1"`). **Nothing has been released since.**
+  `git log --oneline --first-parent v0.7.1..HEAD` is the full unreleased delta;
+  `CHANGELOG.md` `[Unreleased]` accumulates: `markdown_to_pdf(links=, toc=)`,
+  layout-preserving `get_text("layout")`, PDF→Markdown `to_markdown()`, the
+  7-method OCG layer surface + `oc=` writers + `/Usage`/`/AS` visibility,
+  reading-order stage 3 + D4 (geometric XY-cut block order), `remove_rotation`
+  widget/annot rects, `get_text(clip=)`, and the `pdf-typeset` FontIndependent
+  line-height rule. **Drift to fix before release:** the ONNX vision
+  layout/table backend (PP-DocLayout / PP-DocLayoutV3 default + SLANet-plus,
+  merges `48d297e` / `817f13f`) is on `main` but is **not yet written into
+  `[Unreleased]`** — see backlog item 0.
+- **Gate.** `./ci.sh` runs `scripts/quality_gate.py`, phases in order
+  `rust → extension → python → drift → artifacts`. The `extension` phase
+  fingerprints `crates/**`, `Cargo.toml`, `Cargo.lock`, `pyproject.toml` and
+  `rust-toolchain*` against `.gate/extension.stamp` and runs
+  `maturin develop --release` on any mismatch before pytest (opt out with
+  `--skip-extension-check` or `PDFSPINE_GATE_SKIP_EXTENSION=1`); the `artifacts`
+  phase does a full `maturin build --release`. So after any Rust change the gate
+  rebuilds the extension for you — no manual `maturin develop` before pushing.
+  The **pre-push hook** (`.githooks/pre-push`, wired via
+  `git config core.hooksPath`) runs the whole gate; run it with
+  `PATH="$PWD/.venv/bin:$PATH" TMPDIR=/Volumes/ExternalSSD/tmp` and `nohup` it —
+  the full release build is slow and has been SIGKILLed under concurrent load.
+- **Environment.** `.venv` holds the toolchain the gate expects — `maturin`,
+  `ruff` **0.14.14**, `mypy`, `pytest`; the oracle venv **`.venv-oracle`** has
+  **PyMuPDF 1.28.2** (`import fitz` there is the real library). `target/` is a
+  symlink to `/Volumes/Cargo/target/pdfspine` (`/target` is gitignored); the
+  internal disk is tight, so keep temporary build dirs on the external SSD
+  (`TMPDIR=/Volumes/ExternalSSD/tmp`).
+- **Corpora & scoring assets (gitignored, not in the repo).** Bench / GT corpora
+  live in `fixtures/corpus` and `conformance/gt/corpus-*`. The reading-order
+  scoring assets (variant wheels, `summarize.py`, `ro_compare.py`, digests,
+  `attribution-v1.md`) are in **`/Volumes/ExternalSSD/tmp/ro34/`** (present on
+  this machine). **The worktree paths baked into those scripts are stale** —
+  repoint them to this main checkout before reuse.
+- **Docs status split.** `PRD.md` is the **frozen v1 scope/history** doc and is
+  intentionally *not* updated for post-v1 features (its only live status markers
+  — `Tools.set_annot_stem` Deferred, the "vector page" Deferred (M6) — are still
+  correct); this file (`PRD-NEXT.md` §0) is the live queue. Per-symbol
+  disposition lives only in `COMPAT.toml`, generated from
+  `scripts/_compat_catalog.py` — **never hand-edit `COMPAT.toml`**.
 
 ### Read in this order
 
-1. This section: the next-task queue, then the completion records below it.
-2. `docs/reading-order-root-cause.md`, section "2026-09-09 阶段 3 + D4 落地记录"
-   (what changed, the base/V1/V2/V3/V4 variant table, the stage 3 attribution and the
-   stage 4 measure-and-drop, plus the reading-order follow-ups) before touching
-   reading order; the earlier "2026-09-05 修复记录" and the root-cause design (a)–(e)
-   are the background above it.
-3. `conformance/COVERAGE-REPORT.md` (the `2b7df16` record and "Combined Rust+Python
-   profile"), `conformance/BENCH.md` with `conformance/gt/RENDER-REPORT.md` (the
-   2026-09-05 render numbers), and `docs/BENCHMARKS.md` §6 (OCR re-measurement and
-   the Latin root cause).
-4. `HANDOFF-glyph-geometry.md` top checkpoint and §12 for the completed A–G evidence,
-   and `conformance/GLYPH-GEOMETRY-ANCHORING-EXPERIMENT.md` before touching span
-   anchoring or the F thresholds.
-5. The older phase plan below only when taking one of its still-open items.
+1. **This §0** — the backlog and working rules below, then the **History**
+   section for what each recent branch actually changed.
+2. `CHANGELOG.md` `[Unreleased]` — the accumulated post-0.7.1 surface (and note
+   the ONNX-vision drift called out in backlog item 0).
+3. `docs/reading-order-root-cause.md`, the **2026-09-09** section (the
+   base/V1/V2/V3/V4 variant table, the stage-3 attribution, "阶段 4 数据与放弃
+   理由", and "后续该修") — required before touching reading order.
+4. `docs/RELEASE-PYPI.md` + `.github/workflows/release.yml` +
+   `scripts/release-local.sh` — the real release runbook (backlog item 0).
+5. `docs/PRD-NEXT.md` §4–§6 (below) — the P0–P4 task index; of these only the
+   **P3-6** table-structure row is still open.
+6. `conformance/COVERAGE-REPORT.md`, `conformance/BENCH.md` +
+   `conformance/gt/RENDER-REPORT.md`, and `docs/BENCHMARKS.md` §5–§6 — only the
+   parts a backlog item cites (render cost, OCR Latin, coverage baseline).
+7. `docs/spine-family.md` §7 — cross-repo maintenance rules (see Working rules).
 
-### In-flight branches
+### Next-phase backlog
 
-None. The three branches in flight at the 2026-09-06 pause were merged on another
-machine and deleted here (`fix/get-text-clip`, `fix/remove-rotation` and
-`feat/ocg-gaps` — see their completion records below), and the reading-order branch
-(`worktree-agent-ae07f5282e4af72f5`, HEAD `372213a`) is finished this round (see
-"Completed 2026-09-09" below) and `--no-ff` merged. `HANDOFF-reading-order-3-4.md`
-is retired — its content is folded into that completion record and into
-`docs/reading-order-root-cause.md`. `HANDOFF-glyph-geometry.md` and
-`HANDOFF-redact.md` stay (their work is not part of this round).
+> Ordered by payoff. Each item is **Goal · Why/evidence · Where · Acceptance ·
+> Size (S/M/L)**. One branch per item; merge back `--no-ff`; update this §0 and
+> `CHANGELOG.md` as each lands. Nothing already merged (see **History**) is
+> repeated here. All numbers below trace to a repo file or a command noted
+> inline; re-derive anything marked "verify with `…`".
 
-### Next task queue
+- [ ] **0. Cut release `v0.8.0`.**
+  - *Goal:* archive `[Unreleased]`, bump to 0.8.0, tag, publish to PyPI, and
+    create the GitHub Release.
+  - *Why / evidence:* PyPI is still 0.7.1 (`Cargo.toml` 0.7.1, tag `v0.7.1` @
+    `9da7ca6`); `[Unreleased]` holds a full slate of **new features** (OCG
+    surface + writers, ONNX vision backend, PDF→Markdown, layout extraction,
+    markdown links/outline) plus one **deliberate behavior change** (geometric
+    block order under `sort=False`). Pre-1.0 SemVer → a **minor** bump, so
+    **`0.8.0`** (not a patch — far more than fixes; not `1.0` — still pre-1.0 and
+    intentionally API-diverging from PyMuPDF).
+  - *Where:* the release is **tag-driven** — `scripts/set_version_from_tag.py`
+    stamps the built version from the pushed `v*` tag, so a human need not
+    hand-edit `Cargo.toml`/`pyproject.toml` for the build (but keep them in sync
+    per `docs/RELEASE-PYPI.md` §B). `.github/workflows/release.yml` fires on a
+    pushed `v*` tag: builds the abi3-py311 wheel matrix (linux x86_64 + aarch64,
+    macos-14 arm64 + x86_64, windows x64) and an sdist, then the `publish` job
+    uploads to PyPI via `pypa/gh-action-pypi-publish` using the
+    **`PYPI_API_TOKEN`** repo secret (`skip-existing: true`; Trusted-Publishing /
+    OIDC is wired but not registered on PyPI, so the token path is the live one).
+    `scripts/release-local.sh <version>` is the local fallback when Actions is
+    billable/blocked — it builds the macOS + Linux wheels + sdist and
+    `twine upload`s with the `~/.pypirc` token (**no Windows wheel**;
+    `--dry-run` = build + `twine check` only). The GitHub Release is **manual**
+    (`gh release create v0.8.0 --generate-notes`); the workflow does not create
+    it or attach assets.
+  - *Acceptance:* **first add the missing ONNX-vision entries to
+    `[Unreleased]`**, then move `[Unreleased]` → `## [0.8.0] — <date>`;
+    `git tag v0.8.0` on a green-gate `main` and push; the `release.yml` run
+    publishes every wheel + sdist (PyPI shows 0.8.0); `pip install
+    pdfspine==0.8.0` imports on a clean env; the GitHub Release exists.
+  - *Size:* **M** (process; gated on the CHANGELOG fix and a green pre-push gate).
 
-1. **Merge and push the reading-order branch.** `--no-ff` merge
-   `worktree-agent-ae07f5282e4af72f5` (HEAD `372213a`: stage 3 + D4, see "Completed
-   2026-09-09" below) into `main`, rebuild `.venv`, run the ruff check, push, then
-   delete the worktree and branch. The three earlier branches are already merged.
-2. **Reading-order follow-ups** (from the 2026-09-09 attribution, by payoff; none
-   started):
-   1. Stop the horizontal band cut (R3/R4) from splitting two genuinely
-      side-by-side body columns into stacked bands — the one real reading-order bug
-      (`32013R0575_EL p0` recital interleave) and probably the 4 FR pages stage 3
-      newly regressed. Guard: only split a spanning row into rows when it covers the
-      whole gutter valley and is ≳ 50 % page width (a true full-width heading); or
-      treat a parent region as a single column region when both halves of a band cut
-      still column-cut into the same L/R structure.
-   2. SECCI label/value form detection: keep row-major (single region / shared
-      baseline) when a right column of short lines shares baselines with the left —
-      fixes `32008L0048_EL p21–26` and `_BG p22/p24` (small, and shared with fitz).
-   3. D4 header de-fragmentation, remaining 247 pages toward fitz's 0
-      (`independent_run_gap` etc.); D4's rule was the gutter-coverage split only.
-   4. PMC order 0.9605 / PMC212689 0.749 still unmet — the PLoS 3-column mid-page
-      spanning-caption float-vs-rows semantics stage 3 did not touch.
-3. **govdocs1-00074 near-blank render** (fitz SSIM 0.2654 at baseline): not started;
-   the agent was cut off while reading. Corpus is in `fixtures/corpus`.
-4. **Render, remaining cost:** first-seen glyph rasterization (~30% of text pages),
-   `into_pixmap` (~10%), J2K decoding on image pages. Do this after item 3 so the two
-   do not collide in `pdf-render`.
-5. **The 9 remaining deferred symbols:** device-replay (`Page.run`,
-   `Page.extend_textpage`, `DisplayList.run`, `DisplayList.get_textpage`), then
-   `Page.insert_font`, `Pixmap.warp`, `Annot.get_textbox`,
-   `Tools.set_annot_stem` / `set_subset_fontnames`.
-6. **typeset next increments:** docx paragraph borders/shading (`pBdr` / `shd`),
-   `RunStyle` superscript/subscript and character spacing, docx lineGap placement
-   (confirm Word's behaviour first).
-7. **Coverage:** keep the `fail_under` ratchet (96) moving; enable Rust branch
-   coverage in the CI coverage job on a nightly toolchain.
-8. **OCR and supply chain:** the `AI → Al` homoglyph in the Latin benchmark; the 5
-   pre-existing `cargo fmt --check` violations in ocrspine; a CI check that warns
-   30 days before the cargo-vet trust entries expire (2027-09-05).
-9. **Continue the existing roadmap** (§4–§6 below).
+- [ ] **1. Reading-order follow-ups** (from the 2026-09-09 stage-3 attribution;
+  none started).
+  - *Goal:* close the four residual reading-order gaps left after stage 3 + D4.
+  - *Why / evidence:* `docs/reading-order-root-cause.md` "后续该修" + the variant
+    table. The hard bars are met at HEAD (PMC 7 order 0.9600 vs fitz 0.9605;
+    EUR-Lex 40 lev 0.9375 / order 0.9777; FR misplaced 24/2492 vs fitz 64/2517;
+    FR fragmented 247 pages vs fitz 0) but four gaps remain.
+  - *Where:* `crates/pdf-text/src/layout.rs` — `find_column_cut`, `cut_lines`,
+    `emit_column_cut` / `SPANNING_BANDS_PARTITION_ROWS`, `group_blocks_columned`,
+    `detect_page_gutters` / `split_on_gutter`.
+  - *Sub-items, by payoff:*
+    1. **Guard the R3/R4 horizontal band cut** so two genuinely side-by-side
+       body columns are not split into stacked bands — the one real bug
+       (`32013R0575_EL p0` recital interleave) and probably the 4 newly-regressed
+       FR pages (`FR-2026-01-13 p144/p146`, `-01-15 p382`, `-01-20 p164`). Split
+       a spanning row into rows only when it covers the whole gutter valley and
+       is ≳ 50% page width (a true full-width heading); or treat a parent region
+       as a single column region when both halves of a band cut still column-cut
+       to the same L/R structure.
+    2. **SECCI label/value form detection:** keep row-major (single region /
+       shared baseline) when a right column of short lines shares baselines with
+       the left column — fixes `32008L0048_EL p21–26` and `_BG p22/p24` (small; a
+       table-recognition gap shared with fitz).
+    3. **D4 header de-fragmentation, remaining 247 pages** toward fitz's 0
+       (`independent_run_gap` etc.); D4 only did the gutter-coverage split
+       (530 → 247).
+    4. **PMC order 0.9605 / PMC212689 0.749 targets** still unmet — the PLoS
+       3-column, mid-page spanning-caption float-vs-rows semantics that stage 3
+       did not touch.
+  - *Stage-4 caveat:* if the in-region geometric line order is retried, add a
+    **"no side-by-side columns inside the region" guard first** (two rows at the
+    same y with disjoint x → fall back to `seq`); without it V3 broke the
+    2-column born docs and PMC (see History; commit `90de9c5` removed, local tag
+    `ro-stage4-dropped`).
+  - *Acceptance:* each sub-item keeps every hard bar met (PMC order ≥ 0.9600,
+    PMC212689 ≥ 0.7456, EUR-Lex lev ≥ 0.9372 / order ≥ 0.9773, born bit-identical,
+    FR misplaced ≤ 24) and nets an improvement on its target; new `layout_e2e_*`
+    tests; re-score with `/Volumes/ExternalSSD/tmp/ro34/summarize.py <tagA> <tagB>`.
+  - *Size:* **L**.
+
+- [ ] **2. govdocs1-00074 near-blank render.**
+  - *Goal:* fix the near-blank raster for this document.
+  - *Why / evidence:* it renders near-blank at fitz SSIM **0.2654** (pre-existing
+    and untouched — noted in the render-performance record, History). Corpus in
+    `fixtures/corpus`.
+  - *Where:* `crates/pdf-render/` — root cause not yet diagnosed (the previous
+    agent was cut off while reading).
+  - *Acceptance:* SSIM against `.venv-oracle` fitz rises out of the near-blank
+    band with no regression elsewhere (the P1-3 render gate stays green).
+  - *Size:* **M**.
+
+- [ ] **3. Render, remaining cost.**
+  - *Goal:* shave the last render hot spots, after item 2.
+  - *Why / evidence:* first-seen glyph rasterization ≈30% of text pages,
+    `into_pixmap` ≈10%, and J2K decode on image pages (render-performance record,
+    History; corpus median is already 1.21–1.28× fitz).
+  - *Where:* `crates/pdf-render/` (`glyph_cache.rs`, the `into_pixmap` path, the
+    J2K decoder). Do this **after item 2** so the two do not collide in
+    `pdf-render`.
+  - *Acceptance:* measurable median-time drop vs fitz with SSIM bit-identical
+    (`conformance/BENCH.md` refreshed); no `into_pixmap` fast path that regresses
+    SSIM (one was already measured slower and rejected).
+  - *Size:* **L**.
+
+- [ ] **4. The 9 remaining deferred symbols.**
+  - *Goal:* implement the long tail (`COMPAT.toml` `deferred = 9`).
+  - *Why / evidence:* they are the entire remaining deferred set — parity is
+    694/769 = 90.2% (`PARITY.md`).
+  - *Where / order:* device-replay first (`Page.run`, `Page.extend_textpage`,
+    `DisplayList.run`, `DisplayList.get_textpage` — need a device-callback replay
+    engine), then `Page.insert_font`, `Pixmap.warp`, `Annot.get_textbox`,
+    `Tools.set_annot_stem` / `Tools.set_subset_fontnames`.
+  - *Acceptance:* each flips to `implemented` in `scripts/_compat_catalog.py` →
+    regenerate `COMPAT.toml` (`scripts/compat-symbol-guard.py` exit 0), each with
+    a `.venv-oracle` PyMuPDF parity test.
+  - *Size:* **L** (device-replay is the bulk).
+
+- [ ] **5. `pdf-typeset` next increments.**
+  - *Goal:* docx paragraph borders/shading (`pBdr` / `shd`), `RunStyle`
+    superscript / subscript + character spacing, and docx `lineGap` placement.
+  - *Why / evidence:* named in the prior queue; the shared engine (§10) is the
+    docspine / pptspine faithful-export path and these are its next missing DOCX
+    / `RunStyle` features.
+  - *Where:* `crates/pdf-typeset/` (confirm Word's `lineGap` behaviour before
+    implementing it).
+  - *Acceptance:* LibreOffice-oracle SSIM on the docx / pptx fixtures does not
+    regress and rises on a new border/shading fixture; new pdf-typeset Rust tests.
+  - *Size:* **M**.
+
+- [ ] **6. Coverage ratchet + Rust branch coverage.**
+  - *Goal:* keep the `fail_under` ratchet moving up and add Rust branch coverage.
+  - *Why / evidence:* `fail_under` is at **96** (raised 77 → 96 in `d3ed6fa`);
+    the CI coverage job does not yet report Rust branch coverage.
+  - *Where:* the combined Rust+Python coverage job and the pytest/coverage
+    `fail_under` config; Rust branch coverage needs a **nightly** toolchain.
+  - *Acceptance:* `fail_under` ratcheted with zero regressions; the coverage job
+    emits Rust branch coverage.
+  - *Size:* **S–M**.
+
+- [ ] **7. OCR & supply-chain hygiene.**
+  - *Goal:* three small pre-existing items.
+  - *Why / where:*
+    - the `AI → Al` homoglyph in the Latin OCR benchmark
+      (`docs/BENCHMARKS.md` §6);
+    - the 5 pre-existing `cargo fmt --check` violations in the ocrspine crates
+      (**cross-repo — record, do not fix here**; see Working rules);
+    - a CI check that warns **30 days before** the cargo-vet trust entries
+      expire (**2027-09-05**; `supply-chain/`).
+  - *Acceptance:* the homoglyph resolved or documented as an accepted miss; a
+    scheduled CI job that warns ahead of the vet-trust expiry.
+  - *Size:* **S**.
+
+- [ ] **8. OCG `/Intent`-mismatch hiding.**
+  - *Goal:* hide an OCG whose `/Intent` does not meet the configuration's, and
+    only when the configuration carries a non-empty `/Intent` (MuPDF behaviour).
+  - *Why / evidence:* the last remaining OCG gap after `feat/ocg-gaps` (History,
+    2026-09-08).
+  - *Where:* `crates/pdf-core/src/ocg.rs` (`OcVisibility::read`).
+  - *Acceptance:* `PYOCG-*` / `OCG-VIS-*` oracle tests against real PyMuPDF; the
+    `docs/pymupdf-compat-findings.md` decision table updated.
+  - *Size:* **S**.
+
+- [ ] **9. Table-structure backend benchmark + ONNX validation (P3-6, proposed).**
+  - *Goal:* validate the landed ONNX backend and finish the multi-backend seam.
+  - *Why / evidence:* `find_tables(strategy="vision", backend="onnx")`
+    (PP-DocLayoutV3 + SLANet-plus) landed 2026-09-08 but is **not yet validated
+    on an evaluation set**; ADR `docs/adr/0002-table-structure-backends.md` is
+    still Proposed; the first real-model baseline
+    (`docs/onnx-backend-baseline-2026-09-08.md`) shows numeric-block cropping and
+    cell/column-merge as the dominant errors.
+  - *Where:* `python/pdfspine/_onnx.py`, `conformance/gt/tables_diff.py`
+    (`--gold` / `--strategy`), `docs/onnx-backend-baseline-2026-09-08.md`,
+    `docs/adr/0002-table-structure-backends.md`.
+  - *Sub-tasks (from P3-6 / the baseline):* build a 30–50-page financial eval set
+    with hand-written correct HTML + a TEDS / cell-alignment scorer; add the
+    TSR-only gold-crop mode; fix cell/column merging (fold `"$"`-only columns,
+    assign row-label words by row band, strip dotted-leader tokens); add the
+    TableFormer backend + alias registry; then the benchmark report → flip ADR
+    0002 to Accepted with the chosen default recorded.
+  - *Acceptance:* a committed eval report with GriTS / TEDS numbers per backend
+    and the ADR default recorded in its registry table.
+  - *Size:* **M–L**.
+
+- [ ] **10. Gate & CI health (context — no action unless CI changes).**
+  - The hosted CI job sets **`PDFSPINE_GATE_SKIP_EXTENSION=1`** (`ef7e667`)
+    because it installs the package editable with the hosted interpreter before
+    calling `./ci.sh`, so the compiled `_core` is already current there and the
+    `extension` phase (which refuses to run outside a virtualenv) would otherwise
+    fail (the failure `0a27d31` introduced). **Locally the opposite holds:**
+    leave the opt-out unset so the gate rebuilds the extension on any Rust
+    change. Keep this documented if the CI build steps change.
+
+### Working rules for the next agent
+
+- **One branch per backlog item.** Branch off `main`, do the work, merge back
+  with **`--no-ff`**, and keep only `main` at the end (delete the branch and any
+  worktree).
+- **The gate rebuilds the extension for you** after a Rust change (the
+  `extension` phase fingerprints the Rust inputs); no manual `maturin develop`
+  before pushing.
+- **Any branch that touches Python** must pass
+  `.venv/bin/python -m ruff format --check python/pdfspine python/tests scripts`
+  before push — branches formatted with a different ruff fail the gate (pinned
+  ruff is 0.14.14).
+- **Do not write into sibling repos.** ocrspine / docspine / pptspine / corespine
+  etc. are read-only from here; record needed cross-repo changes (e.g. the 5
+  ocrspine `cargo fmt` violations) in `docs/spine-family.md` §6 or that repo's
+  issue tracker — never edit them in passing (family rule, `docs/spine-family.md`
+  §7).
+- **Evidence stays out of the repo.** Scoring wheels, digests and large fixtures
+  live on the external SSD (`/Volumes/ExternalSSD/tmp/…`), not in git; the ro34
+  scripts' baked-in worktree paths are stale — repoint them to this checkout
+  before reuse.
+- **Per-symbol disposition** changes go in `scripts/_compat_catalog.py`, then
+  regenerate `COMPAT.toml` (`scripts/compat-symbol-guard.py` exit 0). Never
+  hand-edit `COMPAT.toml`.
+- **After each item lands,** update this §0 and `CHANGELOG.md` `[Unreleased]`.
+
+## History (completed records, newest first)
 
 ### Completed 2026-09-09: reading order stage 3 + D4 (stage 4 measured and dropped) (branch `worktree-agent-ae07f5282e4af72f5`, HEAD `372213a`)
 
