@@ -55,7 +55,7 @@
 | `ocrspine/` | `VoldemortGin/ocrspine` | Rust 单 crate | crate `ocrspine` 0.0.1（`publish = false`）；数据包 `ocrspine-models` 0.0.3 | crate 仅 git dep；`ocrspine-models` 已发 PyPI | L0 底座 | 2026-09-06 / 11 | 活跃（小） |
 | `ragspine/` | `VoldemortGin/ragspine` | Python（hatchling，FastAPI，内置 Vite 前端） | **`rag-spine`**（import `ragspine`）0.13.0 | 已发 PyPI | L1 引擎 | 2026-09-03（实质功能停在 08-03）/ 245 | 活跃，最成熟 |
 | `spineagent/` | `VoldemortGin/spineagent` | Python（hatchling） | `spineagent` 0.3.1 | 已发 PyPI | L1 引擎 | 2026-07-30 / 42 | 停滞约 5 周 |
-| `pdfspine/` | `VoldemortGin/pdfspine` | Rust 2021 + PyO3 0.29 + maturin | `pdfspine` 0.7.1；13 个 crate 全 `publish = false` | 已发 PyPI；crates.io 未发 | L1 引擎（含 `pdf-typeset` / `pdf-fonts` 被 git dep） | 2026-09-07 / 339 | 最活跃 |
+| `pdfspine/` | `VoldemortGin/pdfspine` | Rust 2021 + PyO3 0.29 + maturin | `pdfspine` 0.8.0（2026-09-10 发布）；13 个 crate 全 `publish = false` | 已发 PyPI；crates.io 未发 | L1 引擎（含 `pdf-typeset` / `pdf-fonts` 被 git dep） | 2026-09-07 / 339 | 最活跃 |
 | `docspine/` | `VoldemortGin/docspine` | Rust + PyO3 + maturin | `docspine`，tag v0.5.1（Cargo 内长期 0.0.1 占位） | 已发 PyPI | L2 文档引擎 | 2026-07-30 / 29 | 停滞 |
 | `pptspine/` | `VoldemortGin/pptspine` | Rust + PyO3 + maturin | `pptspine`，tag v0.5.1（Cargo 内 0.0.1 占位） | 已发 PyPI | L2 文档引擎 | 2026-07-30 / 37 | 停滞 |
 | `spinestudio/` | `VoldemortGin/spinestudio` | Python（FastAPI）+ TS（Next.js 16）+ Python SDK | `spinestudio` 0.3.1、`spinestudio-sdk` 0.2.1、`spinestudio-web` 0.1.0（private） | 有 `dist/` 与 tag，**无 release CI**，大概率未上 PyPI | L3 应用 | 2026-07-30 / 46 | 停滞 |
@@ -83,7 +83,7 @@ graph TD
     subgraph L1["L1 引擎"]
         ragspine["ragspine (PyPI: rag-spine) 0.13.0"]
         spineagent["spineagent 0.3.1"]
-        pdfspine["pdfspine 0.7.1 (含 pdf-typeset / pdf-fonts)"]
+        pdfspine["pdfspine 0.8.0 (含 pdf-typeset / pdf-fonts)"]
     end
     subgraph L2["L2 文档引擎"]
         docspine["docspine v0.5.1"]
@@ -175,7 +175,7 @@ L0 底座     corespine (deps=[])        ocrspine (crate, 零依赖)
 | **docspine** | — | git rev `732975f` (2026-06-25)（`Cargo.toml:29`）；`doc-ocr/src/lib.rs:22` 等 3 处 use | PyPI `>=0.0.1,<0.1` 硬依赖；`python/docspine/__init__.py:56` | — | — | git rev `509a932e` (2026-07-13) `pdf-typeset`（`Cargo.toml:40`），12 处 use；dev-dep `pdf-fonts` git rev `93214453` (2026-07-08)（`crates/doc-render/Cargo.toml`），1 处测试 use；**同仓两个 rev** | 自身 | — |
 | **pptspine** | — | git rev `732975f` (2026-06-25)（`Cargo.toml:28`）；`ppt-ocr/src/lib.rs:12` | PyPI `>=0.0.1,<0.1` 硬依赖；`python/pptspine/__init__.py:72` | — | — | git rev `5f1640cb` (2026-07-13) `pdf-typeset` + dev `pdf-fonts` 同 rev（`Cargo.toml:34,36`），19 处 use；另 **仅测试、未声明**：`python/tests/test_pdf_export.py:16 import pdfspine` | — | 自身 |
 | **spinestudio** | PyPI `>=0.4.0` + uv path editable（`backend/pyproject.toml`）；5 imports | — | —（经 office 传递） | PyPI `rag-spine>=0.10.0` + uv path editable；12 imports（`chat/engine.py:5-7` 等） | PyPI `>=0.2.0` + uv path editable；6 imports（`admin/provider_factory.py:15` 等） | PyPI `>=0.4` `[office]` 延迟 import（`preview/renderer.py:56`）；不在 uv.sources | PyPI `>=0.4` `[office]` 延迟 import（`preview/renderer.py:36`） | PyPI `>=0.4` `[office]` 延迟 import（`preview/renderer.py:44`） |
-| **pdfspine-studio** | — | — | — | — | — | **path** `../pdfspine/crates/pdf-api`, `version = "=0.4.1"`（`Cargo.toml:39`），pdfspine 现为 0.7.1 → 不满足；`crates/adapters/src/pdfspine.rs:6`；测试硬读 `../../../pdfspine/fixtures/` | — | — |
+| **pdfspine-studio** | — | — | — | — | — | **path** `../pdfspine/crates/pdf-api`, `version = "=0.4.1"`（`Cargo.toml:39`），pdfspine 现为 0.8.0 → 不满足；`crates/adapters/src/pdfspine.rs:6`；测试硬读 `../../../pdfspine/fixtures/` | — | — |
 | **examples** | .venv editable（corespine 0.1.0）；3 imports | — | — | .venv editable（rag_spine 0.3.0） | .venv editable（spineagent 0.0.3） | .venv editable（pdfspine 0.0.1） | — | — |
 | **rag-spine-web** | 手写 MDX | — | — | 手写 MDX（159 处文本命中） | 手写 MDX | 手写 MDX（含 docspine/pptspine 子目录） | 手写 MDX | 手写 MDX |
 | **corespine / ocrspine** | — | — | — | — | — | — | — | — |
@@ -277,7 +277,7 @@ L0 底座     corespine (deps=[])        ocrspine (crate, 零依赖)
   pdfspine-studio（path 取 `pdf-api`）；pptspine 测试（未声明）；examples。
 - **家族相关文档在哪**：**没有 `CLAUDE.md`**（`git ls-files | grep -i claude` 为空），与家族 README"各子项目另有自己的 CLAUDE.md"不符。
   家族关系散在 `README.md:7,70,104,213`、`llms.txt`、`docs/RELEASE-PYPI.md`、`crates/pdf-typeset/Cargo.toml:1-4`、`crates/pdf-ocr/Cargo.toml:29-40`。
-- **当前状态与注意事项**：0.7.1（CHANGELOG 到 2026-09-05），339 commits，最活跃；当前分支 `fix/remove-rotation`，
+- **当前状态与注意事项**：0.8.0（2026-09-10 发布，CHANGELOG 已归档到 [0.8.0]），339 commits，最活跃；2026-09-09 起只有 `main` 分支，
   4 个未提交改动，本地 main 有 5 个 commit 未推。5 个 `.claude/worktrees/*` 仍钉 ocrspine 旧 rev `732975f`。
   `packages/pdfspine-ocr-models/` 旧伴随包残留，与 `ocrspine-models` 重复，仅作第 3 顺位回退。`dist/` 残留 0.4.0。
 
@@ -349,7 +349,7 @@ L0 底座     corespine (deps=[])        ocrspine (crate, 零依赖)
 - **被谁依赖**：无人；全家族 grep `pdfspine-studio` 0 处外部引用。
 - **家族相关文档在哪**：`README.md:1-6`（"reuses the sibling `../pdfspine/crates/pdf-api` crate through the Studio `adapters` layer"）；`CLAUDE.md` 只讲工程宪章，不提家族。
   家族根 README / CLAUDE.md 成员表**均未列出它**。
-- **当前状态与注意事项**：远程 `VoldemortGin/pdfspine-studio`（private，2026-09-09 新建并推送 main；此前为纯本地仓），2026-07-22 后停更。`=0.4.1` 与 pdfspine 当前 0.7.1 **不匹配，当前构建不了**
+- **当前状态与注意事项**：远程 `VoldemortGin/pdfspine-studio`（private，2026-09-09 新建并推送 main；此前为纯本地仓），2026-07-22 后停更。`=0.4.1` 与 pdfspine 当前 0.8.0 **不匹配，当前构建不了**
   （Cargo.lock 仍锁 0.4.1）。定位未在家族层被确认。
 
 ### 5.10 rag-spine-web
@@ -398,7 +398,7 @@ L0 底座     corespine (deps=[])        ocrspine (crate, 零依赖)
 - 建议：把铁律改写为"Rust 侧 git dep + rev；Python 侧 PyPI 下限 + uv path，发布 CI `--no-sources`"，或者反过来让 Python 侧也钉 rev——二选一并记 ADR。
 
 **G3 · pdfspine-studio 构建断裂、定位未确认**
-- 现象：`pdfspine-studio/Cargo.toml:39` path 依赖 `=0.4.1`，pdfspine 已 0.7.1；家族 README / CLAUDE.md 未列；测试硬读兄弟仓 fixture。
+- 现象：`pdfspine-studio/Cargo.toml:39` path 依赖 `=0.4.1`，pdfspine 已 0.8.0；家族 README / CLAUDE.md 未列；测试硬读兄弟仓 fixture。
 - 影响：当前 `cargo build` 不可能通过；无人引用、无 CI、无备份。
 - 建议：三选一——(a) 补远程、收进家族表、改 git dep + rev；(b) 明确为实验仓并在根 CLAUDE.md 标注；(c) 归档。
 
