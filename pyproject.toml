@@ -90,7 +90,7 @@ tatr = [
 #   5. else a clear `PdfUnsupportedError`.
 ocr = []  # models arrive via the base `ocrspine-models` dependency; back-compat no-op.
 # `[onnx]` is the torch-free vision backend (PP-DocLayout layout detection,
-# PP-DocLayout-L by default or PP-DocLayoutV3 via `layout_variant`, + SLANet-plus
+# PP-DocLayoutV3 by default or PP-DocLayout-L via `layout_variant`, + SLANet-plus
 # table structure; both Apache-2.0 PaddlePaddle models as RapidAI ONNX exports) behind
 # `find_tables(strategy="vision", backend="onnx")`, `Page.find_layout()` and
 # `Page.get_layout_html()`. Model files are NOT in the wheel: download them into

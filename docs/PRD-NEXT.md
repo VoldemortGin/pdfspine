@@ -12,22 +12,21 @@
 ### Repository facts
 
 - **Repository:** `/Users/linhan/startup/spine/pdfspine`, branch `main`, HEAD
-  **`ef7e667`** (`ci(gate): skip the venv-only extension rebuild in the hosted
-  CI job`). No other branches or worktrees are checked out here. Confirm with
+  **`f1f6ab4`** (`chore(release): prepare v0.8.0`). No other branches or
+  worktrees are checked out here. Confirm with
   `git -C /Users/linhan/startup/spine/pdfspine log --oneline --first-parent -6`.
-- **Released vs unreleased.** The published release is **`v0.7.1`** (annotated
-  tag at commit `9da7ca6`; on PyPI as `pdfspine` 0.7.1; `Cargo.toml`
-  `version = "0.7.1"`). **Nothing has been released since.**
-  `git log --oneline --first-parent v0.7.1..HEAD` is the full unreleased delta;
-  `CHANGELOG.md` `[Unreleased]` accumulates: `markdown_to_pdf(links=, toc=)`,
+- **Released vs unreleased.** The published release is **`v0.8.0`** (annotated
+  tag at commit `f1f6ab4`, 2026-09-10; on PyPI as `pdfspine` 0.8.0 — **6 files**:
+  five abi3 wheels [macOS x86_64/arm64, manylinux x86_64/aarch64, win_amd64] +
+  sdist; plus a GitHub Release `v0.8.0` carrying the same 6 artifacts). It
+  shipped the full post-0.7.1 slate: `markdown_to_pdf(links=, toc=)`,
   layout-preserving `get_text("layout")`, PDF→Markdown `to_markdown()`, the
-  7-method OCG layer surface + `oc=` writers + `/Usage`/`/AS` visibility,
+  7-method OCG layer surface + `oc=` writers + `/Usage`/`/AS` visibility, the
+  ONNX vision layout/table backend (PP-DocLayoutV3 default + SLANet-plus),
   reading-order stage 3 + D4 (geometric XY-cut block order), `remove_rotation`
   widget/annot rects, `get_text(clip=)`, and the `pdf-typeset` FontIndependent
-  line-height rule. **Drift to fix before release:** the ONNX vision
-  layout/table backend (PP-DocLayout / PP-DocLayoutV3 default + SLANet-plus,
-  merges `48d297e` / `817f13f`) is on `main` but is **not yet written into
-  `[Unreleased]`** — see backlog item 0.
+  line-height rule. **`CHANGELOG.md` `[Unreleased]` is now empty** — the next
+  change opens a fresh section.
 - **Gate.** `./ci.sh` runs `scripts/quality_gate.py`, phases in order
   `rust → extension → python → drift → artifacts`. The `extension` phase
   fingerprints `crates/**`, `Cargo.toml`, `Cargo.lock`, `pyproject.toml` and
@@ -63,8 +62,8 @@
 
 1. **This §0** — the backlog and working rules below, then the **History**
    section for what each recent branch actually changed.
-2. `CHANGELOG.md` `[Unreleased]` — the accumulated post-0.7.1 surface (and note
-   the ONNX-vision drift called out in backlog item 0).
+2. `CHANGELOG.md` `## [0.8.0] — 2026-09-10` — the surface shipped in 0.8.0;
+   `[Unreleased]` is now empty.
 3. `docs/reading-order-root-cause.md`, the **2026-09-09** section (the
    base/V1/V2/V3/V4 variant table, the stage-3 attribution, "阶段 4 数据与放弃
    理由", and "后续该修") — required before touching reading order.
@@ -85,37 +84,17 @@
 > repeated here. All numbers below trace to a repo file or a command noted
 > inline; re-derive anything marked "verify with `…`".
 
-- [ ] **0. Cut release `v0.8.0`.**
-  - *Goal:* archive `[Unreleased]`, bump to 0.8.0, tag, publish to PyPI, and
-    create the GitHub Release.
-  - *Why / evidence:* PyPI is still 0.7.1 (`Cargo.toml` 0.7.1, tag `v0.7.1` @
-    `9da7ca6`); `[Unreleased]` holds a full slate of **new features** (OCG
-    surface + writers, ONNX vision backend, PDF→Markdown, layout extraction,
-    markdown links/outline) plus one **deliberate behavior change** (geometric
-    block order under `sort=False`). Pre-1.0 SemVer → a **minor** bump, so
-    **`0.8.0`** (not a patch — far more than fixes; not `1.0` — still pre-1.0 and
-    intentionally API-diverging from PyMuPDF).
-  - *Where:* the release is **tag-driven** — `scripts/set_version_from_tag.py`
-    stamps the built version from the pushed `v*` tag, so a human need not
-    hand-edit `Cargo.toml`/`pyproject.toml` for the build (but keep them in sync
-    per `docs/RELEASE-PYPI.md` §B). `.github/workflows/release.yml` fires on a
-    pushed `v*` tag: builds the abi3-py311 wheel matrix (linux x86_64 + aarch64,
-    macos-14 arm64 + x86_64, windows x64) and an sdist, then the `publish` job
-    uploads to PyPI via `pypa/gh-action-pypi-publish` using the
-    **`PYPI_API_TOKEN`** repo secret (`skip-existing: true`; Trusted-Publishing /
-    OIDC is wired but not registered on PyPI, so the token path is the live one).
-    `scripts/release-local.sh <version>` is the local fallback when Actions is
-    billable/blocked — it builds the macOS + Linux wheels + sdist and
-    `twine upload`s with the `~/.pypirc` token (**no Windows wheel**;
-    `--dry-run` = build + `twine check` only). The GitHub Release is **manual**
-    (`gh release create v0.8.0 --generate-notes`); the workflow does not create
-    it or attach assets.
-  - *Acceptance:* **first add the missing ONNX-vision entries to
-    `[Unreleased]`**, then move `[Unreleased]` → `## [0.8.0] — <date>`;
-    `git tag v0.8.0` on a green-gate `main` and push; the `release.yml` run
-    publishes every wheel + sdist (PyPI shows 0.8.0); `pip install
-    pdfspine==0.8.0` imports on a clean env; the GitHub Release exists.
-  - *Size:* **M** (process; gated on the CHANGELOG fix and a green pre-push gate).
+- [x] **0. Cut release `v0.8.0`.** ✅ **Done (2026-09-10).** Archived
+  `[Unreleased]` → `## [0.8.0] — 2026-09-10`, bumped to 0.8.0, and pushed tag
+  `v0.8.0` @ `f1f6ab4` (`chore(release): prepare v0.8.0`), which drove
+  `.github/workflows/release.yml` (run `34453113446`, green) to build the
+  abi3-py311 wheel matrix + sdist and publish to PyPI via the **`PYPI_API_TOKEN`**
+  secret — PyPI now shows 0.8.0 (6 files). The GitHub Release was then created by
+  hand with `gh release create v0.8.0` attaching the CI artifacts. *Snag & fix:*
+  the local pre-push gate PASSED, but it ran >10 min and GitHub dropped the idle
+  SSH connection mid-transfer, so the `push` failed; the same already-gated
+  commit was re-pushed with `--no-verify`.
+  **The next open backlog item is #1.**
 
 - [ ] **1. Reading-order follow-ups** (from the 2026-09-09 stage-3 attribution;
   none started).
