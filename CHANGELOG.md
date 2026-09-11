@@ -11,6 +11,12 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
+### OCR benchmark acceptance notes
+
+- Document the four `AI` → `Al` cases as accepted remaining OCR quality misses
+  and correct the claim of identical Arial glyphs to visual confusion. Recognition,
+  models, ground truth, raw predictions and the 0.9899 Latin score are unchanged.
+
 ### Resolved script run placement
 
 - `pdf-typeset` adds optional validated `ResolvedScriptPlacement` on `RunStyle`:
