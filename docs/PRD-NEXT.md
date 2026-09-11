@@ -248,15 +248,17 @@
     scheduled CI job that warns ahead of the vet-trust expiry.
   - *Size:* **S**.
 
-- [ ] **8. OCG `/Intent`-mismatch hiding.**
-  - *Goal:* hide an OCG whose `/Intent` does not meet the configuration's, and
-    only when the configuration carries a non-empty `/Intent` (MuPDF behaviour).
-  - *Why / evidence:* the last remaining OCG gap after `feat/ocg-gaps` (History,
-    2026-09-08).
-  - *Where:* `crates/pdf-core/src/ocg.rs` (`OcVisibility::read`).
-  - *Acceptance:* `PYOCG-*` / `OCG-VIS-*` oracle tests against real PyMuPDF; the
-    `docs/pymupdf-compat-findings.md` decision table updated.
-  - *Size:* **S**.
+- [x] **8. OCG `/Intent`-mismatch hiding — done (2026-09-10).**
+  `OcVisibility::read` applies a dedicated visibility parser when the active
+  configuration has a non-empty Intent. OCG absent Intent defaults to View;
+  explicit `[]` matches nothing, even configuration All. Name/array intersection
+  and All wildcards match real PyMuPDF 1.28.2 on **64 combinations**. Mismatch
+  wins over panel ON and AS promotion; reporting APIs retain configuration
+  state, and alternate configurations do not inherit default Intent.
+  Core/interpreter regressions cover indirect values, OCMD, text, image and
+  vector rendering operations. All 860 isolated core/text tests and clippy
+  passed. The behavior decision table is updated; original oracle fixtures and
+  compiled-Rust comparison are in `/Volumes/ExternalSSD/tmp/ocg-intent/`.
 
 - [ ] **9. Table-structure backend benchmark + ONNX validation (P3-6, proposed).**
   - *Goal:* validate the landed ONNX backend and finish the multi-backend seam.
