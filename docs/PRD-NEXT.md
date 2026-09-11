@@ -379,7 +379,7 @@
     Active tracking preserves base-plus-combining-mark sequences, including CJK
     token and run boundaries; this does not add complete shaping/grapheme support.
     LO +1pt tracking SSIM **0.8631 → 0.9749**; five prior engine PDFs byte-identical.
-  - [x] **Solid paragraph borders** (unreleased, isolated increment).
+  - [x] **Solid paragraph borders** (unreleased).
     Optional validated four-edge borders reserve vertical space and repeat on
     page fragments; matching sibling strokes share outer edges while preserving
     each paragraph's side spacing. Default None retains all six prior PDFs
@@ -1791,6 +1791,17 @@ lists why · files · effort · **Acceptance**, the green condition that means "
   negative tracking, scripts, full shaping/graphemes and `lineGap` remain outside
   this increment. Combined isolated crate gate: **165 tests**, clippy/fmt/Rustdoc
   green. Current DOCX/PPTX/shading scores **0.9822 / 0.9780 / 0.9868** are unchanged.
+- **TS-15 · Solid paragraph borders** — ✅ DONE 2026-09-11 (unreleased).
+  Default-off validated four-edge RGB borders participate in shared paragraph
+  measurement and pagination. Matching strokes join, preserving per-paragraph
+  side spacing; page fragments restore outer edges. A real LO/Rust regression
+  caught internal bottom spacing forcing a 42pt group out of 60pt remaining
+  space; bounded closing-edge lookahead fixes it without losing the paired
+  true-split bottom/top edges. 179 crate tests (14 new) and independent review
+  pass; old six PDFs byte-identical, readback 5/5 and render refs 8/8 pass.
+  New LO border score **0.9527 → 0.9836**, previous four oracle pairs unchanged.
+  `between`/non-solid borders and consumer migration remain separate work.
+  See `docs/typeset-paragraph-borders.md`.
 - **Downstream unblocking:** **Phase B (pptspine `ppt-render`)** starts when the TS-2/3/5/6 gates are
   green; **Phase C (docspine `doc-render`)** when the TS-2/3/4 gates (incl. TS-4's table primitives) are
   green. Phase B/C PRDs live in the consumer repos; each pins a pdfspine rev with its needed TS tasks
