@@ -13,9 +13,12 @@
 
 - **Repository:** `/Users/linhan/startup/spine/pdfspine`, branch `main`.
   The reading-order follow-up below started at **`93298af`** (the 2026-09-10
-  backlog update); use the log for the current post-fix HEAD. No other branches
-  or worktrees remain after the per-item merge. Confirm with
-  `git -C /Users/linhan/startup/spine/pdfspine log --oneline --first-parent -6`.
+  backlog update); SECCI started at **`3faa62d`**, and the conservative FR
+  header increment at **`b0414f7`**. Use the log
+  for the current post-fix HEAD; clean up only the completed item's branch /
+  worktree, preserving other active tasks. Inspect with
+  `git -C /Users/linhan/startup/spine/pdfspine log --oneline --first-parent -6`
+  and `git -C /Users/linhan/startup/spine/pdfspine worktree list`.
 - **Released vs unreleased.** The published release is **`v0.8.0`** (annotated
   tag at commit `f1f6ab4`, 2026-09-10; on PyPI as `pdfspine` 0.8.0 — **6 files**:
   five abi3 wheels [macOS x86_64/arm64, manylinux x86_64/aarch64, win_amd64] +
@@ -98,13 +101,14 @@
   **The next open backlog item is #1.**
 
 - [ ] **1. Reading-order follow-ups** (from the 2026-09-09 stage-3 attribution;
-  sub-item 1 completed below).
+  sub-items 1–3 completed within their conservative scopes below).
   - *Goal:* close the four residual reading-order gaps left after stage 3 + D4.
   - *Why / evidence:* `docs/reading-order-root-cause.md` "后续该修" + the variant
     table. The hard bars are met at HEAD (PMC 7 order 0.9600 vs fitz 0.9605;
-    EUR-Lex 40 lev 0.9377 / order 0.9779; FR misplaced 24/2493 vs fitz 64/2517;
-    FR fragmented 247 pages vs fitz 0). Sub-item 1 is now fixed; the other
-    three follow-ups remain open.
+    EUR-Lex 40 lev 0.9392 / order 0.9794; FR misplaced 22/2493 vs fitz 64/2517;
+    FR fragmented 82 pages vs fitz 0). Sub-items 1–3 are complete within
+    the conservative scopes below; sub-item 4 remains open, with form/header
+    edge cases explicitly retained for future refinements.
   - *Where:* `crates/pdf-text/src/layout.rs` — `find_column_cut`, `cut_lines`,
     `emit_column_cut` / `SPANNING_BANDS_PARTITION_ROWS`, `group_blocks_columned`,
     `detect_page_gutters` / `split_on_gutter`.
@@ -122,14 +126,41 @@
        FR output is unchanged (24 misplaced / 2493 detected header pages,
        247 fragmented; the old 2492 was the historical base/V1 join count).
        Evidence and the final corpus/gate run are in the **2026-09-10** section
-       of `docs/reading-order-root-cause.md`. Sub-item **2** is next.
-    2. **SECCI label/value form detection:** keep row-major (single region /
-       shared baseline) when a right column of short lines shares baselines with
-       the left column — fixes `32008L0048_EL p21–26` and `_BG p22/p24` (small; a
-       table-recognition gap shared with fitz).
-    3. **D4 header de-fragmentation, remaining 247 pages** toward fitz's 0
-       (`independent_run_gap` etc.); D4 only did the gutter-coverage split
-       (530 → 247).
+       of `docs/reading-order-root-cause.md`.
+    2. **SECCI label/value form detection — done (2026-09-10, conservative).**
+       Legal column-cut regions with at least two textual bracketed field
+       placeholders and repeated label/value baseline alignment now emit
+       complete left cells followed by their right values in geometric row
+       order, independent of which column was painted first. Value starts also
+       separate tightly adjacent labels; multi-line values and visibly empty
+       rows are retained. Numeric citations / empty checkboxes and ordinary
+       sparse prose do not count as field placeholders. This improves the
+       targeted `32008L0048_EL p21–26` / `_BG p22/p24` and corresponding DE/PL
+       form pages. Regions with fewer than two placeholders remain unchanged
+       (including the upper portion of EL p22); this is not general-purpose
+       form inference. EL p26 still groups the address label with following
+       empty contact fields, so its address value is not yet immediately after
+       the address alone. A future row-boundary refinement must handle these
+       residuals without guessing empty rows that have no geometric boundary.
+       Final full-document corpus and gate evidence is in the
+       **SECCI label/value** section of `docs/reading-order-root-cause.md`.
+    3. **D4 isolated header de-fragmentation — done (2026-09-10, conservative).**
+       Recover complete same-baseline running-header lines from original glyphs
+       after the original line geometry has finished region / XY-cut ordering.
+       Only an isolated top horizontal run bridging a body gutter qualifies;
+       repeated narrow columns / table starts retain their boundaries. Complete
+       painted-character provenance must match before consuming each fragment.
+       This fixes the full header on FR-2026-01-07 p62/p67/p88 and reduces
+       fragmented pages **247 → 82**, with misplaced **24 → 22**. The remaining
+       82 fragmented pages stay unchanged when safe identification fails.
+       All 2551 FR pages retain identical bbox/text/relative order for blocks
+       with y0 > 60pt; previously exposed cross-column sentence interruptions
+       are restored. EUR-Lex 40/3365 pages and the 300-document prefix digest
+       are unchanged. Actual GT worker inputs for EUR-Lex/born are byte-identical
+       to `secci-final`, so their validated scores are reused rather than claimed
+       as a new full GT run; PMC is freshly rescored and unchanged. Full evidence
+       and gate results are in the **FR 孤立刊头** section of the root-cause report.
+       Sub-item **4** is next.
     4. **PMC order 0.9605 / PMC212689 0.749 targets** still unmet — the PLoS
        3-column, mid-page spanning-caption float-vs-rows semantics that stage 3
        did not touch.
