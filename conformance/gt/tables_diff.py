@@ -193,8 +193,10 @@ WORKER_SCHEMA = "pdfspine.table-worker.v2"
 def eval_config(strategy="lines", backend=None, vision_options=None, *, mode="page-e2e"):
     strategy = strategy.casefold()
     backend = (backend or ("tatr" if strategy in {"vision", "tatr"} else "native")).casefold()
-    if backend not in {"native", "tatr", "onnx"}:
+    if backend not in {"native", "tatr", "onnx", "tableformer"}:
         raise ValueError(f"unsupported evaluation backend: {backend}")
+    if backend == "tableformer" and mode != "gold-crop-tsr":
+        raise ValueError("TableFormer evaluation only supports gold-crop-tsr")
     if strategy not in {"lines", "lines_strict", "text", "vision", "tatr"}:
         raise ValueError(f"unsupported strategy: {strategy}")
     if (backend == "native") != (strategy not in {"vision", "tatr"}):
@@ -390,6 +392,22 @@ def _worker_pdfspine(
             request = _crop_request(crop_request)
             if request["coordinate_space"] == "fintabnet-page":
                 _validate_fintabnet_crop(page, request)
+            if config["backend"] == "tableformer":
+                import tableformer_adapter
+                result = tableformer_adapter.recognize(page, request["bbox"], options=config["options"], padding=request["padding"])
+                from pdfspine import _core
+                metadata = {**{key: result.metadata[key] for key in (
+                                "model_files", "effective_model_config", "runtime_source", "packages",
+                                "effective_options", "backend_source", "track_identity",
+                                "loaded_model_roles", "executed_model_roles", "word_assignment", "recognition_options") if key in result.metadata},
+                            "backend": "tableformer", "requested": config,
+                            "evaluator_source": _identity(THIS), "python": sys.version,
+                            "executable": sys.executable, "platform": platform.platform(),
+                            "module": pdfspine.__file__, "extension": _identity(_core.__file__)}
+                record = {"table_id": request["table_id"], "crop_request": request,
+                          "cells": result.cells, "quality": result.quality,
+                          "quality_reasons": list(result.reasons), "metadata": result.metadata}
+                return [record], metadata
             from pdfspine import _onnx, _tatr
             implementation = _onnx if config["backend"] == "onnx" else _tatr
             options_type = implementation.OnnxOptions if config["backend"] == "onnx" else implementation.TatrOptions
@@ -2126,7 +2144,7 @@ def main(argv: list[str] | None = None) -> int:
                     help="first persistent vision request timeout, including model load (s)")
     ap.add_argument("--match-iou", type=float, default=0.5,
                     help="minimum bbox IoU for gold table matching (default: 0.5)")
-    ap.add_argument("--backend", choices=["native", "tatr", "onnx"], default=None)
+    ap.add_argument("--backend", choices=["native", "tatr", "onnx", "tableformer"], default=None)
     ap.add_argument("--eval-mode", choices=["page-e2e", "gold-crop-tsr"], default="page-e2e")
     ap.add_argument("--crop-request-json", default=None, help=argparse.SUPPRESS)
     ap.add_argument("--options-json", default=None, help="explicit vision options JSON object; no downloads")
