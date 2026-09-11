@@ -429,15 +429,24 @@
     LO improvement evidence remains `conformance/gt/TYPESET-LO-REPORT.md`.
   - *Size:* **M** (remaining scope).
 
-- [ ] **6. Coverage ratchet + Rust branch coverage.**
-  - *Goal:* keep the `fail_under` ratchet moving up and add Rust branch coverage.
-  - *Why / evidence:* `fail_under` is at **96** (raised 77 → 96 in `d3ed6fa`);
-    the CI coverage job does not yet report Rust branch coverage.
-  - *Where:* the combined Rust+Python coverage job and the pytest/coverage
-    `fail_under` config; Rust branch coverage needs a **nightly** toolchain.
-  - *Acceptance:* `fail_under` ratcheted with zero regressions; the coverage job
-    emits Rust branch coverage.
-  - *Size:* **S–M**.
+- [ ] **6. Coverage ratchet + Rust branch coverage — baseline established (2026-09-11).**
+  - *Goal:* keep the `fail_under` ratchet moving up as measured headroom allows.
+  - [x] Combined coverage job emits real Rust branch counters in JSON and LCOV
+    using pinned `nightly-2026-04-17` / `cargo-llvm-cov 0.8.5`; tests, debug
+    extension and reports share instrumentation. Python-driven binding coverage
+    is recorded before/after pytest. Existing nonblocking policy is unchanged.
+  - [x] Current baseline: Python **97.2680%** combined, Rust **43,969/47,921**
+    lines and **5,541/7,632** branches. One 2,011-test Rust run, one full Python
+    run plus the existing corpus smoke and eight behavioral supplements cover
+    **1,449 unique Python tests / 68 skips**. Production code/extension unchanged.
+  - *Ratchet:* `fail_under` stays **96** (`floor(97.2680) - 1`); it was not raised
+    this round. Further raising remains contingent on real headroom, without
+    exclusions or tests that merely mirror implementation.
+  - *Evidence / acceptance:* `conformance/COVERAGE-REPORT.md` distinguishes the
+    complete pre-increment 97.0025% baseline, final tests-only increment and
+    historical reports. JSON diagnostics precede the unchanged final 96% gate.
+  - *Remaining:* future threshold ratchet when supported by the measured floor.
+  - *Size:* **S** (remaining scope).
 
 - [x] **7. OCR & supply-chain hygiene — acceptance complete (2026-09-11).**
   - *Goal:* three small pre-existing items.

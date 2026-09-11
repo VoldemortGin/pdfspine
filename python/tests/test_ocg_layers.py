@@ -1370,3 +1370,32 @@ def test_pyocg_056_live_oracle_usage_matrix(tmp_path):
     assert _text_words(
         pdfspine.open(stream=_USAGE_CASES["off_view_on_as_view"][0])
     ) == (_VISIBLE)
+
+
+@pytest.mark.parametrize("kind", ["oval", "bezier", "polyline"])
+def test_ocg_curve_convenience_writers_survive_save_and_obey_visibility(kind):
+    doc = pdfspine.open()
+    page = doc.new_page(width=60, height=60)
+    group = doc.add_ocg("curve-layer")
+    if kind == "oval":
+        page.draw_oval((10, 10, 50, 50), color=(1, 0, 0), width=3, oc=group)
+    elif kind == "bezier":
+        page.draw_bezier(
+            (5, 30), (15, 5), (45, 55), (55, 30), color=(1, 0, 0), width=3, oc=group
+        )
+    else:
+        page.draw_polyline(
+            [(5, 10), (30, 50), (55, 10)], color=(1, 0, 0), width=3, oc=group
+        )
+    reopened = pdfspine.open(stream=doc.tobytes(), filetype="pdf")
+    doc.close()
+    assert reopened.get_ocgs()[group]["name"] == "curve-layer"
+    visible = reopened[0].get_pixmap().samples
+    blank = pdfspine.open()
+    blank.new_page(width=60, height=60)
+    background = blank[0].get_pixmap().samples
+    assert visible != background
+    reopened.set_layer(-1, on=[], off=[group])
+    assert reopened[0].get_pixmap().samples == background
+    reopened.set_layer(-1, on=[group], off=[])
+    assert reopened[0].get_pixmap().samples == visible
