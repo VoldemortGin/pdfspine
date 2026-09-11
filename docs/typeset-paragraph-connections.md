@@ -85,10 +85,13 @@ does not roll back provider calls, font-cache changes or accumulated warnings.
 There is no connection-dropping legacy fallback. Ordinary malformed-style
 policies are not broadened into a promise to preserve arbitrary invalid input.
 
-## Candidate validation
+## Validation
 
-The isolated candidate is based on `f6d4799`; final whole-repository integration
-is a separate gate and is not claimed here.
+Implementation `267961b`, based on `f6d4799`, passed the final whole-repository
+five-stage gate: **2,046 Rust / 1,535 Python passed, 68 existing skips**, including
+both installed artifacts. The named source/fingerprint/binary/log checkpoint is
+in [validation baselines](validation-baselines.md). The smaller counts below
+are focused subsets of that validation, not additional tests to add to its total.
 
 - Real same-page red: old layout measured 38pt where the explicit boundary
   requires 39pt (`1 + 14 + 6 + 3 + 14 + 1`). The candidate also checks one separator

@@ -436,14 +436,18 @@
     Final source 472a47f passes the complete five-stage gate: **2,034 Rust /
     1,535 Python passed, 68 existing skips**, including both artifact installs.
     Fingerprint/native/log identities are in `docs/validation-baselines.md`.
-  - [ ] **Caller-resolved solid paragraph connections — candidate.** Additive
-    checked-only overlay with structural paths and typed errors; existing model
-    fields/try return types remain unchanged. Same-page and page-break boundary
-    reservations share line metrics; container clones preserve paths. Twelve
-    focused tests and prior 11-PDF byte equality are recorded in
-    `docs/typeset-paragraph-connections.md`; independent review and final main
-    integration gate are required before marking this increment complete.
-  - [ ] **Remaining:** other non-solid/raw between-border policies and pattern shading,
+  - [x] **Caller-resolved solid paragraph connections** (unreleased).
+    Additive checked-only overlay with structural paths and typed errors;
+    existing model fields and four checked return types remain unchanged.
+    Same-page and page-break reservations share line metrics; container clones
+    preserve paths. Twelve focused tests, prior 11-PDF byte equality and all
+    13 reference pages at 100dpi pass. Implementation `267961b` passes the complete
+    five-stage gate: **2,046 Rust / 1,535 Python passed, 68 existing skips**,
+    including wheel/sdist installation. Source/fingerprint identities are in
+    `docs/validation-baselines.md`; restrictions and real red/green cases are in
+    `docs/typeset-paragraph-connections.md`.
+  - [ ] **Remaining:** dashed/nonzero-clearance connection separators, other
+    non-solid/raw between-border policies and pattern shading,
     automatic signed-spacing/script policy and consumer mappings, and verified
     Word `lineGap` placement.
   - *Increment validation:* LibreOffice 26.8.0.3 at 100 dpi, same renderer:
