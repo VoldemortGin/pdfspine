@@ -13,6 +13,13 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ### Fixed
 
+- **PMC caption and dropped-initial reading order.** Wide image captions stay
+  together after surrounding columns, using original text blocks and preserving
+  existing body order. Large paragraph initials rejoin their first line without
+  interleaving the following rows. Ambiguous caption boundaries and adjacent
+  large heading letters retain their existing handling. PMC reading-order mean
+  reaches 0.9605; PMC212689 improves from 0.7456 to 0.7495.
+
 - **OCG Intent visibility.** Layers with mismatched intent are hidden when the
   active configuration supplies a non-empty Intent, including name/array and
   All-wildcard handling. Explicit empty OCG intent remains distinct from its

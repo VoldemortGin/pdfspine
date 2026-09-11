@@ -1004,3 +1004,87 @@ GT 长度；未改 GT。`gt-reuse-frheader-verified.json` 明确注明不是新 
 `-D warnings`、cargo-deny、ruff、mypy、drift guards，以及 wheel/sdist 隔离
 安装 smoke 均通过。门禁复用与评分相同的 extension 输入 fingerprint
 `618cccafdd0eb40f208b7a14000fb41b792a59cb15ac122af62a2bad69fa57ae`。
+
+## 2026-09-10 — PMC 图注与首字下沉（§0 #1.4）
+
+基线为整合 JPEG / OCG / 文档后的 `9223553`。最终产物标签 **`pmc14-final`**，
+与此前的 `pmc14-*-proto*` 诊断版本分开；没有恢复 stage 4 或改全局栏序。
+
+### 两个独立根因与最小修复
+
+PMC212689 的剩余差距集中在零基 p0 / p3。先前人工反事实仅用于归因，
+不是修复成绩：p0 恢复大写 C 所在正文、p3 将 Figure 2 的四块说明整体移到
+页末，组合预计 order 0.7495；移动 p0 的单栏 Figure 1 没有收益。
+
+p3 的真实图像 bbox 为 (54, 447.63316)–(380.3998, 692.433)，跨左、中两栏，
+右栏仍有正文。原 DOI / 图题 / 两行说明 / 尾行分别为块 3、4、7、9，夹在
+左右正文中。现在在 **原 XY-cut 与 block grouping 完成后**，只对有旁侧正文、
+宽度超过普通行中位宽 1.5 倍的图像查找近邻编号粗体标题，再沿一致的小字号
+说明风格归组。通用 `label: identifier` 形态且紧凑的一行标识可归组，不特判
+DOI / Figure 文本或样本坐标。短尾行后的同风格近邻、跨图宽混合块或不明确
+段落间隔会拒绝整个移动，不能只搬前半；没有固定 10 行截断。独立页脚风格
+或同 baseline 的远端页脚提供停止边界。原 block / line / span / char 整体
+唯一消费，其他块相对顺序不变。它是保守的单段图注规则，不是通用多段图注、
+表格、公式或所有浮动对象语义推断。
+
+实际 p3 新顺序严格对应旧块号：
+`[0,1,2,5,6,8,10,11,12,13,14,15,16,17,18,19,3,4,7,9]`。
+所有块 bbox 和全文原样保留。旧页脚仍位于中栏正文与右栏正文之间，因此
+不能声称 “Kenyan Agricultural Research” 与 “Institute to overcome …”
+在未经页脚处理的原始全文中已字面相邻；本项移除了四块图注的插入。
+
+p0 的 42.33319pt C 原 baseline 190.052；正文三行 baseline 为
+168.052 / 179.052 / 190.052，字号 9pt。C 的大 baseline 容差把后两行桥接，
+后续按 x 排列交织成 `Cedaormlieesstt…`。修复先识别孤立大字旁三至四条真正
+绕排行首，在 baseline 聚类时隔离原 glyph，完成普通行拆分后将它附回最上行。
+大小使用设备字号；左右邻接的大字、多字标题、非水平文字不进入此路径，
+支持行不能只是整宽行中恰好落到右沿的内部字符。原字形来源、bbox、矩阵、
+seq 与显式空格都保留；C + `orn` 恢复 `Corn`，A + 显式空格仍是独立单词。
+具有完全相同绕排几何的孤立数学字母仍有语义歧义，不声称公式识别。
+
+### 最终验收与范围
+
+PMC 7 篇从最终 extension **重新运行真实 GT 评分**：order **0.9600 → 0.9605**；
+PMC212689 **0.7456 → 0.7495**，lev 0.7003 → 0.7054，F1 0.9393 → 0.9411。
+其余六篇所有评分指标不变。目标文档只有 p0 / p3 改变，其他三页完整块/文字
+相同；两页非空白字符多重集均保持，p0 的字词切分恢复因此不应要求旧错误
+word multiset 相同。p3 是完整块纯置换，字词与 bbox 全保留。
+
+FR 12 篇 / **2551 页完整 blocks（含全文、bbox、顺序和编号）全部相同**，
+保留 #1.3 的 82 碎片 / 22 misplaced（2493 个检测到刊头的页面）。
+EUR-Lex **40 篇 / 3365 页全部 blocks 相同**，包括前 20 页之外的 SECCI 页。
+另真实调用 `run_gt.extract_pdfspine` worker 核对 EUR 40 + born 6 篇默认 text
+flags 与换行拼接后的评分输入 SHA，逐字节相同，沿用 EUR lev **0.9392** /
+order **0.9794** 与 born 全文位同证据，**未重新运行 EUR 全套 GT 评分**。
+评分源代码 / serializer 与原基线一致；未跟踪 manifest 的现 SHA、历史评分前
+mtime/ctime、逐篇 GT 长度口径沿用 #1.3 的透明核验方式，未改 GT 资产。
+
+历史 300 文档 digest 每篇最多前 20 页：299 个有效输入 / 1886 页，仅
+`govdocs1-00067.pdf p0` 改变，恢复同根因下沉 R 的三行 “Russia, formerly … /
+largest grain importers … / second-largest meat importer …”。其余页面不变。
+此 digest **不包含目标 PMC212689**，目标另做完整 5 页与 PMC 7 篇评分；
+也不能将 1886 页范围泛称 300 文档全文。历史 `typeset-lo-slide.pdf` SHA
+mismatch 继续排除，未改冻结 manifest 或 fixture。
+
+### 证据与门禁
+
+证据位于 `/Volumes/ExternalSSD/tmp/ro34/`：
+
+- `pmc14-current-baseline.json` / `pmc14-final-target.json` / `pmc14-final-target-compare.json`；
+- `gt-pmc-pmc14-final.json`（真实新评分）、`pmc14-final-eurlex-compare.json`（零变化）；
+- `fr-full-pmc14-final.json` / `fr-full-pmc14-final-compare.json`（零变化）；
+- `gt-reuse-pmc14-final.json` / `pmc14-final-score-input-records.json`（46 篇实际 worker 输入）；
+- `digest-pmc14-final` / `compare-pmc14-final.json`；
+- `pmc14-final-build.json`、`pmc14-final-extension.log`、`pmc14-final-gate-{rust,rest}.log`。
+
+回归测试 `layout_e2e_022` 使用真实 Image XObject，验证整组图注与同/异字体页脚；
+`023` 红绿验证三行首字下沉及显式空格；`024` 保留 AB 大标题；`025` 红绿验证
+紧邻同风格不明确段落时整页原 text-block bbox / lines 完全相同。
+合成 022 不声称单独重现真实 p3 的所有 XY-cut 交织，实页四块纯置换是相应
+验收证据。扩展最终输入 fingerprint 为
+`a829471b0121f7a990176e61304d6d7150f3e8e7f737eed61ff2a7d23d318df5`。
+
+最终五阶段门禁全过：Rust **1928 passed / 1 ignored**（172 个 test-result 段），
+Python **1227 passed / 66 skipped**；fmt、clippy `-D warnings`、cargo-deny、
+ruff、mypy、drift guards 与 wheel/sdist 隔离安装 smoke 全通过。门禁完成后
+复核源码、测试和实际评分 `_core` SHA 均与 `pmc14-final-build.json` 相同。
