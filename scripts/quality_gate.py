@@ -23,6 +23,7 @@ PHASE_ORDER = ("rust", "extension", "python", "drift", "artifacts")
 # extension built from exactly these inputs, so their content is fingerprinted.
 EXTENSION_INPUTS = (
     "crates",
+    "vendor",
     "Cargo.toml",
     "Cargo.lock",
     "pyproject.toml",
@@ -57,6 +58,7 @@ def run(
 
 def run_rust() -> None:
     """Run the Rust formatting, lint, test, and dependency-policy gates."""
+    run([sys.executable, "scripts/check_vendored_sources.py"])
     cargo = executable("cargo")
     run([cargo, "fmt", "--all", "--check"])
     run(

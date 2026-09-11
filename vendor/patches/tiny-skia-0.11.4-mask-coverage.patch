@@ -1,0 +1,19 @@
+--- a/src/pipeline/blitter.rs
++++ b/src/pipeline/blitter.rs
+@@ -246,6 +246,16 @@
+                 ALPHA_U8_TRANSPARENT => {}
+                 ALPHA_U8_OPAQUE => {
+                     self.blit_h(x, y, width);
++                }
++                alpha if self.is_mask => {
++                    // Exact specialization of white -> LoadDestinationU8 ->
++                    // Lerp1Float -> StoreU8; preserve already-filled masks too.
++                    let offset = y as usize * self.pixmap.real_width + x as usize;
++                    let coverage = u32::from(alpha);
++                    for dst in &mut self.pixmap.data[offset..offset + width.get() as usize] {
++                        *dst = ((u32::from(*dst) * (255 - coverage) + 255 * coverage + 255) >> 8)
++                            as u8;
++                    }
+                 }
+                 alpha => {
+                     self.blit_anti_h_rp.ctx.current_coverage = alpha as f32 * (1.0 / 255.0);

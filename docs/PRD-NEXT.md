@@ -35,7 +35,7 @@
   These changes are not part of the published 0.8.0 release.
 - **Gate.** `./ci.sh` runs `scripts/quality_gate.py`, phases in order
   `rust → extension → python → drift → artifacts`. The `extension` phase
-  fingerprints `crates/**`, `Cargo.toml`, `Cargo.lock`, `pyproject.toml` and
+  fingerprints `crates/**`, `vendor/**`, `Cargo.toml`, `Cargo.lock`, `pyproject.toml` and
   `rust-toolchain*` against `.gate/extension.stamp` and runs
   `maturin develop --release` on any mismatch before pytest (opt out with
   `--skip-extension-check` or `PDFSPINE_GATE_SKIP_EXTENSION=1`); the `artifacts`
@@ -205,6 +205,14 @@
   `conformance/gt/RENDER-REPORT.md` (2026-09-10 update).
 
 - [ ] **3. Render, remaining cost.**
+  - *Mask coverage increment (2026-09-11, unreleased):* a complete, pinned
+    tiny-skia 0.11.4 vendor specializes partial byte-mask blending. All 53
+    validated outputs remain byte-identical; per-document ABBA/reverse BAAB
+    median ratios are **0.9019 / 0.8962**, sum-of-medians ratios **0.9450 /
+    0.9441**. These single-ARM64-machine observations include background
+    application activity, not a general speed guarantee. Source provenance,
+    inherited git consumption and the audit-base/local-delta distinction are
+    documented in ADR 0003. See `conformance/BENCH.md`; **item 3 stays open**.
   - *Small increment landed (2026-09-10):* glyph masks now retain their original
     allocation and cache hits avoid a second lookup; clip coverage uses an
     exhaustively equivalent integer expression. Eight alternating rounds on

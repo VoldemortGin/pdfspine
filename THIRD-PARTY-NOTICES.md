@@ -177,7 +177,7 @@ cargo 图新增组件 fontdb / fontconfig-parser / roxmltree / slotmap / core_ma
 | time | 0.3.49 | Apache-2.0 OR MIT | Jacob Pratt <open-source@jhpratt.dev>, Time contributors | https://github.com/time-rs/time |
 | time-core | 0.1.9 | Apache-2.0 OR MIT | Jacob Pratt <open-source@jhpratt.dev>, Time contributors | https://github.com/time-rs/time |
 | time-macros | 0.2.29 | Apache-2.0 OR MIT | Jacob Pratt <open-source@jhpratt.dev>, Time contributors | https://github.com/time-rs/time |
-| tiny-skia | 0.11.4 | BSD-3-Clause | Yevhenii Reizner <razrfalcon@gmail.com> | https://github.com/RazrFalcon/tiny-skia |
+| tiny-skia | 0.11.4 (local mask patch; see vendor provenance) | BSD-3-Clause | Yevhenii Reizner <razrfalcon@gmail.com> | https://github.com/RazrFalcon/tiny-skia |
 | tiny-skia-path | 0.11.4 | BSD-3-Clause | Yevhenii Reizner <razrfalcon@gmail.com> | https://github.com/RazrFalcon/tiny-skia/tree/master/path |
 | tinyvec | 1.11.0 | Apache-2.0 OR MIT OR Zlib | Lokathor <zefria@gmail.com> | https://github.com/Lokathor/tinyvec |
 | tinyvec_macros | 0.1.1 | Apache-2.0 OR MIT OR Zlib | Soveu <marx.tomasz@gmail.com> | https://github.com/Soveu/tinyvec_macros |
@@ -392,3 +392,10 @@ the following restrictions:
    misrepresented as being the original software.
 3. This notice may not be removed or altered from any source distribution.
 ```
+
+## Local tiny-skia source modification
+
+The complete BSD-3-Clause tiny-skia 0.11.4 source and license are retained in
+`vendor/tiny-skia`. pdfspine modifies only partial byte-mask coverage blending;
+`vendor/tiny-skia.provenance.json` and its referenced patch identify the exact
+change. Upstream copyright and license terms remain in force.
