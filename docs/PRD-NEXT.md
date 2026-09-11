@@ -600,23 +600,20 @@
     leave the opt-out unset so the gate rebuilds the extension on any Rust
     change. Keep this documented if the CI build steps change.
 
-- [ ] **11. Backfill the gate / test numbers in README and the docs.**
-  - *Goal:* replace the stale 0.7.0-era test counts and gate label with the
-    real numbers from one full 0.8.0 gate run.
-  - *Why / evidence:* `README.md:19–20` still reads "**1,702 Rust tests + 814
-    Python tests** passing in the 0.7.0 release gate", and `README.md:81` is
-    "### Glyph geometry (0.7.0)" — both stale (the 2026-09-09 branch gate already
-    showed **pytest 1211 passed**, History). Meanwhile `docs/index.md:68–71` and
-    `PARITY.md:40,44–47,82` already agree with `COMPAT.toml [meta]` at 694/769 =
-    90.2% implemented, deferred 9 — so only the README lags.
-  - *Where:* `README.md` (the test-count line ~19–20 and the "(0.7.0)" headings
-    ~81), plus any `docs/index.md` / `PARITY.md` / `_llms` number that cites a
-    gate version. Derive counts from one full `./ci.sh` run (the `cargo test
-    --workspace` total + the pytest total), not by hand.
-  - *Acceptance:* README / `docs/index.md` / `PARITY.md` test-and-gate numbers
-    are mutually consistent, cite the 0.8.0 gate, and trace to a named gate run;
-    `.venv/bin/python scripts/check_docs_coverage.py` stays 316/316.
-  - *Size:* **S**.
+- [x] **11. Documentation validation baselines — corrected (2026-09-11).**
+  README, docs/index and PARITY now distinguish current local 703/769 (91.4%),
+  zero deferred, from published v0.8.0 tag f1f6ab4 at 694/769 (90.2%), nine
+  deferred. The obsolete current-doc index table and README gate attribution
+  are corrected; dated release-history counts are preserved.
+  `docs/validation-baselines.md` identifies the local signed-spacing full gate:
+  source 0c320dcb / integration e67545f, **2,027 Rust / 1,518 Python passed,
+  68 existing skips**, plus fingerprint/binary/log hashes. Later TableFormer
+  work passed **132 related / 5 existing skips**, not a new full suite.
+  The original instruction to call newer counts a "0.8.0 release gate" is
+  corrected: published and unreleased validation are distinct. Acceptance is
+  exact catalog/tag agreement, named evidence and linked documentation;
+  public-doc coverage remains **318/318**. No Rust build or full gate is
+  rerun for this documentation-only correction.
 
 - [x] **12. Repository `CLAUDE.md` — done (2026-09-10).**
   The root guide maps all 13 workspace crates, Python/conformance directories,

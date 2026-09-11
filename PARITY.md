@@ -35,9 +35,14 @@
 > **Current snapshot.** Numbers below are recomputed from the
 > live `COMPAT.toml` per-symbol dispositions. `COMPAT.toml [meta]` is always the authoritative live figure;
 > the current development backlog lives in
-> [`docs/PRD-NEXT.md`](docs/PRD-NEXT.md) §3.B.
+> [`docs/PRD-NEXT.md`](docs/PRD-NEXT.md) §0.
 
-**Overall: 703 / 769 implemented (91.4% coverage).**
+**Current local source: 703 / 769 implemented (91.4% coverage).**
+
+Published v0.8.0 (`f1f6ab4208876b0ba867edd76cc4e5da7ad8add2`) remains
+694/769 (90.2%), with 9 deferred. See
+[validation baselines](docs/validation-baselines.md) for the separate release
+and named local full-gate checkpoints; catalog counts are not full-suite counts.
 
 | Disposition | Count | Share |
 |---|---:|---:|
@@ -48,7 +53,7 @@
 
 > "Total" counts every PyMuPDF 1.24.x baseline symbol plus the `PdfUnsupportedError` catch-all row. Geometry
 > (M0) is fully landed; M1–M5 read/text/edit/forms/annot/Pixmap surfaces are largely landed; M6 vector
-> rendering, M7 SVG/tables/OCG, and M8 OCR have their headline paths implemented with long tails deferred.
+> rendering, M7 SVG/tables/OCG, and M8 OCR have their headline paths implemented with the explicit scope limits below.
 
 ### Per-class / per-group breakdown
 
