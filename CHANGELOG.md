@@ -11,6 +11,14 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
+### Glyph mask rendering
+
+- Specialize partial byte-mask coverage in a provenance-checked, BSD-licensed
+  tiny-skia 0.11.4 vendor. Pixel output is unchanged on the validated samples;
+  repeated single-machine benchmarks show lower first-glyph render cost.
+  See `conformance/BENCH.md` for statistics and background-load limitations.
+  Larger rendering hotspots remain open.
+
 ### Page font registration
 
 - `Page.insert_font` registers Core14 or a complete standalone glyf TrueType
