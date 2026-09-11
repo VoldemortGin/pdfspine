@@ -273,7 +273,54 @@ fn textpage_core(
 ) -> TextPage {
     let p = page_transform(page_box, rotate);
     let (width, height) = page_size(page_box, rotate);
+    textpage_transformed_core(
+        glyphs,
+        images,
+        p,
+        (width, height),
+        clip,
+        None,
+        resolver,
+        flags,
+    )
+}
 
+/// Builds only a new appended segment with an additional device-space affine
+/// transform and target-origin clipping. Existing page builders are unchanged.
+#[must_use]
+pub fn textpage_from_glyphs_transformed(
+    glyphs: &[PositionedGlyph],
+    images: &[ImageRef],
+    page_box: Rect,
+    rotate: i32,
+    matrix: Matrix,
+    target: Rect,
+    flags: u32,
+) -> TextPage {
+    let p = page_transform(page_box, rotate) * matrix;
+    textpage_transformed_core(
+        glyphs,
+        images,
+        p,
+        (target.width(), target.height()),
+        Some(page_box),
+        Some(target),
+        None,
+        flags,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn textpage_transformed_core(
+    glyphs: &[PositionedGlyph],
+    images: &[ImageRef],
+    p: Matrix,
+    (width, height): (f64, f64),
+    clip: Option<Rect>,
+    device_clip: Option<Rect>,
+    resolver: Option<&FontResolver>,
+    flags: u32,
+) -> TextPage {
     // 1. Transform every glyph to device space, dropping out-of-CropBox glyphs.
     // `dir` depends only on the page transform + writing mode (not the glyph), so
     // both vectors are computed once. The font name is resolved (enriched) and
@@ -295,6 +342,13 @@ fn textpage_core(
             if !origin_in_clip(g.origin, c) {
                 continue;
             }
+        }
+        if device_clip.is_some_and(|c| !origin_in_clip(p.transform_point(g.origin), &c)) {
+            continue;
+        }
+        // A degenerate affine produces no usable glyph geometry.
+        if device_clip.is_some() && p.a == 0.0 && p.b == 0.0 && p.c == 0.0 && p.d == 0.0 {
+            continue;
         }
         let (font, flags) = font_cache
             .entry(g.font_name.clone())
@@ -323,6 +377,11 @@ fn textpage_core(
     // image blocks (device-space bbox via the placement CTM → page transform).
     for img in images {
         let bbox = image_bbox(img, &p);
+        if device_clip.is_some_and(|c| {
+            bbox.x1 <= c.x0 || bbox.x0 >= c.x1 || bbox.y1 <= c.y0 || bbox.y0 >= c.y1
+        }) {
+            continue;
+        }
         blocks.push(Block {
             bbox,
             kind: BlockKind::Image,

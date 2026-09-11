@@ -11,7 +11,6 @@ DEFERRED: frozenset[str] = frozenset(
     {
         "Annot.get_textbox",
         "DisplayList.run",
-        "Page.extend_textpage",
         "Page.insert_font",
         "Page.run",
         "Pixmap.warp",

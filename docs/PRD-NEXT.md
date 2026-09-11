@@ -226,7 +226,7 @@
     SSIM (one was already measured slower and rejected).
   - *Size:* **L**.
 
-- [ ] **4. Deferred APIs — 1 of the original 9 landed; 8 remain.**
+- [ ] **4. Deferred APIs — 2 of the original 9 landed; 7 remain.**
   - *Landed:* `DisplayList.get_textpage(flags=3)` returns a usable public
     `TextPage` wrapper from owned semantic/font/image resources; source edits
     and closure do not invalidate text extraction. Paired recording avoids a
@@ -236,13 +236,28 @@
   - *Scope:* only the text resource snapshot is independent. Existing DisplayList
     raster references to live ICC/palette/mask resources are not deep-copied here;
     direct `Page.get_pixmap` is unchanged. See the behavior decision record.
-  - *Remaining order:* `Page.extend_textpage`, then device callbacks `Page.run` /
+  - *Also landed:* `Page.extend_textpage(tpage, flags=0, matrix=None)` preserves
+    the target object, bounds and previous block order while appending a new
+    transformed, target-clipped segment. Image placement matrices retain rotation
+    and shear; owned per-segment resources survive source closure and avoid
+    cross-document image-name collisions. Invalid matrices or unreadable target
+    images fail atomically. Ordinary Page-backed targets retain their pre-existing
+    image visibility semantics; the older Page creation-flags discrepancy is not
+    repaired by this increment. Recorded targets retain exact creation flags.
+    `python/tests/test_extend_textpage.py` has 25 focused cases, including numeric
+    image/text affine comparisons with local PyMuPDF 1.28.2. A 19-record legacy
+    probe retains 13 selected EUR-Lex/FR page block arrays and all six born
+    documents' full page text byte-for-byte; it is not a new full-corpus score.
+    Final B gate: **1948 Rust / 1292 Python tests**, 66 existing Python skips;
+    extension, drift checks and wheel/sdist install smoke all pass. The installed
+    wheel also passes an explicit append/transform/duplicate-number smoke.
+  - *Remaining order:* device callbacks `Page.run` /
     `DisplayList.run`; `Page.insert_font`, `Pixmap.warp`, `Annot.get_textbox`,
     `Tools.set_annot_stem` / `Tools.set_subset_fontnames` remain deferred.
   - *Evidence:* `python/tests/test_displaylist_textpage.py` covers flags, invisible
     text, Form resources, source edit/close, CropBox/Rotate, annotations and live
     PyMuPDF 1.28.2 comparisons; Rust tests cover lazy decoding and snapshot bounds.
-    Catalog parity is 695/769 = 90.4%, deferred = 8. No callback framework is added.
+    Catalog parity is 696/769 = 90.5%, deferred = 7. No callback framework is added.
     Full five-phase gate passes (1255 Python tests, 66 existing skips). The same
     35 available render inputs retain identical dimensions/full pixel hashes in
     direct Page rendering and `annots=0` DisplayList replay; eight historical

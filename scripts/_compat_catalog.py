@@ -727,7 +727,7 @@ add_many(
 # 3. Page
 # ---------------------------------------------------------------------------
 # Text extraction
-add_many("Page", IMPLEMENTED, "M2", ["get_text", "get_textpage"])
+add_many("Page", IMPLEMENTED, "M2", ["get_text", "get_textpage", "extend_textpage"])
 add_many(
     "Page",
     DEFERRED,
@@ -737,7 +737,6 @@ add_many(
         "get_text_words",
         "get_textbox",
         "get_text_selection",
-        "extend_textpage",
         "get_texttrace",
     ],
 )

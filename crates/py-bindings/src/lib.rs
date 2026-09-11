@@ -323,6 +323,7 @@ fn unpack_color(rgb: u32) -> (f64, f64, f64) {
 /// `Page.search_for(..., textpage=tp)` reuse it instead of re-parsing.
 enum TextPageSource {
     Page(pdf_api::Page),
+    Extended(Arc<pdf_api::ExtendedTextResources>),
     Recorded {
         resources: Arc<pdf_api::RecordedTextResources>,
         flags: u32,
@@ -337,21 +338,38 @@ struct PyTextPage {
 
 impl PyTextPage {
     fn extract_output(&self, py: Python<'_>, opt: &str) -> PyResult<Py<PyAny>> {
+        self.extract_output_sorted(py, opt, false)
+    }
+
+    fn extract_output_sorted(&self, py: Python<'_>, opt: &str, sort: bool) -> PyResult<Py<PyAny>> {
         match &self.source {
             TextPageSource::Page(page) => {
-                text_output_to_py(py, page, opt, None, Some(&self.tp), false)
+                text_output_to_py(py, page, opt, None, Some(&self.tp), sort)
+            }
+            TextPageSource::Extended(resources) => {
+                if matches!(opt, "dict" | "rawdict") {
+                    let blocks = py.detach(|| resources.dict_blocks(&self.tp));
+                    Ok(
+                        dict_blocks_to_py(py, &self.tp, &blocks, opt == "rawdict", sort)?
+                            .into_any()
+                            .unbind(),
+                    )
+                } else {
+                    let output = py.detach(|| resources.output(&self.tp, opt));
+                    text_value_to_py(py, output, sort)
+                }
             }
             TextPageSource::Recorded { resources, flags } => {
                 if matches!(opt, "dict" | "rawdict") {
                     let blocks = py.detach(|| resources.dict_blocks(&self.tp, *flags));
                     Ok(
-                        dict_blocks_to_py(py, &self.tp, &blocks, opt == "rawdict", false)?
+                        dict_blocks_to_py(py, &self.tp, &blocks, opt == "rawdict", sort)?
                             .into_any()
                             .unbind(),
                     )
                 } else {
                     let output = py.detach(|| resources.output(&self.tp, opt, *flags));
-                    text_value_to_py(py, output, false)
+                    text_value_to_py(py, output, sort)
                 }
             }
         }
@@ -478,6 +496,7 @@ impl PyTextPage {
     fn extractIMGINFO<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
         let entries = py.detach(|| match &self.source {
             TextPageSource::Page(page) => pdf_api::extract_imginfo(page),
+            TextPageSource::Extended(resources) => resources.image_info(&self.tp),
             TextPageSource::Recorded { resources, flags } => resources.image_info(&self.tp, *flags),
         });
         let list = PyList::empty(py);
@@ -2077,6 +2096,51 @@ impl PyPage {
         }
     }
 
+    /// Constructs an atomic replacement for the public wrapper's append.
+    fn extend_textpage(
+        &self,
+        py: Python<'_>,
+        target: &PyTextPage,
+        flags: u32,
+        matrix: (f64, f64, f64, f64, f64, f64),
+    ) -> PyResult<PyTextPage> {
+        let (a, b, c, d, e, f) = matrix;
+        if ![a, b, c, d, e, f].iter().all(|v| v.is_finite()) {
+            return Err(PyValueError::new_err("matrix coefficients must be finite"));
+        }
+        let (tp, resources) = py
+            .detach(|| -> pdf_api::Result<_> {
+                let mut tp = target.tp.clone();
+                let mut resources = match &target.source {
+                    TextPageSource::Page(page) => {
+                        pdf_api::ExtendedTextResources::from_page(page, &mut tp)?
+                    }
+                    TextPageSource::Recorded { resources, flags } => {
+                        pdf_api::ExtendedTextResources::from_recorded(
+                            &mut tp,
+                            resources.clone(),
+                            *flags,
+                        )
+                    }
+                    TextPageSource::Extended(resources) => (**resources).clone(),
+                };
+                let recorded = pdf_api::page_get_displaylist_with_annots(&self.page, true);
+                let new = recorded.get_textpage_transformed(
+                    flags,
+                    Matrix::new(a, b, c, d, e, f),
+                    Rect::new(0.0, 0.0, tp.width, tp.height),
+                );
+                let transforms = recorded.text_image_transforms(Matrix::new(a, b, c, d, e, f));
+                resources.append(&mut tp, new, recorded.text_resources(), flags, &transforms);
+                Ok((tp, resources))
+            })
+            .map_err(map_err)?;
+        Ok(PyTextPage {
+            tp,
+            source: TextPageSource::Extended(Arc::new(resources)),
+        })
+    }
+
     /// Builds an OCR [`PyTextPage`] by rasterizing the page and recognizing it
     /// with the selected `engine` (PyMuPDF `page.get_textpage_ocr`). `flags` is
     /// accepted for API symmetry; `language` is used by Tesseract;
@@ -2134,6 +2198,11 @@ impl PyPage {
         textpage: Option<&PyTextPage>,
         sort: bool,
     ) -> PyResult<Py<PyAny>> {
+        if let Some(target) = textpage {
+            if matches!(&target.source, TextPageSource::Extended(_)) {
+                return target.extract_output_sorted(py, option, sort);
+            }
+        }
         let clipped;
         let tp = match (textpage, clip) {
             (Some(t), _) => Some(&t.tp),
