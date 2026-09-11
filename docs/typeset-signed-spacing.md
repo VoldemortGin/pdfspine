@@ -86,3 +86,12 @@ from our explicit cluster rule. CJK requests in that local LO setup produced
 missing glyphs and were excluded; engine CJK tests use bundled faces and are
 not evidence of CJK LO or Word parity. No Word compatibility, production
 consumer migration, or general backward-advance layout is claimed.
+
+Final integrated validation at source commit `0c320dcb0fe7a8eb714b2469116f9544eda1190d`:
+2027 Rust tests and 1518 Python tests passed (68 existing skips), followed by
+drift checks and independent wheel/sdist build-and-install smoke tests. The
+extension fingerprint was
+`7a92be9fe832d8b2e720b26ad5fb6222490bdaecd62f6419ffa644e031c160d3`.
+The focused crate run passed 210 tests, including 15 signed-spacing integration
+cases; all ten generated PDFs remained byte-identical after the final review
+fixes. This validation record is a later documentation-only change.
