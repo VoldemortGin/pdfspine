@@ -12,7 +12,7 @@
 //!   mix faces and sizes, sharing a single baseline computed from the real
 //!   font ascent/descent (the `BASELINE_FACTOR = 0.8` heuristic is retired);
 //! - the line box height / baseline follow the engine's
-//!   [`LineHeightRule`](crate::LineHeightRule): real face metrics (Word / Writer)
+//!   [`LineHeightRule`]: real face metrics (Word / Writer)
 //!   or PowerPoint / Impress font-independent 1.2-em spacing (decorations,
 //!   highlight and link rects always keep the real face metrics);
 //! - `Align::Justify` redistributes inter-word **space fragment widths**
@@ -25,7 +25,7 @@
 //!   before/after (pending-gap model: gaps collapse at a page top);
 //! - pagination is driven by a [`PageProvider`] callback (docspine sections
 //!   with per-section page geometry), while text boxes and table cells reuse
-//!   the same core through [`layout_box_content`] (no pagination, optional
+//!   the same core through `layout_box_content` (no pagination, optional
 //!   wrap-off where lines break only at hard `\n`).
 //!
 //! Small documented degradations: a `\t` advances the pen to the next tab stop
@@ -764,9 +764,18 @@ fn box_layout(
 
 /// Lays out sibling blocks at the context cursor.
 pub(crate) fn layout_blocks(ctx: &mut Ctx, blocks: &[Block]) {
-    for block in blocks {
+    for (index, block) in blocks.iter().enumerate() {
         match block {
-            Block::Paragraph(props, runs) => layout_paragraph(ctx, props, runs),
+            Block::Paragraph(props, runs) => {
+                let join_background = props.shading.is_some()
+                    && index > 0
+                    && matches!(&blocks[index - 1], Block::Paragraph(previous, previous_runs)
+                        if previous.shading == props.shading
+                            && previous.indent_left == props.indent_left
+                            && previous.indent_right == props.indent_right
+                            && previous_runs.iter().any(|run| run.style.size.is_finite() && run.style.size > 0.0));
+                layout_paragraph(ctx, props, runs, join_background);
+            }
             Block::Table(spec) => crate::table::layout_table(ctx, spec),
             Block::Image(spec) => layout_image(ctx, spec),
             Block::PageBreak => ctx.page_break(),
@@ -778,7 +787,14 @@ pub(crate) fn layout_blocks(ctx: &mut Ctx, blocks: &[Block]) {
 
 /// Lays out one paragraph under its properties: indents, wrap, alignment
 /// (incl. justify), line spacing, list label, per-line pagination.
-fn layout_paragraph(ctx: &mut Ctx, props: &crate::model::ParaProps, runs: &[Run]) {
+fn layout_paragraph(
+    ctx: &mut Ctx,
+    props: &crate::model::ParaProps,
+    runs: &[Run],
+    join_background: bool,
+) {
+    let preceding_page = ctx.page;
+    let preceding_bottom = ctx.y;
     ctx.gap(props.space_before);
     ctx.flush_gap();
 
@@ -833,6 +849,7 @@ fn layout_paragraph(ctx: &mut Ctx, props: &crate::model::ParaProps, runs: &[Run]
     }
 
     let rule = ctx.ts.line_height_rule();
+    let mut backgrounds: Vec<(usize, usize, Op)> = Vec::new();
     for (i, line) in lines.iter().enumerate() {
         let (asc, desc, natural) = line_metrics(ctx.ts.faces(), line, ref_frag, rule);
         let lh = match props.spacing {
@@ -860,6 +877,31 @@ fn layout_paragraph(ctx: &mut Ctx, props: &crate::model::ParaProps, runs: &[Run]
             });
         }
         ctx.ensure(lh);
+        if let Some(color) = props.shading {
+            let top = if i == 0 && join_background && ctx.page == preceding_page {
+                preceding_bottom
+            } else {
+                ctx.y
+            };
+            let x = ctx.left() + props.indent_left.max(0.0);
+            let right = (ctx.right() - props.indent_right.max(0.0)).max(x + 1.0);
+            match backgrounds.last_mut() {
+                Some((page, _, Op::FillRect { y, h, .. })) if *page == ctx.page => {
+                    *h = ctx.y + lh - *y;
+                }
+                _ => backgrounds.push((
+                    ctx.page,
+                    ctx.pages[ctx.page].ops.len(),
+                    Op::FillRect {
+                        x,
+                        y: top,
+                        w: right - x,
+                        h: ctx.y + lh - top,
+                        color,
+                    },
+                )),
+            }
+        }
         let baseline = ctx.y + lh - desc;
         let line_left = if i == 0 { first_left } else { left };
         let align_w = right - line_left;
@@ -879,6 +921,12 @@ fn layout_paragraph(ctx: &mut Ctx, props: &crate::model::ParaProps, runs: &[Run]
         ctx.y += lh;
     }
 
+    // One background per page fragment, inserted before all its text. Painting
+    // a fill before each line would erase overflowing descenders under Exact
+    // spacing shorter than the glyph height.
+    for (page, before_text, background) in backgrounds {
+        ctx.pages[page].ops.insert(before_text, background);
+    }
     ctx.gap(props.space_after);
 }
 
