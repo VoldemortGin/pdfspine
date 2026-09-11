@@ -11,6 +11,22 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
+### OCR benchmark acceptance notes
+
+- Document the four `AI` → `Al` cases as accepted remaining OCR quality misses
+  and correct the claim of identical Arial glyphs to visual confusion. Recognition,
+  models, ground truth, raw predictions and the 0.9899 Latin score are unchanged.
+
+### Resolved script run placement
+
+- `pdf-typeset` adds optional validated `ResolvedScriptPlacement` on `RunStyle`:
+  caller-resolved glyph scale and upward-positive point baseline shift preserve
+  nominal line struts while placing smaller script glyphs. Shared flow, table,
+  textbox and border measurement includes effective overflow; Exact keeps normal
+  text baselines. Decorations/links follow the shifted glyphs and autoshrink
+  scales the offset once. None/identity retain default output. No automatic
+  OOXML script policy, consumer mapping or global lineGap change is introduced.
+
 ### Replay devices
 
 - Added `ReplayDevice(callback)`, immutable `ReplayEvent`, and typed

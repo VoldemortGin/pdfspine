@@ -1,0 +1,501 @@
+{
+  "cells": [
+    {
+      "canonical_columns": [
+        0
+      ],
+      "canonical_rows": [
+        0
+      ],
+      "normalized_text": "",
+      "raw": {
+        "column_nums": [
+          0
+        ],
+        "is_column_header": true,
+        "is_projected_row_header": false,
+        "json_text_content": "",
+        "pdf_bbox": [
+          30.000099182128906,
+          484.0015563964844,
+          98.79537200927734,
+          537.5347290039062
+        ],
+        "pdf_text_content": "",
+        "pdf_text_tight_bbox": [],
+        "row_nums": [
+          0
+        ]
+      },
+      "source_cell_index": 0,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        1
+      ],
+      "canonical_rows": [
+        0
+      ],
+      "normalized_text": "UnrecognizedCompensation Cost(in millions)*",
+      "raw": {
+        "column_nums": [
+          1
+        ],
+        "is_column_header": true,
+        "is_projected_row_header": false,
+        "json_text_content": "UnrecognizedCompensation Cost(in millions)*",
+        "pdf_bbox": [
+          193.19989013671875,
+          484.0015563964844,
+          233.64590454101562,
+          537.5347290039062
+        ],
+        "pdf_text_content": "Unrecognized Compensation Cost (in millions)*",
+        "pdf_text_tight_bbox": [
+          193.19989013671875,
+          502.00201416015625,
+          233.64590454101562,
+          537.5347290039062
+        ],
+        "row_nums": [
+          0
+        ]
+      },
+      "source_cell_index": 1,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        2
+      ],
+      "canonical_rows": [
+        0
+      ],
+      "normalized_text": "Weighted-Average RemainingVesting Period(in years)",
+      "raw": {
+        "column_nums": [
+          2
+        ],
+        "is_column_header": true,
+        "is_projected_row_header": false,
+        "json_text_content": "Weighted-Average RemainingVesting Period(in years)",
+        "pdf_bbox": [
+          253.65048217773438,
+          484.0015563964844,
+          283.9884948730469,
+          537.5347290039062
+        ],
+        "pdf_text_content": "Weighted- Average Remaining Vesting Period (in years)",
+        "pdf_text_tight_bbox": [
+          253.65048217773438,
+          484.0015563964844,
+          283.9884948730469,
+          537.5340576171875
+        ],
+        "row_nums": [
+          0
+        ]
+      },
+      "source_cell_index": 2,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        0
+      ],
+      "canonical_rows": [
+        1
+      ],
+      "normalized_text": "Stock options",
+      "raw": {
+        "column_nums": [
+          0
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "Stock options",
+        "pdf_bbox": [
+          30.000099182128906,
+          542.6375122070312,
+          98.79537200927734,
+          551.6600341796875
+        ],
+        "pdf_text_content": "Stock options",
+        "pdf_text_tight_bbox": [
+          30.000099182128906,
+          542.6375122070312,
+          66.6375961303711,
+          551.6600341796875
+        ],
+        "row_nums": [
+          1
+        ]
+      },
+      "source_cell_index": 3,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        1
+      ],
+      "canonical_rows": [
+        1
+      ],
+      "normalized_text": "$32",
+      "raw": {
+        "column_nums": [
+          1
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "$32",
+        "pdf_bbox": [
+          193.19989013671875,
+          542.6375122070312,
+          233.64590454101562,
+          551.6600341796875
+        ],
+        "pdf_text_content": "$ 32",
+        "pdf_text_tight_bbox": [
+          206.75033569335938,
+          542.6375122070312,
+          220.1100616455078,
+          551.6600341796875
+        ],
+        "row_nums": [
+          1
+        ]
+      },
+      "source_cell_index": 4,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        2
+      ],
+      "canonical_rows": [
+        1
+      ],
+      "normalized_text": "",
+      "raw": {
+        "column_nums": [
+          2
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "",
+        "pdf_bbox": [
+          253.65048217773438,
+          542.6375122070312,
+          283.9884948730469,
+          551.6600341796875
+        ],
+        "pdf_text_content": "",
+        "pdf_text_tight_bbox": [],
+        "row_nums": [
+          1
+        ]
+      },
+      "source_cell_index": 5,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        0
+      ],
+      "canonical_rows": [
+        2
+      ],
+      "normalized_text": "Non-vested stock awards",
+      "raw": {
+        "column_nums": [
+          0
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "Non-vested stock awards",
+        "pdf_bbox": [
+          30.000099182128906,
+          554.6375122070312,
+          98.79537200927734,
+          563.6600341796875
+        ],
+        "pdf_text_content": "Non-vested stock awards",
+        "pdf_text_tight_bbox": [
+          30.000099182128906,
+          554.6375122070312,
+          98.79537200927734,
+          563.6600341796875
+        ],
+        "row_nums": [
+          2
+        ]
+      },
+      "source_cell_index": 6,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        1
+      ],
+      "canonical_rows": [
+        2
+      ],
+      "normalized_text": "171",
+      "raw": {
+        "column_nums": [
+          1
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "171",
+        "pdf_bbox": [
+          193.19989013671875,
+          554.6375122070312,
+          233.64590454101562,
+          563.6600341796875
+        ],
+        "pdf_text_content": "171",
+        "pdf_text_tight_bbox": [
+          210.10061645507812,
+          554.6375122070312,
+          220.09059143066406,
+          563.6600341796875
+        ],
+        "row_nums": [
+          2
+        ]
+      },
+      "source_cell_index": 7,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        2
+      ],
+      "canonical_rows": [
+        2
+      ],
+      "normalized_text": "",
+      "raw": {
+        "column_nums": [
+          2
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "",
+        "pdf_bbox": [
+          253.65048217773438,
+          554.6375122070312,
+          283.9884948730469,
+          563.6600341796875
+        ],
+        "pdf_text_content": "",
+        "pdf_text_tight_bbox": [],
+        "row_nums": [
+          2
+        ]
+      },
+      "source_cell_index": 8,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        0
+      ],
+      "canonical_rows": [
+        3
+      ],
+      "normalized_text": "",
+      "raw": {
+        "column_nums": [
+          0
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "",
+        "pdf_bbox": [
+          30.000099182128906,
+          569.5175170898438,
+          98.79537200927734,
+          578.6600341796875
+        ],
+        "pdf_text_content": "",
+        "pdf_text_tight_bbox": [],
+        "row_nums": [
+          3
+        ]
+      },
+      "source_cell_index": 9,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        1
+      ],
+      "canonical_rows": [
+        3
+      ],
+      "normalized_text": "$203",
+      "raw": {
+        "column_nums": [
+          1
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "$203",
+        "pdf_bbox": [
+          193.19989013671875,
+          569.5175170898438,
+          233.64590454101562,
+          578.6600341796875
+        ],
+        "pdf_text_content": "$203",
+        "pdf_text_tight_bbox": [
+          206.75033569335938,
+          569.5175170898438,
+          220.07029724121094,
+          578.6600341796875
+        ],
+        "row_nums": [
+          3
+        ]
+      },
+      "source_cell_index": 10,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        2
+      ],
+      "canonical_rows": [
+        3
+      ],
+      "normalized_text": "3.3",
+      "raw": {
+        "column_nums": [
+          2
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "3.3",
+        "pdf_bbox": [
+          253.65048217773438,
+          569.5175170898438,
+          283.9884948730469,
+          578.6600341796875
+        ],
+        "pdf_text_content": "3.3",
+        "pdf_text_tight_bbox": [
+          264.6502685546875,
+          569.5175170898438,
+          272.9752502441406,
+          578.6600341796875
+        ],
+        "row_nums": [
+          3
+        ]
+      },
+      "source_cell_index": 11,
+      "text_source": "json_text_content"
+    }
+  ],
+  "normalization": "Unicode NFC + whitespace collapse/strip",
+  "review_status": "unreviewed",
+  "source_table_metadata": {
+    "columns": {
+      "0": {
+        "pdf_column_bbox": [
+          30.000099182128906,
+          484.0015563964844,
+          98.79537200927734,
+          578.6600341796875
+        ]
+      },
+      "1": {
+        "pdf_column_bbox": [
+          193.19989013671875,
+          484.0015563964844,
+          233.64590454101562,
+          578.6600341796875
+        ]
+      },
+      "2": {
+        "pdf_column_bbox": [
+          253.65048217773438,
+          484.0015563964844,
+          283.9884948730469,
+          578.6600341796875
+        ]
+      }
+    },
+    "document_id": "BSX_2007_page_128",
+    "document_table_index": 0,
+    "exclude_for_detection": false,
+    "exclude_for_structure": false,
+    "fintabnet_source_file_name": "FinTabNet_1.0.0_cell_train.jsonl",
+    "fintabnet_source_line_index": 14591,
+    "fintabnet_source_table_id": 25689,
+    "pdf_file_name": "page_128.pdf",
+    "pdf_folder": "BSX/2007/",
+    "pdf_full_page_bbox": [
+      0.0,
+      0.0,
+      612.0,
+      792.0
+    ],
+    "pdf_page_index": 0,
+    "pdf_table_bbox": [
+      30.000099182128906,
+      484.0015563964844,
+      283.9884948730469,
+      578.6600341796875
+    ],
+    "rows": {
+      "0": {
+        "is_column_header": true,
+        "is_projected_row_header": false,
+        "pdf_row_bbox": [
+          30.000099182128906,
+          484.0015563964844,
+          283.9884948730469,
+          537.5347290039062
+        ]
+      },
+      "1": {
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "pdf_row_bbox": [
+          30.000099182128906,
+          542.6375122070312,
+          283.9884948730469,
+          551.6600341796875
+        ]
+      },
+      "2": {
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "pdf_row_bbox": [
+          30.000099182128906,
+          554.6375122070312,
+          283.9884948730469,
+          563.6600341796875
+        ]
+      },
+      "3": {
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "pdf_row_bbox": [
+          30.000099182128906,
+          569.5175170898438,
+          283.9884948730469,
+          578.6600341796875
+        ]
+      }
+    },
+    "split": "train",
+    "structure_id": "BSX_2007_page_128_0"
+  },
+  "structure_id": "BSX_2007_page_128_0"
+}

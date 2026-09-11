@@ -1,0 +1,848 @@
+{
+  "cells": [
+    {
+      "canonical_columns": [
+        0
+      ],
+      "canonical_rows": [
+        0
+      ],
+      "normalized_text": "",
+      "raw": {
+        "column_nums": [
+          0
+        ],
+        "is_column_header": true,
+        "is_projected_row_header": false,
+        "json_text_content": "",
+        "pdf_bbox": [
+          33.0,
+          105.36387634277344,
+          489.18353271484375,
+          114.827880859375
+        ],
+        "pdf_text_content": "",
+        "pdf_text_tight_bbox": [],
+        "row_nums": [
+          0
+        ]
+      },
+      "source_cell_index": 0,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        1
+      ],
+      "canonical_rows": [
+        0
+      ],
+      "normalized_text": "Page",
+      "raw": {
+        "column_nums": [
+          1
+        ],
+        "is_column_header": true,
+        "is_projected_row_header": false,
+        "json_text_content": "Page",
+        "pdf_bbox": [
+          544.504638671875,
+          105.36387634277344,
+          561.013671875,
+          114.827880859375
+        ],
+        "pdf_text_content": "Page",
+        "pdf_text_tight_bbox": [
+          544.6400146484375,
+          105.36387634277344,
+          560.8720092773438,
+          114.827880859375
+        ],
+        "row_nums": [
+          0
+        ]
+      },
+      "source_cell_index": 1,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        0
+      ],
+      "canonical_rows": [
+        1
+      ],
+      "normalized_text": "Consolidated Statements of Income",
+      "raw": {
+        "column_nums": [
+          0
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "Consolidated Statements of Income",
+        "pdf_bbox": [
+          33.0,
+          119.34687805175781,
+          489.18353271484375,
+          132.75587463378906
+        ],
+        "pdf_text_content": "Consolidated Statements of Income",
+        "pdf_text_tight_bbox": [
+          33.0,
+          119.34687805175781,
+          204.47898864746094,
+          132.75587463378906
+        ],
+        "row_nums": [
+          1
+        ]
+      },
+      "source_cell_index": 2,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        1
+      ],
+      "canonical_rows": [
+        1
+      ],
+      "normalized_text": "67",
+      "raw": {
+        "column_nums": [
+          1
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "67",
+        "pdf_bbox": [
+          544.504638671875,
+          119.34687805175781,
+          561.013671875,
+          132.75587463378906
+        ],
+        "pdf_text_content": "67",
+        "pdf_text_tight_bbox": [
+          550.0103759765625,
+          119.34687805175781,
+          561.0103759765625,
+          132.75587463378906
+        ],
+        "row_nums": [
+          1
+        ]
+      },
+      "source_cell_index": 3,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        0
+      ],
+      "canonical_rows": [
+        2
+      ],
+      "normalized_text": "Consolidated Balance Sheets",
+      "raw": {
+        "column_nums": [
+          0
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "Consolidated Balance Sheets",
+        "pdf_bbox": [
+          33.0,
+          138.34718322753906,
+          489.18353271484375,
+          151.7561798095703
+        ],
+        "pdf_text_content": "Consolidated Balance Sheets",
+        "pdf_text_tight_bbox": [
+          33.0,
+          138.34718322753906,
+          171.53399658203125,
+          151.7561798095703
+        ],
+        "row_nums": [
+          2
+        ]
+      },
+      "source_cell_index": 4,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        1
+      ],
+      "canonical_rows": [
+        2
+      ],
+      "normalized_text": "68",
+      "raw": {
+        "column_nums": [
+          1
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "68",
+        "pdf_bbox": [
+          544.504638671875,
+          138.34718322753906,
+          561.013671875,
+          151.7561798095703
+        ],
+        "pdf_text_content": "68",
+        "pdf_text_tight_bbox": [
+          550.011474609375,
+          138.34718322753906,
+          561.011474609375,
+          151.7561798095703
+        ],
+        "row_nums": [
+          2
+        ]
+      },
+      "source_cell_index": 5,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        0
+      ],
+      "canonical_rows": [
+        3
+      ],
+      "normalized_text": "Consolidated Statements of Cash Flows",
+      "raw": {
+        "column_nums": [
+          0
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "Consolidated Statements of Cash Flows",
+        "pdf_bbox": [
+          33.0,
+          157.3474884033203,
+          489.18353271484375,
+          170.75648498535156
+        ],
+        "pdf_text_content": "Consolidated Statements of Cash Flows",
+        "pdf_text_tight_bbox": [
+          33.0,
+          157.3474884033203,
+          223.70700073242188,
+          170.75648498535156
+        ],
+        "row_nums": [
+          3
+        ]
+      },
+      "source_cell_index": 6,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        1
+      ],
+      "canonical_rows": [
+        3
+      ],
+      "normalized_text": "69",
+      "raw": {
+        "column_nums": [
+          1
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "69",
+        "pdf_bbox": [
+          544.504638671875,
+          157.3474884033203,
+          561.013671875,
+          170.75648498535156
+        ],
+        "pdf_text_content": "69",
+        "pdf_text_tight_bbox": [
+          550.0103759765625,
+          157.3474884033203,
+          561.0103759765625,
+          170.75648498535156
+        ],
+        "row_nums": [
+          3
+        ]
+      },
+      "source_cell_index": 7,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        0
+      ],
+      "canonical_rows": [
+        4
+      ],
+      "normalized_text": "Consolidated Statements of Shareowners' Equity",
+      "raw": {
+        "column_nums": [
+          0
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "Consolidated Statements of Shareowners' Equity",
+        "pdf_bbox": [
+          33.0,
+          176.34779357910156,
+          489.18353271484375,
+          189.7567901611328
+        ],
+        "pdf_text_content": "Consolidated Statements of Shareowners’ Equity",
+        "pdf_text_tight_bbox": [
+          33.0,
+          176.34779357910156,
+          267.1570129394531,
+          189.7567901611328
+        ],
+        "row_nums": [
+          4
+        ]
+      },
+      "source_cell_index": 8,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        1
+      ],
+      "canonical_rows": [
+        4
+      ],
+      "normalized_text": "70",
+      "raw": {
+        "column_nums": [
+          1
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "70",
+        "pdf_bbox": [
+          544.504638671875,
+          176.34779357910156,
+          561.013671875,
+          189.7567901611328
+        ],
+        "pdf_text_content": "70",
+        "pdf_text_tight_bbox": [
+          550.0081787109375,
+          176.34779357910156,
+          561.0081787109375,
+          189.7567901611328
+        ],
+        "row_nums": [
+          4
+        ]
+      },
+      "source_cell_index": 9,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        0
+      ],
+      "canonical_rows": [
+        5
+      ],
+      "normalized_text": "Notes to Consolidated Financial Statements",
+      "raw": {
+        "column_nums": [
+          0
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "Notes to Consolidated Financial Statements",
+        "pdf_bbox": [
+          33.0,
+          195.3480987548828,
+          489.18353271484375,
+          208.75709533691406
+        ],
+        "pdf_text_content": "Notes to Consolidated Financial Statements",
+        "pdf_text_tight_bbox": [
+          33.0,
+          195.3480987548828,
+          244.0460662841797,
+          208.75709533691406
+        ],
+        "row_nums": [
+          5
+        ]
+      },
+      "source_cell_index": 10,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        1
+      ],
+      "canonical_rows": [
+        5
+      ],
+      "normalized_text": "71",
+      "raw": {
+        "column_nums": [
+          1
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "71",
+        "pdf_bbox": [
+          544.504638671875,
+          195.3480987548828,
+          561.013671875,
+          208.75709533691406
+        ],
+        "pdf_text_content": "71",
+        "pdf_text_tight_bbox": [
+          550.00927734375,
+          195.3480987548828,
+          561.00927734375,
+          208.75709533691406
+        ],
+        "row_nums": [
+          5
+        ]
+      },
+      "source_cell_index": 11,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        0
+      ],
+      "canonical_rows": [
+        6
+      ],
+      "normalized_text": "Report of Management on Internal Control Over Financial Reporting",
+      "raw": {
+        "column_nums": [
+          0
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "Report of Management on Internal Control Over Financial Reporting",
+        "pdf_bbox": [
+          33.0,
+          214.34840393066406,
+          489.18353271484375,
+          227.7574005126953
+        ],
+        "pdf_text_content": "Report of Management on Internal Control Over Financial Reporting",
+        "pdf_text_tight_bbox": [
+          33.0,
+          214.34840393066406,
+          370.1589660644531,
+          227.7574005126953
+        ],
+        "row_nums": [
+          6
+        ]
+      },
+      "source_cell_index": 12,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        1
+      ],
+      "canonical_rows": [
+        6
+      ],
+      "normalized_text": "125",
+      "raw": {
+        "column_nums": [
+          1
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "125",
+        "pdf_bbox": [
+          544.504638671875,
+          214.34840393066406,
+          561.013671875,
+          227.7574005126953
+        ],
+        "pdf_text_content": "125",
+        "pdf_text_tight_bbox": [
+          544.504638671875,
+          214.34840393066406,
+          561.004638671875,
+          227.7574005126953
+        ],
+        "row_nums": [
+          6
+        ]
+      },
+      "source_cell_index": 13,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        0
+      ],
+      "canonical_rows": [
+        7
+      ],
+      "normalized_text": "Report of Independent Registered Public Accounting Firm",
+      "raw": {
+        "column_nums": [
+          0
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "Report of Independent Registered Public Accounting Firm",
+        "pdf_bbox": [
+          33.0,
+          233.3487091064453,
+          489.18353271484375,
+          246.75770568847656
+        ],
+        "pdf_text_content": "Report of Independent Registered Public Accounting Firm",
+        "pdf_text_tight_bbox": [
+          33.0,
+          233.3487091064453,
+          316.3073425292969,
+          246.75770568847656
+        ],
+        "row_nums": [
+          7
+        ]
+      },
+      "source_cell_index": 14,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        1
+      ],
+      "canonical_rows": [
+        7
+      ],
+      "normalized_text": "126",
+      "raw": {
+        "column_nums": [
+          1
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "126",
+        "pdf_bbox": [
+          544.504638671875,
+          233.3487091064453,
+          561.013671875,
+          246.75770568847656
+        ],
+        "pdf_text_content": "126",
+        "pdf_text_tight_bbox": [
+          544.5069580078125,
+          233.3487091064453,
+          561.0069580078125,
+          246.75770568847656
+        ],
+        "row_nums": [
+          7
+        ]
+      },
+      "source_cell_index": 15,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        0
+      ],
+      "canonical_rows": [
+        8
+      ],
+      "normalized_text": "Report of Independent Registered Public Accounting Firm on Internal Control Over Financial Reporting",
+      "raw": {
+        "column_nums": [
+          0
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "Report of Independent Registered Public Accounting Firm on Internal Control Over Financial Reporting",
+        "pdf_bbox": [
+          33.0,
+          252.34901428222656,
+          489.18353271484375,
+          278.7578125
+        ],
+        "pdf_text_content": "Report of Independent Registered Public Accounting Firm on Internal Control Over Financial Reporting",
+        "pdf_text_tight_bbox": [
+          33.0,
+          252.34901428222656,
+          489.18353271484375,
+          278.7578125
+        ],
+        "row_nums": [
+          8
+        ]
+      },
+      "source_cell_index": 16,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        1
+      ],
+      "canonical_rows": [
+        8
+      ],
+      "normalized_text": "127",
+      "raw": {
+        "column_nums": [
+          1
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "127",
+        "pdf_bbox": [
+          544.504638671875,
+          252.34901428222656,
+          561.013671875,
+          278.7578125
+        ],
+        "pdf_text_content": "127",
+        "pdf_text_tight_bbox": [
+          544.513671875,
+          265.34881591796875,
+          561.013671875,
+          278.7578125
+        ],
+        "row_nums": [
+          8
+        ]
+      },
+      "source_cell_index": 17,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        0
+      ],
+      "canonical_rows": [
+        9
+      ],
+      "normalized_text": "Quarterly Data (Unaudited)",
+      "raw": {
+        "column_nums": [
+          0
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "Quarterly Data (Unaudited)",
+        "pdf_bbox": [
+          33.0,
+          284.34912109375,
+          489.18353271484375,
+          297.75811767578125
+        ],
+        "pdf_text_content": "Quarterly Data (Unaudited)",
+        "pdf_text_tight_bbox": [
+          33.0,
+          284.34912109375,
+          168.72900390625,
+          297.75811767578125
+        ],
+        "row_nums": [
+          9
+        ]
+      },
+      "source_cell_index": 18,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        1
+      ],
+      "canonical_rows": [
+        9
+      ],
+      "normalized_text": "128",
+      "raw": {
+        "column_nums": [
+          1
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "128",
+        "pdf_bbox": [
+          544.504638671875,
+          284.34912109375,
+          561.013671875,
+          297.75811767578125
+        ],
+        "pdf_text_content": "128",
+        "pdf_text_tight_bbox": [
+          544.511474609375,
+          284.34912109375,
+          561.011474609375,
+          297.75811767578125
+        ],
+        "row_nums": [
+          9
+        ]
+      },
+      "source_cell_index": 19,
+      "text_source": "json_text_content"
+    }
+  ],
+  "normalization": "Unicode NFC + whitespace collapse/strip",
+  "review_status": "unreviewed",
+  "source_table_metadata": {
+    "columns": {
+      "0": {
+        "pdf_column_bbox": [
+          33.0,
+          105.36387634277344,
+          489.18353271484375,
+          297.75811767578125
+        ]
+      },
+      "1": {
+        "pdf_column_bbox": [
+          544.504638671875,
+          105.36387634277344,
+          561.013671875,
+          297.75811767578125
+        ]
+      }
+    },
+    "document_id": "KO_2006_page_68",
+    "document_table_index": 0,
+    "exclude_for_detection": false,
+    "exclude_for_structure": false,
+    "fintabnet_source_file_name": "FinTabNet_1.0.0_cell_train.jsonl",
+    "fintabnet_source_line_index": 56638,
+    "fintabnet_source_table_id": 93659,
+    "pdf_file_name": "page_68.pdf",
+    "pdf_folder": "KO/2006/",
+    "pdf_full_page_bbox": [
+      0.0,
+      0.0,
+      594.0,
+      774.0
+    ],
+    "pdf_page_index": 0,
+    "pdf_table_bbox": [
+      33.0,
+      105.36387634277344,
+      561.013671875,
+      297.75811767578125
+    ],
+    "rows": {
+      "0": {
+        "is_column_header": true,
+        "is_projected_row_header": false,
+        "pdf_row_bbox": [
+          33.0,
+          105.36387634277344,
+          561.013671875,
+          114.827880859375
+        ]
+      },
+      "1": {
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "pdf_row_bbox": [
+          33.0,
+          119.34687805175781,
+          561.013671875,
+          132.75587463378906
+        ]
+      },
+      "2": {
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "pdf_row_bbox": [
+          33.0,
+          138.34718322753906,
+          561.013671875,
+          151.7561798095703
+        ]
+      },
+      "3": {
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "pdf_row_bbox": [
+          33.0,
+          157.3474884033203,
+          561.013671875,
+          170.75648498535156
+        ]
+      },
+      "4": {
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "pdf_row_bbox": [
+          33.0,
+          176.34779357910156,
+          561.013671875,
+          189.7567901611328
+        ]
+      },
+      "5": {
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "pdf_row_bbox": [
+          33.0,
+          195.3480987548828,
+          561.013671875,
+          208.75709533691406
+        ]
+      },
+      "6": {
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "pdf_row_bbox": [
+          33.0,
+          214.34840393066406,
+          561.013671875,
+          227.7574005126953
+        ]
+      },
+      "7": {
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "pdf_row_bbox": [
+          33.0,
+          233.3487091064453,
+          561.013671875,
+          246.75770568847656
+        ]
+      },
+      "8": {
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "pdf_row_bbox": [
+          33.0,
+          252.34901428222656,
+          561.013671875,
+          278.7578125
+        ]
+      },
+      "9": {
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "pdf_row_bbox": [
+          33.0,
+          284.34912109375,
+          561.013671875,
+          297.75811767578125
+        ]
+      }
+    },
+    "split": "train",
+    "structure_id": "KO_2006_page_68_0"
+  },
+  "structure_id": "KO_2006_page_68_0"
+}

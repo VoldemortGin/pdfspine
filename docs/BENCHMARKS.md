@@ -199,8 +199,8 @@ Tesseract cannot read a single Chinese character (it emits ASCII noise like `RUS
 `RZEMETASARATTZ`), so its CJK accuracy is a flat zero across all 16 scans. PaddleOCR recovers the
 Chinese nearly perfectly (13/16 images at 1.000; the rest drop 1–4 characters on the noise-4/6/8
 scans) with no external binary and no model download. On Latin only 5 of the 214 ground-truth tokens
-remain imperfect: `AI` → `Al` (4×, Arial's `I`/`l` are the same glyph — Tesseract makes the identical
-error) and `parallel` → `parall` on the 0.8 px-blur scan. The 0.839 Latin score of the previously
+remain imperfect: `AI` → `Al` (4×, visually confusable sans-serif `I`/`l` in these scans —
+Tesseract makes the same character error) and `parallel` → `parall` on the 0.8 px-blur scan. The 0.839 Latin score of the previously
 pinned `ocrspine` `732975f` was a single, root-caused bug in the shared recognizer (below), not a model
 limitation.
 
@@ -213,6 +213,45 @@ Per-image numbers, the raw recognized text per engine, and every Latin token tha
 `conformance/ocr/results.json`, so a regression is diagnosable without re-running the engines. The
 corpus is regenerable and the scoring is deterministic and **identical for both engines**
 (`python/tests/test_ocr_bench_latin.py` pins the scoring contract).
+
+### Accepted remaining I/l quality miss (2026-09-11)
+
+The four `AI changes world` → `Al changes world` cases are recorded as an
+**accepted remaining OCR quality miss**, not a recognition fix. They occur in
+`images/scan_02.png`, `scan_05.png`, `scan_09.png` and `scan_13.png`: Latin sizes
+28/26/30/30 px, blur 0/0.5/0/0.3 px and noise 6/4/5/6. Both engines' archived
+raw outputs show the character confusion. Ground truth and predictions remain
+unchanged, and `ai` → `al` still scores 0.5 under the case-folded best-token
+metric. The exact aggregate remains Paddle Latin **0.9899** (0.990 rounded).
+The separate blurred `parallel` → `parall` miss also remains; no substitutions,
+score exceptions or model changes are introduced.
+
+A one-page check of scan_02 reproduced `Al changes world` using the completed
+border baseline **`d05f9df`**, its installed extension SHA-256
+`fb01f0099b0c82a8cf376ed589f3ca85712faf6745d9223431733e178f522016`, and the
+existing models at 150 dpi. This is not a measurement of the subsequent
+DisplayList run or resolved-script source. Its PNG SHA-256 was
+`98cf7026e0ba480eaec8542b3b0012da6d832c712f0187eb21a8e762401fcdb3`.
+The usual helper path is `_scanned_pdf(png)` then `_ocr_text(doc, "paddle")`
+in `conformance/ocr/run_ocr_bench.py`; the one-page check did not overwrite the
+archived 16-image results or rerun the full benchmark.
+
+The earlier claim that Arial `I`/`l` are “the same glyph” was too strong.
+A current-machine check of the generator's actual Latin font, Arial.ttf
+(SHA-256 `525979822591a3447cfc49d943d6f7683508e25543407871c0ed8fed05fd2bd9`), found different raster pixels **and advances** at
+26/28/30 px. This current font check does not reconstruct the font bytes used
+by the historical benchmark; it supports describing visual confusion, not
+asserting pixel identity or an unavoidable recognition limit.
+
+The PDF bridge copies recognized text unchanged. The pinned ocrspine pipeline
+performs crop/orientation, CRNN inference and greedy CTC decoding, followed by
+trimming/confidence filtering; no `I`/`l` replacement was found. Final text
+alone does not isolate crop/resize effects from the recognizer's decision.
+Any future improvement requires a controlled crop/recognition experiment and
+true-`Al`/identifier controls, rather than a blanket `Al` → `AI` rewrite.
+The clean scan_00 regression contains no `AI` token and is not a regression test
+for these four cases. Acceptance does not require a test that keeps future
+recognition wrong.
 
 ### Latin gap root cause — `ocrspine` padded recognition crops with black (found and fixed 2026-09-05)
 
@@ -244,8 +283,8 @@ avg 17–29 on 16 cores):
 | **gray pad (`0.0` normalized), 64 px bucket** | **0.990** | **0.993** | 1.08 |
 | gray pad, 32 px bucket | 0.991 | 0.993 | 0.90 |
 
-With the gray pad only 5 Latin tokens remain imperfect: `AI` → `Al` (4×, Arial's `I`/`l` are the same
-glyph — Tesseract makes the identical error) and `parallel` → `parall` on the 0.8 px-blur scan; the
+With the gray pad only 5 Latin tokens remain imperfect: `AI` → `Al` (4×, visually confusable sans-serif `I`/`l` in
+these scans — Tesseract makes the same character error) and `parallel` → `parall` on the 0.8 px-blur scan; the
 CJK drops are confined to the noise-4/6/8 scans. The fix landed in `ocrspine` `e810a9c`
 (`src/paddle/recognize.rs`: the padded canvas is now built from mid-gray, `PAD_GRAY = 127`, ≈`0.0`
 after normalization, with a unit test on the pad region; the 64 px bucket stays — 32 px buys nothing

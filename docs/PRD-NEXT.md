@@ -407,8 +407,16 @@
     byte-for-byte. New LO fixture **0.9527 → 0.9836**; previous DOCX/PPTX/shading/
     tracking scores unchanged. `between` and non-solid styles remain unsupported.
     See `docs/typeset-paragraph-borders.md`; consumer mappings/pins are unchanged.
+  - [x] **Resolved script run placement** (unreleased).
+    Optional validated glyph scale and upward-positive point baseline shift keep
+    nominal line struts separate from effective glyph geometry. Exact preserves
+    normal baselines; shared measurement covers boxes/cells/border page reserves.
+    None/identity preserve old bytes. LO DOCX **0.9498 → 0.9637**, PPTX
+    **0.8766 → 0.9849**; old seven PDFs unchanged. Caller-resolved geometry only;
+    no automatic OOXML policy or consumer migration. See
+    `docs/typeset-script-placement.md`.
   - [ ] **Remaining:** non-solid/between paragraph borders and pattern shading, condensed negative
-    character spacing, superscript/subscript, and verified Word `lineGap` placement.
+    character spacing, automatic script policy/consumer mappings, and verified Word `lineGap` placement.
   - *Increment validation:* LibreOffice 26.8.0.3 at 100 dpi, same renderer:
     existing DOCX/PPTX **0.9822 / 0.9780**, unchanged. These are the current
     comparison baseline, not the historical TS-12 **0.9815 / 0.9777** results.
@@ -421,21 +429,34 @@
     LO improvement evidence remains `conformance/gt/TYPESET-LO-REPORT.md`.
   - *Size:* **M** (remaining scope).
 
-- [ ] **6. Coverage ratchet + Rust branch coverage.**
-  - *Goal:* keep the `fail_under` ratchet moving up and add Rust branch coverage.
-  - *Why / evidence:* `fail_under` is at **96** (raised 77 → 96 in `d3ed6fa`);
-    the CI coverage job does not yet report Rust branch coverage.
-  - *Where:* the combined Rust+Python coverage job and the pytest/coverage
-    `fail_under` config; Rust branch coverage needs a **nightly** toolchain.
-  - *Acceptance:* `fail_under` ratcheted with zero regressions; the coverage job
-    emits Rust branch coverage.
-  - *Size:* **S–M**.
+- [ ] **6. Coverage ratchet + Rust branch coverage — baseline established (2026-09-11).**
+  - *Goal:* keep the `fail_under` ratchet moving up as measured headroom allows.
+  - [x] Combined coverage job emits real Rust branch counters in JSON and LCOV
+    using pinned `nightly-2026-04-17` / `cargo-llvm-cov 0.8.5`; tests, debug
+    extension and reports share instrumentation. Python-driven binding coverage
+    is recorded before/after pytest. Existing nonblocking policy is unchanged.
+  - [x] Current baseline: Python **97.2680%** combined, Rust **43,969/47,921**
+    lines and **5,541/7,632** branches. One 2,011-test Rust run, one full Python
+    run plus the existing corpus smoke and eight behavioral supplements cover
+    **1,449 unique Python tests / 68 skips**. Production code/extension unchanged.
+  - *Ratchet:* `fail_under` stays **96** (`floor(97.2680) - 1`); it was not raised
+    this round. Further raising remains contingent on real headroom, without
+    exclusions or tests that merely mirror implementation.
+  - *Evidence / acceptance:* `conformance/COVERAGE-REPORT.md` distinguishes the
+    complete pre-increment 97.0025% baseline, final tests-only increment and
+    historical reports. JSON diagnostics precede the unchanged final 96% gate.
+  - *Remaining:* future threshold ratchet when supported by the measured floor.
+  - *Size:* **S** (remaining scope).
 
-- [ ] **7. OCR & supply-chain hygiene.**
+- [x] **7. OCR & supply-chain hygiene — acceptance complete (2026-09-11).**
   - *Goal:* three small pre-existing items.
   - *Why / where:*
-    - the `AI → Al` homoglyph in the Latin OCR benchmark
-      (`docs/BENCHMARKS.md` §6);
+    - **Accepted remaining OCR quality miss:** four `AI → Al` cases in
+      scan_02/05/09/13 (`docs/BENCHMARKS.md` §6). Current scan_02 reproduces the
+      miss on the completed `d05f9df` extension; the prior claim of identical
+      Arial glyphs is corrected to visual confusion. Recognition is not fixed:
+      true GT/predictions, Latin 0.9899 and `parallel → parall` remain unchanged;
+      no runtime/model/heuristic or must-stay-wrong test was added;
     - ocrspine's earlier reported formatting violations were not reproduced by
       its scoped 2026-09-10 `cargo fmt --all --check` (passes). Its dependency
       and model-version documentation was updated separately in `a47ab8d`;
@@ -448,9 +469,10 @@
       51 records end **2027-09-05**. Reaching that date does not invalidate
       already covered locked dependencies; reminders exit successfully and
       never renew trust or change criteria. Invalid input remains an operational
-      error. The OCR homoglyph item remains open.
-  - *Acceptance:* the homoglyph resolved or documented as an accepted miss; a
-    scheduled CI job that warns ahead of the vet-trust expiry.
+      error. The OCR quality miss is accepted as documented above.
+  - *Acceptance:* the documented accepted-miss branch is satisfied; the
+    scheduled coverage-window advisory is implemented. This closes this hygiene
+    task, not general OCR accuracy, and does not alter trust coverage or models.
   - *Size:* **S**.
 
 - [x] **8. OCG `/Intent`-mismatch hiding — done (2026-09-10).**

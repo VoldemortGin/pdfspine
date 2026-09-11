@@ -1,0 +1,688 @@
+{
+  "cells": [
+    {
+      "canonical_columns": [
+        0
+      ],
+      "canonical_rows": [
+        0
+      ],
+      "normalized_text": "",
+      "raw": {
+        "column_nums": [
+          0
+        ],
+        "is_column_header": true,
+        "is_projected_row_header": false,
+        "json_text_content": "",
+        "pdf_bbox": [
+          35.999969482421875,
+          535.3450317382812,
+          314.0329895019531,
+          556.529052734375
+        ],
+        "pdf_text_content": "",
+        "pdf_text_tight_bbox": [],
+        "row_nums": [
+          0
+        ]
+      },
+      "source_cell_index": 0,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        1
+      ],
+      "canonical_rows": [
+        0
+      ],
+      "normalized_text": "Successor December 31, 2010",
+      "raw": {
+        "column_nums": [
+          1
+        ],
+        "is_column_header": true,
+        "is_projected_row_header": false,
+        "json_text_content": "Successor December 31, 2010",
+        "pdf_bbox": [
+          511.3500061035156,
+          535.3450317382812,
+          576.0003662109375,
+          556.529052734375
+        ],
+        "pdf_text_content": "Successor December 31, 2010",
+        "pdf_text_tight_bbox": [
+          511.3500061035156,
+          535.3450317382812,
+          576.0003662109375,
+          556.529052734375
+        ],
+        "row_nums": [
+          0
+        ]
+      },
+      "source_cell_index": 1,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        0
+      ],
+      "canonical_rows": [
+        1
+      ],
+      "normalized_text": "Pre-acquisition finance receivables (pre-acquisition carrying amount)",
+      "raw": {
+        "column_nums": [
+          0
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "Pre-acquisition finance receivables (pre-acquisition carrying amount)",
+        "pdf_bbox": [
+          35.999969482421875,
+          561.7951049804688,
+          314.0329895019531,
+          572.965087890625
+        ],
+        "pdf_text_content": "Pre-acquisition finance receivables (pre-acquisition carrying amount)",
+        "pdf_text_tight_bbox": [
+          36.0,
+          561.7951049804688,
+          314.0329895019531,
+          572.965087890625
+        ],
+        "row_nums": [
+          1
+        ]
+      },
+      "source_cell_index": 2,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        1
+      ],
+      "canonical_rows": [
+        1
+      ],
+      "normalized_text": "$7,724",
+      "raw": {
+        "column_nums": [
+          1
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "$7,724",
+        "pdf_bbox": [
+          511.3500061035156,
+          561.7951049804688,
+          576.0003662109375,
+          572.965087890625
+        ],
+        "pdf_text_content": "$7,724",
+        "pdf_text_tight_bbox": [
+          529.9500122070312,
+          561.7951049804688,
+          557.4500122070312,
+          572.965087890625
+        ],
+        "row_nums": [
+          1
+        ]
+      },
+      "source_cell_index": 3,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        0
+      ],
+      "canonical_rows": [
+        2
+      ],
+      "normalized_text": "Post-acquisition finance receivables",
+      "raw": {
+        "column_nums": [
+          0
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "Post-acquisition finance receivables",
+        "pdf_bbox": [
+          35.999969482421875,
+          573.7951049804688,
+          314.0329895019531,
+          584.965087890625
+        ],
+        "pdf_text_content": "Post-acquisition finance receivables",
+        "pdf_text_tight_bbox": [
+          36.0,
+          573.7951049804688,
+          180.08102416992188,
+          584.965087890625
+        ],
+        "row_nums": [
+          2
+        ]
+      },
+      "source_cell_index": 4,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        1
+      ],
+      "canonical_rows": [
+        2
+      ],
+      "normalized_text": "924",
+      "raw": {
+        "column_nums": [
+          1
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "924",
+        "pdf_bbox": [
+          511.3500061035156,
+          573.7951049804688,
+          576.0003662109375,
+          584.965087890625
+        ],
+        "pdf_text_content": "924",
+        "pdf_text_tight_bbox": [
+          542.4500122070312,
+          573.7951049804688,
+          557.4500122070312,
+          584.965087890625
+        ],
+        "row_nums": [
+          2
+        ]
+      },
+      "source_cell_index": 5,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        0
+      ],
+      "canonical_rows": [
+        3
+      ],
+      "normalized_text": "Total finance receivables",
+      "raw": {
+        "column_nums": [
+          0
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "Total finance receivables",
+        "pdf_bbox": [
+          35.999969482421875,
+          589.7950439453125,
+          314.0329895019531,
+          600.9650268554688
+        ],
+        "pdf_text_content": "Total finance receivables",
+        "pdf_text_tight_bbox": [
+          36.0,
+          589.7950439453125,
+          136.63002014160156,
+          600.9650268554688
+        ],
+        "row_nums": [
+          3
+        ]
+      },
+      "source_cell_index": 6,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        1
+      ],
+      "canonical_rows": [
+        3
+      ],
+      "normalized_text": "8,648",
+      "raw": {
+        "column_nums": [
+          1
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "8,648",
+        "pdf_bbox": [
+          511.3500061035156,
+          589.7950439453125,
+          576.0003662109375,
+          600.9650268554688
+        ],
+        "pdf_text_content": "8,648",
+        "pdf_text_tight_bbox": [
+          534.9500122070312,
+          589.7950439453125,
+          557.4500122070312,
+          600.9650268554688
+        ],
+        "row_nums": [
+          3
+        ]
+      },
+      "source_cell_index": 7,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        0
+      ],
+      "canonical_rows": [
+        4
+      ],
+      "normalized_text": "Purchase price premium",
+      "raw": {
+        "column_nums": [
+          0
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "Purchase price premium",
+        "pdf_bbox": [
+          35.999969482421875,
+          601.7950439453125,
+          314.0329895019531,
+          612.9650268554688
+        ],
+        "pdf_text_content": "Purchase price premium",
+        "pdf_text_tight_bbox": [
+          36.0,
+          601.7950439453125,
+          133.3100128173828,
+          612.9650268554688
+        ],
+        "row_nums": [
+          4
+        ]
+      },
+      "source_cell_index": 8,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        1
+      ],
+      "canonical_rows": [
+        4
+      ],
+      "normalized_text": "423",
+      "raw": {
+        "column_nums": [
+          1
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "423",
+        "pdf_bbox": [
+          511.3500061035156,
+          601.7950439453125,
+          576.0003662109375,
+          612.9650268554688
+        ],
+        "pdf_text_content": "423",
+        "pdf_text_tight_bbox": [
+          542.4500122070312,
+          601.7950439453125,
+          557.4500122070312,
+          612.9650268554688
+        ],
+        "row_nums": [
+          4
+        ]
+      },
+      "source_cell_index": 9,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        0
+      ],
+      "canonical_rows": [
+        5
+      ],
+      "normalized_text": "Less non-accretable discount on pre-acquisition finance receivables",
+      "raw": {
+        "column_nums": [
+          0
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "Less non-accretable discount on pre-acquisition finance receivables",
+        "pdf_bbox": [
+          35.999969482421875,
+          613.7950439453125,
+          314.0329895019531,
+          624.9650268554688
+        ],
+        "pdf_text_content": "Less non-accretable discount on pre-acquisition finance receivables",
+        "pdf_text_tight_bbox": [
+          36.00000762939453,
+          613.7950439453125,
+          306.9320373535156,
+          624.9650268554688
+        ],
+        "row_nums": [
+          5
+        ]
+      },
+      "source_cell_index": 10,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        1
+      ],
+      "canonical_rows": [
+        5
+      ],
+      "normalized_text": "(848)",
+      "raw": {
+        "column_nums": [
+          1
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "(848)",
+        "pdf_bbox": [
+          511.3500061035156,
+          613.7950439453125,
+          576.0003662109375,
+          624.9650268554688
+        ],
+        "pdf_text_content": "(848)",
+        "pdf_text_tight_bbox": [
+          539.0999755859375,
+          613.7950439453125,
+          560.760009765625,
+          624.9650268554688
+        ],
+        "row_nums": [
+          5
+        ]
+      },
+      "source_cell_index": 11,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        0
+      ],
+      "canonical_rows": [
+        6
+      ],
+      "normalized_text": "Less allowance for loan losses on post-acquisition receivables",
+      "raw": {
+        "column_nums": [
+          0
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "Less allowance for loan losses on post-acquisition receivables",
+        "pdf_bbox": [
+          35.999969482421875,
+          625.7950439453125,
+          314.0329895019531,
+          636.9650268554688
+        ],
+        "pdf_text_content": "Less allowance for loan losses on post-acquisition receivables",
+        "pdf_text_tight_bbox": [
+          35.999969482421875,
+          625.7950439453125,
+          284.3819885253906,
+          636.9650268554688
+        ],
+        "row_nums": [
+          6
+        ]
+      },
+      "source_cell_index": 12,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        1
+      ],
+      "canonical_rows": [
+        6
+      ],
+      "normalized_text": "(26)",
+      "raw": {
+        "column_nums": [
+          1
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "(26)",
+        "pdf_bbox": [
+          511.3500061035156,
+          625.7950439453125,
+          576.0003662109375,
+          636.9650268554688
+        ],
+        "pdf_text_content": "(26)",
+        "pdf_text_tight_bbox": [
+          544.0999755859375,
+          625.7950439453125,
+          560.760009765625,
+          636.9650268554688
+        ],
+        "row_nums": [
+          6
+        ]
+      },
+      "source_cell_index": 13,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        0
+      ],
+      "canonical_rows": [
+        7
+      ],
+      "normalized_text": "Total finance receivables, net",
+      "raw": {
+        "column_nums": [
+          0
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "Total finance receivables, net",
+        "pdf_bbox": [
+          35.999969482421875,
+          641.7950439453125,
+          314.0329895019531,
+          652.9650268554688
+        ],
+        "pdf_text_content": "Total finance receivables, net",
+        "pdf_text_tight_bbox": [
+          36.0,
+          641.7950439453125,
+          153.9710235595703,
+          652.9650268554688
+        ],
+        "row_nums": [
+          7
+        ]
+      },
+      "source_cell_index": 14,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        1
+      ],
+      "canonical_rows": [
+        7
+      ],
+      "normalized_text": "$8,197",
+      "raw": {
+        "column_nums": [
+          1
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "$8,197",
+        "pdf_bbox": [
+          511.3500061035156,
+          641.7950439453125,
+          576.0003662109375,
+          652.9650268554688
+        ],
+        "pdf_text_content": "$8,197",
+        "pdf_text_tight_bbox": [
+          529.9500122070312,
+          641.7950439453125,
+          557.4500122070312,
+          652.9650268554688
+        ],
+        "row_nums": [
+          7
+        ]
+      },
+      "source_cell_index": 15,
+      "text_source": "json_text_content"
+    }
+  ],
+  "normalization": "Unicode NFC + whitespace collapse/strip",
+  "review_status": "unreviewed",
+  "source_table_metadata": {
+    "columns": {
+      "0": {
+        "pdf_column_bbox": [
+          35.999969482421875,
+          535.3450317382812,
+          314.0329895019531,
+          652.9650268554688
+        ]
+      },
+      "1": {
+        "pdf_column_bbox": [
+          511.3500061035156,
+          535.3450317382812,
+          576.0003662109375,
+          652.9650268554688
+        ]
+      }
+    },
+    "document_id": "GM_2010_page_167",
+    "document_table_index": 0,
+    "exclude_for_detection": false,
+    "exclude_for_structure": false,
+    "fintabnet_source_file_name": "FinTabNet_1.0.0_cell_train.jsonl",
+    "fintabnet_source_line_index": 27143,
+    "fintabnet_source_table_id": 44662,
+    "pdf_file_name": "page_167.pdf",
+    "pdf_folder": "GM/2010/",
+    "pdf_full_page_bbox": [
+      0.0,
+      0.0,
+      612.0,
+      792.0
+    ],
+    "pdf_page_index": 0,
+    "pdf_table_bbox": [
+      35.999969482421875,
+      535.3450317382812,
+      576.0003662109375,
+      652.9650268554688
+    ],
+    "rows": {
+      "0": {
+        "is_column_header": true,
+        "is_projected_row_header": false,
+        "pdf_row_bbox": [
+          35.999969482421875,
+          535.3450317382812,
+          576.0003662109375,
+          556.529052734375
+        ]
+      },
+      "1": {
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "pdf_row_bbox": [
+          35.999969482421875,
+          561.7951049804688,
+          576.0003662109375,
+          572.965087890625
+        ]
+      },
+      "2": {
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "pdf_row_bbox": [
+          35.999969482421875,
+          573.7951049804688,
+          576.0003662109375,
+          584.965087890625
+        ]
+      },
+      "3": {
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "pdf_row_bbox": [
+          35.999969482421875,
+          589.7950439453125,
+          576.0003662109375,
+          600.9650268554688
+        ]
+      },
+      "4": {
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "pdf_row_bbox": [
+          35.999969482421875,
+          601.7950439453125,
+          576.0003662109375,
+          612.9650268554688
+        ]
+      },
+      "5": {
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "pdf_row_bbox": [
+          35.999969482421875,
+          613.7950439453125,
+          576.0003662109375,
+          624.9650268554688
+        ]
+      },
+      "6": {
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "pdf_row_bbox": [
+          35.999969482421875,
+          625.7950439453125,
+          576.0003662109375,
+          636.9650268554688
+        ]
+      },
+      "7": {
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "pdf_row_bbox": [
+          35.999969482421875,
+          641.7950439453125,
+          576.0003662109375,
+          652.9650268554688
+        ]
+      }
+    },
+    "split": "train",
+    "structure_id": "GM_2010_page_167_0"
+  },
+  "structure_id": "GM_2010_page_167_0"
+}

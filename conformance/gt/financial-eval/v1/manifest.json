@@ -1,0 +1,2124 @@
+{
+  "dataset_id": "fintabnet-c-financial-40-v1",
+  "entries": [
+    {
+      "annotation": "../../corpus-fintabnet/annotations/ADBE_2011_page_118_tables.json",
+      "annotation_license": "CDLA-Permissive-2.0",
+      "annotation_sha256": "e068449c01e076195dd2d73bc111427659a4564711c833195f73eac61ea21435",
+      "document_id": "ADBE_2011_page_118",
+      "features": {
+        "blank_cell": false,
+        "col_span": true,
+        "currency": true,
+        "dense_rows": false,
+        "multi_header": false,
+        "multi_table": false,
+        "parenthesized_number": false,
+        "row_span": false,
+        "text_source_disagreement": true
+      },
+      "historical_benchmark_exposure": true,
+      "issuer": "ADBE",
+      "n_tables": 1,
+      "partition": "development",
+      "pdf": "../../corpus-fintabnet/pdfs/ADBE_2011_page_118.pdf",
+      "pdf_license": "CDLA-Permissive-1.0",
+      "pdf_page_index": 0,
+      "pdf_sha256": "d9ba031f438fb1b165f8641d75b221ba8324416acae209a310380e2b96f66825",
+      "prior_targeted_tuning": true,
+      "review_status": "unreviewed",
+      "source_pdf_rel_path": "ADBE/2011/page_118.pdf",
+      "source_splits": [
+        "train"
+      ],
+      "tables": [
+        {
+          "cells": "cells/ADBE_2011_page_118_0.json",
+          "cells_sha256": "b7195077ab5dcfd4a107bf08a3027835951d020ec91ef795a8de7b72048a82d5",
+          "html": "html/ADBE_2011_page_118_0.html",
+          "html_sha256": "cdd46d2ec6714bcd38968fc2fe38f8c5a446b1d3bc089d6a796fb390ba9d6497",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_train.jsonl",
+          "source_line_index": 38333,
+          "source_split": "train",
+          "source_table_id": 62249,
+          "source_table_index": 0,
+          "structure_id": "ADBE_2011_page_118_0"
+        }
+      ]
+    },
+    {
+      "annotation": "../../corpus-fintabnet/annotations/ADI_2010_page_51_tables.json",
+      "annotation_license": "CDLA-Permissive-2.0",
+      "annotation_sha256": "7890211307debe334bb4da4facfa72a1f01877bd87af62855aae267a0308db52",
+      "document_id": "ADI_2010_page_51",
+      "features": {
+        "blank_cell": true,
+        "col_span": true,
+        "currency": true,
+        "dense_rows": true,
+        "multi_header": false,
+        "multi_table": false,
+        "parenthesized_number": true,
+        "row_span": false,
+        "text_source_disagreement": true
+      },
+      "historical_benchmark_exposure": true,
+      "issuer": "ADI",
+      "n_tables": 1,
+      "partition": "development",
+      "pdf": "../../corpus-fintabnet/pdfs/ADI_2010_page_51.pdf",
+      "pdf_license": "CDLA-Permissive-1.0",
+      "pdf_page_index": 0,
+      "pdf_sha256": "f8eb748aa964c80db9dac31ccaeb6c1d96a45c53239b2d4580b0fd3e02b08302",
+      "prior_targeted_tuning": true,
+      "review_status": "unreviewed",
+      "source_pdf_rel_path": "ADI/2010/page_51.pdf",
+      "source_splits": [
+        "train"
+      ],
+      "tables": [
+        {
+          "cells": "cells/ADI_2010_page_51_0.json",
+          "cells_sha256": "fe7d412248354b8c96925b733183cb1cf3ada15ea1a60dbe7ea19629d0d85012",
+          "html": "html/ADI_2010_page_51_0.html",
+          "html_sha256": "51970208673d7d1a230a7905b6371612050911459bfb43d40d475a7812b1bd5f",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_train.jsonl",
+          "source_line_index": 78096,
+          "source_split": "train",
+          "source_table_id": 127191,
+          "source_table_index": 0,
+          "structure_id": "ADI_2010_page_51_0"
+        }
+      ]
+    },
+    {
+      "annotation": "../../corpus-fintabnet/annotations/AMP_2015_page_94_tables.json",
+      "annotation_license": "CDLA-Permissive-2.0",
+      "annotation_sha256": "86f53fa3ed9d41cbbc91eaf82dc703fabc44ee207e9f2140b08c36e7e0a67cf2",
+      "document_id": "AMP_2015_page_94",
+      "features": {
+        "blank_cell": false,
+        "col_span": true,
+        "currency": true,
+        "dense_rows": false,
+        "multi_header": true,
+        "multi_table": true,
+        "parenthesized_number": true,
+        "row_span": true,
+        "text_source_disagreement": true
+      },
+      "historical_benchmark_exposure": true,
+      "issuer": "AMP",
+      "n_tables": 3,
+      "partition": "development",
+      "pdf": "../../corpus-fintabnet/pdfs/AMP_2015_page_94.pdf",
+      "pdf_license": "CDLA-Permissive-1.0",
+      "pdf_page_index": 0,
+      "pdf_sha256": "fa6870b10fe5842edf83e2aa7f0247be611b202e5c7c7ff0a6bb5174cb21efb1",
+      "prior_targeted_tuning": true,
+      "review_status": "unreviewed",
+      "source_pdf_rel_path": "AMP/2015/page_94.pdf",
+      "source_splits": [
+        "train"
+      ],
+      "tables": [
+        {
+          "cells": "cells/AMP_2015_page_94_0.json",
+          "cells_sha256": "3b7a75dc08058199fbf52507e3c1df50319d6317f587ad6e7b62b43b72af9c4c",
+          "html": "html/AMP_2015_page_94_0.html",
+          "html_sha256": "c90ac353ecd4e54e35f614579685ed8f9e3b4b09c0c07bf429f197cea4076cb3",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_train.jsonl",
+          "source_line_index": 61489,
+          "source_split": "train",
+          "source_table_id": 99863,
+          "source_table_index": 0,
+          "structure_id": "AMP_2015_page_94_0"
+        },
+        {
+          "cells": "cells/AMP_2015_page_94_1.json",
+          "cells_sha256": "d099eb3b90aa77976054de1fb3eb22a9282405ada95686166dbdd9f4ee77490b",
+          "html": "html/AMP_2015_page_94_1.html",
+          "html_sha256": "cef1e5ea6e57f27be70368ff3fbe4afbe21303f6351fcf15a03ce409f737e38f",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_train.jsonl",
+          "source_line_index": 61490,
+          "source_split": "train",
+          "source_table_id": 99864,
+          "source_table_index": 1,
+          "structure_id": "AMP_2015_page_94_1"
+        },
+        {
+          "cells": "cells/AMP_2015_page_94_2.json",
+          "cells_sha256": "9633e37fb68d357931538d97379447f59a93fae53b88bd0c2880fb46b12c994c",
+          "html": "html/AMP_2015_page_94_2.html",
+          "html_sha256": "c72b88287be003865362bec7e12b01bb5bd2924e8401ba1c8fb6ff8b532ccceb",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_train.jsonl",
+          "source_line_index": 61491,
+          "source_split": "train",
+          "source_table_id": 99865,
+          "source_table_index": 2,
+          "structure_id": "AMP_2015_page_94_2"
+        }
+      ]
+    },
+    {
+      "annotation": "../../corpus-fintabnet/annotations/UNP_2012_page_64_tables.json",
+      "annotation_license": "CDLA-Permissive-2.0",
+      "annotation_sha256": "e126b477a64488dcd0c2555d945cc9605bd46899f9d04caf96efaa58e7af46a2",
+      "document_id": "UNP_2012_page_64",
+      "features": {
+        "blank_cell": true,
+        "col_span": true,
+        "currency": true,
+        "dense_rows": false,
+        "multi_header": true,
+        "multi_table": true,
+        "parenthesized_number": true,
+        "row_span": true,
+        "text_source_disagreement": true
+      },
+      "historical_benchmark_exposure": true,
+      "issuer": "UNP",
+      "n_tables": 3,
+      "partition": "development",
+      "pdf": "../../corpus-fintabnet/pdfs/UNP_2012_page_64.pdf",
+      "pdf_license": "CDLA-Permissive-1.0",
+      "pdf_page_index": 0,
+      "pdf_sha256": "f612c16bb65405507f87b20ee9e23099576b3f78ebf54b675ad215665aa0bdd2",
+      "prior_targeted_tuning": false,
+      "review_status": "unreviewed",
+      "source_pdf_rel_path": "UNP/2012/page_64.pdf",
+      "source_splits": [
+        "train"
+      ],
+      "tables": [
+        {
+          "cells": "cells/UNP_2012_page_64_0.json",
+          "cells_sha256": "01cc82ec4b664881547812ef2f662ef2643c8f8de7282d597b992bfff6dceec6",
+          "html": "html/UNP_2012_page_64_0.html",
+          "html_sha256": "cb2e3186335f28343c45a41ef910bae561754d44e9d2110a62ab9fcd5be225a5",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_train.jsonl",
+          "source_line_index": 74523,
+          "source_split": "train",
+          "source_table_id": 122023,
+          "source_table_index": 0,
+          "structure_id": "UNP_2012_page_64_0"
+        },
+        {
+          "cells": "cells/UNP_2012_page_64_1.json",
+          "cells_sha256": "7dc473d17dbfbb80fc1fab49b7663b089cbef8501042b46a5d6924c61a6e6cf2",
+          "html": "html/UNP_2012_page_64_1.html",
+          "html_sha256": "57481cfc1af204fe1f217aeeca7954f9f2afb9925b0ea53fa0ba2b85e295d3e9",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_train.jsonl",
+          "source_line_index": 74524,
+          "source_split": "train",
+          "source_table_id": 122024,
+          "source_table_index": 1,
+          "structure_id": "UNP_2012_page_64_1"
+        },
+        {
+          "cells": "cells/UNP_2012_page_64_2.json",
+          "cells_sha256": "7743339b616252d34075de3fd123c275dc8f0fb437edd34a252bc6f9d309212b",
+          "html": "html/UNP_2012_page_64_2.html",
+          "html_sha256": "55c45195c1e3eac2212348705c85e00b6118403d2eeed9a1ca4497cf26ab7aee",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_train.jsonl",
+          "source_line_index": 74525,
+          "source_split": "train",
+          "source_table_id": 122025,
+          "source_table_index": 2,
+          "structure_id": "UNP_2012_page_64_2"
+        }
+      ]
+    },
+    {
+      "annotation": "../../corpus-fintabnet/annotations/DISCA_2011_page_51_tables.json",
+      "annotation_license": "CDLA-Permissive-2.0",
+      "annotation_sha256": "719e2a2274c3354c51c7a13c716f649e127f070f17abfdc5b18dc233260e4f52",
+      "document_id": "DISCA_2011_page_51",
+      "features": {
+        "blank_cell": true,
+        "col_span": true,
+        "currency": true,
+        "dense_rows": true,
+        "multi_header": true,
+        "multi_table": false,
+        "parenthesized_number": true,
+        "row_span": true,
+        "text_source_disagreement": true
+      },
+      "historical_benchmark_exposure": true,
+      "issuer": "DISCA",
+      "n_tables": 1,
+      "partition": "development",
+      "pdf": "../../corpus-fintabnet/pdfs/DISCA_2011_page_51.pdf",
+      "pdf_license": "CDLA-Permissive-1.0",
+      "pdf_page_index": 0,
+      "pdf_sha256": "46b827d1db37262d66f6aefb1cff8e0ad1a2cc5cf2feaf605ff0778782c5001a",
+      "prior_targeted_tuning": false,
+      "review_status": "unreviewed",
+      "source_pdf_rel_path": "DISCA/2011/page_51.pdf",
+      "source_splits": [
+        "train"
+      ],
+      "tables": [
+        {
+          "cells": "cells/DISCA_2011_page_51_0.json",
+          "cells_sha256": "832a8465429ba611067f255bd7e0c5f41ea71d375e3ab80c04937e82c939f510",
+          "html": "html/DISCA_2011_page_51_0.html",
+          "html_sha256": "0d7665c9b3abcdedf2dd55d3a53bbb6e295a3ad9cf49dbd1788cd0ed15fcab67",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_train.jsonl",
+          "source_line_index": 53154,
+          "source_split": "train",
+          "source_table_id": 87999,
+          "source_table_index": 0,
+          "structure_id": "DISCA_2011_page_51_0"
+        }
+      ]
+    },
+    {
+      "annotation": "../../corpus-fintabnet/annotations/TTWO_2009_page_91_tables.json",
+      "annotation_license": "CDLA-Permissive-2.0",
+      "annotation_sha256": "4cb504998a532cae6a755b83586baa2737b02d9a9414191dbb497800a61fe990",
+      "document_id": "TTWO_2009_page_91",
+      "features": {
+        "blank_cell": true,
+        "col_span": true,
+        "currency": true,
+        "dense_rows": false,
+        "multi_header": true,
+        "multi_table": true,
+        "parenthesized_number": true,
+        "row_span": true,
+        "text_source_disagreement": true
+      },
+      "historical_benchmark_exposure": true,
+      "issuer": "TTWO",
+      "n_tables": 2,
+      "partition": "development",
+      "pdf": "../../corpus-fintabnet/pdfs/TTWO_2009_page_91.pdf",
+      "pdf_license": "CDLA-Permissive-1.0",
+      "pdf_page_index": 0,
+      "pdf_sha256": "fa0d9e30887ce54fe1d1f9451d74202e34c74a96713cce2723bd6bfc768dae39",
+      "prior_targeted_tuning": false,
+      "review_status": "unreviewed",
+      "source_pdf_rel_path": "TTWO/2009/page_91.pdf",
+      "source_splits": [
+        "val"
+      ],
+      "tables": [
+        {
+          "cells": "cells/TTWO_2009_page_91_1.json",
+          "cells_sha256": "78e7e02a9b0df0e69aca67008db9f74212b1cb1ab9714dda6443ed81e7255544",
+          "html": "html/TTWO_2009_page_91_1.html",
+          "html_sha256": "2a56dedb44eee34bdc4c40624d955e866b2acba790acd005bfc3acd58e1a9186",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_val.jsonl",
+          "source_line_index": 2776,
+          "source_split": "val",
+          "source_table_id": 140767,
+          "source_table_index": 0,
+          "structure_id": "TTWO_2009_page_91_1"
+        },
+        {
+          "cells": "cells/TTWO_2009_page_91_0.json",
+          "cells_sha256": "a1bcd5fdcc19b9739e15faec5fde8839d4b77c8625297b369c95d1d47e5d277c",
+          "html": "html/TTWO_2009_page_91_0.html",
+          "html_sha256": "cc661d5ab73be79da0d35cd7fb841966816563f3f04c30844892f790225d3825",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_val.jsonl",
+          "source_line_index": 2735,
+          "source_split": "val",
+          "source_table_id": 140768,
+          "source_table_index": 1,
+          "structure_id": "TTWO_2009_page_91_0"
+        }
+      ]
+    },
+    {
+      "annotation": "../../corpus-fintabnet/annotations/STX_2006_page_88_tables.json",
+      "annotation_license": "CDLA-Permissive-2.0",
+      "annotation_sha256": "7c349071469c4d7cb321d2f98f66f83c4d64ae16ddf169e71e1c7c3801177d98",
+      "document_id": "STX_2006_page_88",
+      "features": {
+        "blank_cell": true,
+        "col_span": true,
+        "currency": true,
+        "dense_rows": false,
+        "multi_header": true,
+        "multi_table": false,
+        "parenthesized_number": true,
+        "row_span": true,
+        "text_source_disagreement": true
+      },
+      "historical_benchmark_exposure": true,
+      "issuer": "STX",
+      "n_tables": 1,
+      "partition": "development",
+      "pdf": "../../corpus-fintabnet/pdfs/STX_2006_page_88.pdf",
+      "pdf_license": "CDLA-Permissive-1.0",
+      "pdf_page_index": 0,
+      "pdf_sha256": "82f5f8eb46e7f08e5f0ddc5c8c0a3be8f1c424cb893d696dfefa4ceec93ae71a",
+      "prior_targeted_tuning": false,
+      "review_status": "unreviewed",
+      "source_pdf_rel_path": "STX/2006/page_88.pdf",
+      "source_splits": [
+        "train"
+      ],
+      "tables": [
+        {
+          "cells": "cells/STX_2006_page_88_0.json",
+          "cells_sha256": "1da49ad16664fe42dd76a72a041e7b6e26378b8ee893fe3e18a1cda34da6a186",
+          "html": "html/STX_2006_page_88_0.html",
+          "html_sha256": "b7db33860883329ddc75af8bfad83d7d48622ab85c5145effb849aafbc2c14de",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_train.jsonl",
+          "source_line_index": 21345,
+          "source_split": "train",
+          "source_table_id": 34414,
+          "source_table_index": 0,
+          "structure_id": "STX_2006_page_88_0"
+        }
+      ]
+    },
+    {
+      "annotation": "../../corpus-fintabnet/annotations/BDX_2009_page_79_tables.json",
+      "annotation_license": "CDLA-Permissive-2.0",
+      "annotation_sha256": "e68fdef18ef083c7eb42c2f4d9f0f14f407f084631501b760b2baf03b6ad2544",
+      "document_id": "BDX_2009_page_79",
+      "features": {
+        "blank_cell": true,
+        "col_span": false,
+        "currency": true,
+        "dense_rows": false,
+        "multi_header": false,
+        "multi_table": false,
+        "parenthesized_number": true,
+        "row_span": false,
+        "text_source_disagreement": true
+      },
+      "historical_benchmark_exposure": true,
+      "issuer": "BDX",
+      "n_tables": 1,
+      "partition": "development",
+      "pdf": "../../corpus-fintabnet/pdfs/BDX_2009_page_79.pdf",
+      "pdf_license": "CDLA-Permissive-1.0",
+      "pdf_page_index": 0,
+      "pdf_sha256": "7527769ee03d2a7e179512edfedb9350bf326de312db0cb1a3d3ea2d31bd6cea",
+      "prior_targeted_tuning": false,
+      "review_status": "unreviewed",
+      "source_pdf_rel_path": "BDX/2009/page_79.pdf",
+      "source_splits": [
+        "train"
+      ],
+      "tables": [
+        {
+          "cells": "cells/BDX_2009_page_79_0.json",
+          "cells_sha256": "6e02f669dcfeb96e5cc27a35acb231f63bd85662553c369e5f2154322e4b49c5",
+          "html": "html/BDX_2009_page_79_0.html",
+          "html_sha256": "14cda497bec992c47f396fc1ae06ee32011f6495271769f052c469fa571ab88b",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_train.jsonl",
+          "source_line_index": 75720,
+          "source_split": "train",
+          "source_table_id": 123407,
+          "source_table_index": 0,
+          "structure_id": "BDX_2009_page_79_0"
+        }
+      ]
+    },
+    {
+      "annotation": "../../corpus-fintabnet/annotations/MO_2017_page_72_tables.json",
+      "annotation_license": "CDLA-Permissive-2.0",
+      "annotation_sha256": "2eb3bed47b6dc267126b389fa7af40f032729675f3e5621326db2fab97224dbc",
+      "document_id": "MO_2017_page_72",
+      "features": {
+        "blank_cell": true,
+        "col_span": false,
+        "currency": false,
+        "dense_rows": false,
+        "multi_header": false,
+        "multi_table": false,
+        "parenthesized_number": false,
+        "row_span": false,
+        "text_source_disagreement": false
+      },
+      "historical_benchmark_exposure": true,
+      "issuer": "MO",
+      "n_tables": 1,
+      "partition": "development",
+      "pdf": "../../corpus-fintabnet/pdfs/MO_2017_page_72.pdf",
+      "pdf_license": "CDLA-Permissive-1.0",
+      "pdf_page_index": 0,
+      "pdf_sha256": "1e5ab9d727145cdc7b73391f7ce4b5f3ab5cf7b1b0456f444af0004c6bb7152b",
+      "prior_targeted_tuning": false,
+      "review_status": "unreviewed",
+      "source_pdf_rel_path": "MO/2017/page_72.pdf",
+      "source_splits": [
+        "train"
+      ],
+      "tables": [
+        {
+          "cells": "cells/MO_2017_page_72_0.json",
+          "cells_sha256": "97ce36cc79a4fabaeec9c4cd74c8ad1a9a70cb4f27eebe69954239eea386251a",
+          "html": "html/MO_2017_page_72_0.html",
+          "html_sha256": "7082e7833ea7a51f860a791c7cb4962de52fa73ff508e8e6de94c09600d3413f",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_train.jsonl",
+          "source_line_index": 73369,
+          "source_split": "train",
+          "source_table_id": 120280,
+          "source_table_index": 0,
+          "structure_id": "MO_2017_page_72_0"
+        }
+      ]
+    },
+    {
+      "annotation": "../../corpus-fintabnet/annotations/ADP_2008_page_35_tables.json",
+      "annotation_license": "CDLA-Permissive-2.0",
+      "annotation_sha256": "8b73332effb9bc60762091fceba0f8f1e4dd59619bb0ede048dce6a2df64765c",
+      "document_id": "ADP_2008_page_35",
+      "features": {
+        "blank_cell": false,
+        "col_span": true,
+        "currency": true,
+        "dense_rows": true,
+        "multi_header": false,
+        "multi_table": false,
+        "parenthesized_number": true,
+        "row_span": false,
+        "text_source_disagreement": true
+      },
+      "historical_benchmark_exposure": true,
+      "issuer": "ADP",
+      "n_tables": 1,
+      "partition": "development",
+      "pdf": "../../corpus-fintabnet/pdfs/ADP_2008_page_35.pdf",
+      "pdf_license": "CDLA-Permissive-1.0",
+      "pdf_page_index": 0,
+      "pdf_sha256": "1787cd872bd33e9a75e56d1e715a838bf73cf9ccba63d62ce73f5671ac0bea16",
+      "prior_targeted_tuning": false,
+      "review_status": "unreviewed",
+      "source_pdf_rel_path": "ADP/2008/page_35.pdf",
+      "source_splits": [
+        "val"
+      ],
+      "tables": [
+        {
+          "cells": "cells/ADP_2008_page_35_0.json",
+          "cells_sha256": "88e003ab7fb0299a912ece7d97da305720b9db33edd56594ac04a90eb957c27d",
+          "html": "html/ADP_2008_page_35_0.html",
+          "html_sha256": "89d6b8270021782962f44d6e9598fbac58513bc04b165a6f62a62b3e251c7a6a",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_val.jsonl",
+          "source_line_index": 5993,
+          "source_split": "val",
+          "source_table_id": 21276,
+          "source_table_index": 0,
+          "structure_id": "ADP_2008_page_35_0"
+        }
+      ]
+    },
+    {
+      "annotation": "../../corpus-fintabnet/annotations/CF_2015_page_32_tables.json",
+      "annotation_license": "CDLA-Permissive-2.0",
+      "annotation_sha256": "b74dff988caf0991029565886220028c9f6c71a259b6e1db76f7fe1d791c7762",
+      "document_id": "CF_2015_page_32",
+      "features": {
+        "blank_cell": true,
+        "col_span": true,
+        "currency": true,
+        "dense_rows": false,
+        "multi_header": true,
+        "multi_table": true,
+        "parenthesized_number": true,
+        "row_span": true,
+        "text_source_disagreement": true
+      },
+      "historical_benchmark_exposure": true,
+      "issuer": "CF",
+      "n_tables": 2,
+      "partition": "evaluation",
+      "pdf": "../../corpus-fintabnet/pdfs/CF_2015_page_32.pdf",
+      "pdf_license": "CDLA-Permissive-1.0",
+      "pdf_page_index": 0,
+      "pdf_sha256": "418e6383a12e436998b3bef37dfc2b30a2fab9e9f3bdbd5ceca219004f802c38",
+      "prior_targeted_tuning": false,
+      "review_status": "unreviewed",
+      "source_pdf_rel_path": "CF/2015/page_32.pdf",
+      "source_splits": [
+        "train"
+      ],
+      "tables": [
+        {
+          "cells": "cells/CF_2015_page_32_0.json",
+          "cells_sha256": "9c9bf51c99315bf71c3b488c010970d3992967214e1b761392409ee66ac73487",
+          "html": "html/CF_2015_page_32_0.html",
+          "html_sha256": "f26f302b412f0b2f121787e5439f6882b67fa8c406999b549ed73ea78476a27a",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_train.jsonl",
+          "source_line_index": 40960,
+          "source_split": "train",
+          "source_table_id": 66062,
+          "source_table_index": 0,
+          "structure_id": "CF_2015_page_32_0"
+        },
+        {
+          "cells": "cells/CF_2015_page_32_1.json",
+          "cells_sha256": "e0c0429cec3b540f75b4ab153f5b73adbaaddc8345889a26d84420c7a19778b6",
+          "html": "html/CF_2015_page_32_1.html",
+          "html_sha256": "8df080d677ce7706a1663d9a2f511635d95711d062e6624288b85e350bbc5510",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_train.jsonl",
+          "source_line_index": 40961,
+          "source_split": "train",
+          "source_table_id": 66063,
+          "source_table_index": 1,
+          "structure_id": "CF_2015_page_32_1"
+        }
+      ]
+    },
+    {
+      "annotation": "../../corpus-fintabnet/annotations/V_2009_page_105_tables.json",
+      "annotation_license": "CDLA-Permissive-2.0",
+      "annotation_sha256": "6ed78ae3c6d11154403ac5f7272424f50c54760818548f483f67063f0f3a8b53",
+      "document_id": "V_2009_page_105",
+      "features": {
+        "blank_cell": true,
+        "col_span": true,
+        "currency": true,
+        "dense_rows": true,
+        "multi_header": true,
+        "multi_table": false,
+        "parenthesized_number": true,
+        "row_span": true,
+        "text_source_disagreement": true
+      },
+      "historical_benchmark_exposure": true,
+      "issuer": "V",
+      "n_tables": 1,
+      "partition": "evaluation",
+      "pdf": "../../corpus-fintabnet/pdfs/V_2009_page_105.pdf",
+      "pdf_license": "CDLA-Permissive-1.0",
+      "pdf_page_index": 0,
+      "pdf_sha256": "65ab3f2875733da1d704c92778747baaebd6d716e47f8e800ff99c62d39f5e00",
+      "prior_targeted_tuning": false,
+      "review_status": "unreviewed",
+      "source_pdf_rel_path": "V/2009/page_105.pdf",
+      "source_splits": [
+        "train"
+      ],
+      "tables": [
+        {
+          "cells": "cells/V_2009_page_105_0.json",
+          "cells_sha256": "c94a432471384d194144ad1a3c7d4f2516638fa2abcceb2f162dd284c02cc929",
+          "html": "html/V_2009_page_105_0.html",
+          "html_sha256": "c92d5b357d07a2be960da20ec6f67918e260ebef1de6b4c07e6b94623ef9e0e6",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_train.jsonl",
+          "source_line_index": 33888,
+          "source_split": "train",
+          "source_table_id": 54491,
+          "source_table_index": 0,
+          "structure_id": "V_2009_page_105_0"
+        }
+      ]
+    },
+    {
+      "annotation": "../../corpus-fintabnet/annotations/SNPS_2011_page_77_tables.json",
+      "annotation_license": "CDLA-Permissive-2.0",
+      "annotation_sha256": "0cb19b965610300f4d66b8f61cdad71c80426db8780bf02b9bd8e570028d4d07",
+      "document_id": "SNPS_2011_page_77",
+      "features": {
+        "blank_cell": true,
+        "col_span": true,
+        "currency": true,
+        "dense_rows": false,
+        "multi_header": true,
+        "multi_table": true,
+        "parenthesized_number": true,
+        "row_span": true,
+        "text_source_disagreement": true
+      },
+      "historical_benchmark_exposure": true,
+      "issuer": "SNPS",
+      "n_tables": 3,
+      "partition": "evaluation",
+      "pdf": "../../corpus-fintabnet/pdfs/SNPS_2011_page_77.pdf",
+      "pdf_license": "CDLA-Permissive-1.0",
+      "pdf_page_index": 0,
+      "pdf_sha256": "cdd11efc5ddad210934e45291dcb0829e639e57fde69264e43a7b75a5d72c353",
+      "prior_targeted_tuning": false,
+      "review_status": "unreviewed",
+      "source_pdf_rel_path": "SNPS/2011/page_77.pdf",
+      "source_splits": [
+        "train"
+      ],
+      "tables": [
+        {
+          "cells": "cells/SNPS_2011_page_77_0.json",
+          "cells_sha256": "e2081365dabd034e87b208b9f91d0aecebae325064f957dd01a3dcc04a273aec",
+          "html": "html/SNPS_2011_page_77_0.html",
+          "html_sha256": "2997777779f4393aad5fcd4b0e87cd03d788f3acb444839c6750969aae9d2cbc",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_train.jsonl",
+          "source_line_index": 68403,
+          "source_split": "train",
+          "source_table_id": 111161,
+          "source_table_index": 0,
+          "structure_id": "SNPS_2011_page_77_0"
+        },
+        {
+          "cells": "cells/SNPS_2011_page_77_1.json",
+          "cells_sha256": "2dcbeb539e7716cb6e483e5f3b29f7f957795ca678e14a54b6acbea68a018f58",
+          "html": "html/SNPS_2011_page_77_1.html",
+          "html_sha256": "979e5aa0a3bfcd137691c291dea57bb0b305ac5de6f2b090c40785a9efadf227",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_train.jsonl",
+          "source_line_index": 68404,
+          "source_split": "train",
+          "source_table_id": 111162,
+          "source_table_index": 1,
+          "structure_id": "SNPS_2011_page_77_1"
+        },
+        {
+          "cells": "cells/SNPS_2011_page_77_2.json",
+          "cells_sha256": "866acf15e3c21493d77888e0990d8d2180a920ee40b2d60ee5a1ede4a2528f12",
+          "html": "html/SNPS_2011_page_77_2.html",
+          "html_sha256": "8a103302e99bc55a11ef3eef273cb37d58bb2792abed0ca1b93eb6497ccbe140",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_train.jsonl",
+          "source_line_index": 68405,
+          "source_split": "train",
+          "source_table_id": 111163,
+          "source_table_index": 2,
+          "structure_id": "SNPS_2011_page_77_2"
+        }
+      ]
+    },
+    {
+      "annotation": "../../corpus-fintabnet/annotations/PNC_2015_page_192_tables.json",
+      "annotation_license": "CDLA-Permissive-2.0",
+      "annotation_sha256": "89b94d4b91049d5ad5e3c5bbd4a173b2f495330e8b88bcf8460886c55492e92e",
+      "document_id": "PNC_2015_page_192",
+      "features": {
+        "blank_cell": true,
+        "col_span": true,
+        "currency": true,
+        "dense_rows": false,
+        "multi_header": true,
+        "multi_table": true,
+        "parenthesized_number": true,
+        "row_span": true,
+        "text_source_disagreement": true
+      },
+      "historical_benchmark_exposure": true,
+      "issuer": "PNC",
+      "n_tables": 3,
+      "partition": "evaluation",
+      "pdf": "../../corpus-fintabnet/pdfs/PNC_2015_page_192.pdf",
+      "pdf_license": "CDLA-Permissive-1.0",
+      "pdf_page_index": 0,
+      "pdf_sha256": "bba1033bebc27ff8f81669b03c507a04bef36f1379ab4f246d452c45b40b7db0",
+      "prior_targeted_tuning": false,
+      "review_status": "unreviewed",
+      "source_pdf_rel_path": "PNC/2015/page_192.pdf",
+      "source_splits": [
+        "train"
+      ],
+      "tables": [
+        {
+          "cells": "cells/PNC_2015_page_192_2.json",
+          "cells_sha256": "942364f0ae1d7ccc991de83cf17a231db59e76a87f04b7f35505053b020c73d3",
+          "html": "html/PNC_2015_page_192_2.html",
+          "html_sha256": "d60e254b3d5dca5d52542822d38825e079134a5a4a68df3237f16a2a049687e9",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_train.jsonl",
+          "source_line_index": 23883,
+          "source_split": "train",
+          "source_table_id": 38137,
+          "source_table_index": 0,
+          "structure_id": "PNC_2015_page_192_2"
+        },
+        {
+          "cells": "cells/PNC_2015_page_192_1.json",
+          "cells_sha256": "9960e117c8b8c7dbd42e5188a1dfa829d4c57f12f175ba53c56c976b0e7a91fd",
+          "html": "html/PNC_2015_page_192_1.html",
+          "html_sha256": "fe56b7d55e48a35e220454341e934b12326824cd16cc28b7dfa5a36685ea1d77",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_train.jsonl",
+          "source_line_index": 23882,
+          "source_split": "train",
+          "source_table_id": 38136,
+          "source_table_index": 1,
+          "structure_id": "PNC_2015_page_192_1"
+        },
+        {
+          "cells": "cells/PNC_2015_page_192_0.json",
+          "cells_sha256": "0eb4d9cba2f34aa8074f9237081982b54be7101060e96e5eb344e5272422faeb",
+          "html": "html/PNC_2015_page_192_0.html",
+          "html_sha256": "b68de977f24e74df1b4b60d7163c47400225bfd0cfef91ce4318a3b3090d9667",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_train.jsonl",
+          "source_line_index": 23795,
+          "source_split": "train",
+          "source_table_id": 38047,
+          "source_table_index": 2,
+          "structure_id": "PNC_2015_page_192_0"
+        }
+      ]
+    },
+    {
+      "annotation": "../../corpus-fintabnet/annotations/XEL_2013_page_98_tables.json",
+      "annotation_license": "CDLA-Permissive-2.0",
+      "annotation_sha256": "eb1b672ea9140012817d9b65ff4477fbec784dbbbc67001243988d230f41472f",
+      "document_id": "XEL_2013_page_98",
+      "features": {
+        "blank_cell": true,
+        "col_span": true,
+        "currency": true,
+        "dense_rows": true,
+        "multi_header": true,
+        "multi_table": false,
+        "parenthesized_number": true,
+        "row_span": true,
+        "text_source_disagreement": true
+      },
+      "historical_benchmark_exposure": true,
+      "issuer": "XEL",
+      "n_tables": 1,
+      "partition": "evaluation",
+      "pdf": "../../corpus-fintabnet/pdfs/XEL_2013_page_98.pdf",
+      "pdf_license": "CDLA-Permissive-1.0",
+      "pdf_page_index": 0,
+      "pdf_sha256": "6221bae77e57e874f1797a7dea99b8391661a839cdf888923e0f1f94edfb00e4",
+      "prior_targeted_tuning": false,
+      "review_status": "unreviewed",
+      "source_pdf_rel_path": "XEL/2013/page_98.pdf",
+      "source_splits": [
+        "train"
+      ],
+      "tables": [
+        {
+          "cells": "cells/XEL_2013_page_98_0.json",
+          "cells_sha256": "32c9c3344c34e191f2354b87b3824abd2899c661f8bf2a97939f6fec1b9163d4",
+          "html": "html/XEL_2013_page_98_0.html",
+          "html_sha256": "abb4fb257ec6bc19c4920d26ff1219a0b084422a665085f416f8c0d14b3ba827",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_train.jsonl",
+          "source_line_index": 1289,
+          "source_split": "train",
+          "source_table_id": 2266,
+          "source_table_index": 0,
+          "structure_id": "XEL_2013_page_98_0"
+        }
+      ]
+    },
+    {
+      "annotation": "../../corpus-fintabnet/annotations/IRM_2016_page_107_tables.json",
+      "annotation_license": "CDLA-Permissive-2.0",
+      "annotation_sha256": "543b045b9106105b5b3773538ec0361d63af19ec00ed10f263c230b535689216",
+      "document_id": "IRM_2016_page_107",
+      "features": {
+        "blank_cell": true,
+        "col_span": true,
+        "currency": true,
+        "dense_rows": false,
+        "multi_header": true,
+        "multi_table": true,
+        "parenthesized_number": true,
+        "row_span": true,
+        "text_source_disagreement": true
+      },
+      "historical_benchmark_exposure": true,
+      "issuer": "IRM",
+      "n_tables": 3,
+      "partition": "evaluation",
+      "pdf": "../../corpus-fintabnet/pdfs/IRM_2016_page_107.pdf",
+      "pdf_license": "CDLA-Permissive-1.0",
+      "pdf_page_index": 0,
+      "pdf_sha256": "cf1f4321dbddf9077d64135dfe3f1f66845cafb37a53ab33622b5c9870dbcf17",
+      "prior_targeted_tuning": false,
+      "review_status": "unreviewed",
+      "source_pdf_rel_path": "IRM/2016/page_107.pdf",
+      "source_splits": [
+        "train"
+      ],
+      "tables": [
+        {
+          "cells": "cells/IRM_2016_page_107_0.json",
+          "cells_sha256": "899f88cb49358eefc942acc034e824548324eb6bbc2ff72ac695b395e90cbd2c",
+          "html": "html/IRM_2016_page_107_0.html",
+          "html_sha256": "216e4811f79fd4c6392c397284956b8dd2d720ba54f371fcc52b78e44921c0b1",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_train.jsonl",
+          "source_line_index": 27778,
+          "source_split": "train",
+          "source_table_id": 46190,
+          "source_table_index": 0,
+          "structure_id": "IRM_2016_page_107_0"
+        },
+        {
+          "cells": "cells/IRM_2016_page_107_1.json",
+          "cells_sha256": "0492be2ad6b928e68fb15932f71fba4503d8abbee373791096f3bf901bb7d089",
+          "html": "html/IRM_2016_page_107_1.html",
+          "html_sha256": "dfb0d339fb3058e91776ee71e4229252fd1368f97303f1a3482848ec87c8d9b5",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_train.jsonl",
+          "source_line_index": 27779,
+          "source_split": "train",
+          "source_table_id": 46191,
+          "source_table_index": 1,
+          "structure_id": "IRM_2016_page_107_1"
+        },
+        {
+          "cells": "cells/IRM_2016_page_107_2.json",
+          "cells_sha256": "779bfc165af95eb2c46e6a866414ca0e333ed774908db4ab17305ae1b2b5336c",
+          "html": "html/IRM_2016_page_107_2.html",
+          "html_sha256": "513dce02b7fa18a639905468dc1f2974177ddc69f624243f3a0be1196b05ea83",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_train.jsonl",
+          "source_line_index": 27780,
+          "source_split": "train",
+          "source_table_id": 46192,
+          "source_table_index": 2,
+          "structure_id": "IRM_2016_page_107_2"
+        }
+      ]
+    },
+    {
+      "annotation": "../../corpus-fintabnet/annotations/MKTX_2018_page_134_tables.json",
+      "annotation_license": "CDLA-Permissive-2.0",
+      "annotation_sha256": "4d10d0449a4f5a37ee991ab1c92c613453e51ba56fc468bfe125d5461e174ec1",
+      "document_id": "MKTX_2018_page_134",
+      "features": {
+        "blank_cell": true,
+        "col_span": true,
+        "currency": true,
+        "dense_rows": false,
+        "multi_header": true,
+        "multi_table": true,
+        "parenthesized_number": true,
+        "row_span": true,
+        "text_source_disagreement": true
+      },
+      "historical_benchmark_exposure": true,
+      "issuer": "MKTX",
+      "n_tables": 3,
+      "partition": "evaluation",
+      "pdf": "../../corpus-fintabnet/pdfs/MKTX_2018_page_134.pdf",
+      "pdf_license": "CDLA-Permissive-1.0",
+      "pdf_page_index": 0,
+      "pdf_sha256": "b59430d4ab1e378af2055108d1b2cf9c42f6a86fcdab5e0ce470e797acc4e956",
+      "prior_targeted_tuning": false,
+      "review_status": "unreviewed",
+      "source_pdf_rel_path": "MKTX/2018/page_134.pdf",
+      "source_splits": [
+        "train"
+      ],
+      "tables": [
+        {
+          "cells": "cells/MKTX_2018_page_134_0.json",
+          "cells_sha256": "d0ee755f6186054fd1c7662a8dc268535ebf11528a06681f2aa42ee54b84c4c6",
+          "html": "html/MKTX_2018_page_134_0.html",
+          "html_sha256": "dc6265e520a987762b3a900cf5221232fca0e3ed73e272bd91e484a1a95d4834",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_train.jsonl",
+          "source_line_index": 9820,
+          "source_split": "train",
+          "source_table_id": 16508,
+          "source_table_index": 0,
+          "structure_id": "MKTX_2018_page_134_0"
+        },
+        {
+          "cells": "cells/MKTX_2018_page_134_1.json",
+          "cells_sha256": "874cc0242e41abc48d4c3d8894175a0ff6041ce5bc8d4fe548a5775e61a475e1",
+          "html": "html/MKTX_2018_page_134_1.html",
+          "html_sha256": "23f098b4d53ef1f6c7f410fb172b5dd9ba867a385c8eabe5e07f5e5949a98855",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_train.jsonl",
+          "source_line_index": 9821,
+          "source_split": "train",
+          "source_table_id": 16509,
+          "source_table_index": 1,
+          "structure_id": "MKTX_2018_page_134_1"
+        },
+        {
+          "cells": "cells/MKTX_2018_page_134_2.json",
+          "cells_sha256": "11911559472fcdee3225fbf2b5edade4fd8b634d8c7add73e830efea30d1a553",
+          "html": "html/MKTX_2018_page_134_2.html",
+          "html_sha256": "3e5ee45efc9705b22ae90a64a84202592c7c94895f5f416dd6529489fe7b5da0",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_train.jsonl",
+          "source_line_index": 9822,
+          "source_split": "train",
+          "source_table_id": 16510,
+          "source_table_index": 2,
+          "structure_id": "MKTX_2018_page_134_2"
+        }
+      ]
+    },
+    {
+      "annotation": "../../corpus-fintabnet/annotations/JKHY_2017_page_25_tables.json",
+      "annotation_license": "CDLA-Permissive-2.0",
+      "annotation_sha256": "024e2d58e88a4e39d4038bd17a0bc1de314292ac998fafd2239ab3b22ec420e0",
+      "document_id": "JKHY_2017_page_25",
+      "features": {
+        "blank_cell": true,
+        "col_span": true,
+        "currency": true,
+        "dense_rows": false,
+        "multi_header": true,
+        "multi_table": true,
+        "parenthesized_number": true,
+        "row_span": true,
+        "text_source_disagreement": true
+      },
+      "historical_benchmark_exposure": true,
+      "issuer": "JKHY",
+      "n_tables": 2,
+      "partition": "evaluation",
+      "pdf": "../../corpus-fintabnet/pdfs/JKHY_2017_page_25.pdf",
+      "pdf_license": "CDLA-Permissive-1.0",
+      "pdf_page_index": 0,
+      "pdf_sha256": "c0fc8e0aa48a39b1704537a47f0572ff15ac2394c6297ac45940b6fbc1fde15e",
+      "prior_targeted_tuning": false,
+      "review_status": "unreviewed",
+      "source_pdf_rel_path": "JKHY/2017/page_25.pdf",
+      "source_splits": [
+        "train"
+      ],
+      "tables": [
+        {
+          "cells": "cells/JKHY_2017_page_25_0.json",
+          "cells_sha256": "05f1efb53ba0950856fa8a330796ec1b603ecd405a684aaac3bb94faee6dd89e",
+          "html": "html/JKHY_2017_page_25_0.html",
+          "html_sha256": "ee485f3e4dee395f471b3cd7d66fb7a8f56814295f365d08a203c47b3f7b5869",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_train.jsonl",
+          "source_line_index": 21464,
+          "source_split": "train",
+          "source_table_id": 34956,
+          "source_table_index": 0,
+          "structure_id": "JKHY_2017_page_25_0"
+        },
+        {
+          "cells": "cells/JKHY_2017_page_25_1.json",
+          "cells_sha256": "9c18c0679b8c2adddbf2605424f646b384f4b5561b348e869feca423bd051dfa",
+          "html": "html/JKHY_2017_page_25_1.html",
+          "html_sha256": "6a3f401faab912ec1587e64bad42ea87688cb6259ffe96299295b81aa6f29953",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_train.jsonl",
+          "source_line_index": 21465,
+          "source_split": "train",
+          "source_table_id": 34957,
+          "source_table_index": 1,
+          "structure_id": "JKHY_2017_page_25_1"
+        }
+      ]
+    },
+    {
+      "annotation": "../../corpus-fintabnet/annotations/ZBH_2003_page_69_tables.json",
+      "annotation_license": "CDLA-Permissive-2.0",
+      "annotation_sha256": "b7f9c8c5ce03b012b8375ea23313b9ce38364cf1a76501ec42e117e515e899ed",
+      "document_id": "ZBH_2003_page_69",
+      "features": {
+        "blank_cell": true,
+        "col_span": true,
+        "currency": true,
+        "dense_rows": false,
+        "multi_header": true,
+        "multi_table": false,
+        "parenthesized_number": true,
+        "row_span": true,
+        "text_source_disagreement": true
+      },
+      "historical_benchmark_exposure": true,
+      "issuer": "ZBH",
+      "n_tables": 1,
+      "partition": "evaluation",
+      "pdf": "../../corpus-fintabnet/pdfs/ZBH_2003_page_69.pdf",
+      "pdf_license": "CDLA-Permissive-1.0",
+      "pdf_page_index": 0,
+      "pdf_sha256": "ed330668154b7bf0857e122b521716e7790ac50cc384d8ac3e88ced3292a2f9d",
+      "prior_targeted_tuning": false,
+      "review_status": "unreviewed",
+      "source_pdf_rel_path": "ZBH/2003/page_69.pdf",
+      "source_splits": [
+        "train"
+      ],
+      "tables": [
+        {
+          "cells": "cells/ZBH_2003_page_69_0.json",
+          "cells_sha256": "80c900cd6b755b98b118b4fc9dd5a3cc692cbc165cfa676067a725c2fb012c18",
+          "html": "html/ZBH_2003_page_69_0.html",
+          "html_sha256": "761a07de1afb82d9f893ce0a82d74c83fc23f128a338f9d0c6a42edb97e63234",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_train.jsonl",
+          "source_line_index": 3757,
+          "source_split": "train",
+          "source_table_id": 5834,
+          "source_table_index": 0,
+          "structure_id": "ZBH_2003_page_69_0"
+        }
+      ]
+    },
+    {
+      "annotation": "../../corpus-fintabnet/annotations/PXD_2005_page_109_tables.json",
+      "annotation_license": "CDLA-Permissive-2.0",
+      "annotation_sha256": "6ea6dd6867772c328fbd8e355ce172066462e3b569d091e4096f32efb012e56b",
+      "document_id": "PXD_2005_page_109",
+      "features": {
+        "blank_cell": true,
+        "col_span": true,
+        "currency": true,
+        "dense_rows": false,
+        "multi_header": true,
+        "multi_table": false,
+        "parenthesized_number": true,
+        "row_span": true,
+        "text_source_disagreement": true
+      },
+      "historical_benchmark_exposure": true,
+      "issuer": "PXD",
+      "n_tables": 1,
+      "partition": "evaluation",
+      "pdf": "../../corpus-fintabnet/pdfs/PXD_2005_page_109.pdf",
+      "pdf_license": "CDLA-Permissive-1.0",
+      "pdf_page_index": 0,
+      "pdf_sha256": "76c891a64a0bb3b17eab25e26d447923b6b247caae17f6a2fd0a69ad755dde9e",
+      "prior_targeted_tuning": false,
+      "review_status": "unreviewed",
+      "source_pdf_rel_path": "PXD/2005/page_109.pdf",
+      "source_splits": [
+        "test"
+      ],
+      "tables": [
+        {
+          "cells": "cells/PXD_2005_page_109_0.json",
+          "cells_sha256": "e8337d41250645eae15ff26bad2cd3b5592919bd0e211c8a7eb2642f6f2de73c",
+          "html": "html/PXD_2005_page_109_0.html",
+          "html_sha256": "5430d17eb2044fce5012160e7fb1e020fa95ffe97021fb5cc88a5a9460460cb1",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_test.jsonl",
+          "source_line_index": 3761,
+          "source_split": "test",
+          "source_table_id": 9996,
+          "source_table_index": 0,
+          "structure_id": "PXD_2005_page_109_0"
+        }
+      ]
+    },
+    {
+      "annotation": "../../corpus-fintabnet/annotations/NTRS_2017_page_94_tables.json",
+      "annotation_license": "CDLA-Permissive-2.0",
+      "annotation_sha256": "2789c994fd8075381456c1c13971a2ea35047b3b849c510d192b51371934c64f",
+      "document_id": "NTRS_2017_page_94",
+      "features": {
+        "blank_cell": false,
+        "col_span": true,
+        "currency": true,
+        "dense_rows": true,
+        "multi_header": true,
+        "multi_table": false,
+        "parenthesized_number": true,
+        "row_span": true,
+        "text_source_disagreement": true
+      },
+      "historical_benchmark_exposure": true,
+      "issuer": "NTRS",
+      "n_tables": 1,
+      "partition": "evaluation",
+      "pdf": "../../corpus-fintabnet/pdfs/NTRS_2017_page_94.pdf",
+      "pdf_license": "CDLA-Permissive-1.0",
+      "pdf_page_index": 0,
+      "pdf_sha256": "79ab872ad659ee2aa025d53da735bcc3916f3d235f3fc17b1edc51023e73aeae",
+      "prior_targeted_tuning": false,
+      "review_status": "unreviewed",
+      "source_pdf_rel_path": "NTRS/2017/page_94.pdf",
+      "source_splits": [
+        "train"
+      ],
+      "tables": [
+        {
+          "cells": "cells/NTRS_2017_page_94_0.json",
+          "cells_sha256": "1db7dac69f1052c5b7b6cf0cac9e36f4f4c9327445ff06ddc6e646d5ded15eef",
+          "html": "html/NTRS_2017_page_94_0.html",
+          "html_sha256": "7ff9d6188614becf9e568c309d194ed147edc5f0af5d90eaaf79bca218ba18f8",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_train.jsonl",
+          "source_line_index": 50942,
+          "source_split": "train",
+          "source_table_id": 84324,
+          "source_table_index": 0,
+          "structure_id": "NTRS_2017_page_94_0"
+        }
+      ]
+    },
+    {
+      "annotation": "../../corpus-fintabnet/annotations/UHS_2015_page_133_tables.json",
+      "annotation_license": "CDLA-Permissive-2.0",
+      "annotation_sha256": "30d9eda738f83b4851f11e14c8611be9e1f595a4742d0c1eb52e8cc52cc517cd",
+      "document_id": "UHS_2015_page_133",
+      "features": {
+        "blank_cell": true,
+        "col_span": true,
+        "currency": true,
+        "dense_rows": false,
+        "multi_header": true,
+        "multi_table": false,
+        "parenthesized_number": true,
+        "row_span": true,
+        "text_source_disagreement": true
+      },
+      "historical_benchmark_exposure": true,
+      "issuer": "UHS",
+      "n_tables": 1,
+      "partition": "evaluation",
+      "pdf": "../../corpus-fintabnet/pdfs/UHS_2015_page_133.pdf",
+      "pdf_license": "CDLA-Permissive-1.0",
+      "pdf_page_index": 0,
+      "pdf_sha256": "79e29c5eb7de1b3ef6326bde17fa1e777396b38eaa71547bcafab6740d68d8b2",
+      "prior_targeted_tuning": false,
+      "review_status": "unreviewed",
+      "source_pdf_rel_path": "UHS/2015/page_133.pdf",
+      "source_splits": [
+        "val"
+      ],
+      "tables": [
+        {
+          "cells": "cells/UHS_2015_page_133_0.json",
+          "cells_sha256": "b31415bfb13f29d0a5ad7b43712696be077dff5c75bb486cfa63fcc9b92fa405",
+          "html": "html/UHS_2015_page_133_0.html",
+          "html_sha256": "0c491a42741cc4edd843676bb710b83398ab7584760382d7a5217cc62627794a",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_val.jsonl",
+          "source_line_index": 9158,
+          "source_split": "val",
+          "source_table_id": 117342,
+          "source_table_index": 0,
+          "structure_id": "UHS_2015_page_133_0"
+        }
+      ]
+    },
+    {
+      "annotation": "../../corpus-fintabnet/annotations/EXR_2018_page_28_tables.json",
+      "annotation_license": "CDLA-Permissive-2.0",
+      "annotation_sha256": "367dca2633dbf871e731130cca47416d3c4a6649dd219eaff25e89c21ab0e711",
+      "document_id": "EXR_2018_page_28",
+      "features": {
+        "blank_cell": true,
+        "col_span": true,
+        "currency": true,
+        "dense_rows": false,
+        "multi_header": true,
+        "multi_table": true,
+        "parenthesized_number": false,
+        "row_span": true,
+        "text_source_disagreement": true
+      },
+      "historical_benchmark_exposure": true,
+      "issuer": "EXR",
+      "n_tables": 2,
+      "partition": "evaluation",
+      "pdf": "../../corpus-fintabnet/pdfs/EXR_2018_page_28.pdf",
+      "pdf_license": "CDLA-Permissive-1.0",
+      "pdf_page_index": 0,
+      "pdf_sha256": "929215c85f003915e8ff678475bb1b83b79fc27c38ea01443dfa1b0e46cbfabd",
+      "prior_targeted_tuning": false,
+      "review_status": "unreviewed",
+      "source_pdf_rel_path": "EXR/2018/page_28.pdf",
+      "source_splits": [
+        "train"
+      ],
+      "tables": [
+        {
+          "cells": "cells/EXR_2018_page_28_0.json",
+          "cells_sha256": "17e1b3f25aecce5ba4f19f49a2ebdadd7df28e1e299bc7d5b3576bf94f848c71",
+          "html": "html/EXR_2018_page_28_0.html",
+          "html_sha256": "ffabe673ec2798162108310243a1af95ddcaffe1efaadbe330eeb3c9ec3e4f71",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_train.jsonl",
+          "source_line_index": 576,
+          "source_split": "train",
+          "source_table_id": 1117,
+          "source_table_index": 0,
+          "structure_id": "EXR_2018_page_28_0"
+        },
+        {
+          "cells": "cells/EXR_2018_page_28_1.json",
+          "cells_sha256": "f9fdad1430c794e9c8860770bd5a319c5496996067281b9b5bf0f86f15a8ede5",
+          "html": "html/EXR_2018_page_28_1.html",
+          "html_sha256": "c5b0718d79372d7dd8f90db70da60a9289c5c99e3f29f78e017bd7ebba514365",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_train.jsonl",
+          "source_line_index": 577,
+          "source_split": "train",
+          "source_table_id": 1118,
+          "source_table_index": 1,
+          "structure_id": "EXR_2018_page_28_1"
+        }
+      ]
+    },
+    {
+      "annotation": "../../corpus-fintabnet/annotations/AEE_2007_page_125_tables.json",
+      "annotation_license": "CDLA-Permissive-2.0",
+      "annotation_sha256": "ed58d872ecec188aea1e8164b724a4c763f9ce9360bdab1643e50b62e3dc9005",
+      "document_id": "AEE_2007_page_125",
+      "features": {
+        "blank_cell": true,
+        "col_span": true,
+        "currency": true,
+        "dense_rows": false,
+        "multi_header": true,
+        "multi_table": false,
+        "parenthesized_number": true,
+        "row_span": true,
+        "text_source_disagreement": true
+      },
+      "historical_benchmark_exposure": true,
+      "issuer": "AEE",
+      "n_tables": 1,
+      "partition": "evaluation",
+      "pdf": "../../corpus-fintabnet/pdfs/AEE_2007_page_125.pdf",
+      "pdf_license": "CDLA-Permissive-1.0",
+      "pdf_page_index": 0,
+      "pdf_sha256": "debae176682b8e2037f5367ad5693cb125533a750af74d9488cacc8a24f249d8",
+      "prior_targeted_tuning": false,
+      "review_status": "unreviewed",
+      "source_pdf_rel_path": "AEE/2007/page_125.pdf",
+      "source_splits": [
+        "train"
+      ],
+      "tables": [
+        {
+          "cells": "cells/AEE_2007_page_125_0.json",
+          "cells_sha256": "86ec56276ad2653f196c00974a770f667d21b3e52fc35e31aa6a313405241a4c",
+          "html": "html/AEE_2007_page_125_0.html",
+          "html_sha256": "1d0a5139f8e500cfc15fdebf7c2050983b07fb4e4d3a08519207974ce7a9c42f",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_train.jsonl",
+          "source_line_index": 76220,
+          "source_split": "train",
+          "source_table_id": 124036,
+          "source_table_index": 0,
+          "structure_id": "AEE_2007_page_125_0"
+        }
+      ]
+    },
+    {
+      "annotation": "../../corpus-fintabnet/annotations/PRU_2005_page_83_tables.json",
+      "annotation_license": "CDLA-Permissive-2.0",
+      "annotation_sha256": "5118c47a4be6386a63d3d19075eaa2d7dd04b5034bd854c196e696d1967dbf55",
+      "document_id": "PRU_2005_page_83",
+      "features": {
+        "blank_cell": true,
+        "col_span": true,
+        "currency": true,
+        "dense_rows": true,
+        "multi_header": false,
+        "multi_table": false,
+        "parenthesized_number": true,
+        "row_span": false,
+        "text_source_disagreement": true
+      },
+      "historical_benchmark_exposure": true,
+      "issuer": "PRU",
+      "n_tables": 1,
+      "partition": "evaluation",
+      "pdf": "../../corpus-fintabnet/pdfs/PRU_2005_page_83.pdf",
+      "pdf_license": "CDLA-Permissive-1.0",
+      "pdf_page_index": 0,
+      "pdf_sha256": "028750735b0e7585ec51228b962005354f79e151bef73cd2de674711ab9166e9",
+      "prior_targeted_tuning": false,
+      "review_status": "unreviewed",
+      "source_pdf_rel_path": "PRU/2005/page_83.pdf",
+      "source_splits": [
+        "train"
+      ],
+      "tables": [
+        {
+          "cells": "cells/PRU_2005_page_83_0.json",
+          "cells_sha256": "c6afa164d21f925ac4b63df040b0cf13fb4be56e34481f39034b747da8a07742",
+          "html": "html/PRU_2005_page_83_0.html",
+          "html_sha256": "016fd8702d630b0c28b717b2f0263b493edd01b4831e5ebad2d326777d904762",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_train.jsonl",
+          "source_line_index": 84828,
+          "source_split": "train",
+          "source_table_id": 139118,
+          "source_table_index": 0,
+          "structure_id": "PRU_2005_page_83_0"
+        }
+      ]
+    },
+    {
+      "annotation": "../../corpus-fintabnet/annotations/ETR_2013_page_29_tables.json",
+      "annotation_license": "CDLA-Permissive-2.0",
+      "annotation_sha256": "e613cd923122f7655447a2f7bff14fabf4876398733ec98f35ce7a0fa3845cff",
+      "document_id": "ETR_2013_page_29",
+      "features": {
+        "blank_cell": true,
+        "col_span": true,
+        "currency": true,
+        "dense_rows": false,
+        "multi_header": true,
+        "multi_table": true,
+        "parenthesized_number": false,
+        "row_span": true,
+        "text_source_disagreement": true
+      },
+      "historical_benchmark_exposure": true,
+      "issuer": "ETR",
+      "n_tables": 3,
+      "partition": "evaluation",
+      "pdf": "../../corpus-fintabnet/pdfs/ETR_2013_page_29.pdf",
+      "pdf_license": "CDLA-Permissive-1.0",
+      "pdf_page_index": 0,
+      "pdf_sha256": "9356cf1a30ede7e14c312ce25cee3268e3d33d87a519b79b974d4982cc925375",
+      "prior_targeted_tuning": false,
+      "review_status": "unreviewed",
+      "source_pdf_rel_path": "ETR/2013/page_29.pdf",
+      "source_splits": [
+        "train"
+      ],
+      "tables": [
+        {
+          "cells": "cells/ETR_2013_page_29_3.json",
+          "cells_sha256": "61ab434ed65ab7d8771692d515165cc03c0085bddca0b5c56c10f356baa41cf5",
+          "html": "html/ETR_2013_page_29_3.html",
+          "html_sha256": "4f493ec4e7f3f6f5f97d43e36d75f2ddbf950bbfd945ed8c972091d648446342",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_train.jsonl",
+          "source_line_index": 49576,
+          "source_split": "train",
+          "source_table_id": 81440,
+          "source_table_index": 0,
+          "structure_id": "ETR_2013_page_29_3"
+        },
+        {
+          "cells": "cells/ETR_2013_page_29_0.json",
+          "cells_sha256": "ebbc7fbe38fef8538e7a858fb1c65173b844cef6bdb5b3969c568ce48f3523f9",
+          "html": "html/ETR_2013_page_29_0.html",
+          "html_sha256": "b6c90a213ab81b1182a213a41565625544c48b5129414c0f0e5b8ada0373f989",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_train.jsonl",
+          "source_line_index": 49553,
+          "source_split": "train",
+          "source_table_id": 81407,
+          "source_table_index": 1,
+          "structure_id": "ETR_2013_page_29_0"
+        },
+        {
+          "cells": "cells/ETR_2013_page_29_2.json",
+          "cells_sha256": "66d5b2bdb3abce7683fe38fbdbb2fe5e0b97e5556e52c1f2e1b74580ebb2db9b",
+          "html": "html/ETR_2013_page_29_2.html",
+          "html_sha256": "4329c66c3c55705939cc77347063789b185c8e49826c4f6ca24f7b70c5c68d3b",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_train.jsonl",
+          "source_line_index": 49555,
+          "source_split": "train",
+          "source_table_id": 81409,
+          "source_table_index": 2,
+          "structure_id": "ETR_2013_page_29_2"
+        }
+      ]
+    },
+    {
+      "annotation": "../../corpus-fintabnet/annotations/FRT_2010_page_42_tables.json",
+      "annotation_license": "CDLA-Permissive-2.0",
+      "annotation_sha256": "67334a3bc0928c63b5875959daeb58b5be091606bd0c8dc07a9b12b929788404",
+      "document_id": "FRT_2010_page_42",
+      "features": {
+        "blank_cell": true,
+        "col_span": true,
+        "currency": true,
+        "dense_rows": false,
+        "multi_header": false,
+        "multi_table": false,
+        "parenthesized_number": true,
+        "row_span": false,
+        "text_source_disagreement": true
+      },
+      "historical_benchmark_exposure": true,
+      "issuer": "FRT",
+      "n_tables": 1,
+      "partition": "evaluation",
+      "pdf": "../../corpus-fintabnet/pdfs/FRT_2010_page_42.pdf",
+      "pdf_license": "CDLA-Permissive-1.0",
+      "pdf_page_index": 0,
+      "pdf_sha256": "dd67bdd40d75301bf089f6e54f6f15d28525a45f22eee2f9c43d7fc7e5ba3178",
+      "prior_targeted_tuning": false,
+      "review_status": "unreviewed",
+      "source_pdf_rel_path": "FRT/2010/page_42.pdf",
+      "source_splits": [
+        "train"
+      ],
+      "tables": [
+        {
+          "cells": "cells/FRT_2010_page_42_0.json",
+          "cells_sha256": "4bd6d52ee7e54265127f5319e50fabe15a8ef42b925dc29baf9bc04b1a464cfb",
+          "html": "html/FRT_2010_page_42_0.html",
+          "html_sha256": "0a7ca8bc5308db50579709793c5a310b981c793f49ffe08a747f9734894a0e95",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_train.jsonl",
+          "source_line_index": 88736,
+          "source_split": "train",
+          "source_table_id": 145543,
+          "source_table_index": 0,
+          "structure_id": "FRT_2010_page_42_0"
+        }
+      ]
+    },
+    {
+      "annotation": "../../corpus-fintabnet/annotations/AIZ_2005_page_142_tables.json",
+      "annotation_license": "CDLA-Permissive-2.0",
+      "annotation_sha256": "73c3ae2413588a73dfaaa52c9c07e73ed8bc723814cd6aec2c8389cf8cb7f04f",
+      "document_id": "AIZ_2005_page_142",
+      "features": {
+        "blank_cell": true,
+        "col_span": true,
+        "currency": true,
+        "dense_rows": false,
+        "multi_header": true,
+        "multi_table": false,
+        "parenthesized_number": true,
+        "row_span": true,
+        "text_source_disagreement": true
+      },
+      "historical_benchmark_exposure": true,
+      "issuer": "AIZ",
+      "n_tables": 1,
+      "partition": "evaluation",
+      "pdf": "../../corpus-fintabnet/pdfs/AIZ_2005_page_142.pdf",
+      "pdf_license": "CDLA-Permissive-1.0",
+      "pdf_page_index": 0,
+      "pdf_sha256": "fc8368349a4aa1b2677379eb08aea7c9a4f9d9b566d0530c9ccf11171d8fa9fb",
+      "prior_targeted_tuning": false,
+      "review_status": "unreviewed",
+      "source_pdf_rel_path": "AIZ/2005/page_142.pdf",
+      "source_splits": [
+        "train"
+      ],
+      "tables": [
+        {
+          "cells": "cells/AIZ_2005_page_142_0.json",
+          "cells_sha256": "9f95dfd075bc01aebe93950f3a4c41d78075ab03fed40cbda5ccf0bdbb33ef69",
+          "html": "html/AIZ_2005_page_142_0.html",
+          "html_sha256": "59092fa46dc71a45b186733694516236120b9a773025e82fb4f489ecd064c26b",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_train.jsonl",
+          "source_line_index": 82557,
+          "source_split": "train",
+          "source_table_id": 133490,
+          "source_table_index": 0,
+          "structure_id": "AIZ_2005_page_142_0"
+        }
+      ]
+    },
+    {
+      "annotation": "../../corpus-fintabnet/annotations/AWK_2013_page_131_tables.json",
+      "annotation_license": "CDLA-Permissive-2.0",
+      "annotation_sha256": "b25424e3a78972bb4bcd25c102580afd2dca8e711c82f87f39988abfdf903b88",
+      "document_id": "AWK_2013_page_131",
+      "features": {
+        "blank_cell": true,
+        "col_span": true,
+        "currency": true,
+        "dense_rows": false,
+        "multi_header": true,
+        "multi_table": false,
+        "parenthesized_number": false,
+        "row_span": true,
+        "text_source_disagreement": true
+      },
+      "historical_benchmark_exposure": true,
+      "issuer": "AWK",
+      "n_tables": 1,
+      "partition": "evaluation",
+      "pdf": "../../corpus-fintabnet/pdfs/AWK_2013_page_131.pdf",
+      "pdf_license": "CDLA-Permissive-1.0",
+      "pdf_page_index": 0,
+      "pdf_sha256": "d3ea28963ebcce225ac8f77c197fc4cd315ce81d3bb744d278e413dd3bc35bd4",
+      "prior_targeted_tuning": false,
+      "review_status": "unreviewed",
+      "source_pdf_rel_path": "AWK/2013/page_131.pdf",
+      "source_splits": [
+        "train"
+      ],
+      "tables": [
+        {
+          "cells": "cells/AWK_2013_page_131_0.json",
+          "cells_sha256": "fbf124ce38605eb6f40b5bbcb6f35ba308650b2086106f5d39a92f9ab933ec18",
+          "html": "html/AWK_2013_page_131_0.html",
+          "html_sha256": "10a408aa4ef850a98296e33b49a987310f1789821ed6becc6994b8fa6524bb54",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_train.jsonl",
+          "source_line_index": 11988,
+          "source_split": "train",
+          "source_table_id": 19238,
+          "source_table_index": 0,
+          "structure_id": "AWK_2013_page_131_0"
+        }
+      ]
+    },
+    {
+      "annotation": "../../corpus-fintabnet/annotations/LKQ_2009_page_69_tables.json",
+      "annotation_license": "CDLA-Permissive-2.0",
+      "annotation_sha256": "264a55f72b5971db88118d95aacb5996e8d8478302259fd30b46eb34f6343ffa",
+      "document_id": "LKQ_2009_page_69",
+      "features": {
+        "blank_cell": true,
+        "col_span": true,
+        "currency": true,
+        "dense_rows": false,
+        "multi_header": true,
+        "multi_table": false,
+        "parenthesized_number": false,
+        "row_span": true,
+        "text_source_disagreement": true
+      },
+      "historical_benchmark_exposure": true,
+      "issuer": "LKQ",
+      "n_tables": 1,
+      "partition": "evaluation",
+      "pdf": "../../corpus-fintabnet/pdfs/LKQ_2009_page_69.pdf",
+      "pdf_license": "CDLA-Permissive-1.0",
+      "pdf_page_index": 0,
+      "pdf_sha256": "db0aa241950386b00dc3e4e8b1bab030ab66c90acd5998c57d05cb82aa8fb7ef",
+      "prior_targeted_tuning": false,
+      "review_status": "unreviewed",
+      "source_pdf_rel_path": "LKQ/2009/page_69.pdf",
+      "source_splits": [
+        "train"
+      ],
+      "tables": [
+        {
+          "cells": "cells/LKQ_2009_page_69_0.json",
+          "cells_sha256": "4f7a1ab428a2fdc239d65ac4b46b11f8aa6b6378a75aeda68686d29e064066ee",
+          "html": "html/LKQ_2009_page_69_0.html",
+          "html_sha256": "89c48b1343ead2d5870cab91f00b94f4f1f18abf8e7b0903dc89fdc91ed42950",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_train.jsonl",
+          "source_line_index": 70154,
+          "source_split": "train",
+          "source_table_id": 113484,
+          "source_table_index": 0,
+          "structure_id": "LKQ_2009_page_69_0"
+        }
+      ]
+    },
+    {
+      "annotation": "../../corpus-fintabnet/annotations/EL_2010_page_140_tables.json",
+      "annotation_license": "CDLA-Permissive-2.0",
+      "annotation_sha256": "e65b7eea58b6f5d070ae219a0dd08d44e9bd1b72220210103c20b70a134085ac",
+      "document_id": "EL_2010_page_140",
+      "features": {
+        "blank_cell": false,
+        "col_span": true,
+        "currency": true,
+        "dense_rows": false,
+        "multi_header": true,
+        "multi_table": true,
+        "parenthesized_number": true,
+        "row_span": true,
+        "text_source_disagreement": true
+      },
+      "historical_benchmark_exposure": true,
+      "issuer": "EL",
+      "n_tables": 2,
+      "partition": "evaluation",
+      "pdf": "../../corpus-fintabnet/pdfs/EL_2010_page_140.pdf",
+      "pdf_license": "CDLA-Permissive-1.0",
+      "pdf_page_index": 0,
+      "pdf_sha256": "887bf6076f2ddfe23c30a820bf4386f70607ef6f8b7772a6cf5ce7f11598e88d",
+      "prior_targeted_tuning": false,
+      "review_status": "unreviewed",
+      "source_pdf_rel_path": "EL/2010/page_140.pdf",
+      "source_splits": [
+        "train"
+      ],
+      "tables": [
+        {
+          "cells": "cells/EL_2010_page_140_1.json",
+          "cells_sha256": "21a67ea7ac4e29193c3a451e6234ed923ec933063f28e6a369bd0749c4d962ed",
+          "html": "html/EL_2010_page_140_1.html",
+          "html_sha256": "0e9429c7e90cc95732afa67afd0d05965fc4cd0e49a4df962dc72ee6219de9a2",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_train.jsonl",
+          "source_line_index": 91088,
+          "source_split": "train",
+          "source_table_id": 148987,
+          "source_table_index": 0,
+          "structure_id": "EL_2010_page_140_1"
+        },
+        {
+          "cells": "cells/EL_2010_page_140_0.json",
+          "cells_sha256": "754044815ee9aebda11e90d5432dee1941b036dda04bd16ccb78429cd89a84cf",
+          "html": "html/EL_2010_page_140_0.html",
+          "html_sha256": "0b11cbc899996de4ada55a6261b2b2215098a51e5ad24c475bdea6677f478e78",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_train.jsonl",
+          "source_line_index": 91087,
+          "source_split": "train",
+          "source_table_id": 148986,
+          "source_table_index": 1,
+          "structure_id": "EL_2010_page_140_0"
+        }
+      ]
+    },
+    {
+      "annotation": "../../corpus-fintabnet/annotations/AES_2016_page_188_tables.json",
+      "annotation_license": "CDLA-Permissive-2.0",
+      "annotation_sha256": "e219084587d20fe154b33a6b4f3d8089215f0c0785af3d25d6ee71f7bccb0147",
+      "document_id": "AES_2016_page_188",
+      "features": {
+        "blank_cell": false,
+        "col_span": false,
+        "currency": true,
+        "dense_rows": false,
+        "multi_header": false,
+        "multi_table": false,
+        "parenthesized_number": false,
+        "row_span": false,
+        "text_source_disagreement": true
+      },
+      "historical_benchmark_exposure": true,
+      "issuer": "AES",
+      "n_tables": 1,
+      "partition": "evaluation",
+      "pdf": "../../corpus-fintabnet/pdfs/AES_2016_page_188.pdf",
+      "pdf_license": "CDLA-Permissive-1.0",
+      "pdf_page_index": 0,
+      "pdf_sha256": "940267a439115062c13173c24fa97eff105e3ee7a9eadc729692679c3547fb58",
+      "prior_targeted_tuning": false,
+      "review_status": "unreviewed",
+      "source_pdf_rel_path": "AES/2016/page_188.pdf",
+      "source_splits": [
+        "train"
+      ],
+      "tables": [
+        {
+          "cells": "cells/AES_2016_page_188_0.json",
+          "cells_sha256": "2cefb28a128ffc176dd967edf14aee2f031a4280c28bab21cad6db01a84c48e9",
+          "html": "html/AES_2016_page_188_0.html",
+          "html_sha256": "afd5699c98b146541bc608e2511dc38f60fb58f061dc0117a96429b2c77647ba",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_train.jsonl",
+          "source_line_index": 54496,
+          "source_split": "train",
+          "source_table_id": 90169,
+          "source_table_index": 0,
+          "structure_id": "AES_2016_page_188_0"
+        }
+      ]
+    },
+    {
+      "annotation": "../../corpus-fintabnet/annotations/HBAN_2015_page_71_tables.json",
+      "annotation_license": "CDLA-Permissive-2.0",
+      "annotation_sha256": "8d0ee49d540261aa94bd375350885eeeac0fa8453ffe4b5880ae7f6579286a33",
+      "document_id": "HBAN_2015_page_71",
+      "features": {
+        "blank_cell": false,
+        "col_span": true,
+        "currency": true,
+        "dense_rows": false,
+        "multi_header": true,
+        "multi_table": false,
+        "parenthesized_number": true,
+        "row_span": true,
+        "text_source_disagreement": true
+      },
+      "historical_benchmark_exposure": true,
+      "issuer": "HBAN",
+      "n_tables": 1,
+      "partition": "evaluation",
+      "pdf": "../../corpus-fintabnet/pdfs/HBAN_2015_page_71.pdf",
+      "pdf_license": "CDLA-Permissive-1.0",
+      "pdf_page_index": 0,
+      "pdf_sha256": "710f62ff89a4745b9b712119331b6fd396c78ceeb3709f3fae5ee9462ed2fbcd",
+      "prior_targeted_tuning": false,
+      "review_status": "unreviewed",
+      "source_pdf_rel_path": "HBAN/2015/page_71.pdf",
+      "source_splits": [
+        "train"
+      ],
+      "tables": [
+        {
+          "cells": "cells/HBAN_2015_page_71_0.json",
+          "cells_sha256": "fdd0055c965ac1142a29c7d0dadae3df79e93411d429ccf7de3d060b5140c347",
+          "html": "html/HBAN_2015_page_71_0.html",
+          "html_sha256": "083c918012ef2f92f153cd89efade80e72ec9aff233694457fbda6413f802c66",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_train.jsonl",
+          "source_line_index": 66923,
+          "source_split": "train",
+          "source_table_id": 108466,
+          "source_table_index": 0,
+          "structure_id": "HBAN_2015_page_71_0"
+        }
+      ]
+    },
+    {
+      "annotation": "../../corpus-fintabnet/annotations/BSX_2007_page_128_tables.json",
+      "annotation_license": "CDLA-Permissive-2.0",
+      "annotation_sha256": "6880304f9b6e942850d8de1b45db0740accb135963f88e17a9a802a0da48ea30",
+      "document_id": "BSX_2007_page_128",
+      "features": {
+        "blank_cell": true,
+        "col_span": false,
+        "currency": true,
+        "dense_rows": false,
+        "multi_header": false,
+        "multi_table": true,
+        "parenthesized_number": false,
+        "row_span": false,
+        "text_source_disagreement": true
+      },
+      "historical_benchmark_exposure": true,
+      "issuer": "BSX",
+      "n_tables": 2,
+      "partition": "evaluation",
+      "pdf": "../../corpus-fintabnet/pdfs/BSX_2007_page_128.pdf",
+      "pdf_license": "CDLA-Permissive-1.0",
+      "pdf_page_index": 0,
+      "pdf_sha256": "50bf349dc0151d19c871fec168e87fa3097e3d415a569e740d0ec30f9354f98c",
+      "prior_targeted_tuning": false,
+      "review_status": "unreviewed",
+      "source_pdf_rel_path": "BSX/2007/page_128.pdf",
+      "source_splits": [
+        "train"
+      ],
+      "tables": [
+        {
+          "cells": "cells/BSX_2007_page_128_1.json",
+          "cells_sha256": "eb10529ae7230593661a1e3f2321f2403047aa240e5e0621ac6135a2e8d614d1",
+          "html": "html/BSX_2007_page_128_1.html",
+          "html_sha256": "00164eb0c7e02b942f3431865b72ed827dacc610c529513cfd54af3478278d5d",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_train.jsonl",
+          "source_line_index": 14592,
+          "source_split": "train",
+          "source_table_id": 25690,
+          "source_table_index": 0,
+          "structure_id": "BSX_2007_page_128_1"
+        },
+        {
+          "cells": "cells/BSX_2007_page_128_0.json",
+          "cells_sha256": "81d60a61cab7397172e739edcf2b19b31f9dd6d8cf41ef2224ee1bfe4c379bad",
+          "html": "html/BSX_2007_page_128_0.html",
+          "html_sha256": "429f6beb0c31a4b0ce3300310543248f574136a144e99257cb2e56e11b3c257c",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_train.jsonl",
+          "source_line_index": 14591,
+          "source_split": "train",
+          "source_table_id": 25689,
+          "source_table_index": 1,
+          "structure_id": "BSX_2007_page_128_0"
+        }
+      ]
+    },
+    {
+      "annotation": "../../corpus-fintabnet/annotations/GM_2010_page_167_tables.json",
+      "annotation_license": "CDLA-Permissive-2.0",
+      "annotation_sha256": "e2e89e4a83897603d0672f6c57d1d4aef7aed1bc87c6d7660b65f4a3bc27ae67",
+      "document_id": "GM_2010_page_167",
+      "features": {
+        "blank_cell": true,
+        "col_span": false,
+        "currency": true,
+        "dense_rows": false,
+        "multi_header": false,
+        "multi_table": false,
+        "parenthesized_number": true,
+        "row_span": false,
+        "text_source_disagreement": false
+      },
+      "historical_benchmark_exposure": true,
+      "issuer": "GM",
+      "n_tables": 1,
+      "partition": "evaluation",
+      "pdf": "../../corpus-fintabnet/pdfs/GM_2010_page_167.pdf",
+      "pdf_license": "CDLA-Permissive-1.0",
+      "pdf_page_index": 0,
+      "pdf_sha256": "a9ce63121d2a2cde7ccee45bf096ebd80b0405958b85f8e71424e5d8acd2c9d8",
+      "prior_targeted_tuning": false,
+      "review_status": "unreviewed",
+      "source_pdf_rel_path": "GM/2010/page_167.pdf",
+      "source_splits": [
+        "train"
+      ],
+      "tables": [
+        {
+          "cells": "cells/GM_2010_page_167_0.json",
+          "cells_sha256": "a23b182e9e1e459a121d6a1f159a50283fec761875b5ef44487f3a82095de856",
+          "html": "html/GM_2010_page_167_0.html",
+          "html_sha256": "a0d6045411ec1a0ca134cf5455c1049aaaa46975f587eb65b99bec150ae974b8",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_train.jsonl",
+          "source_line_index": 27143,
+          "source_split": "train",
+          "source_table_id": 44662,
+          "source_table_index": 0,
+          "structure_id": "GM_2010_page_167_0"
+        }
+      ]
+    },
+    {
+      "annotation": "../../corpus-fintabnet/annotations/KO_2006_page_68_tables.json",
+      "annotation_license": "CDLA-Permissive-2.0",
+      "annotation_sha256": "6d78a6f18b32af60546570fd0de13ec461b32f478f81d80a10d8eef9c449f08d",
+      "document_id": "KO_2006_page_68",
+      "features": {
+        "blank_cell": true,
+        "col_span": false,
+        "currency": false,
+        "dense_rows": false,
+        "multi_header": false,
+        "multi_table": false,
+        "parenthesized_number": false,
+        "row_span": false,
+        "text_source_disagreement": true
+      },
+      "historical_benchmark_exposure": true,
+      "issuer": "KO",
+      "n_tables": 1,
+      "partition": "evaluation",
+      "pdf": "../../corpus-fintabnet/pdfs/KO_2006_page_68.pdf",
+      "pdf_license": "CDLA-Permissive-1.0",
+      "pdf_page_index": 0,
+      "pdf_sha256": "825216b5e1bae2f597780d3526219a91ff8644bf2b5a2a61ac38a5c55d44b495",
+      "prior_targeted_tuning": false,
+      "review_status": "unreviewed",
+      "source_pdf_rel_path": "KO/2006/page_68.pdf",
+      "source_splits": [
+        "train"
+      ],
+      "tables": [
+        {
+          "cells": "cells/KO_2006_page_68_0.json",
+          "cells_sha256": "c0f1630596b5d88d2b8c227aecdfa1b478fefa8b0556f581c75d49a37036f858",
+          "html": "html/KO_2006_page_68_0.html",
+          "html_sha256": "01e340ec111f2cbb34609854bf226ff16cae419296eb84ebcff39dd68a51381e",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_train.jsonl",
+          "source_line_index": 56638,
+          "source_split": "train",
+          "source_table_id": 93659,
+          "source_table_index": 0,
+          "structure_id": "KO_2006_page_68_0"
+        }
+      ]
+    },
+    {
+      "annotation": "../../corpus-fintabnet/annotations/PEP_2015_page_89_tables.json",
+      "annotation_license": "CDLA-Permissive-2.0",
+      "annotation_sha256": "a9d270377cb1e231f0de1b09745b2a7ba5f5a4bfbed07ebb889faa0b05858bc4",
+      "document_id": "PEP_2015_page_89",
+      "features": {
+        "blank_cell": true,
+        "col_span": true,
+        "currency": false,
+        "dense_rows": false,
+        "multi_header": false,
+        "multi_table": false,
+        "parenthesized_number": true,
+        "row_span": false,
+        "text_source_disagreement": true
+      },
+      "historical_benchmark_exposure": true,
+      "issuer": "PEP",
+      "n_tables": 1,
+      "partition": "evaluation",
+      "pdf": "../../corpus-fintabnet/pdfs/PEP_2015_page_89.pdf",
+      "pdf_license": "CDLA-Permissive-1.0",
+      "pdf_page_index": 0,
+      "pdf_sha256": "f87d1b34a79f1b8805aa34636ba0ed4414c323b47bd1d7f71c766e9d953620c1",
+      "prior_targeted_tuning": false,
+      "review_status": "unreviewed",
+      "source_pdf_rel_path": "PEP/2015/page_89.pdf",
+      "source_splits": [
+        "test"
+      ],
+      "tables": [
+        {
+          "cells": "cells/PEP_2015_page_89_0.json",
+          "cells_sha256": "db8400bc5ad7d2c5073830d7bb702e8700b884d02717f50a93202ffd88de739e",
+          "html": "html/PEP_2015_page_89_0.html",
+          "html_sha256": "e0492966a581d3e8aa5548e00a8b2b8d7b4c1b7d702ecf1062cdb1e4578c0812",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_test.jsonl",
+          "source_line_index": 5445,
+          "source_split": "test",
+          "source_table_id": 25288,
+          "source_table_index": 0,
+          "structure_id": "PEP_2015_page_89_0"
+        }
+      ]
+    },
+    {
+      "annotation": "../../corpus-fintabnet/annotations/HSY_2007_page_29_tables.json",
+      "annotation_license": "CDLA-Permissive-2.0",
+      "annotation_sha256": "72093ff2b04cba4511772966c19525d37699bb69159ce4ff267491ee7611decc",
+      "document_id": "HSY_2007_page_29",
+      "features": {
+        "blank_cell": false,
+        "col_span": true,
+        "currency": true,
+        "dense_rows": false,
+        "multi_header": false,
+        "multi_table": false,
+        "parenthesized_number": false,
+        "row_span": false,
+        "text_source_disagreement": false
+      },
+      "historical_benchmark_exposure": true,
+      "issuer": "HSY",
+      "n_tables": 1,
+      "partition": "evaluation",
+      "pdf": "../../corpus-fintabnet/pdfs/HSY_2007_page_29.pdf",
+      "pdf_license": "CDLA-Permissive-1.0",
+      "pdf_page_index": 0,
+      "pdf_sha256": "4c26aaedf8edab0e2292f76619990bdfd93c3d708469db05381b3d3fcdb42865",
+      "prior_targeted_tuning": false,
+      "review_status": "unreviewed",
+      "source_pdf_rel_path": "HSY/2007/page_29.pdf",
+      "source_splits": [
+        "train"
+      ],
+      "tables": [
+        {
+          "cells": "cells/HSY_2007_page_29_0.json",
+          "cells_sha256": "332ec2ad8e1643b10441aedc728ba59317267cb0e5d54541df28a9f059ef5c5c",
+          "html": "html/HSY_2007_page_29_0.html",
+          "html_sha256": "28931c1a5dcf68ea890e7fbd4e219b51263ed43ce53cf47d80664f3abf76b72d",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_train.jsonl",
+          "source_line_index": 70774,
+          "source_split": "train",
+          "source_table_id": 115059,
+          "source_table_index": 0,
+          "structure_id": "HSY_2007_page_29_0"
+        }
+      ]
+    },
+    {
+      "annotation": "../../corpus-fintabnet/annotations/AIG_2012_page_271_tables.json",
+      "annotation_license": "CDLA-Permissive-2.0",
+      "annotation_sha256": "d53f9bce7e32594044ce259a485bc88e2f761f9abe19552929b9dd241bf4d864",
+      "document_id": "AIG_2012_page_271",
+      "features": {
+        "blank_cell": false,
+        "col_span": true,
+        "currency": true,
+        "dense_rows": true,
+        "multi_header": true,
+        "multi_table": false,
+        "parenthesized_number": false,
+        "row_span": true,
+        "text_source_disagreement": true
+      },
+      "historical_benchmark_exposure": true,
+      "issuer": "AIG",
+      "n_tables": 1,
+      "partition": "evaluation",
+      "pdf": "../../corpus-fintabnet/pdfs/AIG_2012_page_271.pdf",
+      "pdf_license": "CDLA-Permissive-1.0",
+      "pdf_page_index": 0,
+      "pdf_sha256": "78ffa3362160c8fbb7d91dd434fbbbca301235bac5e9a59e0f0e2b549d441294",
+      "prior_targeted_tuning": false,
+      "review_status": "unreviewed",
+      "source_pdf_rel_path": "AIG/2012/page_271.pdf",
+      "source_splits": [
+        "train"
+      ],
+      "tables": [
+        {
+          "cells": "cells/AIG_2012_page_271_0.json",
+          "cells_sha256": "c7fc1de11a3070ab27af8764eebf9e9b672c2f03d4814344fd84b4c8a496b32c",
+          "html": "html/AIG_2012_page_271_0.html",
+          "html_sha256": "67ef4e176abf8723baf4bc890492ef1f00bc23fa9b0348e290738d9facb551b6",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_train.jsonl",
+          "source_line_index": 29290,
+          "source_split": "train",
+          "source_table_id": 48825,
+          "source_table_index": 0,
+          "structure_id": "AIG_2012_page_271_0"
+        }
+      ]
+    },
+    {
+      "annotation": "../../corpus-fintabnet/annotations/MMM_2007_page_24_tables.json",
+      "annotation_license": "CDLA-Permissive-2.0",
+      "annotation_sha256": "210468dd9f770ffc15c004e084caf6da592297b079b6a2966b56c5d2d959c299",
+      "document_id": "MMM_2007_page_24",
+      "features": {
+        "blank_cell": false,
+        "col_span": false,
+        "currency": true,
+        "dense_rows": false,
+        "multi_header": false,
+        "multi_table": false,
+        "parenthesized_number": false,
+        "row_span": false,
+        "text_source_disagreement": false
+      },
+      "historical_benchmark_exposure": true,
+      "issuer": "MMM",
+      "n_tables": 1,
+      "partition": "evaluation",
+      "pdf": "../../corpus-fintabnet/pdfs/MMM_2007_page_24.pdf",
+      "pdf_license": "CDLA-Permissive-1.0",
+      "pdf_page_index": 0,
+      "pdf_sha256": "3b9e58b79a9f5182025254126c6de577a0860a937ef7f3b5ff093b00e6a63f46",
+      "prior_targeted_tuning": false,
+      "review_status": "unreviewed",
+      "source_pdf_rel_path": "MMM/2007/page_24.pdf",
+      "source_splits": [
+        "train"
+      ],
+      "tables": [
+        {
+          "cells": "cells/MMM_2007_page_24_0.json",
+          "cells_sha256": "d2a0b9cf1e116ef495eefe630dfdb58a1e3e25ac0d4638965cd7498a5b0e690d",
+          "html": "html/MMM_2007_page_24_0.html",
+          "html_sha256": "434d6d7937051ec82ae09c9c3be4bffc17a1faf7c43af3f00a5468ad60cb01f8",
+          "review_status": "unreviewed",
+          "source_annotation_file": "FinTabNet_1.0.0_cell_train.jsonl",
+          "source_line_index": 26313,
+          "source_split": "train",
+          "source_table_id": 43032,
+          "source_table_index": 0,
+          "structure_id": "MMM_2007_page_24_0"
+        }
+      ]
+    }
+  ],
+  "provenance": {
+    "annotations_license": "CDLA-Permissive-2.0",
+    "annotations_source": "https://huggingface.co/datasets/bsmock/FinTabNet.c/resolve/main/FinTabNet.c-PDF_Annotations.tar.gz",
+    "dataset": "FinTabNet.c",
+    "dataset_paper": "arXiv:2303.00716",
+    "pdf_license": "CDLA-Permissive-1.0",
+    "pdf_source": "https://huggingface.co/datasets/Leon1207/FinTabNet/resolve/main/archive.zip",
+    "pdf_source_original": "https://dax-cdn.cdn.appdomain.cloud/dax-fintabnet/1.0.0/fintabnet/pdf/ (DECOMMISSIONED: DNS zone gone)"
+  },
+  "review_ledger": {
+    "path": "review-ledger.json",
+    "sha256": "0208f9fb18af1ac401985fcca3d6103735523f058fe7bd1f16727d4c6f9faed0"
+  },
+  "review_status": "unreviewed",
+  "schema": "pdfspine.financial-eval-drafts.v1",
+  "selection": {
+    "path": "selection.json",
+    "sha256": "042c9f26ae236411272dbf8aac2c05bfa1bb48fd8dcb80f3dceb02c16e3f2250"
+  }
+}
