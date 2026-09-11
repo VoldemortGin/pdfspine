@@ -389,7 +389,7 @@ fn box_fixture() -> Vec<u8> {
 // Letter page, 1 in margins, Liberation Serif (LibreOffice's docx default).
 // Keep this text in sync with DOC_TITLE/DOC_PARAS in typeset_lo_oracle.py.
 // --------------------------------------------------------------------------
-fn lo_doc_fixture(shading: bool, tracking: CharacterSpacing) -> Vec<u8> {
+fn lo_doc_fixture(shading: bool, tracking: CharacterSpacing, border: bool) -> Vec<u8> {
     let mut title = RunStyle::new(SERIF, 24.0);
     title.bold = true;
     title.character_spacing = tracking;
@@ -397,10 +397,32 @@ fn lo_doc_fixture(shading: bool, tracking: CharacterSpacing) -> Vec<u8> {
     title_para.space_after = 12.0;
     let background = shading.then_some(Rgb::new(244.0 / 255.0, 177.0 / 255.0, 131.0 / 255.0));
     title_para.shading = background;
+    let borders = if border {
+        let edge = Some(
+            pdf_typeset::ParagraphBorder::new(
+                BorderEdge {
+                    width: 1.0,
+                    color: Rgb::new(0.8, 0.2, 0.0),
+                },
+                0.0,
+            )
+            .expect("valid border"),
+        );
+        pdf_typeset::ParagraphBorders {
+            top: edge,
+            right: edge,
+            bottom: edge,
+            left: edge,
+        }
+    } else {
+        pdf_typeset::ParagraphBorders::default()
+    };
+    title_para.borders = border.then(|| Box::new(borders));
     let body = |text: &str| {
         let mut p = ParaProps::new();
         p.space_after = 10.0;
         p.shading = background;
+        p.borders = border.then(|| Box::new(borders));
         let mut style = RunStyle::new(SERIF, 12.0);
         style.character_spacing = tracking;
         Block::Paragraph(p, vec![Run::new(text, style)])
@@ -523,18 +545,23 @@ fn main() {
         ("typeset-box.pdf", box_fixture()),
         (
             "typeset-lo-doc.pdf",
-            lo_doc_fixture(false, CharacterSpacing::default()),
+            lo_doc_fixture(false, CharacterSpacing::default(), false),
         ),
         (
             "typeset-lo-shading.pdf",
-            lo_doc_fixture(true, CharacterSpacing::default()),
+            lo_doc_fixture(true, CharacterSpacing::default(), false),
         ),
         ("typeset-lo-slide.pdf", lo_slide_fixture()),
+        (
+            "typeset-lo-border.pdf",
+            lo_doc_fixture(false, CharacterSpacing::default(), true),
+        ),
         (
             "typeset-lo-tracking.pdf",
             lo_doc_fixture(
                 false,
                 CharacterSpacing::new(1.0).expect("valid fixture tracking"),
+                false,
             ),
         ),
     ] {

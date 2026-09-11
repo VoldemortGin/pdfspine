@@ -327,6 +327,20 @@
     cost; these are bounded observations, not significance or zero-cost claims.
     See `docs/subset-fontnames-validation.md` for exact baseline identities,
     per-pair spread and memory limits.
+  - *Also landed:* DisplayList raster resources are captured before recording,
+    including indirect soft masks, palettes and ICC device-alternate metadata.
+    Source bytes and read-only xref tables are shared; pending edits and
+    authentication/layer state are frozen with independent lazy caches. The
+    source may subsequently change or close. Existing dynamic subset-name views
+    remain supported. Ordinary Page rendering is unchanged.
+    Both Rust `page_get_displaylist` factories now return `Result<DisplayList>`;
+    Python signatures stay unchanged. This is an unreleased Rust source change,
+    not a callback implementation. See `docs/displaylist-snapshot-validation.md`
+    for the regression, ownership contract and measured nonzero costs.
+    Final integrated five-phase gate passes **1971 Rust / 1386 Python tests**,
+    with 66 existing Python skips; extension fingerprint `53da3cbce469`, drift
+    and wheel/sdist installation smoke pass. Eight final Page/DL buffer probes
+    remain identical; no additional GT scoring. The two run APIs stay deferred.
   - *Remaining order:* device callbacks `Page.run` / `DisplayList.run` remain deferred.
   - *Evidence:* `python/tests/test_displaylist_textpage.py` covers flags, invisible
     text, Form resources, source edit/close, CropBox/Rotate, annotations and live
@@ -365,7 +379,14 @@
     Active tracking preserves base-plus-combining-mark sequences, including CJK
     token and run boundaries; this does not add complete shaping/grapheme support.
     LO +1pt tracking SSIM **0.8631 → 0.9749**; five prior engine PDFs byte-identical.
-  - [ ] **Remaining:** paragraph borders and pattern shading, condensed negative
+  - [x] **Solid paragraph borders** (unreleased).
+    Optional validated four-edge borders reserve vertical space and repeat on
+    page fragments; matching sibling strokes share outer edges while preserving
+    each paragraph's side spacing. Default None retains all six prior PDFs
+    byte-for-byte. New LO fixture **0.9527 → 0.9836**; previous DOCX/PPTX/shading/
+    tracking scores unchanged. `between` and non-solid styles remain unsupported.
+    See `docs/typeset-paragraph-borders.md`; consumer mappings/pins are unchanged.
+  - [ ] **Remaining:** non-solid/between paragraph borders and pattern shading, condensed negative
     character spacing, superscript/subscript, and verified Word `lineGap` placement.
   - *Increment validation:* LibreOffice 26.8.0.3 at 100 dpi, same renderer:
     existing DOCX/PPTX **0.9822 / 0.9780**, unchanged. These are the current
@@ -1770,6 +1791,17 @@ lists why · files · effort · **Acceptance**, the green condition that means "
   negative tracking, scripts, full shaping/graphemes and `lineGap` remain outside
   this increment. Combined isolated crate gate: **165 tests**, clippy/fmt/Rustdoc
   green. Current DOCX/PPTX/shading scores **0.9822 / 0.9780 / 0.9868** are unchanged.
+- **TS-15 · Solid paragraph borders** — ✅ DONE 2026-09-11 (unreleased).
+  Default-off validated four-edge RGB borders participate in shared paragraph
+  measurement and pagination. Matching strokes join, preserving per-paragraph
+  side spacing; page fragments restore outer edges. A real LO/Rust regression
+  caught internal bottom spacing forcing a 42pt group out of 60pt remaining
+  space; bounded closing-edge lookahead fixes it without losing the paired
+  true-split bottom/top edges. 179 crate tests (14 new) and independent review
+  pass; old six PDFs byte-identical, readback 5/5 and render refs 8/8 pass.
+  New LO border score **0.9527 → 0.9836**, previous four oracle pairs unchanged.
+  `between`/non-solid borders and consumer migration remain separate work.
+  See `docs/typeset-paragraph-borders.md`.
 - **Downstream unblocking:** **Phase B (pptspine `ppt-render`)** starts when the TS-2/3/5/6 gates are
   green; **Phase C (docspine `doc-render`)** when the TS-2/3/4 gates (incl. TS-4's table primitives) are
   green. Phase B/C PRDs live in the consumer repos; each pins a pdfspine rev with its needed TS tasks

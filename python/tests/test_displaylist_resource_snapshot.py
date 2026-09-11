@@ -96,3 +96,33 @@ def test_displaylist_keeps_layer_visibility_after_source_change_and_close() -> N
     doc.close()
     assert display.get_pixmap().samples == before
     assert "Layer text" in display.get_textpage().extractText()
+
+
+def test_snapshot_preserves_raw_font_view_after_edit_and_close() -> None:
+    from python.tests.test_rawdict_serialization import _spans
+
+    previous = pdfspine.TOOLS.set_subset_fontnames()
+    try:
+        pdfspine.TOOLS.set_subset_fontnames(False)
+        doc = pdfspine.open(stream=_resource_pdf())
+        doc.xref_set_key(7, "BaseFont", "/ABCDEF+Helvetica")
+        mask = doc.get_new_xref()
+        doc.update_object(
+            mask,
+            "<< /Type /XObject /Subtype /Image /Width 1 /Height 1 /BitsPerComponent 8 /ColorSpace /DeviceGray >>",
+        )
+        doc.update_stream(mask, b"\xff")
+        doc.xref_set_key(9, "SMask", f"{mask} 0 R")
+        display = doc[0].get_displaylist()
+        before = display.get_pixmap().samples
+        doc.xref_set_key(7, "BaseFont", "/CHANGED+Times-Roman")
+        doc.update_stream(mask, b"\x00")
+        doc.close()
+        pdfspine.TOOLS.set_subset_fontnames(True)
+        textpage = display.get_textpage()
+        assert _spans(textpage.extractDICT())[0]["font"] == "ABCDEF+Helvetica"
+        pdfspine.TOOLS.set_subset_fontnames(False)
+        assert _spans(textpage.extractDICT())[0]["font"] == "Helvetica"
+        assert display.get_pixmap().samples == before
+    finally:
+        pdfspine.TOOLS.set_subset_fontnames(previous)
