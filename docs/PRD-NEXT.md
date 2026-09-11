@@ -205,6 +205,15 @@
   `conformance/gt/RENDER-REPORT.md` (2026-09-10 update).
 
 - [ ] **3. Render, remaining cost.**
+  - *Small increment landed (2026-09-10):* glyph masks now retain their original
+    allocation and cache hits avoid a second lookup; clip coverage uses an
+    exhaustively equivalent integer expression. Eight alternating rounds on
+    35 available samples measured corpus median **12.0943 → 11.9573 ms** (−1.13%),
+    with 30/35 document medians lower and all public-Python output buffers/dimensions
+    byte-identical. Two of four adjacent pairs were essentially flat: this is
+    a small observed change, not a general/significant speedup. First glyph
+    rasterization and J2K remain unresolved; **this item stays open**. See the
+    new `conformance/BENCH.md` section, separate from the old 27-document results.
   - *Goal:* shave the last render hot spots, after item 2.
   - *Why / evidence:* first-seen glyph rasterization ≈30% of text pages,
     `into_pixmap` ≈10%, and J2K decode on image pages (render-performance record,
