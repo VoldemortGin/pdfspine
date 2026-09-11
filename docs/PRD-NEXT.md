@@ -353,7 +353,14 @@
     Active tracking preserves base-plus-combining-mark sequences, including CJK
     token and run boundaries; this does not add complete shaping/grapheme support.
     LO +1pt tracking SSIM **0.8631 → 0.9749**; five prior engine PDFs byte-identical.
-  - [ ] **Remaining:** paragraph borders and pattern shading, condensed negative
+  - [x] **Solid paragraph borders** (unreleased, isolated increment).
+    Optional validated four-edge borders reserve vertical space and repeat on
+    page fragments; matching sibling strokes share outer edges while preserving
+    each paragraph's side spacing. Default None retains all six prior PDFs
+    byte-for-byte. New LO fixture **0.9527 → 0.9836**; previous DOCX/PPTX/shading/
+    tracking scores unchanged. `between` and non-solid styles remain unsupported.
+    See `docs/typeset-paragraph-borders.md`; consumer mappings/pins are unchanged.
+  - [ ] **Remaining:** non-solid/between paragraph borders and pattern shading, condensed negative
     character spacing, superscript/subscript, and verified Word `lineGap` placement.
   - *Increment validation:* LibreOffice 26.8.0.3 at 100 dpi, same renderer:
     existing DOCX/PPTX **0.9822 / 0.9780**, unchanged. These are the current

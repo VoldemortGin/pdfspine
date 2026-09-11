@@ -225,6 +225,8 @@ impl ListLabel {
 #[non_exhaustive]
 #[derive(Clone, Debug, PartialEq)]
 pub struct ParaProps {
+    /// Solid paragraph edges; absent by default. Border dimensions participate in layout.
+    pub borders: Option<Box<ParagraphBorders>>,
     /// Optional solid paragraph background, spanning the indented paragraph
     /// width. Adjacent paragraphs with the same fill and horizontal indents
     /// also shade their intervening spacing; page breaks stop that join.
@@ -254,6 +256,7 @@ impl ParaProps {
     #[must_use]
     pub fn new() -> Self {
         ParaProps {
+            borders: None,
             shading: None,
             align: Align::Left,
             spacing: LineSpacing::default(),
@@ -293,6 +296,82 @@ pub enum ColumnWidth {
     Fixed(f64),
     /// Measured from content (fair-share shrink when the grid overflows).
     Auto,
+}
+
+/// A solid paragraph edge with validated point width and text-to-edge space.
+/// Other line styles and between-paragraph separators are not represented.
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct ParagraphBorder {
+    stroke: BorderEdge,
+    space: f64,
+}
+
+/// Invalid paragraph-border dimensions.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum ParagraphBorderError {
+    /// Width must be finite and strictly positive.
+    Width,
+    /// Space must be finite and nonnegative, with a finite total edge extent.
+    Space,
+}
+
+impl std::fmt::Display for ParagraphBorderError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Width => "paragraph border width must be finite and positive",
+            Self::Space => {
+                "paragraph border space must be finite and nonnegative with finite total extent"
+            }
+        })
+    }
+}
+impl std::error::Error for ParagraphBorderError {}
+
+impl ParagraphBorder {
+    /// Construct a solid edge in points.
+    ///
+    /// # Errors
+    /// Rejects nonfinite dimensions, nonpositive width and negative space.
+    pub fn new(stroke: BorderEdge, space: f64) -> Result<Self, ParagraphBorderError> {
+        if !stroke.width.is_finite() || stroke.width <= 0.0 {
+            return Err(ParagraphBorderError::Width);
+        }
+        if !space.is_finite() || space < 0.0 || !(stroke.width + space).is_finite() {
+            return Err(ParagraphBorderError::Space);
+        }
+        Ok(Self { stroke, space })
+    }
+
+    /// The solid stroke width and color.
+    #[must_use]
+    pub fn stroke(self) -> BorderEdge {
+        self.stroke
+    }
+
+    /// Distance from the text area to the inner stroke edge, in points.
+    #[must_use]
+    pub fn space(self) -> f64 {
+        self.space
+    }
+
+    pub(crate) fn extent(self) -> f64 {
+        self.stroke.width + self.space
+    }
+}
+
+/// Optional solid edges of a paragraph. No edges is the default.
+/// Matching adjacent stroke styles share their outer top/bottom edges;
+/// per-edge space still positions each paragraph's side strokes separately.
+#[derive(Copy, Clone, Debug, Default, PartialEq)]
+pub struct ParagraphBorders {
+    /// Top edge.
+    pub top: Option<ParagraphBorder>,
+    /// Right edge.
+    pub right: Option<ParagraphBorder>,
+    /// Bottom edge.
+    pub bottom: Option<ParagraphBorder>,
+    /// Left edge.
+    pub left: Option<ParagraphBorder>,
 }
 
 /// One table border edge.

@@ -11,6 +11,13 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
+### Solid paragraph borders
+
+- `pdf-typeset` paragraphs can carry validated solid RGB edges with individual
+  spacing. Borders participate in measurement and pagination, join matching
+  siblings and repeat on page fragments in flow, text boxes and cells. The
+  default remains borderless; `between` and non-solid styles are not represented.
+
 ### Glyph mask rendering
 
 - Specialize partial byte-mask coverage in a provenance-checked, BSD-licensed

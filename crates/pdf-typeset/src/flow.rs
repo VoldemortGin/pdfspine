@@ -38,7 +38,10 @@
 use std::rc::Rc;
 
 use crate::faces::FaceRegistry;
-use crate::model::{Align, Block, ImageSpec, LineHeightRule, LineSpacing, ListLabel, Run};
+use crate::model::{
+    Align, Block, ImageSpec, LineHeightRule, LineSpacing, ListLabel, ParaProps, ParagraphBorders,
+    Run,
+};
 use crate::ops::{FaceId, Op, PageOps, PathSeg};
 use crate::warn::ExportWarning;
 use crate::{Rgb, Typesetter};
@@ -820,8 +823,134 @@ fn box_layout(
     (ops, height, max_x, lines)
 }
 
+/// A paragraph's border extent on one page, in top-left coordinates.
+struct BorderFragment {
+    page: usize,
+    left: f64,
+    right: f64,
+    top: f64,
+    bottom: f64,
+    borders: ParagraphBorders,
+    top_edge: bool,
+    bottom_edge: bool,
+}
+
+#[derive(Default)]
+struct BorderGroup {
+    fragments: Vec<BorderFragment>,
+}
+
+fn border_left(props: &ParaProps) -> f64 {
+    props.indent_left.max(0.0)
+        + if props.first_line_indent.is_finite() {
+            props.first_line_indent.min(0.0)
+        } else {
+            0.0
+        }
+}
+
+fn paragraph_borders(props: &ParaProps) -> ParagraphBorders {
+    props.borders.as_deref().copied().unwrap_or_default()
+}
+
+fn bordered(props: &ParaProps) -> bool {
+    let b = paragraph_borders(props);
+    b.top.is_some() || b.right.is_some() || b.bottom.is_some() || b.left.is_some()
+}
+
+fn borders_join(a: &Block, b: &Block) -> bool {
+    match (a, b) {
+        (Block::Paragraph(a, ar), Block::Paragraph(b, br)) => {
+            let strokes = |p: &ParaProps| {
+                let b = paragraph_borders(p);
+                [b.top, b.right, b.bottom, b.left].map(|edge| edge.map(|e| e.stroke()))
+            };
+            bordered(a)
+                && strokes(a) == strokes(b)
+                && border_left(a) == border_left(b)
+                && a.indent_right.max(0.0) == b.indent_right.max(0.0)
+                && [ar, br].iter().all(|runs| {
+                    runs.iter()
+                        .any(|r| r.style.size.is_finite() && r.style.size > 0.0)
+                })
+        }
+        _ => false,
+    }
+}
+
+impl BorderGroup {
+    fn finish(self, ctx: &mut Ctx) {
+        if let Some(last) = self.fragments.last() {
+            ctx.y += last.borders.bottom.map_or(0.0, |e| e.extent());
+        }
+        for f in self.fragments {
+            let left = f.left - f.borders.left.map_or(0.0, |e| e.extent());
+            let right = f.right + f.borders.right.map_or(0.0, |e| e.extent());
+            ctx.max_x = ctx.max_x.max(right);
+            let edges = [
+                (
+                    f.borders.top.filter(|_| f.top_edge),
+                    left,
+                    f.top,
+                    right,
+                    f.top,
+                    true,
+                ),
+                (
+                    f.borders.bottom.filter(|_| f.bottom_edge),
+                    left,
+                    f.bottom,
+                    right,
+                    f.bottom,
+                    false,
+                ),
+            ];
+            for (edge, x1, y, x2, _, top) in edges {
+                if let Some(e) = edge {
+                    let stroke = e.stroke();
+                    let center = y + if top {
+                        stroke.width * 0.5
+                    } else {
+                        -stroke.width * 0.5
+                    };
+                    ctx.pages[f.page].ops.push(Op::Line {
+                        x1,
+                        y1: center,
+                        x2,
+                        y2: center,
+                        width: stroke.width,
+                        color: stroke.color,
+                    });
+                }
+            }
+            for (edge, x, left_side) in [
+                (f.borders.left, left, true),
+                (f.borders.right, right, false),
+            ] {
+                if let Some(e) = edge {
+                    let stroke = e.stroke();
+                    let center = x + if left_side {
+                        stroke.width * 0.5
+                    } else {
+                        -stroke.width * 0.5
+                    };
+                    ctx.pages[f.page].ops.push(Op::Line {
+                        x1: center,
+                        y1: f.top,
+                        x2: center,
+                        y2: f.bottom,
+                        width: stroke.width,
+                        color: stroke.color,
+                    });
+                }
+            }
+        }
+    }
+}
+
 /// Lays out sibling blocks at the context cursor.
 pub(crate) fn layout_blocks(ctx: &mut Ctx, blocks: &[Block]) {
+    let mut border_group = BorderGroup::default();
     for (index, block) in blocks.iter().enumerate() {
         match block {
             Block::Paragraph(props, runs) => {
@@ -832,7 +961,19 @@ pub(crate) fn layout_blocks(ctx: &mut Ctx, blocks: &[Block]) {
                             && previous.indent_left == props.indent_left
                             && previous.indent_right == props.indent_right
                             && previous_runs.iter().any(|run| run.style.size.is_finite() && run.style.size > 0.0));
-                layout_paragraph(ctx, props, runs, join_background);
+                layout_paragraph(
+                    ctx,
+                    props,
+                    runs,
+                    join_background,
+                    bordered(props).then_some(&mut border_group),
+                );
+                if !blocks
+                    .get(index + 1)
+                    .is_some_and(|next| borders_join(block, next))
+                {
+                    std::mem::take(&mut border_group).finish(ctx);
+                }
             }
             Block::Table(spec) => crate::table::layout_table(ctx, spec),
             Block::Image(spec) => layout_image(ctx, spec),
@@ -850,6 +991,7 @@ fn layout_paragraph(
     props: &crate::model::ParaProps,
     runs: &[Run],
     join_background: bool,
+    mut border_group: Option<&mut BorderGroup>,
 ) {
     let preceding_page = ctx.page;
     let preceding_bottom = ctx.y;
@@ -908,6 +1050,7 @@ fn layout_paragraph(
 
     let rule = ctx.ts.line_height_rule();
     let mut backgrounds: Vec<(usize, usize, Op)> = Vec::new();
+    let mut border_fragment: Option<usize> = None;
     for (i, line) in lines.iter().enumerate() {
         let (asc, desc, natural) = line_metrics(ctx.ts.faces(), line, ref_frag, rule);
         let lh = match props.spacing {
@@ -934,7 +1077,47 @@ fn layout_paragraph(
                 height: lh,
             });
         }
-        ctx.ensure(lh);
+        if let Some(group) = border_group.as_deref_mut() {
+            let borders = paragraph_borders(props);
+            let top_extent = borders.top.map_or(0.0, |e| e.extent());
+            let bottom_extent = borders.bottom.map_or(0.0, |e| e.extent());
+            let same_page = group.fragments.last().is_some_and(|f| f.page == ctx.page);
+            ctx.ensure(lh + bottom_extent + if same_page { 0.0 } else { top_extent });
+            let same_page = group.fragments.last().is_some_and(|f| f.page == ctx.page);
+            if border_fragment.is_none_or(|n| group.fragments[n].page != ctx.page) {
+                let top = if same_page && i == 0 {
+                    let previous = group
+                        .fragments
+                        .last_mut()
+                        .expect("same-page border fragment");
+                    previous.bottom = ctx.y;
+                    previous.bottom_edge = false;
+                    preceding_bottom
+                } else {
+                    ctx.y
+                };
+                if !same_page {
+                    ctx.y += top_extent;
+                }
+                group.fragments.push(BorderFragment {
+                    page: ctx.page,
+                    left: ctx.left() + border_left(props),
+                    right: (ctx.right() - props.indent_right.max(0.0))
+                        .max(ctx.left() + props.indent_left.max(0.0) + 1.0),
+                    top,
+                    bottom: ctx.y + lh + bottom_extent,
+                    borders,
+                    top_edge: !same_page,
+                    bottom_edge: true,
+                });
+                border_fragment = Some(group.fragments.len() - 1);
+            }
+            if let Some(n) = border_fragment {
+                group.fragments[n].bottom = ctx.y + lh + bottom_extent;
+            }
+        } else {
+            ctx.ensure(lh);
+        }
         if let Some(color) = props.shading {
             let top = if i == 0 && join_background && ctx.page == preceding_page {
                 preceding_bottom

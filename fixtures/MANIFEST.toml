@@ -135,6 +135,15 @@ cleared_by   = "validation-harness (crates/pdf-typeset/examples/make_typeset_fix
 cleared_date = "2026-09-10"
 notes        = "Engine-generated nonnegative character spacing fixture paired with separately authored OOXML for LibreOffice comparison; embeds OFL Liberation subsets"
 
+[[fixture]]
+path         = "typeset/typeset-lo-border.pdf"
+source       = "self-generated"
+license      = "CC0-1.0"
+sha256       = "36b0a22c9da4ea0704c1904f71f3bb2605d15fe4f9c49e5f0bf96546f972320f"
+cleared_by   = "validation-harness (crates/pdf-typeset/examples/make_typeset_fixtures.rs)"
+cleared_date = "2026-09-11"
+notes        = "Engine-generated solid paragraph borders fixture paired with separately authored OOXML for LibreOffice comparison; embeds OFL Liberation subsets"
+
 # <<< typeset conformance fixtures <<<
 
 # >>> validation-harness corpus (auto-generated) >>>
