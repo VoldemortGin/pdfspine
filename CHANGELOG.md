@@ -11,6 +11,28 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
+### Dynamic subset font names
+
+- Added `Tools.set_subset_fontnames(on=None)`: truthy values enable original
+  subset names in DICT/RAWDICT/JSON/RAWJSON and texttrace, including already
+  created Page, DisplayList and extended TextPages after source edits or close.
+  Resetting False restores the original span grouping; HTML/XML/plain text and
+  layout remain unchanged. None queries and all successful calls return bool.
+- Raw font names are shared per recorded font and retained per character.
+  This adds creation/storage cost even while the display option is disabled.
+  The optional display mode splits existing spans by raw name and preserves
+  accurate character/device geometry. Later split spans expose unavailable
+  source `text_matrix`/`ctm` as None/null; Rust `DictSpan` now represents those
+  two fields as `Option<MatrixTuple>`. Default False still emits the same tuples.
+
+### Glyph mask rendering
+
+- Specialize partial byte-mask coverage in a provenance-checked, BSD-licensed
+  tiny-skia 0.11.4 vendor. Pixel output is unchanged on the validated samples;
+  repeated single-machine benchmarks show lower first-glyph render cost.
+  See `conformance/BENCH.md` for statistics and background-load limitations.
+  Larger rendering hotspots remain open.
+
 ### Page font registration
 
 - `Page.insert_font` registers Core14 or a complete standalone glyf TrueType

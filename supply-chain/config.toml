@@ -58,6 +58,9 @@ audit-as-crates-io = false
 [policy.py-bindings]
 audit-as-crates-io = false
 
+[policy.tiny-skia]
+audit-as-crates-io = true
+
 [[exemptions.aes]]
 version = "0.7.5"
 criteria = "safe-to-deploy"

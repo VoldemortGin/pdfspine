@@ -68,7 +68,7 @@ builds and clean-install smoke checks. `./ci.sh --help` lists phase selection.
 The [pre-push hook](.githooks/pre-push) invokes the same complete gate when
 `core.hooksPath` points to `.githooks`.
 
-The extension phase fingerprints Rust/build inputs against
+The extension phase fingerprints Rust/build inputs (including `vendor/`) against
 `.gate/extension.stamp` and rebuilds via `maturin develop --release` when needed.
 Keep that check enabled locally after Rust changes: selecting the Python phase
 also selects extension verification. Hosted CI uses

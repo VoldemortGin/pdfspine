@@ -44,6 +44,8 @@ pub struct PositionedGlyph {
     pub bbox: Rect,
     /// The resource name the font was referenced under (e.g. `F1`), if known.
     pub font_name: SmolStr,
+    /// Original subset BaseFont, shared per resolved font for dynamic display.
+    pub raw_font_name: Option<std::sync::Arc<SmolStr>>,
     /// The text font size `Tfs` in effect.
     pub size: f64,
     /// The current fill color packed as `0x00RRGGBB` sRGB.
@@ -268,6 +270,8 @@ pub enum BlockKind {
 /// One character with its device-space geometry (PyMuPDF rawdict `char`).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Char {
+    /// Original subset BaseFont, independent of the canonical layout font.
+    pub raw_font_name: Option<std::sync::Arc<SmolStr>>,
     /// The glyph origin (baseline, left edge) in device space.
     pub origin: Point,
     /// The axis-aligned glyph bounding box in device space.

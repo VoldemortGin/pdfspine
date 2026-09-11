@@ -344,8 +344,15 @@ fn glyphgeo_010_dict_span_geometry_keys() {
     // Device-space render matrix: `Trm · page_transform`, y flipped.
     assert_tuple6(span.matrix, (12.0, 0.0, 0.0, -12.0, 100.0, 92.0));
     // ...and the raw user-space operands it was composed from.
-    assert_tuple6(span.text_matrix, (12.0, 0.0, 0.0, 12.0, 100.0, 700.0));
-    assert_tuple6(span.ctm, (1.0, 0.0, 0.0, 1.0, 0.0, 0.0));
+    assert_tuple6(
+        span.text_matrix
+            .expect("default policy preserves source Tm"),
+        (12.0, 0.0, 0.0, 12.0, 100.0, 700.0),
+    );
+    assert_tuple6(
+        span.ctm.expect("default policy preserves source CTM"),
+        (1.0, 0.0, 0.0, 1.0, 0.0, 0.0),
+    );
 
     // Invariant 1: `(0,0)·matrix == origin`.
     approx(span.matrix.4, span.origin.0, 1e-9);
@@ -428,15 +435,32 @@ fn glyphgeo_012_matrix_is_params_tm_ctm_page() {
     // params = [Tfs·Th, 0, 0, Tfs, 0, Trise] (Th = 1, Trise = 0 here).
     let params = Matrix::new(span.declared_size, 0.0, 0.0, span.declared_size, 0.0, 0.0);
     let tm = Matrix::new(
-        span.text_matrix.0,
-        span.text_matrix.1,
-        span.text_matrix.2,
-        span.text_matrix.3,
-        span.text_matrix.4,
-        span.text_matrix.5,
+        span.text_matrix
+            .expect("default policy preserves source Tm")
+            .0,
+        span.text_matrix
+            .expect("default policy preserves source Tm")
+            .1,
+        span.text_matrix
+            .expect("default policy preserves source Tm")
+            .2,
+        span.text_matrix
+            .expect("default policy preserves source Tm")
+            .3,
+        span.text_matrix
+            .expect("default policy preserves source Tm")
+            .4,
+        span.text_matrix
+            .expect("default policy preserves source Tm")
+            .5,
     );
     let ctm = Matrix::new(
-        span.ctm.0, span.ctm.1, span.ctm.2, span.ctm.3, span.ctm.4, span.ctm.5,
+        span.ctm.expect("default policy preserves source CTM").0,
+        span.ctm.expect("default policy preserves source CTM").1,
+        span.ctm.expect("default policy preserves source CTM").2,
+        span.ctm.expect("default policy preserves source CTM").3,
+        span.ctm.expect("default policy preserves source CTM").4,
+        span.ctm.expect("default policy preserves source CTM").5,
     );
     let want = Matrix::concat(
         &Matrix::concat(&Matrix::concat(&params, &tm), &ctm),
@@ -446,8 +470,15 @@ fn glyphgeo_012_matrix_is_params_tm_ctm_page() {
         span.matrix,
         (want.a, want.b, want.c, want.d, want.e, want.f),
     );
-    assert_tuple6(span.ctm, (2.0, 0.0, 0.0, 2.0, 0.0, 0.0));
-    assert_tuple6(span.text_matrix, (1.0, 0.0, 0.0, 1.0, 50.0, 350.0));
+    assert_tuple6(
+        span.ctm.expect("default policy preserves source CTM"),
+        (2.0, 0.0, 0.0, 2.0, 0.0, 0.0),
+    );
+    assert_tuple6(
+        span.text_matrix
+            .expect("default policy preserves source Tm"),
+        (1.0, 0.0, 0.0, 1.0, 50.0, 350.0),
+    );
 }
 
 // === GLYPHGEO-013: json / rawjson carry the same keys ====================

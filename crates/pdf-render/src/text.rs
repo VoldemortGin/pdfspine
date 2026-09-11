@@ -925,6 +925,7 @@ mod tests {
 
     fn glyph_at(origin: Point, size: f64, color: u32, mode: u8) -> PositionedGlyph {
         PositionedGlyph {
+            raw_font_name: None,
             unicode: "A".into(),
             code: u32::from('A'),
             origin,

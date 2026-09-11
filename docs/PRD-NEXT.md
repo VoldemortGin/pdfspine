@@ -35,7 +35,7 @@
   These changes are not part of the published 0.8.0 release.
 - **Gate.** `./ci.sh` runs `scripts/quality_gate.py`, phases in order
   `rust → extension → python → drift → artifacts`. The `extension` phase
-  fingerprints `crates/**`, `Cargo.toml`, `Cargo.lock`, `pyproject.toml` and
+  fingerprints `crates/**`, `vendor/**`, `Cargo.toml`, `Cargo.lock`, `pyproject.toml` and
   `rust-toolchain*` against `.gate/extension.stamp` and runs
   `maturin develop --release` on any mismatch before pytest (opt out with
   `--skip-extension-check` or `PDFSPINE_GATE_SKIP_EXTENSION=1`); the `artifacts`
@@ -205,6 +205,14 @@
   `conformance/gt/RENDER-REPORT.md` (2026-09-10 update).
 
 - [ ] **3. Render, remaining cost.**
+  - *Mask coverage increment (2026-09-11, unreleased):* a complete, pinned
+    tiny-skia 0.11.4 vendor specializes partial byte-mask blending. All 53
+    validated outputs remain byte-identical; per-document ABBA/reverse BAAB
+    median ratios are **0.9019 / 0.8962**, sum-of-medians ratios **0.9450 /
+    0.9441**. These single-ARM64-machine observations include background
+    application activity, not a general speed guarantee. Source provenance,
+    inherited git consumption and the audit-base/local-delta distinction are
+    documented in ADR 0003. See `conformance/BENCH.md`; **item 3 stays open**.
   - *Small increment landed (2026-09-10):* glyph masks now retain their original
     allocation and cache hits avoid a second lookup; clip coverage uses an
     exhaustively equivalent integer expression. Eight alternating rounds on
@@ -226,7 +234,7 @@
     SSIM (one was already measured slower and rejected).
   - *Size:* **L**.
 
-- [ ] **4. Deferred APIs — 5 of the original 9 landed; 4 remain.**
+- [ ] **4. Deferred APIs — 7 of the original 9 landed; 2 remain.**
   - *Landed:* `DisplayList.get_textpage(flags=3)` returns a usable public
     `TextPage` wrapper from owned semantic/font/image resources; source edits
     and closure do not invalidate text extraction. Paired recording avoids a
@@ -305,13 +313,25 @@
     The same seven legacy probes remain identical with that final extension.
     Evidence: `insert-font-integrated-gate.log` and
     `insert-font-legacy-integrated-final.json` in the external deferred-plan bundle.
-  - *Remaining order:* device callbacks `Page.run` /
-    `DisplayList.run`;
-    `Tools.set_subset_fontnames` remain deferred.
+  - *Also landed:* `Tools.set_subset_fontnames(on=None)` dynamically restores
+    original subset names in DICT/RAWDICT/JSON/RAWJSON and texttrace, including
+    existing Page/DL/extended TextPages after source edits/close. False preserves
+    canonical layout, grouping and output. The shared display view splits only
+    existing spans; later split spans publish unavailable source Tm/CTM as
+    None/null (Rust serialized fields are now Option). HTML/XML/plain output is
+    unaffected. Independent review, 14 public cases and 3 shared-view cases pass;
+    the related Python suite passes 81 cases including live-oracle checks.
+    All 665 default-output hashes across 35 documents match the baseline.
+    Glyph/Char structs each add 8 bytes. A short 8-round creation probe observes
+    median document ratios 1.0100 (Page TP) / 1.00884 (DL+TP), with nonzero RSS
+    cost; these are bounded observations, not significance or zero-cost claims.
+    See `docs/subset-fontnames-validation.md` for exact baseline identities,
+    per-pair spread and memory limits.
+  - *Remaining order:* device callbacks `Page.run` / `DisplayList.run` remain deferred.
   - *Evidence:* `python/tests/test_displaylist_textpage.py` covers flags, invisible
     text, Form resources, source edit/close, CropBox/Rotate, annotations and live
     PyMuPDF 1.28.2 comparisons; Rust tests cover lazy decoding and snapshot bounds.
-    Catalog parity is 700/769 = 91.0%, deferred = 3. No callback framework is added.
+    Catalog parity is 701/769 = 91.2%, deferred = 2. No callback framework is added.
     Full five-phase gate passes (1255 Python tests, 66 existing skips). The same
     35 available render inputs retain identical dimensions/full pixel hashes in
     direct Page rendering and `annots=0` DisplayList replay; eight historical

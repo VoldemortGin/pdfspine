@@ -177,6 +177,7 @@ fn char_cells(text: &str, bbox: &Rect, seq: usize) -> Vec<Char> {
             let cell = Rect::new(x0, bbox.y0, x1, bbox.y1);
             let origin = Point::new(x0, bbox.y1);
             Char {
+                raw_font_name: None,
                 origin,
                 bbox: cell,
                 c,
