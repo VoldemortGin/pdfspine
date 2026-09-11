@@ -15,6 +15,29 @@ rather than native-handle compatibility. See [PARITY](../PARITY.md) and the
 
 ## Most recent recorded full gate
 
+The **2026-09-11 local paragraph-dash gate** passed **2,034 Rust tests and 1,535
+Python tests**, with **68 existing Python skips**. All five phases passed: Rust
+fmt/clippy/tests/deny, extension, Python, drift and wheel/sdist installation.
+The sdist vendor inventory and both installed-artifact smoke checks passed.
+This includes the earlier TableFormer evaluator tests; it is an unreleased
+source checkpoint, not a replacement release gate.
+
+- Tested source: `472a47f24b41f07dcc1dc21375d95a949cc0ddc1` (implementation `0d5d584`).
+- Extension input fingerprint: `4ed006d6cc62c1609691433330a0e71dcb1ed6f7fcdb71270328788c1a550805`.
+- Actual native extension SHA256: `fe8ba4d7c88df62c88e4defbd2b73d33e7748369e3156351010d91a2b5eaf5d6`.
+- Archived log: `typeset-dash-probe/main-final-gate.log`, SHA256
+  `d43b04e81e0c38a8f95ae5fbbef4665950ea9a6676bb4d951cf5c3f8debe267c`; companion `final-integration.json` records the final
+  local merge and phase results. Paths use the experiment archive described below.
+
+The extension was rebuilt against its recorded inputs. Its SHA is unchanged
+from the earlier checkpoint because `pdf-typeset` is not a dependency of the
+Python extension; the new Rust typeset behavior is covered by workspace tests.
+Final-binary readback passes 9/9 PDFs and render references 12/12 pages (minimum
+SSIM 0.9991). Ten prior generated PDFs remain byte-identical. Validation-report
+edits after this gate do not change Rust/Python product sources.
+
+## Earlier signed-spacing full gate
+
 The **2026-09-11 local signed-spacing gate** passed **2,027 Rust tests and 1,518
 Python tests**, with **68 existing Python skips**. Rust, extension, Python,
 drift and wheel/sdist installation checks passed. This is a named unreleased

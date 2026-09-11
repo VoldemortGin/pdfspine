@@ -433,6 +433,9 @@
     Seven new tests, 217 isolated crate tests, 9/9 readback and 12/12 render pages
     pass; LO 0.9803 is advisory, not Word or endpoint-phase equivalence.
     See `docs/typeset-paragraph-borders.md`; no automatic enum mapping.
+    Final source 472a47f passes the complete five-stage gate: **2,034 Rust /
+    1,535 Python passed, 68 existing skips**, including both artifact installs.
+    Fingerprint/native/log identities are in `docs/validation-baselines.md`.
   - [ ] **Remaining:** other non-solid/between paragraph borders and pattern shading,
     automatic signed-spacing/script policy and consumer mappings, and verified
     Word `lineGap` placement.
