@@ -142,13 +142,13 @@ def test_pydoc_004_unimplemented_raises(two_page_path):
     # PYDOC-004: a known-but-unimplemented method raises PdfUnsupportedError.
     # `get_pixmap` is implemented in M6d (it renders the page) and `insert_file`
     # is now implemented (M5, image/PDF inputs), so the unimplemented example
-    # here is `Page.insert_font` (still deferred).
+    # here is `Page.run` (still deferred).
     doc = pdfspine.open(two_page_path)
     page = doc[0]
     pix = page.get_pixmap()
     assert pix.width > 0 and pix.height > 0
     with pytest.raises(pdfspine.PdfUnsupportedError):
-        page.insert_font("helv")
+        page.run(None, None)
     # get_toc is now implemented (M3d): a doc with no /Outlines returns [].
     assert doc.get_toc() == []
     # An attribute that does not exist at all is still AttributeError.

@@ -84,6 +84,10 @@ impl<'a> Default for TextOptions<'a> {
 /// PyMuPDF's short aliases (`helv`, `tiro`, `cour`, `symb`, `zadb`, …) and any
 /// `/BaseFont`-style name.
 pub fn resolve_base14(fontname: &str) -> &'static str {
+    checked_base14(fontname).unwrap_or("Helvetica")
+}
+
+pub(crate) fn checked_base14(fontname: &str) -> Option<&'static str> {
     let lower = fontname.to_ascii_lowercase();
     let alias = match lower.as_str() {
         "helv" => "Helvetica",
@@ -103,14 +107,14 @@ pub fn resolve_base14(fontname: &str) -> &'static str {
         _ => "",
     };
     if !alias.is_empty() {
-        return alias;
+        return Some(alias);
     }
-    normalize_standard_font(fontname).unwrap_or("Helvetica")
+    normalize_standard_font(fontname)
 }
 
 /// A Base-14 `/Type1` font resource object for the canonical standard font
 /// `std_name` (no embedding — ISO 32000-1 §9.6.2.2).
-fn base14_font_object(std_name: &str) -> Object {
+pub(crate) fn base14_font_object(std_name: &str) -> Object {
     let mut d = Dict::new();
     d.insert(Name::new("Type"), Object::Name(Name::new("Font")));
     d.insert(Name::new("Subtype"), Object::Name(Name::new("Type1")));
@@ -129,7 +133,7 @@ fn base14_font_object(std_name: &str) -> Object {
 /// Encodes `text` to WinAnsi bytes for a Base-14 `Tj` operand. ASCII
 /// (0x20..0x7E) and the Latin-1 supplement (0xA0..0xFF) map directly; other
 /// chars degrade to `?` so the operand stays valid (never panics).
-fn winansi_bytes(text: &str) -> Vec<u8> {
+pub(crate) fn winansi_bytes(text: &str) -> Vec<u8> {
     text.chars()
         .map(|ch| {
             let cp = ch as u32;
@@ -167,7 +171,22 @@ pub fn insert_text(
     let lines: Vec<&str> = text.split('\n').collect();
     let leading = opts.fontsize * LEADING;
 
-    if let Some(program) = opts.fontfile {
+    let resource_name = opts.fontname.strip_prefix('/').unwrap_or(opts.fontname);
+    if let Some(font) = crate::registered_font::writing_font(&pc, resource_name)? {
+        let shows: Vec<Vec<u8>> = lines
+            .iter()
+            .map(|line| font.encode(line))
+            .collect::<Result<_>>()?;
+        let chunk = build_text_chunk(
+            resource_name,
+            opts,
+            leading,
+            origin,
+            &shows,
+            oc_name.as_deref(),
+        );
+        pc.append_content(&chunk)?;
+    } else if let Some(program) = opts.fontfile {
         let font = EmbeddedFont::parse(program)?;
         let mut used = BTreeMap::new();
         let mut shows = Vec::with_capacity(lines.len());
@@ -268,10 +287,22 @@ pub fn insert_textbox(
     let pc = PageContent::new(doc, page_index)?;
     let oc_name = optional_content(&pc, opts.oc)?;
     let user_rect = pc.rect_to_user_space(rect);
+    let resource_name = opts.fontname.strip_prefix('/').unwrap_or(opts.fontname);
+    let registered = crate::registered_font::writing_font(&pc, resource_name)?;
     let std_name = resolve_base14(opts.fontname);
+    let measure = |text: &str| match &registered {
+        Some(font) => font.advance(text, opts.fontsize),
+        None => Ok(std_widths::string_advance(std_name, text, opts.fontsize)),
+    };
 
     let max_width = user_rect.width();
-    let space_w = std_widths::string_advance(std_name, " ", opts.fontsize);
+    // Old unregistered layout keeps its eager standard width. Registered fonts
+    // need a space mapping only when a space can actually join two words.
+    let mut space_w = if registered.is_none() {
+        Some(measure(" ")?)
+    } else {
+        None
+    };
     let mut wrapped: Vec<String> = Vec::new();
     for para in text.split('\n') {
         let words: Vec<&str> = para.split_whitespace().collect();
@@ -282,11 +313,19 @@ pub fn insert_textbox(
         let mut line = String::new();
         let mut line_w = 0.0;
         for w in words {
-            let w_width = std_widths::string_advance(std_name, w, opts.fontsize);
+            let w_width = measure(w)?;
             let added = if line.is_empty() {
                 w_width
             } else {
-                space_w + w_width
+                let space = match space_w {
+                    Some(width) => width,
+                    None => {
+                        let width = measure(" ")?;
+                        space_w = Some(width);
+                        width
+                    }
+                };
+                space + w_width
             };
             if !line.is_empty() && line_w + added > max_width {
                 wrapped.push(std::mem::take(&mut line));
@@ -306,7 +345,11 @@ pub fn insert_textbox(
     let leading = opts.fontsize * LEADING;
     let total_height = leading * wrapped.len() as f64;
 
-    let name = pc.add_resource("Font", "F", base14_font_object(std_name))?;
+    let name = if registered.is_some() {
+        resource_name.to_string()
+    } else {
+        pc.add_resource("Font", "F", base14_font_object(std_name))?
+    };
     let mut inner = Vec::new();
     inner.extend_from_slice(format!("/{} {} Tf\n", name, fmt_num(opts.fontsize)).as_bytes());
     inner.extend_from_slice(format!("{}\n", opts.color.fill_op()).as_bytes());
@@ -317,17 +360,22 @@ pub fn insert_textbox(
         if y < user_rect.y0 - opts.fontsize {
             break; // past the bottom edge — surplus reported via the return value
         }
-        let line_w = std_widths::string_advance(std_name, line, opts.fontsize);
+        let line_w = measure(line)?;
         let x = match opts.align {
             Align::Left | Align::Justify => user_rect.x0,
             Align::Center => user_rect.x0 + (max_width - line_w) / 2.0,
             Align::Right => user_rect.x1 - line_w,
         };
-        let esc = escape_pdf_literal(&winansi_bytes(line));
         inner.extend_from_slice(format!("1 0 0 1 {} {} Tm\n", fmt_num(x), fmt_num(y)).as_bytes());
-        inner.push(b'(');
-        inner.extend_from_slice(&esc);
-        inner.extend_from_slice(b") Tj\n");
+        if let Some(font) = &registered {
+            inner.extend_from_slice(&font.encode(line)?);
+            inner.extend_from_slice(b" Tj\n");
+        } else {
+            let esc = escape_pdf_literal(&winansi_bytes(line));
+            inner.push(b'(');
+            inner.extend_from_slice(&esc);
+            inner.extend_from_slice(b") Tj\n");
+        }
     }
 
     let mut chunk = Vec::new();

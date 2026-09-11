@@ -36,7 +36,7 @@
 //! crate purity invariant.
 
 use std::borrow::Cow;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use pdf_core::error::{Error, Result};
 use pdf_core::filters::flate;
@@ -80,6 +80,69 @@ pub struct EmbeddedFont {
 }
 
 impl EmbeddedFont {
+    /// Parses a standalone TrueType program for registration before text exists.
+    ///
+    /// # Errors
+    /// Rejects collections, CFF outlines and malformed fonts before allocation.
+    pub fn for_registration(program: &[u8]) -> Result<Self> {
+        if fonts_in_collection(program).is_some() {
+            return Err(Error::Unsupported(
+                "insert_font: collections are not supported",
+            ));
+        }
+        let face = ttf_parser::Face::parse(program, 0)
+            .map_err(|_| Error::Unsupported("insert_font: malformed TrueType font"))?;
+        if face
+            .raw_face()
+            .table(ttf_parser::Tag::from_bytes(b"glyf"))
+            .is_none()
+        {
+            return Err(Error::Unsupported(
+                "insert_font: only TrueType glyf outlines are supported",
+            ));
+        }
+        let mut font = Self::parse(program)?;
+        font.set_full_embed(true);
+        Ok(font)
+    }
+
+    /// Enumerates actual Unicode cmap entries for a complete registration map.
+    ///
+    /// # Errors
+    /// Rejects fonts with no usable Unicode cmap.
+    pub fn registration_map(&self) -> Result<BTreeMap<u16, char>> {
+        let face = ttf_parser::Face::parse(&self.program, self.face_index)
+            .map_err(|_| Error::Unsupported("insert_font: malformed font"))?;
+        // Format 12/13 ranges can represent billions of codes in a tiny table.
+        // Bound their declared iteration before calling ttf-parser's callback API.
+        if let Some(raw) = face.raw_face().table(ttf_parser::Tag::from_bytes(b"cmap")) {
+            registration_cmap_budget(raw)?;
+        }
+        let mut characters = BTreeSet::new();
+        if let Some(cmap) = face.tables().cmap {
+            for table in cmap.subtables.into_iter().filter(|t| t.is_unicode()) {
+                table.codepoints(|code| {
+                    if let Some(ch) = char::from_u32(code) {
+                        if let Some(gid) = face.glyph_index(ch).filter(|gid| gid.0 != 0) {
+                            let _ = gid;
+                            characters.insert(ch);
+                        }
+                    }
+                });
+            }
+        }
+        if characters.is_empty() || characters.len() > usize::from(u16::MAX) {
+            return Err(Error::Unsupported(
+                "insert_font: Unicode cmap empty or exceeds two-byte CID capacity",
+            ));
+        }
+        Ok(characters
+            .into_iter()
+            .enumerate()
+            .map(|(i, ch)| ((i + 1) as u16, ch))
+            .collect())
+    }
+
     /// Parses `program` (a TTF/OTF byte blob) into an embeddable font — face 0
     /// of a collection (see [`EmbeddedFont::parse_indexed`] for TTC faces).
     ///
@@ -141,6 +204,12 @@ impl EmbeddedFont {
             num_glyphs,
             advances,
         })
+    }
+
+    /// Number of glyphs in this font program.
+    #[must_use]
+    pub fn num_glyphs(&self) -> u16 {
+        self.num_glyphs
     }
 
     /// The glyph ID for `ch` via the font `cmap`, or `0` (`.notdef`) if the font
@@ -222,8 +291,33 @@ impl EmbeddedFont {
     ///
     /// Propagates ChangeSet-allocation errors.
     pub fn write_type0(&self, doc: &DocumentStore, used: &BTreeMap<u16, char>) -> Result<ObjRef> {
+        self.write_type0_mapped(doc, used, None)
+    }
+
+    /// Writes a complete registered font with distinct CIDs for Unicode aliases.
+    ///
+    /// # Errors
+    /// Propagates document allocation errors.
+    pub fn write_registered_type0(
+        &self,
+        doc: &DocumentStore,
+        characters: &BTreeMap<u16, char>,
+    ) -> Result<ObjRef> {
+        let mapping: BTreeMap<u16, u16> = characters
+            .iter()
+            .map(|(&cid, &ch)| (cid, self.glyph_id(ch)))
+            .collect();
+        self.write_type0_mapped(doc, characters, Some(&mapping))
+    }
+
+    fn write_type0_mapped(
+        &self,
+        doc: &DocumentStore,
+        used: &BTreeMap<u16, char>,
+        mapping: Option<&BTreeMap<u16, u16>>,
+    ) -> Result<ObjRef> {
         // --- FontFile2: usage-based subset (default) or the whole program --
-        let subset_program = if self.full_embed {
+        let subset_program = if self.full_embed || mapping.is_some() {
             None
         } else {
             subset::subset_truetype(&self.program, self.face_index, used)
@@ -301,13 +395,38 @@ impl EmbeddedFont {
         );
         cidsysinfo.insert(Name::new("Supplement"), Object::Integer(0));
         cidfont.insert(Name::new("CIDSystemInfo"), Object::Dictionary(cidsysinfo));
-        cidfont.insert(
-            Name::new("CIDToGIDMap"),
-            Object::Name(Name::new("Identity")),
-        );
+        let cid_to_gid = if let Some(mapping) = mapping {
+            let max = mapping.keys().next_back().copied().unwrap_or(0);
+            let mut bytes = vec![0; (usize::from(max) + 1) * 2];
+            for (&cid, &gid) in mapping {
+                let start = usize::from(cid) * 2;
+                bytes[start..start + 2].copy_from_slice(&gid.to_be_bytes());
+            }
+            Object::Reference(
+                doc.add_object(Object::Stream(StreamObj::new_encoded(Dict::new(), bytes)))?,
+            )
+        } else {
+            Object::Name(Name::new("Identity"))
+        };
+        cidfont.insert(Name::new("CIDToGIDMap"), cid_to_gid);
         cidfont.insert(Name::new("FontDescriptor"), Object::Reference(descriptor));
         cidfont.insert(Name::new("DW"), Object::Integer(1000));
-        cidfont.insert(Name::new("W"), self.width_array(used));
+        let widths = if let Some(mapping) = mapping {
+            Object::Array(
+                mapping
+                    .iter()
+                    .flat_map(|(&cid, &gid)| {
+                        [
+                            Object::Integer(i64::from(cid)),
+                            Object::Array(vec![Object::Real(self.advance(gid))]),
+                        ]
+                    })
+                    .collect(),
+            )
+        } else {
+            self.width_array(used)
+        };
+        cidfont.insert(Name::new("W"), widths);
         let cidfont_ref = doc.add_object(Object::Dictionary(cidfont))?;
 
         // --- Type0 (the registered font) -----------------------------------
@@ -352,6 +471,42 @@ impl EmbeddedFont {
         }
         flags
     }
+}
+
+fn registration_cmap_budget(raw: &[u8]) -> Result<()> {
+    let u16_at = |offset: usize| {
+        raw.get(offset..offset.checked_add(2)?)
+            .map(|bytes| u16::from_be_bytes([bytes[0], bytes[1]]))
+    };
+    let u32_at = |offset: usize| {
+        raw.get(offset..offset.checked_add(4)?)
+            .map(|bytes| u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
+    };
+    let count = usize::from(u16_at(2).unwrap_or(0));
+    for index in 0..count {
+        let offset = u32_at(4 + index * 8 + 4).unwrap_or(0) as usize;
+        if !matches!(u16_at(offset), Some(12 | 13)) {
+            continue;
+        }
+        let groups = u32_at(offset + 12).unwrap_or(0) as usize;
+        if groups > raw.len().saturating_sub(offset.saturating_add(16)) / 12 {
+            return Err(Error::Unsupported("insert_font: truncated cmap groups"));
+        }
+        let mut declared = 0u64;
+        for group in 0..groups {
+            let start = u32_at(offset + 16 + group * 12).unwrap_or(0);
+            let end = u32_at(offset + 20 + group * 12).unwrap_or(0);
+            if end >= start {
+                declared += u64::from(end - start) + 1;
+            }
+            if declared > u64::from(u16::MAX) {
+                return Err(Error::Unsupported(
+                    "insert_font: cmap range exceeds two-byte CID capacity",
+                ));
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Builds a `/ToUnicode` CMap (ISO 32000-1 §9.10.3) mapping each used 2-byte

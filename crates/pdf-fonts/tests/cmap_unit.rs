@@ -179,3 +179,15 @@ fn cmap_010_mixed_one_and_two_byte_codespace() {
         .iter()
         .any(|r| r.n_bytes == 2 && r.low == 0x8140 && r.high == 0xFEFE));
 }
+
+#[test]
+fn cmap_unicode_materialization_is_bounded_and_last_entry_wins() {
+    let cmap = CMap::parse(
+        b"1 beginbfrange <0010> <FFFF> <0041> endbfrange 1 beginbfchar <0011> <005A> endbfchar",
+        &mut |_| None,
+    );
+    let entries = cmap.unicode_mappings(0x11);
+    assert_eq!(entries.len(), 2);
+    assert_eq!(entries.get(&0x10).unwrap().as_str(), "A");
+    assert_eq!(entries.get(&0x11).unwrap().as_str(), "Z");
+}
