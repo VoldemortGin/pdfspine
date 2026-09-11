@@ -34,15 +34,15 @@
 
 > **Current snapshot.** Numbers below are recomputed from the
 > live `COMPAT.toml` per-symbol dispositions. `COMPAT.toml [meta]` is always the authoritative live figure;
-> the current remaining-work list (the 6 deferred symbols, grouped + prioritized) lives in
+> the current remaining-work list (the 5 deferred symbols, grouped + prioritized) lives in
 > [`docs/PRD-NEXT.md`](docs/PRD-NEXT.md) §3.B.
 
-**Overall: 697 / 769 implemented (90.6% coverage).**
+**Overall: 698 / 769 implemented (90.8% coverage).**
 
 | Disposition | Count | Share |
 |---|---:|---:|
-| **implemented** | **697** | **90.6%** |
-| deferred (planned, later milestone / post-v1) | 6 | 0.8% |
+| **implemented** | **698** | **90.8%** |
+| deferred (planned, later milestone / post-v1) | 5 | 0.7% |
 | out-of-scope (raises `PdfUnsupportedError`) | 66 | 8.6% |
 | **Total catalogued symbols** | **769** | 100% |
 
@@ -63,7 +63,7 @@
 | `Page` | 117 | 113 | 2 | 2 | 97% |
 | `TextPage` | 17 | 17 | 0 | 0 | 100% |
 | `Pixmap` | 43 | 42 | 1 | 0 | 98% |
-| `Annot` | 51 | 46 | 1 | 4 | 90% |
+| `Annot` | 51 | 47 | 0 | 4 | 92% |
 | `Widget` | 35 | 28 | 0 | 7 | 80% |
 | `Link` | 14 | 14 | 0 | 0 | 100% |
 | `Outline` | 11 | 11 | 0 | 0 | 100% |
@@ -79,7 +79,7 @@
 | Module-level functions | 32 | 29 | 0 | 3 | 91% |
 | `Tools` / `TOOLS` | 22 | 14 | 1 | 7 | 64% |
 | `exceptions` | 10 | 10 | 0 | 0 | 100% |
-| **Total** | **769** | **697** | **6** | **66** | **90.6%** |
+| **Total** | **769** | **698** | **5** | **66** | **90.8%** |
 
 ### Per-milestone breakdown
 
@@ -87,7 +87,7 @@
 > per-symbol `milestone` field, so it cannot be recomputed mechanically. Use the **per-class table
 > above** (recomputed from the live `COMPAT.toml`) + `docs/PRD-NEXT.md` §3.B for current status. By
 > milestone, all of M0–M8's headline paths are landed (geometry, parsing, text, edit/save, annot/forms,
-> image-docs/Pixmap, rendering near-parity, SVG/tables/OCG, OCR-via-Tesseract); the 6 deferred are the
+> image-docs/Pixmap, rendering near-parity, SVG/tables/OCG, OCR-via-Tesseract); the 5 deferred are the
 > long tails and the 66 out-of-scope are the HTML/CSS story engine + render-era knobs.
 
 ---
@@ -145,9 +145,9 @@ per-symbol truth (every name, disposition, milestone, note) is in [`COMPAT.toml`
   sections, and OCMD `/P` policies + `/VE` are evaluated) (M7), journalling undo/redo (M3), page-label write,
   OCR export. No gaps remain; known limitation: `Page.insert_text(oc=)` / `insert_image(oc=)` / Shape `oc=`
   still don't emit the `BDC/EMC` marked-content wrapper (only `set_oc` on XObjects binds content to a layer).
-- [x] **`Annot` (46/51)** — `update`, all geometry/colors/opacity/border/flags/info getters+setters,
+- [x] **`Annot` (47/51)** — `update`, all geometry/colors/opacity/border/flags/info getters+setters,
   `type`/`rect`/`xref`/`vertices`/`has_ap`, line-ends/blendmode/name/open, rotation/popup/apn/file-attach;
-  only `get_textbox` deferred (+ 4 out-of-scope).
+  `get_textbox` reads its own AP; prebuilt textpage arguments remain unsupported (+ 4 out-of-scope).
 - [x] **`Shape` (24/24)** — fully landed: all draw primitives (line/rect/circle/oval/bezier/curve/polyline/
   quad/sector/squiggle/zigzag) + `insert_text`/`insert_textbox` + `finish`/`commit` + props.
 - [x] **`Widget` (28/35)** — field props + appearance (`/MK`+`/DA`+`/BS`: border/fill/text color+style,
@@ -183,12 +183,12 @@ per-symbol truth (every name, disposition, milestone, note) is in [`COMPAT.toml`
 
 ## Remaining work
 
-The authoritative, prioritised list of the **6 deferred** symbols (grouped, with quick-wins flagged)
+The authoritative, prioritised list of the **5 deferred** symbols (grouped, with quick-wins flagged)
 now lives in **[`docs/PRD-NEXT.md`](docs/PRD-NEXT.md) §3.B** — kept there to avoid two divergent lists.
 In brief the deferred set is:
 **Page (2)** `insert_font` + device-callback replay (`run`); **DisplayList (1)** `run`
 (device-callback replay); **Tools (1)** `set_subset_fontnames`;
-**Annot (1)** `get_textbox`; **Pixmap (1)** `warp`.
+**Pixmap (1)** `warp`.
 
 The **66 out-of-scope** symbols (raise `PdfUnsupportedError`) are dominated by `Story` / `Xml` /
 `Archive` (the HTML/CSS -> PDF layout engine, PRD §3.2 #2) + render-era `Tools` knobs + EPUB

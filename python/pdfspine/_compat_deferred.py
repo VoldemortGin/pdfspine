@@ -9,7 +9,6 @@ from __future__ import annotations
 
 DEFERRED: frozenset[str] = frozenset(
     {
-        "Annot.get_textbox",
         "DisplayList.run",
         "Page.insert_font",
         "Page.run",

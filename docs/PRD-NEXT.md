@@ -263,13 +263,26 @@
     Final combined five-phase gate: **1953 Rust / 1307 Python tests**, 66 existing
     Python skips; extension, drift and wheel/sdist install smoke pass.
     `Tools.set_subset_fontnames` is not implemented by this increment.
+  - *Also landed:* `Annot.get_textbox(rect, textpage=None)` reads only the
+    selected visible own appearance, respecting AP-local resources, state,
+    Matrix placement and rotated CropBox coordinates. Character bbox overlap
+    selects text beyond AP/nested Form bounds and explicit graphics clips;
+    this text-only mode does not change page or DisplayList clipping.
+    A supplied prebuilt textpage raises
+    `ValueError`, matching local PyMuPDF 1.28.2; existing `Annot.get_textpage` /
+    `get_text` page-region behavior is unchanged. 20 focused tests plus the
+    existing A/B tests pass (74 total). A 19-record legacy probe retains 13
+    selected EUR-Lex/FR page block arrays and all six born documents' full text
+    byte-for-byte, without new GT scoring. Final Rust/Python gates pass **1953 /
+    1326 tests**, with 66 existing Python skips; extension fingerprint
+    `cacd5ba28ba4`. Drift and wheel/sdist install smoke also pass.
   - *Remaining order:* device callbacks `Page.run` /
-    `DisplayList.run`; `Page.insert_font`, `Pixmap.warp`, `Annot.get_textbox`,
+    `DisplayList.run`; `Page.insert_font`, `Pixmap.warp`,
     `Tools.set_subset_fontnames` remain deferred.
   - *Evidence:* `python/tests/test_displaylist_textpage.py` covers flags, invisible
     text, Form resources, source edit/close, CropBox/Rotate, annotations and live
     PyMuPDF 1.28.2 comparisons; Rust tests cover lazy decoding and snapshot bounds.
-    Catalog parity is 697/769 = 90.6%, deferred = 6. No callback framework is added.
+    Catalog parity is 698/769 = 90.8%, deferred = 5. No callback framework is added.
     Full five-phase gate passes (1255 Python tests, 66 existing skips). The same
     35 available render inputs retain identical dimensions/full pixel hashes in
     direct Page rendering and `annots=0` DisplayList replay; eight historical
@@ -1110,8 +1123,8 @@ oracle-cross-checked against real PyMuPDF 1.24.14 (`.venv-oracle`) with zero reg
   `/OC`), and `/Usage /View /ViewState` + the active configuration's `/AS` are evaluated for rendering
   and text extraction; the only remaining gap is `/Intent`-mismatch hiding (see §0).
 - **`Page.run`/`DisplayList.run` (device-callback replay),
-  `Page.remove_rotation`, `Annot.get_textbox`, `convert_to_pdf` non-image:** genuinely blocked (need
-  a device-replay engine, content-stream rewriting, annot-appearance textpage).
+  `Page.remove_rotation`, `convert_to_pdf` non-image:** genuinely blocked (need
+  a device-replay engine, content-stream rewriting).
   Keep deferred; documenting prevents wasted effort.
 - **Splitting the `lib.rs` (4711 lines) / `document.py` (3738 lines) monoliths:** real friction, zero
   correctness impact, churn risk — well after release.

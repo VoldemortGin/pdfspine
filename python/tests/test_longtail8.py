@@ -25,7 +25,6 @@ from __future__ import annotations
 import base64
 
 import pdfspine
-import pytest
 
 
 # === fixtures (raw PDFs; values verified against real PyMuPDF 1.27) ==========
@@ -514,14 +513,10 @@ def test_annot_clean_contents():
 
 
 def test_annot_get_textbox():
-    # Annot.get_textbox is deferred: fitz reads the annot's OWN appearance
-    # textpage (requires a rect arg), semantically unlike Page.get_textbox; we
-    # do not ship the page-delegating approximation. Page.get_textbox is the
-    # supported surface.
+    # A comment without appearance text does not expose its Contents or parent.
     page = _annot_doc()[0]
     note = _by_xref(page)[5]
-    with pytest.raises(pdfspine.PdfUnsupportedError):
-        note.get_textbox((0, 0, 100, 100))
+    assert note.get_textbox((0, 0, 100, 100)) == ""
 
 
 def test_annot_file_get_info():

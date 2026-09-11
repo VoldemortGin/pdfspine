@@ -11,6 +11,17 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
+### Annotation appearance text
+
+- `Annot.get_textbox(rect, textpage=None)` now extracts the annotation's own
+  visible appearance text with character-bbox overlap in rotated page coordinates.
+  AP-local resources, state selection and Matrix placement are respected; the
+  AP BBox positions text without clipping it. Appearance text ignores graphics
+  scissors (including explicit clips and nested Form bounds) before the query.
+  Supplied prebuilt text pages raise
+  `ValueError`, matching the observed PyMuPDF 1.28.2 limitation. Existing
+  `Annot.get_textpage` and `Annot.get_text` retain their page-region behavior.
+
 ### Annotation IDs
 
 - `TOOLS.set_annot_stem(stem=None)` now queries or sets the shared prefix used

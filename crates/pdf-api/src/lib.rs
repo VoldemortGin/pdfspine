@@ -2141,6 +2141,30 @@ impl AnnotHandle {
         pdf_edit::Annot::from_ref(&self.store, self.leaf, self.xref)
     }
 
+    /// Extracts intersecting character boxes from this annotation's own appearance.
+    /// The query uses rotated page coordinates; appearance bounds do not clip text.
+    #[must_use]
+    pub fn get_textbox(&self, rect: Rect) -> String {
+        let page = Page::new(Arc::clone(&self.store), 0, self.leaf);
+        let Some(mut dict) = page.dict() else {
+            return String::new();
+        };
+        // A private dictionary selects one AP without parsing parent page content
+        // or mutating the document. The interpreter resolves AP-local resources.
+        if let Some(resources) = pagetree::resources(&self.store, self.leaf) {
+            dict.insert(Name::new("Resources"), Object::Dictionary(resources));
+        }
+        dict.remove(&Name::new("Contents"));
+        dict.insert(
+            Name::new("Annots"),
+            Object::Array(vec![Object::Reference(self.xref)]),
+        );
+        let content = pdf_text::ContentInterpreter::new(&self.store).run_annotation_text(&dict);
+        let tp =
+            pdf_text::textpage_from_glyphs(&content.glyphs, &[], page.cropbox(), page.rotation());
+        pdf_text::get_textbox(&tp, rect)
+    }
+
     /// The annotation object number (PyMuPDF `Annot.xref`).
     #[must_use]
     pub fn xref(&self) -> u32 {
