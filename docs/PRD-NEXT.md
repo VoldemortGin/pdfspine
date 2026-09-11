@@ -488,6 +488,28 @@
   compiled-Rust comparison are in `/Volumes/ExternalSSD/tmp/ocg-intent/`.
 
 - [ ] **9. Table-structure backend benchmark + ONNX validation (P3-6, proposed).**
+  - *Unreleased infrastructure (2026-09-11):* deterministic financial drafts now
+    contain **40 pages / 60 tables** (10 development, 30 evaluation pages),
+    annotation-derived HTML/cells and hash-bound review ledgers under
+    `conformance/gt/financial-eval/`. All are **unreviewed**; all 150 selection
+    candidates were historically exposed. Machine validation is not human gold.
+  - *Evaluator phase 1+2:* `conformance/gt/TABLE-EVAL-V2.md` documents explicit
+    backend/options and actual runtime/model provenance, versioned worker
+    identity, missing-input and invalid-run diagnostics, and `cell_span_f1_v1`.
+    Illegal predicted topology contributes zero TP, all raw cells as FP and all
+    gold cells as FN; matched-table GriTS is zero without reducing denominators.
+    Execution/protocol failures remain invalid runs. Only explicitly identified
+    historical FinTabNet.c source annotations retain the legacy review track;
+    new drafts require hash/review bindings and remain incomplete, non-comparable
+    with null official scores until human review is recorded.
+  - *Validation:* 112 related tests passed with five existing live-model skips;
+    the final 40-page / 60-table manifest passes real source-hash ingestion and
+    synthetic-worker status checks. These are harness checks, not model results.
+    Native `find_tables` defaults and production vision algorithms are unchanged.
+  - *Still open:* human correction/review, detector-bypassed gold-crop adapters,
+    explicit production postprocessing failures, authentic gold-word inputs,
+    available model/runtime verification and real backend comparison. No TEDS,
+    TableFormer/alias implementation or ADR/default-model decision is claimed.
   - *Goal:* validate the landed ONNX backend and finish the multi-backend seam.
   - *Why / evidence:* `find_tables(strategy="vision", backend="onnx")`
     (PP-DocLayoutV3 + SLANet-plus) landed 2026-09-08 but is **not yet validated
