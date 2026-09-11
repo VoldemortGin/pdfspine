@@ -354,6 +354,13 @@
     (4 empty-parameter deferred-guard skips); 35 available documents × RGB/RGBA at 150 DPI give
     70 byte-identical outputs against ordinary DisplayList rendering. The eight
     missing historical render assets remain outside this coverage.
+    Final integration gate: **1996 Rust / 1441 Python tests**, 68 Python skips
+    (including empty deferred-parameter guards), matching extension fingerprint
+    `b96b546f1127`, drift and both wheel/sdist installation checks pass. The first
+    Python run exposed one stale deferred assertion; after replacing it with a
+    real callback regression, Python/drift/artifacts passed while the unchanged
+    Rust/extension evidence was retained. Both installed artifacts exercise all
+    three targets and include the replay module, stub and contract documentation.
     Catalog parity is **703/769 = 91.4%, deferred = 0**, out-of-scope = 66.
     DL accumulation and native device handles are not supported.
   - *Evidence:* `python/tests/test_displaylist_textpage.py` covers flags, invisible
