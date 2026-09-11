@@ -58,12 +58,58 @@ def verify(root: Path, archive: Path | None = None) -> int:
     return len(expected)
 
 
+def verify_sdist(root: Path, archive: Path) -> int:
+    """Check actual tar members, including files excluded from Cargo's list."""
+    manifest_bytes = (root / "vendor/tiny-skia.provenance.json").read_bytes()
+    manifest = json.loads(manifest_bytes)
+    with tarfile.open(archive) as tar:
+        members = [member for member in tar.getmembers() if member.isfile()]
+        names = [member.name for member in members]
+        if len(names) != len(set(names)):
+            raise ValueError("duplicate sdist file members")
+        manifests = [
+            name for name in names if name.endswith("/vendor/tiny-skia.provenance.json")
+        ]
+        if len(manifests) != 1:
+            raise ValueError("sdist must contain the vendor provenance record")
+        prefix = manifests[0].removesuffix("vendor/tiny-skia.provenance.json")
+
+        def read(name: str) -> bytes:
+            file = tar.extractfile(name)
+            if file is None:
+                raise ValueError(f"unreadable sdist member: {name}")
+            return file.read()
+
+        if read(manifests[0]) != manifest_bytes:
+            raise ValueError("sdist vendor provenance differs from the checkout")
+        source_prefix = prefix + "vendor/tiny-skia/"
+        inventory = {
+            name[len(source_prefix) :]: sha256(read(name))
+            for name in names
+            if name.startswith(source_prefix)
+        }
+        if inventory != {
+            name: entry["sha256"] for name, entry in manifest["files"].items()
+        }:
+            raise ValueError("sdist vendor inventory or checksums differ")
+        if (
+            sha256(read(prefix + "vendor/" + manifest["patch"]))
+            != manifest["patch_sha256"]
+        ):
+            raise ValueError("sdist vendor patch checksum mismatch")
+    return len(inventory)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--upstream-archive", type=Path)
+    parser.add_argument("--sdist", type=Path)
     args = parser.parse_args()
     count = verify(ROOT, args.upstream_archive)
     print(f"Verified {count} tiny-skia source files and the pinned patch")
+    if args.sdist is not None:
+        count = verify_sdist(ROOT, args.sdist)
+        print(f"Verified all {count} source files, provenance and patch in the sdist")
 
 
 if __name__ == "__main__":

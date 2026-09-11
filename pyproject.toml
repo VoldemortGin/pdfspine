@@ -140,7 +140,7 @@ features = ["pyo3/abi3-py311", "ocr"]
 # 根 LICENSE 也显式纳入:元数据声明 License-File: LICENSE,PyPI 要求它实际存在于分发包内,
 # 否则 sdist 上传报 400(maturin 默认不把根 LICENSE 打进 sdist)。
 include = [
-    { path = "vendor/**", format = "sdist" },
+    { path = "vendor/**/*", format = "sdist" },
     "LICENSE",
     "NOTICE",
     # Third-party permissive-license attribution (MIT/Apache/BSD/Zlib/…) for the

@@ -34,7 +34,10 @@ index, not inferred from a directory name. The crates.io version API returned 40
 the archive and sparse-index requests succeeded.
 
 `vendor/tiny-skia.provenance.json` records URLs, archive checksum and every
-upstream/current file checksum. Exactly one upstream source file differs;
+upstream/current file checksum. Exactly one upstream Rust source file differs; the manifest additionally excludes
+Cargo’s reserved `.cargo_vcs_info.json` and `Cargo.toml.orig` from `cargo package --list`, which Maturin
+uses for path dependencies. The root sdist include still retains that original
+metadata, keeping the full 190-file inventory.
 `vendor/patches/tiny-skia-0.11.4-mask-coverage.patch` reproduces that delta.
 Retain the full BSD-3-Clause license, copyright headers, upstream metadata,
 tests and examples. Experimental programs and generated experimental lockfiles

@@ -1,7 +1,8 @@
 # Pinned source dependency
 
 `tiny-skia/` is the complete official tiny-skia 0.11.4 source archive, with one
-reviewed partial-mask-coverage optimization. See
+reviewed partial-mask-coverage optimization and a manifest-only exclusion for
+Cargo’s reserved source metadata (still retained in the root sdist). See
 [ADR 0003](../docs/adr/0003-vendored-mask-coverage.md) and
 [tiny-skia.provenance.json](tiny-skia.provenance.json) for the exact source,
 license, checksums and audit boundary.
@@ -10,6 +11,8 @@ Verify the checkout without network access:
 
 ```sh
 python scripts/check_vendored_sources.py
+# After building a source distribution:
+python scripts/check_vendored_sources.py --sdist /path/to/pdfspine-0.8.0.tar.gz
 ```
 
 To additionally authenticate an already downloaded upstream archive:

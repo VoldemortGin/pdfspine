@@ -259,6 +259,14 @@ def run_artifacts() -> None:
 
         wheel = one_artifact(distributions, "*.whl")
         source_distribution = one_artifact(distributions, "*.tar.gz")
+        run(
+            [
+                sys.executable,
+                "scripts/check_vendored_sources.py",
+                "--sdist",
+                str(source_distribution),
+            ]
+        )
         smoke_install(wheel, temporary_root / "wheel-venv")
         smoke_install(source_distribution, temporary_root / "sdist-venv")
 

@@ -1,3 +1,14 @@
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -10,6 +10,8 @@
+ # See Cargo.toml.orig for the original contents.
+ 
+ [package]
++# Cargo regenerates this reserved metadata; the root sdist preserves the original.
++exclude = [".cargo_vcs_info.json", "Cargo.toml.orig"]
+ edition = "2018"
+ name = "tiny-skia"
+ version = "0.11.4"
 --- a/src/pipeline/blitter.rs
 +++ b/src/pipeline/blitter.rs
 @@ -246,6 +246,16 @@

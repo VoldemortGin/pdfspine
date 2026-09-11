@@ -4,6 +4,7 @@ import importlib.util
 from pathlib import Path
 import shutil
 import subprocess
+import tarfile
 
 import pytest
 
@@ -47,3 +48,23 @@ def test_vendor_edit_invalidates_extension_fingerprint(tmp_path, monkeypatch):
     before = gate.extension_fingerprint(inputs)
     source.write_text("new")
     assert gate.extension_fingerprint(gate.extension_inputs()) != before
+
+
+def test_sdist_inventory_checks_real_members_including_reserved_metadata(tmp_path):
+    checker = module("check_vendored_sources")
+    archive = tmp_path / "source.tar.gz"
+    for omit_original_manifest in [False, True]:
+        with tarfile.open(archive, "w:gz") as tar:
+            for path in (ROOT / "vendor").rglob("*"):
+                if path.is_file() and not (
+                    omit_original_manifest and path.name == "Cargo.toml.orig"
+                ):
+                    tar.add(
+                        path,
+                        arcname="pdfspine-0.8.0/" + path.relative_to(ROOT).as_posix(),
+                    )
+        if omit_original_manifest:
+            with pytest.raises(ValueError, match="sdist vendor inventory"):
+                checker.verify_sdist(ROOT, archive)
+        else:
+            assert checker.verify_sdist(ROOT, archive) == 190

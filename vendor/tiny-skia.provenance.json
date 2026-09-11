@@ -6,8 +6,9 @@
   "archive_sha256": "83d13394d44dae3207b52a326c0c85a8bf87f1541f23b0d143811088497b09ab",
   "license": "BSD-3-Clause",
   "patch": "patches/tiny-skia-0.11.4-mask-coverage.patch",
-  "patch_sha256": "659a1213db146db54547e5a4c8d19e750628867f1f167fe0ec1e1b6fe31b807c",
+  "patch_sha256": "81450ca0f44619c586b379da1ec3d48adf3cd6e3974291b74fc9180874d48878",
   "modified_files": [
+    "Cargo.toml",
     "src/pipeline/blitter.rs"
   ],
   "files": {
@@ -43,7 +44,7 @@
     },
     "Cargo.toml": {
       "upstream_sha256": "76370c68002a8cf88f605f06e1d645d11045ae2bae97a7d8b490acf47362e6ad",
-      "sha256": "76370c68002a8cf88f605f06e1d645d11045ae2bae97a7d8b490acf47362e6ad",
+      "sha256": "49f92228b7106bdfee219005572c25312a276f2aa95f5eb529e5dc1be728588c",
       "bytes": 1436
     },
     "Cargo.toml.orig": {
