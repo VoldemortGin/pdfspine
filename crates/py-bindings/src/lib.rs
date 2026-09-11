@@ -142,7 +142,7 @@ fn map_err(e: ApiError) -> PyErr {
 /// instead of a bare `AttributeError`. `test_core_alias_deferred_set_matches_rust`
 /// guards this list against drift from `_compat_deferred.DEFERRED`.
 const PIXMAP_DEFERRED: &[&str] = &["warp"];
-const DISPLAYLIST_DEFERRED: &[&str] = &["get_textpage", "run"];
+const DISPLAYLIST_DEFERRED: &[&str] = &["run"];
 const TOOLS_DEFERRED: &[&str] = &["set_annot_stem", "set_subset_fontnames"];
 
 /// Raises `PdfUnsupportedError` when `name` is a deferred member of `group`, else
@@ -321,10 +321,41 @@ fn unpack_color(rgb: u32) -> (f64, f64, f64) {
 /// A reusable text-extraction handle (PyMuPDF `TextPage`, PRD §9.4). Holds the
 /// model built once from a [`Page`]; `Page.get_text(..., textpage=tp)` and
 /// `Page.search_for(..., textpage=tp)` reuse it instead of re-parsing.
+enum TextPageSource {
+    Page(pdf_api::Page),
+    Recorded {
+        resources: Arc<pdf_api::RecordedTextResources>,
+        flags: u32,
+    },
+}
+
 #[pyclass(name = "TextPage", module = "pdfspine._core", frozen)]
 struct PyTextPage {
-    page: pdf_api::Page,
+    source: TextPageSource,
     tp: pdf_api::TextPage,
+}
+
+impl PyTextPage {
+    fn extract_output(&self, py: Python<'_>, opt: &str) -> PyResult<Py<PyAny>> {
+        match &self.source {
+            TextPageSource::Page(page) => {
+                text_output_to_py(py, page, opt, None, Some(&self.tp), false)
+            }
+            TextPageSource::Recorded { resources, flags } => {
+                if matches!(opt, "dict" | "rawdict") {
+                    let blocks = py.detach(|| resources.dict_blocks(&self.tp, *flags));
+                    Ok(
+                        dict_blocks_to_py(py, &self.tp, &blocks, opt == "rawdict", false)?
+                            .into_any()
+                            .unbind(),
+                    )
+                } else {
+                    let output = py.detach(|| resources.output(&self.tp, opt, *flags));
+                    text_value_to_py(py, output, false)
+                }
+            }
+        }
+    }
 }
 
 #[pymethods]
@@ -346,53 +377,53 @@ impl PyTextPage {
 
     /// Plain text (PyMuPDF `TextPage.extractText`).
     fn extractText(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        text_output_to_py(py, &self.page, "text", None, Some(&self.tp), false)
+        self.extract_output(py, "text")
     }
 
     /// `words` tuples (PyMuPDF `TextPage.extractWORDS`).
     fn extractWORDS(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        text_output_to_py(py, &self.page, "words", None, Some(&self.tp), false)
+        self.extract_output(py, "words")
     }
 
     /// `blocks` tuples (PyMuPDF `TextPage.extractBLOCKS`).
     fn extractBLOCKS(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        text_output_to_py(py, &self.page, "blocks", None, Some(&self.tp), false)
+        self.extract_output(py, "blocks")
     }
 
     /// The structured dict (PyMuPDF `TextPage.extractDICT`).
     fn extractDICT(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        text_output_to_py(py, &self.page, "dict", None, Some(&self.tp), false)
+        self.extract_output(py, "dict")
     }
 
     /// The structured rawdict (PyMuPDF `TextPage.extractRAWDICT`).
     fn extractRAWDICT(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        text_output_to_py(py, &self.page, "rawdict", None, Some(&self.tp), false)
+        self.extract_output(py, "rawdict")
     }
 
     /// JSON string (PyMuPDF `TextPage.extractJSON`).
     fn extractJSON(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        text_output_to_py(py, &self.page, "json", None, Some(&self.tp), false)
+        self.extract_output(py, "json")
     }
 
     /// Raw JSON string with per-character detail (PyMuPDF
     /// `TextPage.extractRAWJSON`).
     fn extractRAWJSON(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        text_output_to_py(py, &self.page, "rawjson", None, Some(&self.tp), false)
+        self.extract_output(py, "rawjson")
     }
 
     /// fitz-shaped HTML (PyMuPDF `TextPage.extractHTML`).
     fn extractHTML(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        text_output_to_py(py, &self.page, "html", None, Some(&self.tp), false)
+        self.extract_output(py, "html")
     }
 
     /// fitz-shaped XHTML (PyMuPDF `TextPage.extractXHTML`).
     fn extractXHTML(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        text_output_to_py(py, &self.page, "xhtml", None, Some(&self.tp), false)
+        self.extract_output(py, "xhtml")
     }
 
     /// fitz-shaped char-level XML (PyMuPDF `TextPage.extractXML`).
     fn extractXML(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        text_output_to_py(py, &self.page, "xml", None, Some(&self.tp), false)
+        self.extract_output(py, "xml")
     }
 
     /// The text contained in `rect` (PyMuPDF `TextPage.extractTextbox`).
@@ -425,10 +456,8 @@ impl PyTextPage {
             quads,
         };
         let needle_owned = needle.to_string();
-        let page = self.page.clone();
         let tp = self.tp.clone();
-        let hits: Vec<Quad> =
-            py.detach(move || pdf_api::search(&page, &needle_owned, opts, Some(&tp)));
+        let hits: Vec<Quad> = py.detach(move || pdf_api::search_textpage(&tp, &needle_owned, opts));
         let list = PyList::empty(py);
         for q in &hits {
             if quads {
@@ -447,7 +476,10 @@ impl PyTextPage {
     /// `height`, `colorspace`, `cs-name`, `xres`, `yres`, `bpc`, `size`,
     /// `has-mask`.
     fn extractIMGINFO<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
-        let entries = py.detach(|| pdf_api::extract_imginfo(&self.page));
+        let entries = py.detach(|| match &self.source {
+            TextPageSource::Page(page) => pdf_api::extract_imginfo(page),
+            TextPageSource::Recorded { resources, flags } => resources.image_info(&self.tp, *flags),
+        });
         let list = PyList::empty(py);
         for e in entries {
             let d = PyDict::new(py);
@@ -588,6 +620,10 @@ fn text_output_to_py(
 
     // Heavy: build-or-reuse the model + serialize, GIL released (PRD §9.4).
     let out = py.detach(|| pdf_api::get_text(page, opt, flags, tp));
+    text_value_to_py(py, out, sort)
+}
+
+fn text_value_to_py(py: Python<'_>, out: TextOutput, sort: bool) -> PyResult<Py<PyAny>> {
     // Only the final Python-object construction holds the GIL.
     match out {
         TextOutput::Text(s) => Ok(s.into_pyobject(py)?.into_any().unbind()),
@@ -654,7 +690,16 @@ fn dict_to_py<'py>(
         pdf_api::defaults::DICT
     });
     let blocks = py.detach(|| pdf_api::dict_blocks(page, tp, flags));
+    dict_blocks_to_py(py, tp, &blocks, raw, sort)
+}
 
+fn dict_blocks_to_py<'py>(
+    py: Python<'py>,
+    tp: &pdf_api::TextPage,
+    blocks: &[pdf_api::DictBlockRef<'_>],
+    raw: bool,
+    sort: bool,
+) -> PyResult<Bound<'py, PyDict>> {
     // Only the final Python-object construction holds the GIL.
     let root = PyDict::new(py);
     root.set_item(intern!(py, "width"), tp.width)?;
@@ -2027,7 +2072,7 @@ impl PyPage {
         // Heavy: interpret + layout. GIL released (PRD §9.4).
         let tp = py.detach(move || pdf_api::textpage(&page, flags.unwrap_or(0), clip));
         PyTextPage {
-            page: self.page.clone(),
+            source: TextPageSource::Page(self.page.clone()),
             tp,
         }
     }
@@ -2066,7 +2111,7 @@ impl PyPage {
             })
             .map_err(map_err)?;
         Ok(PyTextPage {
-            page: self.page.clone(),
+            source: TextPageSource::Page(self.page.clone()),
             tp,
         })
     }
@@ -2453,8 +2498,9 @@ impl PyPage {
 
     /// Records the page's ordered drawcall stream into a [`PyDisplayList`]
     /// (PyMuPDF `Page.get_displaylist`). Replay it with `dl.get_pixmap(...)`.
-    fn get_displaylist(&self, py: Python<'_>) -> PyResult<PyDisplayList> {
-        let inner = py.detach(|| pdf_api::page_get_displaylist(&self.page));
+    #[pyo3(signature = (annots=true))]
+    fn get_displaylist(&self, py: Python<'_>, annots: bool) -> PyResult<PyDisplayList> {
+        let inner = py.detach(|| pdf_api::page_get_displaylist_with_annots(&self.page, annots));
         Ok(PyDisplayList {
             inner: Arc::new(inner),
         })
@@ -5098,6 +5144,30 @@ impl PyDisplayList {
     /// `PdfUnsupportedError` instead of a bare `AttributeError` (PRD §7 / §9.5).
     fn __getattr__(&self, name: &str) -> PyResult<Py<PyAny>> {
         deferred_getattr("DisplayList", DISPLAYLIST_DEFERRED, name)
+    }
+
+    /// Creates a usable public TextPage from the recorded semantic snapshot.
+    #[pyo3(signature = (flags=3))]
+    fn get_textpage(&self, py: Python<'_>, flags: u32) -> PyResult<Py<PyAny>> {
+        let tp = py.detach(|| self.inner.get_textpage(flags));
+        let core = Py::new(
+            py,
+            PyTextPage {
+                source: TextPageSource::Recorded {
+                    resources: self.inner.text_resources(),
+                    flags,
+                },
+                tp,
+            },
+        )?;
+        // DisplayList is intentionally still the public core alias. Normalize
+        // its result through the existing Python TextPage wrapper rather than
+        // changing all established DisplayList construction/replay entry points.
+        Ok(py
+            .import("pdfspine.document")?
+            .getattr("TextPage")?
+            .call1((core,))?
+            .unbind())
     }
 
     /// The source rect (the page CropBox), as a `(x0, y0, x1, y1)` tuple

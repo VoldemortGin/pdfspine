@@ -224,6 +224,9 @@ pub struct ContentInterpreter<'a> {
     /// [`RenderOp`] stream (document order, for M6 rendering / `DisplayList`).
     /// `None` for the M2 text-extraction path (zero overhead, identical output).
     render_ops: Option<Vec<RenderOp>>,
+    /// Present only for an owned text/display-list snapshot.
+    image_ops: Option<Vec<Option<usize>>>,
+    image_color_spaces: Vec<Option<Object>>,
     /// The hidden-OCG oracle snapshotted at construction (optional content).
     oc: OcVisibility,
     /// The number of enclosing hidden marked-content sections; while non-zero
@@ -240,6 +243,8 @@ impl<'a> ContentInterpreter<'a> {
             doc,
             out: InterpretResult::default(),
             render_ops: None,
+            image_ops: None,
+            image_color_spaces: Vec::new(),
             oc: OcVisibility::read(doc),
             hidden_depth: 0,
         }
@@ -247,13 +252,15 @@ impl<'a> ContentInterpreter<'a> {
 
     /// Creates an interpreter that **also** records the ordered [`RenderOp`]
     /// stream (M6 rendering / `DisplayList`). The flat [`InterpretResult`] is
-    /// still produced; [`ContentInterpreter::run_page_render`] returns both.
+    /// still produced; [`ContentInterpreter::run_page_recorded`] retains both.
     #[must_use]
     pub fn new_recording(doc: &'a DocumentStore) -> Self {
         ContentInterpreter {
             doc,
             out: InterpretResult::default(),
             render_ops: Some(Vec::new()),
+            image_ops: None,
+            image_color_spaces: Vec::new(),
             oc: OcVisibility::read(doc),
             hidden_depth: 0,
         }
@@ -281,6 +288,168 @@ impl<'a> ContentInterpreter<'a> {
     /// [`RenderOp`] stream (the M6 render driver / `DisplayList` source).
     #[must_use]
     pub fn run_page_render(mut self, page: &Dict) -> Vec<RenderOp> {
+        self.run_recorded_content(page);
+        self.render_ops.take().unwrap_or_default()
+    }
+
+    /// Retains the semantic inventory and resolves font names while the source
+    /// is available, without interpreting a second time or changing raster ops.
+    #[must_use]
+    pub fn run_page_recorded(self, page: &Dict) -> crate::renderops::PageRecording {
+        self.run_page_recorded_with_annots(page, false)
+    }
+
+    /// Records page content and optionally visible annotation/widget appearances.
+    #[must_use]
+    pub fn run_page_recorded_with_annots(
+        mut self,
+        page: &Dict,
+        annots: bool,
+    ) -> crate::renderops::PageRecording {
+        self.render_ops = Some(Vec::new());
+        self.image_ops = Some(Vec::new());
+        self.run_recorded_content(page);
+        if annots {
+            self.record_annotation_appearances(page);
+        }
+        for (index, image) in self.out.images.iter_mut().enumerate() {
+            image.name = Some(SmolStr::new(format!("snapshot-image-{index}")));
+        }
+        crate::renderops::PageRecording {
+            content: self.out,
+            ops: self.render_ops.unwrap_or_default(),
+            image_ops: self.image_ops.unwrap_or_default(),
+            image_color_spaces: self.image_color_spaces,
+        }
+    }
+
+    fn record_annotation_appearances(&mut self, page: &Dict) {
+        let Some(annots) = self
+            .doc
+            .resolve_dict_key(page, &Name::new("Annots"))
+            .ok()
+            .flatten()
+        else {
+            return;
+        };
+        let Some(annots) = annots.as_array() else {
+            return;
+        };
+        let resources = self
+            .doc
+            .resolve_dict_key(page, &Name::new("Resources"))
+            .ok()
+            .flatten()
+            .and_then(|o| o.as_dict().cloned())
+            .unwrap_or_default();
+        for annot in annots {
+            let annot = match annot {
+                Object::Reference(r) => self.doc.resolve(*r).ok(),
+                other => Some(Arc::new(other.clone())),
+            };
+            let Some(ad) = annot.as_ref().and_then(|o| o.as_dict()) else {
+                continue;
+            };
+            let flags = ad
+                .get(&Name::new("F"))
+                .and_then(Object::as_i64)
+                .unwrap_or(0);
+            if flags & (1 | 2 | 32) != 0
+                || ad
+                    .get(&Name::new("OC"))
+                    .is_some_and(|oc| self.oc.is_hidden(self.doc, oc))
+            {
+                continue;
+            }
+            let Some(rect) = ad
+                .get(&Name::new("Rect"))
+                .and_then(Object::as_array)
+                .and_then(rect_from_array)
+                .map(|r| r.normalize())
+            else {
+                continue;
+            };
+            let Some(ap) = self
+                .doc
+                .resolve_dict_key(ad, &Name::new("AP"))
+                .ok()
+                .flatten()
+            else {
+                continue;
+            };
+            let Some(ap) = ap.as_dict() else {
+                continue;
+            };
+            let Some(mut normal) = self
+                .doc
+                .resolve_dict_key(ap, &Name::new("N"))
+                .ok()
+                .flatten()
+            else {
+                continue;
+            };
+            if normal.as_stream().is_none() {
+                let Some(state) = ad.get(&Name::new("AS")).and_then(Object::as_name) else {
+                    continue;
+                };
+                let Some(states) = normal.as_dict() else {
+                    continue;
+                };
+                let Some(selected) = self.doc.resolve_dict_key(states, state).ok().flatten() else {
+                    continue;
+                };
+                normal = selected;
+            }
+            let Some(stream) = normal.as_stream() else {
+                continue;
+            };
+            let Some(bbox) = stream
+                .dict
+                .get(&Name::new("BBox"))
+                .and_then(Object::as_array)
+                .and_then(rect_from_array)
+            else {
+                continue;
+            };
+            let matrix = stream
+                .dict
+                .get(&Name::new("Matrix"))
+                .and_then(Object::as_array)
+                .and_then(array_to_matrix)
+                .unwrap_or(Matrix::IDENTITY);
+            let bbox = bbox.transform(&matrix).normalize();
+            if bbox.width() <= 0.0 || bbox.height() <= 0.0 || rect.is_empty() {
+                continue;
+            }
+            let sx = rect.width() / bbox.width();
+            let sy = rect.height() / bbox.height();
+            let gs = GraphicsState::new(Matrix::new(
+                sx,
+                0.0,
+                0.0,
+                sy,
+                rect.x0 - sx * bbox.x0,
+                rect.y0 - sy * bbox.y0,
+            ));
+            let mut xobjects = self
+                .doc
+                .resolve_dict_key(&resources, &Name::new("XObject"))
+                .ok()
+                .flatten()
+                .and_then(|o| o.as_dict().cloned())
+                .unwrap_or_default();
+            xobjects.insert(Name::new("SnapshotAppearance"), normal.as_ref().clone());
+            let mut outer = resources.clone();
+            outer.insert(Name::new("XObject"), Object::Dictionary(xobjects));
+            // The appearance uses the existing Form interpreter, including its
+            // Matrix/BBox/resources, with fresh state isolated from page content.
+            self.emit(RenderOp::Save);
+            self.do_xobject("SnapshotAppearance", &gs, &outer, 0, &mut HashSet::new());
+            self.emit(RenderOp::Restore);
+        }
+    }
+
+    fn run_recorded_content(&mut self, page: &Dict) {
         let content = self.page_content(page);
         let resources = self
             .doc
@@ -296,7 +465,6 @@ impl<'a> ContentInterpreter<'a> {
             0,
             &mut HashSet::new(),
         );
-        self.render_ops.take().unwrap_or_default()
     }
 
     /// Interprets a page dictionary: concatenates its `/Contents` stream(s),
@@ -443,7 +611,7 @@ impl<'a> ContentInterpreter<'a> {
             match ev {
                 Event::Operand(o) => ops.push(o),
                 Event::InlineImage { params, data } => {
-                    self.record_inline_image(&params, data, &gs);
+                    self.record_inline_image(&params, data, &gs, resources);
                     ops.clear();
                 }
                 Event::Operator(name) => {
@@ -946,6 +1114,13 @@ impl<'a> ContentInterpreter<'a> {
                     ctm: Matrix::IDENTITY,
                 }));
             }
+            if self.image_ops.is_some() {
+                if let Some(name) = crate::layout::base_font_name(self.doc, &cached.dict) {
+                    for glyph in &mut self.out.glyphs[start..] {
+                        glyph.font_name = name.clone();
+                    }
+                }
+            }
         }
     }
 
@@ -1229,7 +1404,7 @@ impl<'a> ContentInterpreter<'a> {
 
         match subtype {
             Some("Image") => {
-                self.record_image_xobject(xname, stream, obj_num, gs);
+                self.record_image_xobject(xname, stream, obj_num, gs, resources);
             }
             Some("Form") | None => {
                 // Depth + cycle guards.
@@ -1301,6 +1476,7 @@ impl<'a> ContentInterpreter<'a> {
         stream: &pdf_core::StreamObj,
         obj_num: Option<u32>,
         gs: &GraphicsState,
+        resources: &Dict,
     ) {
         let dict = &stream.dict;
         let width = dict
@@ -1320,7 +1496,19 @@ impl<'a> ContentInterpreter<'a> {
         });
 
         if self.recording() {
-            if let Ok(raw) = self.doc.stream_raw_bytes(stream) {
+            let raw = self.doc.stream_raw_bytes(stream);
+            if self.image_ops.is_some() {
+                self.image_color_spaces
+                    .push(self.record_image_colorspace(dict, resources));
+            }
+            if let Some(indices) = self.image_ops.as_mut() {
+                indices.push(
+                    raw.as_ref()
+                        .ok()
+                        .and(self.render_ops.as_ref().map(Vec::len)),
+                );
+            }
+            if let Ok(raw) = raw {
                 self.emit(RenderOp::Image(ImageOp {
                     dict: dict.clone(),
                     raw: raw.to_vec(),
@@ -1415,7 +1603,32 @@ impl<'a> ContentInterpreter<'a> {
     }
 
     /// Records an inline image (`BI…ID…EI`) into the inventory.
-    fn record_inline_image(&mut self, params: &Object, data: Vec<u8>, gs: &GraphicsState) {
+    fn record_image_colorspace(&self, dict: &Dict, resources: &Dict) -> Option<Object> {
+        let name = dict
+            .get(&Name::new("ColorSpace"))
+            .or_else(|| dict.get(&Name::new("CS")))?
+            .as_name()?;
+        if matches!(
+            name.as_str(),
+            Some("DeviceRGB" | "DeviceGray" | "DeviceCMYK" | "RGB" | "G" | "CMYK")
+        ) {
+            return None;
+        }
+        let spaces = self
+            .doc
+            .resolve_dict_key(resources, &Name::new("ColorSpace"))
+            .ok()
+            .flatten()?;
+        spaces.as_dict()?.get(name).cloned()
+    }
+
+    fn record_inline_image(
+        &mut self,
+        params: &Object,
+        data: Vec<u8>,
+        gs: &GraphicsState,
+        resources: &Dict,
+    ) {
         if self.hidden() {
             return;
         }
@@ -1440,6 +1653,16 @@ impl<'a> ContentInterpreter<'a> {
         });
 
         if self.recording() {
+            if self.image_ops.is_some() {
+                self.image_color_spaces.push(
+                    params
+                        .as_dict()
+                        .and_then(|dict| self.record_image_colorspace(dict, resources)),
+                );
+            }
+            if let Some(indices) = self.image_ops.as_mut() {
+                indices.push(params.as_dict().and(self.render_ops.as_ref().map(Vec::len)));
+            }
             if let Some(dict) = params.as_dict() {
                 self.emit(RenderOp::Image(ImageOp {
                     dict: dict.clone(),

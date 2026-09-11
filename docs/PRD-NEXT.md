@@ -226,18 +226,32 @@
     SSIM (one was already measured slower and rejected).
   - *Size:* **L**.
 
-- [ ] **4. The 9 remaining deferred symbols.**
-  - *Goal:* implement the long tail (`COMPAT.toml` `deferred = 9`).
-  - *Why / evidence:* they are the entire remaining deferred set — parity is
-    694/769 = 90.2% (`PARITY.md`).
-  - *Where / order:* device-replay first (`Page.run`, `Page.extend_textpage`,
-    `DisplayList.run`, `DisplayList.get_textpage` — need a device-callback replay
-    engine), then `Page.insert_font`, `Pixmap.warp`, `Annot.get_textbox`,
-    `Tools.set_annot_stem` / `Tools.set_subset_fontnames`.
-  - *Acceptance:* each flips to `implemented` in `scripts/_compat_catalog.py` →
-    regenerate `COMPAT.toml` (`scripts/compat-symbol-guard.py` exit 0), each with
-    a `.venv-oracle` PyMuPDF parity test.
-  - *Size:* **L** (device-replay is the bulk).
+- [ ] **4. Deferred APIs — 1 of the original 9 landed; 8 remain.**
+  - *Landed:* `DisplayList.get_textpage(flags=3)` returns a usable public
+    `TextPage` wrapper from owned semantic/font/image resources; source edits
+    and closure do not invalidate text extraction. Paired recording avoids a
+    second content parse; encoded image resources decode lazily. `get_displaylist`
+    now accepts `annots=1/0` (default includes visible FreeText/widget appearances),
+    correcting the former DisplayList annotation omission in both text and replay.
+  - *Scope:* only the text resource snapshot is independent. Existing DisplayList
+    raster references to live ICC/palette/mask resources are not deep-copied here;
+    direct `Page.get_pixmap` is unchanged. See the behavior decision record.
+  - *Remaining order:* `Page.extend_textpage`, then device callbacks `Page.run` /
+    `DisplayList.run`; `Page.insert_font`, `Pixmap.warp`, `Annot.get_textbox`,
+    `Tools.set_annot_stem` / `Tools.set_subset_fontnames` remain deferred.
+  - *Evidence:* `python/tests/test_displaylist_textpage.py` covers flags, invisible
+    text, Form resources, source edit/close, CropBox/Rotate, annotations and live
+    PyMuPDF 1.28.2 comparisons; Rust tests cover lazy decoding and snapshot bounds.
+    Catalog parity is 695/769 = 90.4%, deferred = 8. No callback framework is added.
+    Full five-phase gate passes (1255 Python tests, 66 existing skips). The same
+    35 available render inputs retain identical dimensions/full pixel hashes in
+    direct Page rendering and `annots=0` DisplayList replay; eight historical
+    assets remain unavailable. A short ABBA probe observes explicit DisplayList
+    creation median 1.195→1.238 ms (median per-document ratio +5.17%, a different
+    statistic); this bounded added snapshot cost is not a significance claim.
+  - *Acceptance for each remaining API:* flip only its catalog entry, regenerate
+    `COMPAT.toml`, pass the symbol guard and a real PyMuPDF comparison.
+  - *Size:* **L** (device-replay remains the bulk).
 
 - [ ] **5. `pdf-typeset` next increments.**
   - *Goal:* docx paragraph borders/shading (`pBdr` / `shd`), `RunStyle`
@@ -769,8 +783,8 @@
   trusted-publishing `release.yml`. (The only local failures — 3 Rust + 7 pytest OCR tests — stem from a
   broken local tesseract/leptonica install, an env defect, not code; a clean machine still meets the
   1349/593 floors.)
-- **API parity (current):** **694 / 769 implemented (90.2%)** — consistent across `COMPAT.toml`, README, and
-  PARITY.md. 9 deferred · 66 out-of-scope. The remaining deferred symbols are the long tail (device-replay,
+- **API parity (current):** **695 / 769 implemented (90.4%)** — consistent across `COMPAT.toml`, README, and
+  PARITY.md. 8 deferred · 66 out-of-scope. The remaining deferred symbols are the long tail (device-replay,
   and a few Type0/Type3 edges).
 - **Text extraction:** at fitz parity for **single-column AND multi-column**. The multi-column engine landed
   (06-16 PM) and **P3-2 verified it** (2026-06-20, fresh GT): PMC order **0.965 / 0.995** vs fitz 0.975/0.997,
@@ -1034,7 +1048,7 @@ oracle-cross-checked against real PyMuPDF 1.24.14 (`.venv-oracle`) with zero reg
   `oc=` on every content writer now emits the `BDC/EMC` wrapper + `/Properties` resource (XObjects get
   `/OC`), and `/Usage /View /ViewState` + the active configuration's `/AS` are evaluated for rendering
   and text extraction; the only remaining gap is `/Intent`-mismatch hiding (see §0).
-- **`Page.run`/`DisplayList.run`/`get_textpage` (device-callback replay),
+- **`Page.run`/`DisplayList.run` (device-callback replay),
   `Page.remove_rotation`, `Annot.get_textbox`, `convert_to_pdf` non-image:** genuinely blocked (need
   a device-replay engine, content-stream rewriting, annot-appearance textpage).
   Keep deferred; documenting prevents wasted effort.

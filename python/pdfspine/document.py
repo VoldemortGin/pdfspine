@@ -2305,10 +2305,10 @@ class Page:
             clip=_as_clip(clip),
         )
 
-    def get_displaylist(self) -> "DisplayList":
+    def get_displaylist(self, annots: bool = True) -> "DisplayList":
         """Records the page's drawcalls into a :class:`DisplayList` (PyMuPDF
         ``page.get_displaylist``). Replay with ``dl.get_pixmap(...)``."""
-        return self._page.get_displaylist()
+        return self._page.get_displaylist(bool(annots))
 
     @property
     def is_image_only(self) -> bool:

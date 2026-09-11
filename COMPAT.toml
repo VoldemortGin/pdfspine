@@ -29,10 +29,10 @@
 baseline = "1.24.x"
 baseline_detail = "PyMuPDF 1.24.14 / MuPDF 1.24.11"
 total = 769
-implemented = 694
-deferred = 9
+implemented = 695
+deferred = 8
 out_of_scope = 66
-coverage_pct = 90.2
+coverage_pct = 90.4
 
 # ── Matrix ──
 [[symbol]]
@@ -3907,35 +3907,35 @@ name = "DisplayList.DisplayList"
 group = "DisplayList"
 disposition = "implemented"
 milestone = "M6"
-note = "Page.get_displaylist records the render-op stream; replay via get_pixmap (M6d)"
+note = "Page.get_displaylist records rendering and owned text/resources; get_textpage returns a TextPage wrapper"
 
 [[symbol]]
 name = "DisplayList.get_pixmap"
 group = "DisplayList"
 disposition = "implemented"
 milestone = "M6"
-note = "Page.get_displaylist records the render-op stream; replay via get_pixmap (M6d)"
+note = "Page.get_displaylist records rendering and owned text/resources; get_textpage returns a TextPage wrapper"
+
+[[symbol]]
+name = "DisplayList.get_textpage"
+group = "DisplayList"
+disposition = "implemented"
+milestone = "M6"
+note = "Page.get_displaylist records rendering and owned text/resources; get_textpage returns a TextPage wrapper"
 
 [[symbol]]
 name = "DisplayList.rect"
 group = "DisplayList"
 disposition = "implemented"
 milestone = "M6"
-note = "Page.get_displaylist records the render-op stream; replay via get_pixmap (M6d)"
-
-[[symbol]]
-name = "DisplayList.get_textpage"
-group = "DisplayList"
-disposition = "deferred"
-milestone = "M6"
-note = "TextPage-from-displaylist / device-callback replay deferred"
+note = "Page.get_displaylist records rendering and owned text/resources; get_textpage returns a TextPage wrapper"
 
 [[symbol]]
 name = "DisplayList.run"
 group = "DisplayList"
 disposition = "deferred"
 milestone = "M6"
-note = "TextPage-from-displaylist / device-callback replay deferred"
+note = "Device-callback replay deferred"
 
 # ── Shape ──
 [[symbol]]

@@ -26,6 +26,26 @@ use pdf_core::{DocumentStore, Limits, SaveOptions};
 use crate::content::{check_optional_content, fmt_num, PageContent};
 use crate::page_ops::PageEditor;
 
+/// Copies selected resource objects into an independent store, retaining encoded
+/// streams and their transitive dependencies. No image or font decoding occurs.
+///
+/// # Errors
+/// Returns errors creating the destination store. Unresolvable roots are `None`,
+/// so one damaged resource cannot discard independent valid image payloads.
+pub fn snapshot_resources(
+    src: &DocumentStore,
+    roots: &[Object],
+) -> Result<(DocumentStore, Vec<Option<Object>>)> {
+    let dst = DocumentStore::from_bytes(empty_doc(), *src.limits())?;
+    let mut graft = Graft::new(src, &dst);
+    graft.resource_snapshot = true;
+    let copied = roots
+        .iter()
+        .map(|root| graft.copy_value(root).ok())
+        .collect();
+    Ok((dst, copied))
+}
+
 /// Options for [`insert_pdf`] (PRD §8.7). All fields default to "append every
 /// source page at the end, no rotation override".
 #[derive(Clone, Copy, Debug, Default)]
@@ -330,6 +350,8 @@ struct Graft<'a> {
     /// `src object number → dst ObjRef`. Recorded *before* a node's children are
     /// copied, so cycles and shared nodes resolve to the single dst copy.
     map: HashMap<u32, ObjRef>,
+    resource_snapshot: bool,
+    depth: u32,
 }
 
 impl<'a> Graft<'a> {
@@ -338,6 +360,8 @@ impl<'a> Graft<'a> {
             src,
             dst,
             map: HashMap::new(),
+            resource_snapshot: false,
+            depth: 0,
         }
     }
 
@@ -402,6 +426,21 @@ impl<'a> Graft<'a> {
     /// Deep-copies an arbitrary object value, recursively remapping any
     /// references it contains.
     fn copy_value(&mut self, obj: &Object) -> Result<Object> {
+        if !self.resource_snapshot {
+            return self.copy_value_inner(obj);
+        }
+        if self.depth >= self.src.limits().max_recursion_depth {
+            return Err(Error::LimitExceeded(
+                pdf_core::error::LimitKind::RecursionDepth,
+            ));
+        }
+        self.depth += 1;
+        let result = self.copy_value_inner(obj);
+        self.depth -= 1;
+        result
+    }
+
+    fn copy_value_inner(&mut self, obj: &Object) -> Result<Object> {
         match obj {
             Object::Reference(r) => Ok(Object::Reference(self.copy_indirect(*r)?)),
             Object::Array(items) => {
@@ -429,6 +468,9 @@ impl<'a> Graft<'a> {
     fn copy_dict(&mut self, d: &Dict) -> Result<Dict> {
         let mut out = Dict::new();
         for (k, v) in d {
+            if self.resource_snapshot && !image_resource_key(k) {
+                continue;
+            }
             out.insert(k.clone(), self.copy_value(v)?);
         }
         Ok(out)
@@ -454,6 +496,68 @@ impl<'a> Graft<'a> {
         self.dst.update_object(placeholder, copied)?;
         Ok(placeholder)
     }
+}
+
+// Image samples, colorspaces/ICC profiles, tint functions, and filter parameters.
+// Structural/metadata references are deliberately excluded from text snapshots.
+fn image_resource_key(key: &Name) -> bool {
+    matches!(
+        key.as_str(),
+        Some(
+            "Type"
+                | "Subtype"
+                | "Width"
+                | "Height"
+                | "W"
+                | "H"
+                | "BitsPerComponent"
+                | "BPC"
+                | "ColorSpace"
+                | "CS"
+                | "Decode"
+                | "D"
+                | "DecodeParms"
+                | "DP"
+                | "Filter"
+                | "F"
+                | "ImageMask"
+                | "IM"
+                | "Mask"
+                | "SMask"
+                | "Matte"
+                | "SMaskInData"
+                | "Interpolate"
+                | "N"
+                | "Alternate"
+                | "Range"
+                | "WhitePoint"
+                | "BlackPoint"
+                | "Gamma"
+                | "Matrix"
+                | "FunctionType"
+                | "Domain"
+                | "C0"
+                | "C1"
+                | "Functions"
+                | "Bounds"
+                | "Encode"
+                | "Size"
+                | "BitsPerSample"
+                | "Order"
+                | "Predictor"
+                | "Colors"
+                | "Columns"
+                | "EarlyChange"
+                | "JBIG2Globals"
+                | "K"
+                | "EndOfLine"
+                | "EncodedByteAlign"
+                | "Rows"
+                | "EndOfBlock"
+                | "BlackIs1"
+                | "DamagedRowsBeforeError"
+        )
+    )
 }
 
 /// Resolves an inheritable attribute for `leaf` by walking `/Parent` to the
@@ -513,4 +617,51 @@ fn empty_doc() -> Vec<u8> {
     out.extend_from_slice(format!("{startxref}\n").as_bytes());
     out.extend_from_slice(b"%%EOF\n");
     out
+}
+
+#[cfg(test)]
+mod snapshot_tests {
+    use super::*;
+
+    #[test]
+    fn snapshot_preserves_cycles_and_excludes_metadata() {
+        let src = DocumentStore::from_bytes(empty_doc(), Limits::default()).unwrap();
+        let root = src.add_object(Object::Null).unwrap();
+        let metadata = src
+            .add_object(Object::Stream(StreamObj::new_encoded(
+                Dict::new(),
+                vec![9; 100_000],
+            )))
+            .unwrap();
+        let mut dict = Dict::new();
+        dict.insert(Name::new("SMask"), Object::Reference(root));
+        dict.insert(Name::new("Metadata"), Object::Reference(metadata));
+        src.update_object(root, Object::Dictionary(dict)).unwrap();
+        let (dst, copied) = snapshot_resources(&src, &[Object::Reference(root)]).unwrap();
+        let copied_ref = copied[0].as_ref().unwrap().as_reference().unwrap();
+        let object = dst.resolve(copied_ref).unwrap();
+        let copied_dict = object.as_dict().unwrap();
+        assert_eq!(
+            copied_dict
+                .get(&Name::new("SMask"))
+                .and_then(Object::as_reference),
+            Some(copied_ref)
+        );
+        assert!(copied_dict.get(&Name::new("Metadata")).is_none());
+        assert_eq!(dst.xref_length(), 4); // catalog, pages, and one copied resource
+    }
+
+    #[test]
+    fn snapshot_limits_depth_without_losing_other_roots() {
+        let src =
+            DocumentStore::from_bytes(empty_doc(), Limits::default().with_max_recursion_depth(8))
+                .unwrap();
+        let mut deep = Object::Integer(1);
+        for _ in 0..20 {
+            deep = Object::Array(vec![deep]);
+        }
+        let (_, copied) = snapshot_resources(&src, &[deep, Object::Integer(7)]).unwrap();
+        assert!(copied[0].is_none());
+        assert_eq!(copied[1].as_ref().and_then(Object::as_i64), Some(7));
+    }
 }

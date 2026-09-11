@@ -1347,19 +1347,19 @@ add_many(
     [
         "DisplayList",
         "get_pixmap",
+        "get_textpage",
         "rect",
     ],
-    "Page.get_displaylist records the render-op stream; replay via get_pixmap (M6d)",
+    "Page.get_displaylist records rendering and owned text/resources; get_textpage returns a TextPage wrapper",
 )
 add_many(
     "DisplayList",
     DEFERRED,
     "M6",
     [
-        "get_textpage",
         "run",
     ],
-    "TextPage-from-displaylist / device-callback replay deferred",
+    "Device-callback replay deferred",
 )
 
 # ---------------------------------------------------------------------------
