@@ -39,6 +39,11 @@ feature-complete, but the public API and on-disk formats may still change.
   their section boundaries. Fixes the recital interleave on the Greek, German,
   and Polish `32013R0575` cover pages, with no text added or removed.
 
+### Documentation
+
+- Define the v0.8.0 pinned git baseline and upgrade policy for Rust consumers
+  of `pdf-api`, `pdf-typeset` and `pdf-fonts`, retaining `publish = false`.
+
 ## [0.8.0] — 2026-09-10
 
 ### Added
