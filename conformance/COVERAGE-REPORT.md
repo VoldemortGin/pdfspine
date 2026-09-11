@@ -1,5 +1,103 @@
 # Test coverage report
 
+## Current combined baseline — 2026-09-11
+
+The measured production source is `c5bd20c6` (completed replay, typeset script
+placement and OCR acceptance documentation). The full collection ran at
+`8c6e5ea`; the final tests-only supplement is `a05eee8`. No production source,
+coverage exclusions or native extension changed between these measurements.
+The older report below is a historical snapshot, not a like-for-like coverage
+regression comparison: both the source inventory and instrumentation changed.
+
+| Scope | Metric | Covered / total | Coverage |
+|---|---|---:|---:|
+| Python package | statements | 6,749 / 6,877 | 98.1387% |
+| Python package | branches | 2,045 / 2,164 | 94.5009% |
+| Python package | combined statements + branches | 8,794 / 9,041 | **97.2680%** |
+| Rust workspace, combined Rust + Python profile | lines | 43,969 / 47,921 | **91.7531%** |
+| Rust workspace, combined Rust + Python profile | branches | 5,541 / 7,632 | **72.6022%** |
+
+There is no combined cross-language percentage. The Python `fail_under` remains
+**96**, consistent with `floor(97.2680) - 1 = 96`; this increment does not raise
+the threshold. CI now emits actual Rust branch counters in both JSON and LCOV,
+using the same pinned toolchain for tests, the debug extension and reporting.
+The coverage job remains nonblocking; other stable jobs and permissions are
+unchanged. Diagnostic JSON/XML are written before the final Python threshold
+check, so a failing threshold does not hide the measured result.
+
+### Collection and provenance
+
+The coverage job in `.github/workflows/ci.yml` uses `nightly-2026-04-17`
+(`rustc 1.97.0-nightly`, `7af3402cd 2026-04-16`), its `llvm-tools-preview`, and
+`cargo-llvm-cov 0.8.5`. `show-env --branch --export-prefix` supplies one shared
+instrumentation environment to workspace tests and **debug** `maturin develop`.
+This local run used Python 3.12.11 and maturin 1.15.0, with Pillow and NumPy
+installed rather than relying on dependency skips. It did not reuse the main
+release extension. Its instrumented `_core.abi3.so` SHA-256 is
+`b6510351d05c302077b0a90d4586e692a492e764a0fac0279183a0349b9bd6ad`.
+
+One workspace run passed **2,011 Rust tests**. One full Python run passed
+**1,440 tests / 69 skipped**. The isolated checkout initially lacked the ignored
+corpus directory; after linking the existing local assets, the single existing
+corpus smoke passed and was appended to the same profile. This establishes the
+complete pre-increment baseline of **1,441 / 68**, with Python **97.0025%**.
+The initial incomplete-corpus result (**96.9030%**) is retained separately.
+
+Eight new behavioral tests then passed and appended to that same profile:
+three replay targets reject malformed area without callbacks or target changes
+and remain reusable; two factory type errors are explicit; and OCG oval,
+Bezier and polyline content survives save/reopen and toggles actual pixels.
+No product defect or production change was needed. The final measured suite
+therefore exercised **1,449 unique Python tests / 68 remaining skips**, not a
+second full Python run. These tests add 18 covered Python statements and six
+branches; Rust totals remain unchanged. The measured `replay.py` reaches
+74/74 statements and 32/32 branches, not a claim of complete native replay
+coverage.
+
+A report-only snapshot before pytest has `py-bindings` at 136/4,398 lines and
+6/228 branches. After pytest these become 4,049/4,398 and 170/228:
+**+3,913 lines and +164 branches**. Together with the imported debug extension
+path/hash and `LLVM_PROFILE_FILE` containing process/module tokens, this is
+concrete Python-driven native evidence. The retained LCOV `LH > 0` check alone
+is only a degradation sentinel: bindings also have Rust unit tests.
+`scripts/coverage_summary.py` records both reports and rejects missing JSON or
+LCOV branch instrumentation, without turning a zero before/after delta into
+an unsupported failure criterion.
+
+Local evidence is preserved under
+`/Volumes/ExternalSSD/tmp/pdfspine-deferred-plan/`: `coverage-initial-without-corpus/`,
+`coverage-baseline-complete/`, and `coverage-final-complete/` hold separate
+report snapshots; the last includes report hashes and `final-provenance.json`.
+`coverage-combined-final.log`, `coverage-corpus-supplement.log` and
+`coverage-edges-append.log` record the actual runs and final 96% check.
+CI uploads the equivalent report JSON, LCOV, XML, summary and tool versions.
+Nightly instrumentation emitted tool/vendor warnings; this collection is not
+represented as a zero-warning stable gate. The unchanged production baseline
+already passed its stable release and artifact gates.
+
+### Current Rust crate counters
+
+| Crate | Lines | Branches |
+|---|---:|---:|
+| `pdf-api` | 3,610 / 3,898 | 281 / 388 |
+| `pdf-core` | 5,925 / 6,515 | 748 / 948 |
+| `pdf-crypto` | 801 / 836 | 93 / 112 |
+| `pdf-edit` | 8,931 / 9,698 | 1,049 / 1,530 |
+| `pdf-fonts` | 2,227 / 2,444 | 363 / 488 |
+| `pdf-image` | 2,433 / 2,919 | 299 / 526 |
+| `pdf-markdown` | 1,821 / 1,930 | 246 / 316 |
+| `pdf-ocr` | 486 / 531 | 33 / 50 |
+| `pdf-render` | 3,874 / 4,241 | 505 / 781 |
+| `pdf-text` | 6,769 / 7,145 | 1,233 / 1,599 |
+| `pdf-typeset` | 3,043 / 3,366 | 521 / 666 |
+| `py-bindings` | 4,049 / 4,398 | 170 / 228 |
+
+## Historical snapshot — 2026-09-05
+
+The remainder of this file preserves the earlier measurement and its original
+source/tooling scope. Statements about release contents and Rust unit-test
+counts below apply to that historical snapshot only.
+
 Measured locally on **2026-09-05 (Pacific time)** at commit `2b7df16` — the
 targeted-test batch (`4149071` Rust tests, `2b7df16` Python tests) that
 followed the `1f82655` combined profile. Product code is unchanged since the
