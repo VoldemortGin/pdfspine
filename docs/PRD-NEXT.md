@@ -468,16 +468,20 @@
     using pinned `nightly-2026-04-17` / `cargo-llvm-cov 0.8.5`; tests, debug
     extension and reports share instrumentation. Python-driven binding coverage
     is recorded before/after pytest. Existing nonblocking policy is unchanged.
-  - [x] Current baseline: Python **97.2680%** combined, Rust **43,969/47,921**
-    lines and **5,541/7,632** branches. One 2,011-test Rust run, one full Python
-    run plus the existing corpus smoke and eight behavioral supplements cover
-    **1,449 unique Python tests / 68 skips**. Production code/extension unchanged.
-  - *Ratchet:* `fail_under` stays **96** (`floor(97.2680) - 1`); it was not raised
-    this round. Further raising remains contingent on real headroom, without
-    exclusions or tests that merely mirror implementation.
-  - *Evidence / acceptance:* `conformance/COVERAGE-REPORT.md` distinguishes the
-    complete pre-increment 97.0025% baseline, final tests-only increment and
-    historical reports. JSON diagnostics precede the unchanged final 96% gate.
+  - [x] Current named baseline at **74c4c94**: Python **97.408487%** combined,
+    Rust **44,919/48,921** lines and **5,774/7,910** branches. One 2,046-test
+    Rust run and one full Python run (**1,520/83**) plus 15 existing oracle
+    nodes correcting an absent environment path yield **1,535 unique / 68 skips**.
+    New production denominators include strict TSR and typeset connections;
+    old 97.2680% remains a historical snapshot.
+  - *Ratchet:* `fail_under` stays **96** (`floor(97.408487) - 1`); no raise is
+    justified this round. No exclusions, new tests or implementation changes
+    were introduced to improve the score.
+  - *Evidence / acceptance:* `conformance/COVERAGE-REPORT.md` and its linked JSON
+    preserve source/binary/profile identities, the initial incomplete-oracle
+    report and final supplement. Whole Python drives bindings +3,913 lines /
+    +164 branches; the 15-node supplement separately adds 48 Rust lines / 3 branches.
+    JSON diagnostics and branch guards precede the unchanged final 96% gate.
   - *Remaining:* future threshold ratchet when supported by the measured floor.
   - *Size:* **S** (remaining scope).
 

@@ -1,6 +1,70 @@
 # Test coverage report
 
-## Current combined baseline — 2026-09-11
+## Current combined baseline — paragraph connections, 2026-09-11
+
+Measured source **`74c4c94edc85765e25bb0d0814f539515b522814`**, after strict TSR
+helpers, signed character spacing, explicit paragraph dashes and checked paragraph
+connections. This is a new measurement of production changes, not an attribution
+of the old 97.2680% score to newer source. The earlier report is retained below.
+
+| Scope | Metric | Covered / total | Coverage |
+|---|---|---:|---:|
+| Python package | statements | 6,916 / 7,031 | 98.364386% |
+| Python package | branches | 2,105 / 2,230 | 94.394619% |
+| Python package | combined statements + branches | 9,021 / 9,261 | **97.408487%** |
+| Rust workspace, combined profile | lines | 44,919 / 48,921 | **91.819464%** |
+| Rust workspace, combined profile | branches | 5,774 / 7,910 | **72.996207%** |
+
+Python's denominator gains 154 statements and 66 branches; Rust gains 1,000 lines
+and 278 branches, all in `pdf-typeset`. Typeset itself reaches 3,977/4,366 lines
+and 746/944 branches. The conformance evaluator scripts are outside Python's
+package coverage denominator. There is no combined cross-language percentage.
+
+One instrumented workspace run passed **2,046 Rust tests**. The full Python run
+passed **1,520 / 83 skipped**: both existing corpus PDFs and the OCR font were
+present, but the isolated checkout lacked the existing `.venv-oracle` path.
+Only the 15 affected existing oracle nodes were then run and appended to the
+same profiles: **15 passed**, yielding **1,535 unique Python tests / 68 remaining
+skips**. The exact node list is archived. This is one full run plus a targeted
+environment correction, not a first-run 1,535 result. No production or test
+changes, exclusions or model downloads were made for this collection.
+
+The oracle supplement added **48 covered Rust lines and 3 branches**; Python's
+score stayed at 97.408487%. Separately, the whole Python-driven binding delta is
+**+3,913 lines / +164 branches**: before pytest 136/4,398 lines and 6/228 branches,
+after pytest 4,049/4,398 and 170/228. The before snapshot was emitted after Rust
+tests and debug extension construction. JSON/LCOV branch counters agree; the
+bindings `LH > 0` sentinel alone is not proof of Python-driven native coverage.
+
+The same pinned `nightly-2026-04-17`, `llvm-tools-preview`, `cargo-llvm-cov 0.8.5`
+and `show-env --branch` environment cover Rust tests, **debug** maturin and
+reports. Python is 3.12.11 and maturin 1.15.0. The actual isolated extension SHA256
+is `b09795fe698a4d73f66926a326342023e3625a9be69ef26dd31290aaa4ea2b7e`;
+its process/module profile path and before/after evidence are recorded. The
+existing PyMuPDF 1.28.2 oracle was reused read-only with bytecode writes disabled.
+
+Offline wheel resolution initially failed on uncached Pygments 2.20.0. Twelve
+already-installed distributions were instead copied into the isolated environment,
+with per-file hashes, metadata and generated entry points recorded; pipcheck and
+import locations passed. This is **installed-payload reuse**, not independent
+publisher-wheel verification. It did not modify the main environment or fall back
+to floating package versions. Coverage's legitimate startup `.pth` introduced no
+main-environment path. Fixture and oracle inventories have separate hashes.
+
+The final **96%** Python gate passed. `floor(97.408487) - 1 = 96`, so no only-up
+increase is justified here. CI floors, nonblocking policy and stable jobs remain
+unchanged. Nightly collection is not a substitute for the stable full quality gate.
+
+[Machine-readable counters and provenance](coverage-current-2026-09-11.json)
+include the tested source, crate counters, exact supplemental nodes and report/log
+hashes. Original reports, locked installed-payload inventory and scripts are under
+`pdfspine-coverage-current-evidence/` in the retained external experiment archive
+(`/Volumes/ExternalSSD/tmp` on this machine); `initial-without-oracle/` and
+`final-complete/` remain separate. Raw profiles/debug objects are retained at
+`/Volumes/Cargo/target/pdfspine-coverage-current`. `collect.sh` and `supplement.sh`
+record the actual commands; diagnostics were exported before the final 96% check.
+
+## Historical replay baseline — 2026-09-11
 
 The measured production source is `c5bd20c6` (completed replay, typeset script
 placement and OCR acceptance documentation). The full collection ran at
@@ -75,7 +139,7 @@ Nightly instrumentation emitted tool/vendor warnings; this collection is not
 represented as a zero-warning stable gate. The unchanged production baseline
 already passed its stable release and artifact gates.
 
-### Current Rust crate counters
+### Replay-baseline Rust crate counters
 
 | Crate | Lines | Branches |
 |---|---:|---:|
