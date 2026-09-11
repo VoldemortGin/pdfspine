@@ -75,7 +75,7 @@ and distinct-binary run supports the microbenchmark results.
 
 ## Maintenance and validation
 
-- Verify source hashes and the exact one-file patch before dependency updates.
+- Verify source hashes and the exact runtime/packaging delta before dependency updates.
 - Preserve permissive license notices and the existing audit policy boundary.
 - Run the ordinary full gate, an extracted-sdist wheel build outside the checkout,
   and a separate consumer that fetches an immutable local git revision with
