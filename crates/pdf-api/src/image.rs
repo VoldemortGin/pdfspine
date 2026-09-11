@@ -360,6 +360,14 @@ pub fn pixmap_blank(
     Ok(Pixmap::blank(width, height, colorspace, alpha, fill)?)
 }
 
+/// Warps a local pixel-boundary quad `(ul, ur, ll, lr)` into owned pixels.
+///
+/// # Errors
+/// Invalid geometry/storage and the image allocation limit propagate.
+pub fn pixmap_warp(pix: &Pixmap, quad: [[f64; 2]; 4], width: u32, height: u32) -> Result<Pixmap> {
+    Ok(pdf_image::warp::warp(pix, quad, width, height)?)
+}
+
 /// Encodes a [`Pixmap`] in `format` (PyMuPDF `Pixmap.tobytes`).
 ///
 /// # Errors

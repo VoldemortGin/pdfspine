@@ -8,7 +8,7 @@
 
 - 引擎：纯 Rust（PDF 解析 / 渲染 / 文本 / OCR 全部 Rust 实现），`_core.abi3.so` 是编译产物。
 - 目标：**“PyMuPDF 有的我们都要”**——按 PyMuPDF 1.24.x 基线做符号级对齐（见 PARITY.md / COMPAT.toml）。
-- 当前覆盖：**90.6%（697/769）** 的 PyMuPDF 1.24 公开 API 已实现且有测试；其余为 deferred（6）或 out-of-scope（66）。
+- 当前覆盖：**90.9%（699/769）** 的 PyMuPDF 1.24 公开 API 已实现且有测试；其余为 deferred（4）或 out-of-scope（66）。
 
 ## 核心概念（对象模型）
 

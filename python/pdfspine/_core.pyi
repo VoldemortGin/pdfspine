@@ -848,6 +848,7 @@ class Document:
 
 @final
 class Pixmap:
+    def warp(self, quad: Any, width: int, height: int) -> Pixmap: ...
     def __new__(
         cls,
         colorspace: int | str,
