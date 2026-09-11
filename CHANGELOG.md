@@ -11,6 +11,14 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
+### Changed
+
+- **Render cost cleanup.** Glyph caches retain rasterized masks without copying
+  coverage bytes and avoid duplicate lookups; clip intersection uses equivalent
+  integer arithmetic. A 35-document, eight-round comparison observed a small
+  median reduction with overlapping round ranges; rendered pixels are unchanged.
+  Major glyph/JPEG 2000 performance work remains open (see `conformance/BENCH.md`).
+
 ### Fixed
 
 - **PMC caption and dropped-initial reading order.** Wide image captions stay
