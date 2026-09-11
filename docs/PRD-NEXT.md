@@ -506,9 +506,23 @@
     the final 40-page / 60-table manifest passes real source-hash ingestion and
     synthetic-worker status checks. These are harness checks, not model results.
     Native `find_tables` defaults and production vision algorithms are unchanged.
-  - *Still open:* human correction/review, detector-bypassed gold-crop adapters,
-    explicit production postprocessing failures, authentic gold-word inputs,
-    available model/runtime verification and real backend comparison. No TEDS,
+  - *Evaluator phase 3 complete (2026-09-11):* private TATR/ONNX gold-crop TSR
+    adapters and identity-paired worker mode bypass detection, native guidance
+    and adaptive expansion. Native words only, OCR disabled; actual integer crop
+    origin/rotation/token hashes and used-model provenance are recorded. Strict
+    final-cell diagnostics preserve raw invalid predictions; pipeline exceptions
+    remain failures. Existing public permissive extraction defaults are unchanged.
+    See `conformance/gt/TABLE-TSR.md` for coordinate and safety-budget contracts.
+    Validation: **127 related tests / 5 existing model skips**, final full Python
+    **1,492 passed / 68 skipped**, Ruff/format and project mypy pass. Rust source
+    and binary are unchanged; no new Rust build or coverage collection is claimed.
+  - *Offline readiness, not quality:* the same ADBE development crop runs on both
+    fixed CPU backends: TATR 107 final cells / ONNX 187, each detect=0 and
+    recognize=1. ONNX has only the table session and an intentionally absent layout
+    file. No metric, threshold change, winner or human-review completion is inferred
+    from these counts. The earlier 97.2680% coverage is a pre-increment baseline.
+  - *Still open:* human correction/review, authentic gold-word inputs,
+    evaluation-set quality scoring and real backend comparison. No TEDS,
     TableFormer/alias implementation or ADR/default-model decision is claimed.
   - *Goal:* validate the landed ONNX backend and finish the multi-backend seam.
   - *Why / evidence:* `find_tables(strategy="vision", backend="onnx")`
@@ -522,7 +536,7 @@
     `docs/adr/0002-table-structure-backends.md`.
   - *Sub-tasks (from P3-6 / the baseline):* build a 30–50-page financial eval set
     with hand-written correct HTML + a TEDS / cell-alignment scorer; add the
-    TSR-only gold-crop mode; fix cell/column merging (fold `"$"`-only columns,
+    TSR-only gold-crop mode (implemented above); fix cell/column merging (fold `"$"`-only columns,
     assign row-label words by row band, strip dotted-leader tokens); add the
     TableFormer backend + alias registry; then the benchmark report → flip ADR
     0002 to Accepted with the chosen default recorded.

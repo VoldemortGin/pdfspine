@@ -85,3 +85,27 @@ The pre-change 97.2680% Python coverage report is a historical measured baseline
 new private Python lines have not been remeasured in that combined profile.
 Real model readiness is recorded separately; fake inference tests are not model
 quality evidence. No model tuning or dataset quality score is claimed here.
+
+
+### Frozen implementation and readiness evidence
+
+Implementation source `d98bdf3` passes 127 related tests (five existing live-model
+skips) and the full Python suite: **1,492 passed / 68 skipped**. Ruff/format and
+project mypy pass. No Rust source changed or native rebuild was needed; the
+copied main extension SHA-256 remains
+`4f2b3fd6fe6dae8eb4f3eae63d2c804e45c14143118bde99ce9041b08028a331`.
+
+Independent offline CPU smoke on the single ADBE development crop completed:
+TATR returned 107 final cells and ONNX 187, each with zero detector calls and
+one recognizer call. ONNX's layout path deliberately does not exist and its
+only actual session is table/CPU. This establishes executable bypass/readiness,
+not extraction quality or comparability to published gold-word scores.
+
+External evidence under `/Volumes/ExternalSSD/tmp/`:
+`pdfspine-goldcrop-readiness/` contains each backend's raw stdout, trap trace,
+source/binary hashes, exact options and model fingerprints;
+`pdfspine-deferred-plan/table-tsr-full-python.log` and
+`table-tsr-related-final.log` contain test results; `table-tsr-grid-budget.json`
+records the 186-table budget inspection. `table-tsr-adbe-source-box.png` and its
+JSON document the actual source-coordinate check. These are separate from the
+unreviewed financial dataset and from any future benchmark acceptance report.
