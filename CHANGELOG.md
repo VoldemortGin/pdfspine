@@ -11,6 +11,13 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
+### Caller-resolved paragraph dash pairs
+
+- Added validated on/off lengths to Rust `ParagraphBorder` with phase-zero butt
+  strokes restarted per edge and page fragment. Dash style participates in
+  sibling grouping; existing solid bytes, layout extents and autofit dimensions
+  are preserved. Automatic OOXML patterns and `between` remain separate work.
+
 ### Documentation validation baselines
 
 - Separated the current local API catalog from published v0.8.0 coverage and

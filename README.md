@@ -17,9 +17,8 @@
 > images**, and **OCR** (Tesseract + a pure-Rust PaddleOCR engine, stronger on CJK).
 > **91.4%** (703 / 769) of the PyMuPDF 1.24 public API is implemented and tested
 > in the **current local source**. Published **v0.8.0** covers **90.2% (694 / 769)**.
-> The named 2026-09-11 local full gate passed **2,027 Rust + 1,518 Python tests**
-> (68 existing Python skips); later changes have targeted checks, not a new full
-> suite. See [validation baselines](docs/validation-baselines.md) for exact source
+> The named 2026-09-11 local paragraph-dash full gate passed **2,034 Rust + 1,535
+> Python tests** (68 existing Python skips). See [validation baselines](docs/validation-baselines.md) for exact source
 > and binary identities. In the dated 58-document benchmark, its aggregate mean text scores
 > trail fitz by 0.2–1.4 percentage points (and it beats fitz on Arabic / RTL); rendering
 > is at/near parity (SSIM 0.984 mean, 2026-06-21) though about 1.3× slower than fitz

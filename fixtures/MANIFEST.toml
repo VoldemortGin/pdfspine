@@ -445,3 +445,12 @@ sha256 = "e91a188ab10f1f89833fdd87f7b844a8fb9ff141a9c4f7e760cc24f7e0db107c"
 cleared_by = "pdfspine-typeset"
 cleared_date = "2026-09-11"
 notes = "Self-authored resolved -1pt cluster-gap sample; embedded Liberation font subset under SIL OFL 1.1 (see bundled font license)."
+
+[[fixture]]
+path = "typeset/typeset-lo-dashed-border.pdf"
+source = "self-generated"
+license = "CC0-1.0"
+sha256 = "1dd7a85dbf80be7fe4f4743377b992eb3940ac39a7435277b90fcbeb6cd1f4da"
+cleared_by = "validation-harness (crates/pdf-typeset/examples/make_typeset_fixtures.rs)"
+cleared_date = "2026-09-11"
+notes = "Explicit caller-resolved 8/2.5pt paragraph dash; OFL Liberation subsets; phase zero per edge"

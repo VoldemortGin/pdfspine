@@ -390,6 +390,15 @@ fn box_fixture() -> Vec<u8> {
 // Keep this text in sync with DOC_TITLE/DOC_PARAS in typeset_lo_oracle.py.
 // --------------------------------------------------------------------------
 fn lo_doc_fixture(shading: bool, tracking: CharacterSpacing, border: bool) -> Vec<u8> {
+    lo_doc_fixture_with_dash(shading, tracking, border, None)
+}
+
+fn lo_doc_fixture_with_dash(
+    shading: bool,
+    tracking: CharacterSpacing,
+    border: bool,
+    dash: Option<(f64, f64)>,
+) -> Vec<u8> {
     let mut title = RunStyle::new(SERIF, 24.0);
     title.bold = true;
     title.character_spacing = tracking;
@@ -416,6 +425,19 @@ fn lo_doc_fixture(shading: bool, tracking: CharacterSpacing, border: bool) -> Ve
         }
     } else {
         pdf_typeset::ParagraphBorders::default()
+    };
+    let borders = if let Some((on, off)) = dash {
+        let apply = |edge: Option<pdf_typeset::ParagraphBorder>| {
+            edge.map(|e| e.with_dash(on, off).expect("valid resolved fixture dash"))
+        };
+        pdf_typeset::ParagraphBorders {
+            top: apply(borders.top),
+            right: apply(borders.right),
+            bottom: apply(borders.bottom),
+            left: apply(borders.left),
+        }
+    } else {
+        borders
     };
     title_para.borders = border.then(|| Box::new(borders));
     let body = |text: &str| {
@@ -616,6 +638,10 @@ fn main() {
         ),
         ("typeset-lo-script-doc.pdf", lo_script_fixture(false)),
         ("typeset-lo-script-slide.pdf", lo_script_fixture(true)),
+        (
+            "typeset-lo-dashed-border.pdf",
+            lo_doc_fixture_with_dash(false, CharacterSpacing::default(), true, Some((8.0, 2.5))),
+        ),
         (
             "typeset-lo-border.pdf",
             lo_doc_fixture(false, CharacterSpacing::default(), true),

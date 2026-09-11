@@ -109,7 +109,7 @@ def _rels(pairs: list[tuple[str, str, str]]) -> str:
     return f'{XML_DECL}<Relationships xmlns="{NS_REL}">{rows}</Relationships>'
 
 
-def build_docx(path: Path, *, shading: bool = False, tracking: bool = False, border: bool = False, condensed: bool = False) -> None:
+def build_docx(path: Path, *, shading: bool = False, tracking: bool = False, border: bool = False, condensed: bool = False, dashed_border: bool = False) -> None:
     """One Letter page, 1-in margins, Liberation Serif — mirrors typeset-lo-doc."""
 
     def para(text: str, *, size_half_pt: int, bold: bool, after_20th: int) -> str:
@@ -120,7 +120,8 @@ def build_docx(path: Path, *, shading: bool = False, tracking: bool = False, bor
             f'{b}{extra_spacing}<w:sz w:val="{size_half_pt}"/></w:rPr>'
         )
         background = '<w:shd w:val="clear" w:color="auto" w:fill="F4B183"/>' if shading else ""
-        edges = ('<w:pBdr>' + ''.join(f'<w:{edge} w:val="single" w:sz="8" w:space="0" w:color="CC3300"/>' for edge in ('top','left','bottom','right')) + '</w:pBdr>') if border else ''
+        border_style = "dashed" if dashed_border else "single"
+        edges = ('<w:pBdr>' + ''.join(f'<w:{edge} w:val="{border_style}" w:sz="8" w:space="0" w:color="CC3300"/>' for edge in ('top','left','bottom','right')) + '</w:pBdr>') if border or dashed_border else ''
         return (
             f'<w:p><w:pPr>{edges}{background}<w:spacing w:before="0" w:after="{after_20th}" '
             f'w:line="240" w:lineRule="auto"/></w:pPr>'
@@ -467,6 +468,8 @@ def main(argv: list[str] | None = None) -> int:
     build_docx(condensed_docx, condensed=True)
     border_docx = cache / "sample-border.docx"
     build_docx(border_docx, border=True)
+    dashed_docx = cache / "sample-dashed-border.docx"
+    build_docx(dashed_docx, dashed_border=True)
     script_docx = cache / "sample-script-doc.docx"
     script_pptx = cache / "sample-script-slide.pptx"
     build_script_sample(script_docx, slide=False)
@@ -482,6 +485,7 @@ def main(argv: list[str] | None = None) -> int:
             ("docx-tracking", tracked_docx, ROOT / "fixtures" / "typeset" / "typeset-lo-tracking.pdf"),
             ("docx-condensed", condensed_docx, ROOT / "fixtures" / "typeset" / "typeset-lo-condensed.pdf"),
             ("docx-border", border_docx, ROOT / "fixtures" / "typeset" / "typeset-lo-border.pdf"),
+            ("docx-dashed-border", dashed_docx, ROOT / "fixtures" / "typeset" / "typeset-lo-dashed-border.pdf"),
             ("docx-script", script_docx, ROOT / "fixtures" / "typeset" / "typeset-lo-script-doc.pdf"),
             ("pptx-script", script_pptx, ROOT / "fixtures" / "typeset" / "typeset-lo-script-slide.pdf"),
         ]:
