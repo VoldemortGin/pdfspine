@@ -327,6 +327,20 @@
     cost; these are bounded observations, not significance or zero-cost claims.
     See `docs/subset-fontnames-validation.md` for exact baseline identities,
     per-pair spread and memory limits.
+  - *Also landed:* DisplayList raster resources are captured before recording,
+    including indirect soft masks, palettes and ICC device-alternate metadata.
+    Source bytes and read-only xref tables are shared; pending edits and
+    authentication/layer state are frozen with independent lazy caches. The
+    source may subsequently change or close. Existing dynamic subset-name views
+    remain supported. Ordinary Page rendering is unchanged.
+    Both Rust `page_get_displaylist` factories now return `Result<DisplayList>`;
+    Python signatures stay unchanged. This is an unreleased Rust source change,
+    not a callback implementation. See `docs/displaylist-snapshot-validation.md`
+    for the regression, ownership contract and measured nonzero costs.
+    Final integrated five-phase gate passes **1971 Rust / 1386 Python tests**,
+    with 66 existing Python skips; extension fingerprint `53da3cbce469`, drift
+    and wheel/sdist installation smoke pass. Eight final Page/DL buffer probes
+    remain identical; no additional GT scoring. The two run APIs stay deferred.
   - *Remaining order:* device callbacks `Page.run` / `DisplayList.run` remain deferred.
   - *Evidence:* `python/tests/test_displaylist_textpage.py` covers flags, invisible
     text, Form resources, source edit/close, CropBox/Rotate, annotations and live

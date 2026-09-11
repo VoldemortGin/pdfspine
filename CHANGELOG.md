@@ -11,6 +11,18 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
+### DisplayList resource revisions
+
+- Display lists capture resource state before recording, so later edits to
+  indirect soft masks, Indexed palettes and ICC device-alternate metadata do not
+  alter their raster. Source close remains supported; ordinary Page rendering is
+  unchanged. Source bytes and immutable xref tables are shared, while pending
+  edits, authentication and layer state are captured with independent caches.
+- Unreleased Rust API change: `page_get_displaylist` and
+  `page_get_displaylist_with_annots` now return `Result<DisplayList>`; callers
+  must propagate or handle snapshot errors. Python signatures are unchanged.
+  This does not implement `Page.run` or `DisplayList.run` callbacks.
+
 ### Dynamic subset font names
 
 - Added `Tools.set_subset_fontnames(on=None)`: truthy values enable original

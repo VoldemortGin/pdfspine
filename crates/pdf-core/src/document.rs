@@ -47,7 +47,7 @@ pub struct Version {
 #[derive(Debug)]
 pub struct DocumentStore {
     source: Source,
-    xref: XrefTable,
+    xref: Arc<XrefTable>,
     trailer: Dict,
     version: Version,
     header_offset: usize,
@@ -94,6 +94,61 @@ pub struct DocumentStore {
 }
 
 impl DocumentStore {
+    /// Captures a resource revision with shared source bytes and independent caches.
+    ///
+    /// The overlay, trailer overrides, layer view and authentication state are
+    /// held under simultaneous read guards. The result represents one store
+    /// instant, not a transaction across a multi-step authoring operation.
+    /// The overlay map is copied; xref, object payloads and source bytes are shared.
+    ///
+    /// # Errors
+    /// Returns a typed error if a semantic-state lock is poisoned.
+    pub fn snapshot(&self) -> Result<Self> {
+        // Fixed order; do not resolve objects or invoke locking helpers while
+        // holding these guards. Current writers hold only one of these locks.
+        let changes = self
+            .changes
+            .read()
+            .map_err(|_| Error::Unsupported("snapshot: change-set lock poisoned"))?;
+        let overrides = self
+            .trailer_overrides
+            .read()
+            .map_err(|_| Error::Unsupported("snapshot: trailer lock poisoned"))?;
+        let layer = self
+            .layer_view
+            .read()
+            .map_err(|_| Error::Unsupported("snapshot: layer lock poisoned"))?;
+        #[cfg(feature = "encryption")]
+        let decryptor = self
+            .decryptor
+            .read()
+            .map_err(|_| Error::Unsupported("snapshot: decryptor lock poisoned"))?;
+        Ok(Self {
+            source: self.source.clone(),
+            xref: self.xref.clone(),
+            trailer: self.trailer.clone(),
+            version: self.version,
+            header_offset: self.header_offset,
+            parse_was_repaired: self.parse_was_repaired,
+            redaction_applied: std::sync::atomic::AtomicBool::new(self.redaction_applied()),
+            mode: self.mode,
+            diagnostics: self.diagnostics.clone(),
+            limits: self.limits,
+            interner: RwLock::new(NameInterner::new()),
+            // Never import cache entries from another authentication epoch.
+            arena: RwLock::new(HashMap::new()),
+            changes: RwLock::new(changes.clone()),
+            trailer_overrides: RwLock::new(overrides.clone()),
+            layer_view: RwLock::new(layer.clone()),
+            #[cfg(feature = "encryption")]
+            decryptor: RwLock::new(decryptor.clone()),
+            #[cfg(feature = "encryption")]
+            arena_generation: std::sync::atomic::AtomicU64::new(0),
+            #[cfg(feature = "encryption")]
+            encrypt_obj_num: self.encrypt_obj_num,
+        })
+    }
+
     // --- opening ----------------------------------------------------------
 
     /// Opens a document from in-memory bytes with the given [`Limits`], in the
@@ -306,7 +361,7 @@ impl DocumentStore {
 
         let mut store = DocumentStore {
             source,
-            xref,
+            xref: Arc::new(xref),
             trailer,
             version,
             header_offset,
@@ -1607,5 +1662,19 @@ mod tests {
         assert!(doc.is_dirty());
         assert_eq!(doc.changes_snapshot().len(), 2);
         assert_eq!(*doc.resolve(new_ref).unwrap(), Object::Integer(42));
+    }
+    #[test]
+    fn resource_snapshot_poison_is_typed_error() {
+        let doc = Arc::new(DocumentStore::from_bytes(minimal_pdf(), Limits::default()).unwrap());
+        let other = Arc::clone(&doc);
+        let _ = std::thread::spawn(move || {
+            let _guard = other.changes.write().unwrap();
+            panic!("poison fixture");
+        })
+        .join();
+        assert!(matches!(
+            doc.snapshot(),
+            Err(Error::Unsupported("snapshot: change-set lock poisoned"))
+        ));
     }
 }
