@@ -190,7 +190,7 @@ def _table_record(tbl) -> dict:
 WORKER_SCHEMA = "pdfspine.table-worker.v2"
 
 
-def eval_config(strategy="lines", backend=None, vision_options=None):
+def eval_config(strategy="lines", backend=None, vision_options=None, *, mode="page-e2e"):
     strategy = strategy.casefold()
     backend = (backend or ("tatr" if strategy in {"vision", "tatr"} else "native")).casefold()
     if backend not in {"native", "tatr", "onnx"}:
@@ -207,7 +207,17 @@ def eval_config(strategy="lines", backend=None, vision_options=None):
         raise ValueError("native evaluation does not accept vision options")
     if options.get("local_files_only") is False:
         raise ValueError("evaluation does not download model weights")
-    return {"strategy": strategy, "backend": backend, "options": options}
+    result = {"strategy": strategy, "backend": backend, "options": options}
+    if mode not in {"page-e2e", "gold-crop-tsr"}:
+        raise ValueError("unsupported evaluation mode")
+    if mode == "gold-crop-tsr":
+        if backend == "native":
+            raise ValueError("native extraction is not detector-free TSR")
+        if options.get("ocr_if_no_text", False) is not False:
+            raise ValueError("gold-crop TSR requires native words with OCR disabled")
+        options["ocr_if_no_text"] = False
+        result.update(mode=mode, word_source="pdfspine-native")
+    return result
 
 
 @lru_cache(maxsize=64)
@@ -224,8 +234,8 @@ def _identity(path):
     return _file_identity(str(path), stat.st_size, stat.st_mtime_ns)
 
 
-def _vision_runtime_metadata(strategy, backend=None, vision_options=None):
-    config = eval_config(strategy, backend, vision_options)
+def _vision_runtime_metadata(strategy, backend=None, vision_options=None, *, mode="page-e2e", used_runtime=None):
+    config = eval_config(strategy, backend, vision_options, mode=mode)
     import pdfspine
     from pdfspine import _core
     metadata = {"backend": config["backend"], "requested": config,
@@ -244,7 +254,7 @@ def _vision_runtime_metadata(strategy, backend=None, vision_options=None):
         from pdfspine import _tatr as implementation
         options = implementation.TatrOptions.from_mapping(config["options"])
         packages = ("torch", "transformers", "numpy", "Pillow")
-    runtime = implementation._get_runtime(options)
+    runtime = used_runtime if used_runtime is not None else implementation._get_runtime(options)
     metadata.update(dict(runtime.metadata))
     metadata["effective_options"] = dataclasses.asdict(options)
     metadata["backend_source"] = _identity(implementation.__file__)
@@ -253,7 +263,11 @@ def _vision_runtime_metadata(strategy, backend=None, vision_options=None):
     if config["backend"] == "onnx":
         metadata["session_providers"] = {name: session.get_providers() for name, session in getattr(runtime, "_sessions", {}).items()}
     files = []
-    for role in ("layout", "table") if config["backend"] == "onnx" else ("detection", "structure"):
+    roles = (("table",) if mode == "gold-crop-tsr" else ("layout", "table")) if config["backend"] == "onnx" else ("detection", "structure")
+    if mode == "gold-crop-tsr":
+        metadata["executed_model_roles"] = ["table" if config["backend"] == "onnx" else "structure"]
+        metadata["loaded_model_roles"] = sorted(getattr(runtime, "_sessions", {})) if config["backend"] == "onnx" else list(roles)
+    for role in roles:
         source = metadata.get(role + "_model")
         if not source:
             raise ValueError(f"runtime omitted {role} model provenance")
@@ -272,14 +286,30 @@ def _vision_runtime_metadata(strategy, backend=None, vision_options=None):
                     files.append({"role": role, "filename": child.name, **_identity(child)})
         else:
             files.append({"role": role, "filename": path.name, **_identity(path)})
-    for role in (("layout", "table") if config["backend"] == "onnx" else ("detection", "structure")):
+    for role in roles:
         if not any(item["role"] == role and Path(item["filename"]).suffix in {".onnx", ".safetensors", ".bin"} for item in files):
             raise ValueError(f"missing model weight fingerprint: {role}")
     metadata["model_files"] = files
     return metadata
 
 
-def _validate_response(value, request_id=None, expected_config=None):
+def _crop_request(value):
+    if not isinstance(value, dict) or set(value) - {"table_id", "bbox", "coordinate_space", "padding"}:
+        raise ValueError("gold crop request must be a known-field object")
+    if not isinstance(value.get("table_id"), str) or not value["table_id"]:
+        raise ValueError("gold crop requires a nonempty table ID")
+    if value.get("coordinate_space") not in {"page-display", "fintabnet-page"}:
+        raise ValueError("gold crop requires an explicit supported coordinate space")
+    bbox = value.get("bbox")
+    if not isinstance(bbox, (list, tuple)) or len(bbox) != 4 or any(type(v) not in (float, int) or not math.isfinite(v) for v in bbox) or bbox[2] <= bbox[0] or bbox[3] <= bbox[1]:
+        raise ValueError("gold crop requires a finite positive box")
+    padding = value.get("padding", 0)
+    if type(padding) is not int or not 0 <= padding <= 20:
+        raise ValueError("gold crop padding must be integer pixels in [0,20]")
+    return {**value, "bbox": list(bbox), "padding": padding}
+
+
+def _validate_response(value, request_id=None, expected_config=None, expected_crop=None):
     if not isinstance(value, dict) or type(value.get("ok")) is not bool:
         raise ValueError("worker response must contain boolean ok")
     if request_id is not None and value.get("request_id") != request_id:
@@ -292,6 +322,18 @@ def _validate_response(value, request_id=None, expected_config=None):
         metadata = value.get("backend_metadata", {})
         if metadata.get("backend") != expected_config["backend"] or metadata.get("requested") != expected_config:
             raise ValueError("worker backend/options identity does not match request")
+    if value["ok"] and expected_config and expected_config.get("mode") == "gold-crop-tsr":
+        if len(value["tables"]) != 1:
+            raise ValueError("gold crop must return exactly one identity-bearing result")
+        record = value["tables"][0]
+        if not isinstance(record, dict) or record.get("crop_request") != _crop_request(expected_crop):
+            raise ValueError("gold crop result identity mismatch")
+        if record.get("table_id") != expected_crop["table_id"] or record.get("quality") not in {"valid", "empty", "invalid"}:
+            raise ValueError("invalid gold crop result status/identity")
+        if not isinstance(record.get("cells"), list) or any(not isinstance(c, dict) for c in record["cells"]):
+            raise ValueError("gold crop cells must be raw objects")
+        json.dumps(record, allow_nan=False)
+        return value
     for table in value["tables"]:
         if not isinstance(table, dict):
             raise ValueError("worker table must be an object")
@@ -307,13 +349,33 @@ def _worker_pdfspine(
     pdf: str,
     page_index: int,
     strategy: str = "lines", backend=None, vision_options=None,
+    *, mode="page-e2e", crop_request=None,
 ) -> tuple[list[dict], dict]:
     import pdfspine
 
     doc = pdfspine.open(pdf)
     try:
         page = doc.load_page(page_index)
-        config = eval_config(strategy, backend, vision_options)
+        config = eval_config(strategy, backend, vision_options, mode=mode)
+        if mode == "gold-crop-tsr":
+            request = _crop_request(crop_request)
+            if request["coordinate_space"] == "fintabnet-page":
+                # The corpus generator emits PyMuPDF top-left page coordinates.
+                # Only the verified source-page convention is accepted implicitly.
+                # Rotated/cropped general callers must supply page-display explicitly.
+                if page.rotation != 0 or tuple(page.cropbox) != tuple(page.mediabox):
+                    raise ValueError("FinTabNet source crop requires unrotated full page; supply explicit page-display coordinates otherwise")
+            from pdfspine import _onnx, _tatr
+            implementation = _onnx if config["backend"] == "onnx" else _tatr
+            options_type = implementation.OnnxOptions if config["backend"] == "onnx" else implementation.TatrOptions
+            options = options_type.from_mapping(config["options"])
+            result = implementation._recognize_gold_crop(page, request["bbox"], options=config["options"], padding=request["padding"])
+            runtime = implementation._get_runtime(options)
+            record = {"table_id": request["table_id"], "crop_request": request,
+                      "cells": result.cells, "quality": result.quality, "quality_reasons": list(result.reasons),
+                      "metadata": result.metadata}
+            metadata = _vision_runtime_metadata(strategy, backend, config["options"], mode=mode, used_runtime=runtime)
+            return [record], metadata
         kwargs = {} if config["backend"] == "native" else {"backend": config["backend"], "vision_options": config["options"]}
         finder = page.find_tables(strategy=strategy, **kwargs)
         tables = list(getattr(finder, "tables", finder))
@@ -355,7 +417,7 @@ def _worker_fitz(pdf: str, page_index: int) -> list[dict]:
             pass
 
 
-def _run_worker(mode: str, pdf: str, page_index: int, strategy: str = "lines", backend=None, vision_options=None, request_id=None) -> int:
+def _run_worker(mode: str, pdf: str, page_index: int, strategy: str = "lines", backend=None, vision_options=None, request_id=None, eval_mode="page-e2e", crop_request=None) -> int:
     """Worker entrypoint: emit ``{"ok":bool, "tables":[...], "error":...}`` JSON.
 
     fitz (and MuPDF's C layer) write warnings to **stdout** ("Consider using the
@@ -378,7 +440,7 @@ def _run_worker(mode: str, pdf: str, page_index: int, strategy: str = "lines", b
         try:
             if mode == "pdfspine":
                 out["tables"], out["backend_metadata"] = _worker_pdfspine(
-                    pdf, page_index, strategy, backend, vision_options
+                    pdf, page_index, strategy, backend, vision_options, mode=eval_mode, crop_request=crop_request
                 )
             elif mode == "fitz":
                 out["tables"] = _worker_fitz(pdf, page_index)
@@ -444,6 +506,7 @@ def _run_jsonl_worker(strategy: str, backend=None, vision_options=None) -> int:
                     int(request.get("page_index", 0)),
                     str(request.get("strategy") or strategy),
                     request.get("backend", backend), request.get("options", vision_options),
+                    mode=request.get("mode", "page-e2e"), crop_request=request.get("crop_request"),
                 )
                 response = {
                     "schema": WORKER_SCHEMA,
@@ -479,9 +542,9 @@ class PersistentPdfspineWorker:
         python: str,
         strategy: str,
         timeout: float,
-        startup_timeout: float, backend=None, vision_options=None,
+        startup_timeout: float, backend=None, vision_options=None, *, mode="page-e2e",
     ) -> None:
-        self.config = eval_config(strategy, backend, vision_options)
+        self.config = eval_config(strategy, backend, vision_options, mode=mode)
         self.strategy = strategy
         self.timeout = timeout
         self.startup_timeout = startup_timeout
@@ -524,7 +587,7 @@ class PersistentPdfspineWorker:
             )
         return json.loads(line)
 
-    def call(self, pdf: Path, page_index: int) -> dict:
+    def call(self, pdf: Path, page_index: int, crop_request=None) -> dict:
         self._sequence += 1
         request_id = f"{pdf.name}:{page_index}:{self._sequence}"
         request = {
@@ -536,6 +599,8 @@ class PersistentPdfspineWorker:
             "strategy": self.strategy,
             "backend": self.config["backend"], "options": self.config["options"],
         }
+        if self.config.get("mode") == "gold-crop-tsr":
+            request.update(mode="gold-crop-tsr", crop_request=_crop_request(crop_request))
         try:
             if self._process.stdin is None:
                 raise RuntimeError("table worker stdin is closed")
@@ -548,7 +613,7 @@ class PersistentPdfspineWorker:
                 raise RuntimeError("table worker response request_id mismatch")
             if response.get("schema") != WORKER_SCHEMA or response.get("type") != "result":
                 raise ValueError("worker result schema/type mismatch")
-            return _validate_response(response, request_id, self.config)
+            return _validate_response(response, request_id, self.config, crop_request)
         except Exception as exc:  # noqa: BLE001
             self.close()
             return {
@@ -591,7 +656,7 @@ class PersistentPdfspineWorker:
 # PARENT MODE — drives both workers per page, compares, reports.
 # ===========================================================================
 def call_worker(py: str, mode: str, pdf: Path, page_index: int, timeout: float,
-                strategy: str = "lines", backend=None, vision_options=None) -> dict:
+                strategy: str = "lines", backend=None, vision_options=None, *, eval_mode="page-e2e", crop_request=None) -> dict:
     """Spawn an isolated worker; return its JSON (or a synthesized failure rec).
 
     A timeout / non-zero exit / SIGABRT (Rust panic) becomes ``ok=False`` with an
@@ -605,6 +670,8 @@ def call_worker(py: str, mode: str, pdf: Path, page_index: int, timeout: float,
         cmd += ["--backend", backend]
     if vision_options is not None:
         cmd += ["--options-json", json.dumps(vision_options, allow_nan=False)]
+    if eval_mode != "page-e2e":
+        cmd += ["--eval-mode", eval_mode, "--crop-request-json", json.dumps(_crop_request(crop_request))]
     try:
         request_id = f"{pdf.name}:{page_index}"
         cmd += ["--request-id", request_id]
@@ -636,7 +703,7 @@ def call_worker(py: str, mode: str, pdf: Path, page_index: int, timeout: float,
         response = json.loads(proc.stdout)
         if not isinstance(response, dict) or response.get("schema") != WORKER_SCHEMA or response.get("type") != "result":
             raise ValueError("worker result schema/type mismatch")
-        return _validate_response(response, request_id, eval_config(strategy, backend, vision_options) if mode == "pdfspine" else None)
+        return _validate_response(response, request_id, eval_config(strategy, backend, vision_options, mode=eval_mode) if mode == "pdfspine" else None, crop_request)
     except (json.JSONDecodeError, ValueError, TypeError):
         tail = (proc.stdout or "").strip()[-200:]
         return {
@@ -1321,16 +1388,123 @@ def load_gold_manifest(path: Path) -> list[dict]:
     return out
 
 
+def _score_crop(gold, record):
+    from cell_alignment import score_cells, counts, topology_error
+    from grits import grits_top, grits_con
+    cells = record["cells"]
+    scored = score_cells(gold, cells)
+    invalid = scored["invalid_prediction"] or record["quality"] == "invalid"
+    if invalid:
+        scored.update(invalid_prediction=True, prediction_error=record.get("quality_reasons") or scored["prediction_error"])
+        scored["span"] = counts(0, len(cells), len(gold))
+        scored["content"] = counts(0, len(cells), len(gold))
+    if topology_error(gold):
+        raise ValueError("invalid gold topology")
+    return {"cell_alignment": scored,
+            "grits_top": 0.0 if invalid else grits_top(gold, cells)[0],
+            "grits_con": 0.0 if invalid else grits_con(gold, cells)[0]}
+
+
+def _run_gold_crops(manifest_path, python, timeout, report_path, json_path, strategy, startup_timeout, backend, vision_options):
+    """Identity-paired native-word TSR; no detector matching or detector metrics."""
+    from cell_alignment import aggregate
+    config = eval_config(strategy, backend, vision_options, mode="gold-crop-tsr")
+    pages, results, issues = [], [], []
+    worker = None
+    error = None
+    attempted = 0
+    metadata = None
+    providers = {}
+    try:
+        pages = load_gold_manifest(manifest_path)
+        if not pages:
+            raise ValueError("manifest has no requested pages")
+    except (ValueError, OSError, TypeError, KeyError, AttributeError) as exc:
+        issues.append(f"input-validation: {type(exc).__name__}: {exc}")
+    prepared = []
+    from cell_alignment import topology_error
+    for page in pages:
+        if page.get("input_issues") or not page.get("pdf") or not page["pdf"].is_file():
+            issues.append({"document_id": page["document_id"], "issues": page.get("input_issues") or ["missing PDF"]})
+            continue
+        ids = [t.get("structure_id") or f"{page['document_id']}:{i}" for i, t in enumerate(page["gold_tables"])]
+        for index, table in enumerate(page["gold_tables"]):
+            try:
+                table_id = ids[index]
+                if ids.count(table_id) != 1:
+                    raise ValueError("duplicate requested table identity")
+                gold, bbox = _gold_cells_from_annotation(table)
+                if topology_error(gold):
+                    raise ValueError(f"invalid gold topology: {topology_error(gold)}")
+                request = _crop_request({"table_id": table_id, "bbox": bbox, "coordinate_space": "fintabnet-page", "padding": 0})
+                prepared.append((page, gold, request))
+            except (ValueError, TypeError, KeyError, OverflowError) as exc:
+                issues.append({"document_id": page["document_id"], "table_index": index, "issues": [f"input-validation: {type(exc).__name__}: {exc}"]})
+    try:
+        for page, gold, request in prepared:
+                if worker is None:
+                    worker = PersistentPdfspineWorker(python, strategy, timeout, startup_timeout, backend, config["options"], mode="gold-crop-tsr")
+                table_id = request["table_id"]
+                attempted += 1
+                response = worker.call(page["pdf"], page["page_index"], request)
+                if not response.get("ok"):
+                    raise RuntimeError(response.get("error", "crop execution failed"))
+                _validate_response(response, expected_config=config, expected_crop=request)
+                current = response["backend_metadata"]
+                stable = {k: v for k, v in current.items() if k != "session_providers"}
+                if metadata is not None and stable != metadata:
+                    raise ValueError("backend metadata changed within TSR run")
+                metadata = stable
+                for role, value in current.get("session_providers", {}).items():
+                    if role in providers and providers[role] != value:
+                        raise ValueError("backend session providers changed within TSR run")
+                    providers[role] = value
+                record = response["tables"][0]
+                results.append({"document_id": page["document_id"], "table_id": table_id,
+                                "prediction": record, **_score_crop(gold, record)})
+    except Exception as exc:
+        error = f"{type(exc).__name__}: {exc}"
+    finally:
+        if worker is not None:
+            try:
+                worker.close()
+            except Exception as exc:
+                error = error or f"shutdown: {type(exc).__name__}: {exc}"
+    review_complete = bool(pages) and all(p.get("review_status") in {"source-annotations", "reviewed"} and p.get("all_table_reviews_complete", True) and p.get("ledger_reviews_complete", True) and (p.get("manifest_track") != "financial-drafts" or p.get("manifest_review_status") == "reviewed") for p in pages)
+    requested = sum(len(p["gold_tables"]) for p in pages)
+    complete = bool(pages) and not issues and len(results) == requested
+    status = "invalid" if error else "valid" if complete and review_complete else "incomplete"
+    diagnostic = {"cell_alignment": aggregate([r["cell_alignment"] for r in results]),
+                  "grits_top": sum(r["grits_top"] for r in results)/len(results) if results else None,
+                  "grits_con": sum(r["grits_con"] for r in results)/len(results) if results else None}
+    payload = {"mode": "gold-crop-tsr", "requested": config, "status": status,
+               "execution_status": "failed" if error else "success" if complete else "partial",
+               "comparable": status == "valid", "official_aggregate": diagnostic if status == "valid" else None,
+               "diagnostic_partial_aggregate": diagnostic, "n_pages_requested": len(pages) if pages else None,
+               "n_tables_requested": requested if pages else None, "n_tables_attempted": attempted,
+               "n_tables_evaluated": len(results), "missing_inputs": issues, "error": error,
+               "backend_metadata": metadata, "docs": results,
+               "review_statuses": sorted({p.get("review_status", "unknown") for p in pages}),
+               "unknown_table_count": bool(issues), "word_source": "pdfspine-native", "ocr_enabled": False}
+    json_path.parent.mkdir(parents=True, exist_ok=True)
+    json_path.write_text(json.dumps(payload, indent=2, allow_nan=False))
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(f"# Gold-crop TSR: {status.upper()}\n\nNative words, OCR disabled; table-ID pairing, no detection metrics.\n\nRequested {payload['n_tables_requested']} tables; evaluated {len(results)}.\n\nOfficial aggregate: `{payload['official_aggregate']}`.\n\nUnreviewed drafts remain diagnostic-only. Details and provenance are in `{json_path.name}`.\n")
+    return 0 if status == "valid" else 2 if error else 3
+
+
 def run_gold(manifest_path: Path, pdfspine_py: str, timeout: float,
              report_path: Path, json_path: Path, strategy: str = "lines",
              startup_timeout: float = 600.0, match_iou: float = 0.5,
-             backend=None, vision_options=None) -> int:
+             backend=None, vision_options=None, *, mode="page-e2e") -> int:
     """Drive the gold-GT GriTS run over a FinTabNet.c manifest; write report+json.
 
     If no source PDFs are present (the common BLOCKED case in restricted
     environments), still writes a clean report stating exactly what is missing and
     how to obtain it — never a fabricated score.
     """
+    if mode == "gold-crop-tsr":
+        return _run_gold_crops(manifest_path, pdfspine_py, timeout, report_path, json_path, strategy, startup_timeout, backend, vision_options)
     config = eval_config(strategy, backend, vision_options)
     try:
         pages = load_gold_manifest(manifest_path)
@@ -1923,6 +2097,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--match-iou", type=float, default=0.5,
                     help="minimum bbox IoU for gold table matching (default: 0.5)")
     ap.add_argument("--backend", choices=["native", "tatr", "onnx"], default=None)
+    ap.add_argument("--eval-mode", choices=["page-e2e", "gold-crop-tsr"], default="page-e2e")
+    ap.add_argument("--crop-request-json", default=None, help=argparse.SUPPRESS)
     ap.add_argument("--options-json", default=None, help="explicit vision options JSON object; no downloads")
     ap.add_argument("--strategy", default="lines",
                     help="find_tables strategy for the pdfspine worker in --gold mode "
@@ -1940,7 +2116,7 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
     try:
         options = json.loads(args.options_json) if args.options_json is not None else None
-        config = eval_config(args.strategy, args.backend, options)
+        config = eval_config(args.strategy, args.backend, options, mode=args.eval_mode)
     except (ValueError, TypeError) as exc:
         ap.error(str(exc))
     if not 0.0 <= args.match_iou <= 1.0:
@@ -1955,7 +2131,7 @@ def main(argv: list[str] | None = None) -> int:
         if not args.pdf:
             sys.stdout.write(json.dumps({"ok": False, "tables": [], "error": "no --pdf"}))
             return 2
-        return _run_worker(args.worker, args.pdf, args.page, args.strategy, args.backend, options, args.request_id)
+        return _run_worker(args.worker, args.pdf, args.page, args.strategy, args.backend, options, args.request_id, args.eval_mode, json.loads(args.crop_request_json) if args.crop_request_json else None)
 
     # GOLD-GT mode (absolute cell-structure score vs FinTabNet.c via GriTS).
     if args.gold is not None:
@@ -1964,6 +2140,8 @@ def main(argv: list[str] | None = None) -> int:
         # Non-default strategies get suffixed default paths so a 'text' run can
         # never silently clobber the canonical (lines-default) gold report.
         sfx = "" if args.strategy == "lines" else f"-{args.strategy}"
+        if args.eval_mode != "page-e2e":
+            sfx += "-gold-crop-tsr-native-words"
         if args.backend is not None or options is not None:
             digest = hashlib.sha256(json.dumps(config, sort_keys=True).encode()).hexdigest()[:10]
             sfx += f"-{config['backend']}-{digest}"
@@ -1973,10 +2151,10 @@ def main(argv: list[str] | None = None) -> int:
                  else GT_DIR / f"gt-tables-gold{sfx}.json")
         return run_gold(
             args.gold, args.pdfspine_python, args.timeout, report, jsonp,
-            args.strategy, args.startup_timeout, args.match_iou, args.backend, options,
+            args.strategy, args.startup_timeout, args.match_iou, args.backend, options, mode=args.eval_mode,
         )
 
-    if args.backend is not None or options is not None:
+    if args.eval_mode != "page-e2e" or args.backend is not None or options is not None:
         ap.error("--backend/--options-json require --gold; parity mode retains its historical native path")
 
     # Parent.
