@@ -2914,6 +2914,59 @@ impl ShapeHandle {
 // `page_*` free functions, taking `&Page` and tuple colors and delegating to
 // `pdf_edit::*` with `page.document()` + `page.number()`.
 
+/// Finds an existing exact-name page font, promoting a direct dictionary.
+///
+/// # Errors
+/// Propagates resource and mutation errors.
+pub fn page_existing_font(page: &Page, name: &str) -> Result<Option<u32>> {
+    Ok(pdf_edit::registered_font::existing_font(
+        page.document(),
+        page.number(),
+        name,
+    )?)
+}
+
+/// Registers a Core14 or standalone TrueType font without writing Contents.
+///
+/// # Errors
+/// Rejects unsupported options/formats and propagates file/resource errors.
+#[allow(clippy::too_many_arguments)]
+pub fn page_insert_font(
+    page: &Page,
+    name: &str,
+    fontfile: Option<&Path>,
+    buffer: Option<&[u8]>,
+    set_simple: bool,
+    wmode: i32,
+    encoding: i32,
+) -> Result<u32> {
+    if let Some(xref) = page_existing_font(page, name)? {
+        return Ok(xref);
+    }
+    let mut options = pdf_edit::registered_font::FontRegistrationOptions {
+        program: None,
+        set_simple,
+        wmode,
+        encoding,
+    };
+    if set_simple || wmode != 0 || encoding != 0 || pdf_edit::registered_font::is_core14(name) {
+        return Ok(pdf_edit::registered_font::insert_font(
+            page.document(),
+            page.number(),
+            name,
+            &options,
+        )?);
+    }
+    let file_bytes = fontfile.map(std::fs::read).transpose()?;
+    options.program = file_bytes.as_deref().or(buffer);
+    Ok(pdf_edit::registered_font::insert_font(
+        page.document(),
+        page.number(),
+        name,
+        &options,
+    )?)
+}
+
 /// Inserts `text` at `point` (PyMuPDF `Page.insert_text`), returning the number
 /// of lines written. A non-zero `oc` (OCG / OCMD xref) wraps the text in an
 /// `/OC /MCn BDC` … `EMC` marked-content section.

@@ -1,0 +1,3 @@
+# Unified patches encode empty context lines as a literal space. Source files
+# retain the normal whitespace checks; the patch is also checksum-verified.
+vendor/patches/*.patch whitespace=-blank-at-eol

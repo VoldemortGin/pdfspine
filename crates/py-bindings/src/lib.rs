@@ -2838,6 +2838,39 @@ impl PyPage {
 
     // --- content insertion (PRD §8.8 / §9.4) -----------------------------
 
+    /// Existing exact-name resource lookup before Python reads a font source.
+    fn existing_font(&self, py: Python<'_>, name: &str) -> PyResult<Option<u32>> {
+        py.detach(|| pdf_api::page_existing_font(&self.page, name))
+            .map_err(map_err)
+    }
+
+    /// Registers an exact-name Core14 or standalone TrueType font resource.
+    #[pyo3(signature = (name, fontfile=None, fontbuffer=None, set_simple=false, wmode=0, encoding=0))]
+    #[allow(clippy::too_many_arguments)]
+    fn insert_font(
+        &self,
+        py: Python<'_>,
+        name: &str,
+        fontfile: Option<String>,
+        fontbuffer: Option<Vec<u8>>,
+        set_simple: bool,
+        wmode: i32,
+        encoding: i32,
+    ) -> PyResult<u32> {
+        py.detach(|| {
+            pdf_api::page_insert_font(
+                &self.page,
+                name,
+                fontfile.as_deref().map(std::path::Path::new),
+                fontbuffer.as_deref(),
+                set_simple,
+                wmode,
+                encoding,
+            )
+        })
+        .map_err(map_err)
+    }
+
     /// Inserts `text` at `point` (PyMuPDF `Page.insert_text`). Heavy work runs
     /// with the GIL released. Returns the number of lines written. A non-zero
     /// `oc` (OCG / OCMD xref) wraps the text in `/OC /MCn BDC` … `EMC`.

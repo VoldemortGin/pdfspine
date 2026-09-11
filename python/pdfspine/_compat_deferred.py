@@ -10,7 +10,6 @@ from __future__ import annotations
 DEFERRED: frozenset[str] = frozenset(
     {
         "DisplayList.run",
-        "Page.insert_font",
         "Page.run",
     }
 )

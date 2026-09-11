@@ -34,15 +34,15 @@
 
 > **Current snapshot.** Numbers below are recomputed from the
 > live `COMPAT.toml` per-symbol dispositions. `COMPAT.toml [meta]` is always the authoritative live figure;
-> the current remaining-work list (the 4 deferred symbols, grouped + prioritized) lives in
+> the current remaining-work list (the 3 deferred symbols, grouped + prioritized) lives in
 > [`docs/PRD-NEXT.md`](docs/PRD-NEXT.md) §3.B.
 
-**Overall: 699 / 769 implemented (90.9% coverage).**
+**Overall: 700 / 769 implemented (91.0% coverage).**
 
 | Disposition | Count | Share |
 |---|---:|---:|
-| **implemented** | **699** | **90.9%** |
-| deferred (planned, later milestone / post-v1) | 4 | 0.5% |
+| **implemented** | **700** | **91.0%** |
+| deferred (planned, later milestone / post-v1) | 3 | 0.4% |
 | out-of-scope (raises `PdfUnsupportedError`) | 66 | 8.6% |
 | **Total catalogued symbols** | **769** | 100% |
 
@@ -60,7 +60,7 @@
 | `IRect` | 25 | 25 | 0 | 0 | 100% |
 | `Quad` | 17 | 17 | 0 | 0 | 100% |
 | `Document` | 150 | 136 | 0 | 14 | 91% |
-| `Page` | 117 | 113 | 2 | 2 | 97% |
+| `Page` | 117 | 114 | 1 | 2 | 97% |
 | `TextPage` | 17 | 17 | 0 | 0 | 100% |
 | `Pixmap` | 43 | 43 | 0 | 0 | 100% |
 | `Annot` | 51 | 47 | 0 | 4 | 92% |
@@ -79,7 +79,7 @@
 | Module-level functions | 32 | 29 | 0 | 3 | 91% |
 | `Tools` / `TOOLS` | 22 | 14 | 1 | 7 | 64% |
 | `exceptions` | 10 | 10 | 0 | 0 | 100% |
-| **Total** | **769** | **699** | **4** | **66** | **90.9%** |
+| **Total** | **769** | **700** | **3** | **66** | **91.0%** |
 
 ### Per-milestone breakdown
 
@@ -87,7 +87,7 @@
 > per-symbol `milestone` field, so it cannot be recomputed mechanically. Use the **per-class table
 > above** (recomputed from the live `COMPAT.toml`) + `docs/PRD-NEXT.md` §3.B for current status. By
 > milestone, all of M0–M8's headline paths are landed (geometry, parsing, text, edit/save, annot/forms,
-> image-docs/Pixmap, rendering near-parity, SVG/tables/OCG, OCR-via-Tesseract); the 4 deferred are the
+> image-docs/Pixmap, rendering near-parity, SVG/tables/OCG, OCR-via-Tesseract); the 3 deferred are the
 > long tails and the 66 out-of-scope are the HTML/CSS story engine + render-era knobs.
 
 ---
@@ -117,18 +117,18 @@ per-symbol truth (every name, disposition, milestone, note) is in [`COMPAT.toml`
 
 ### Partial (headline paths landed, long tail deferred)
 
-- [x] **`Page` (113/117)** — text extraction (`get_text` all variants, `get_textpage`, `extend_textpage`, `search_for`, `TEXTFLAGS`,
+- [x] **`Page` (114/117)** — text extraction (`get_text` all variants, `get_textpage`, `extend_textpage`, `search_for`, `TEXTFLAGS`,
   OCR textpage), inventory (`get_fonts`/`get_images`/`get_xobjects`/`get_image_info`/`get_image_bbox`/
   `get_image_rects`/`get_drawings`/`get_cdrawings`/`cluster_drawings`), the full annotation `add_*` family
   (incl. `add_caret_annot`/`add_widget`) + `delete`/`delete_widget`/`apply_redactions`, widgets
   read (`widgets`/`first_widget`) + object loaders (`load_annot`/`load_widget`), links
   (`get_links`/`load_links`/`links`/`first_link`/`insert_link`/`update_link`/`delete_link`),
   drawing primitives + page-level draw convenience (`draw_curve`/`draw_quad`/`draw_sector`/`draw_squiggle`/
-  `draw_zigzag`) + `new_shape`, `insert_text`/`insert_textbox`/`insert_image`/`show_pdf_page`,
+  `draw_zigzag`) + `new_shape`, `insert_font` (Core14/glyf TrueType), `insert_text`/`insert_textbox`/`insert_image`/`show_pdf_page`,
   rendering (`get_pixmap`/`get_displaylist`/`get_svg_image`), `find_tables`, full box geometry
   (`set_mediabox`/`set_cropbox`/`artbox`/`bleedbox`/`trimbox` + setters), rotation read + `set_rotation` +
   the rotation matrices, `get_contents`/`set_contents`/`read_contents`, page labels (`get_label`),
-  `language`/`set_language`, `is_wrapped`, `write_text`, `remove_rotation`, `refresh`. Gaps: `insert_font`,
+  `language`/`set_language`, `is_wrapped`, `write_text`, `remove_rotation`, `refresh`. Gaps:
   device-callback replay (`run`).
 - [x] **`Document` (136/150)** — open/lifecycle, save family (`save`/`ez_save`/`save_incremental`/`write`/
   `tobytes`/`convert_to_pdf`/`subset`), page ops (`new_page`/`insert_pdf`/`delete_page`/`select`/`fullcopy_page`/`reload_page`/
@@ -183,10 +183,10 @@ per-symbol truth (every name, disposition, milestone, note) is in [`COMPAT.toml`
 
 ## Remaining work
 
-The authoritative, prioritised list of the **4 deferred** symbols (grouped, with quick-wins flagged)
+The authoritative, prioritised list of the **3 deferred** symbols (grouped, with quick-wins flagged)
 now lives in **[`docs/PRD-NEXT.md`](docs/PRD-NEXT.md) §3.B** — kept there to avoid two divergent lists.
 In brief the deferred set is:
-**Page (2)** `insert_font` + device-callback replay (`run`); **DisplayList (1)** `run`
+**Page (1)** device-callback replay (`run`); **DisplayList (1)** `run`
 (device-callback replay); **Tools (1)** `set_subset_fontnames`.
 
 The **66 out-of-scope** symbols (raise `PdfUnsupportedError`) are dominated by `Story` / `Xml` /

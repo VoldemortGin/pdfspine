@@ -852,10 +852,16 @@ add_many(
     DEFERRED,
     "M4",
     [
-        "insert_font",
         "replace_image",
         "delete_image",
     ],
+)
+add(
+    "Page.insert_font",
+    "Page",
+    IMPLEMENTED,
+    "M4",
+    "Core14 and full standalone glyf TrueType registration; horizontal defaults; registered text/textbox reuse",
 )
 add(
     "Page.insert_htmlbox",

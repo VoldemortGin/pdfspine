@@ -35,7 +35,7 @@
   These changes are not part of the published 0.8.0 release.
 - **Gate.** `./ci.sh` runs `scripts/quality_gate.py`, phases in order
   `rust → extension → python → drift → artifacts`. The `extension` phase
-  fingerprints `crates/**`, `Cargo.toml`, `Cargo.lock`, `pyproject.toml` and
+  fingerprints `crates/**`, `vendor/**`, `Cargo.toml`, `Cargo.lock`, `pyproject.toml` and
   `rust-toolchain*` against `.gate/extension.stamp` and runs
   `maturin develop --release` on any mismatch before pytest (opt out with
   `--skip-extension-check` or `PDFSPINE_GATE_SKIP_EXTENSION=1`); the `artifacts`
@@ -205,6 +205,14 @@
   `conformance/gt/RENDER-REPORT.md` (2026-09-10 update).
 
 - [ ] **3. Render, remaining cost.**
+  - *Mask coverage increment (2026-09-11, unreleased):* a complete, pinned
+    tiny-skia 0.11.4 vendor specializes partial byte-mask blending. All 53
+    validated outputs remain byte-identical; per-document ABBA/reverse BAAB
+    median ratios are **0.9019 / 0.8962**, sum-of-medians ratios **0.9450 /
+    0.9441**. These single-ARM64-machine observations include background
+    application activity, not a general speed guarantee. Source provenance,
+    inherited git consumption and the audit-base/local-delta distinction are
+    documented in ADR 0003. See `conformance/BENCH.md`; **item 3 stays open**.
   - *Small increment landed (2026-09-10):* glyph masks now retain their original
     allocation and cache hits avoid a second lookup; clip coverage uses an
     exhaustively equivalent integer expression. Eight alternating rounds on
@@ -290,13 +298,28 @@
     gate passes **1959 Rust / 1341 Python tests**, 66 existing Python skips, plus
     wheel/sdist installation smoke. The installed wheel also passes the explicit
     warp center/metadata smoke. See the behavior record.
+  - *Also landed:* `Page.insert_font` registers Core14 and complete standalone
+    glyf TrueType fonts without adding Contents. Existing exact resource names
+    win before source validation; inherited/shared resources use leaf-local copies.
+    Registered `insert_text` and `insert_textbox` reuse actual PDF encoding and
+    widths after save/reopen, preserving Unicode aliases through distinct CIDs.
+    New CFF/CFF2/collections and nondefault simple/vertical/encoding modes remain
+    unsupported and fail before mutation. This does not add shaping or change
+    the legacy unregistered-font fallback. Independent review and 21 focused
+    public cases pass; seven legacy writing probes retain PDF/block/pixel hashes.
+    Final integrated Rust/Python checks pass **1963 / 1361 tests**, with 66
+    existing Python skips; final extension fingerprint `125521030a0a`.
+    Drift and wheel/sdist installation smoke also pass.
+    The same seven legacy probes remain identical with that final extension.
+    Evidence: `insert-font-integrated-gate.log` and
+    `insert-font-legacy-integrated-final.json` in the external deferred-plan bundle.
   - *Remaining order:* device callbacks `Page.run` /
-    `DisplayList.run`; `Page.insert_font`,
+    `DisplayList.run`;
     `Tools.set_subset_fontnames` remain deferred.
   - *Evidence:* `python/tests/test_displaylist_textpage.py` covers flags, invisible
     text, Form resources, source edit/close, CropBox/Rotate, annotations and live
     PyMuPDF 1.28.2 comparisons; Rust tests cover lazy decoding and snapshot bounds.
-    Catalog parity is 699/769 = 90.9%, deferred = 4. No callback framework is added.
+    Catalog parity is 700/769 = 91.0%, deferred = 3. No callback framework is added.
     Full five-phase gate passes (1255 Python tests, 66 existing skips). The same
     35 available render inputs retain identical dimensions/full pixel hashes in
     direct Page rendering and `annots=0` DisplayList replay; eight historical

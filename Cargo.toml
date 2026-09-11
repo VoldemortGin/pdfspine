@@ -20,7 +20,7 @@ members = [
 # target dir; folding them into the stable workspace would break `cargo build`
 # / `cargo test --workspace` on the pinned stable toolchain (1.96.0). The
 # scaffold lives in `fuzz/` and is driven by `cargo +nightly fuzz` (M1+).
-exclude = ["fuzz"]
+exclude = ["fuzz", "vendor/tiny-skia"]
 
 [workspace.package]
 version = "0.8.0"
@@ -132,7 +132,7 @@ hayro-jpeg2000 = "0.4"
 # (`swash`/`fontdue`/`ab_glyph`) is needed — minimizing deps per the policy.
 # Color management (`moxcms` ICC) is intentionally deferred: naive CMYK→RGB is
 # acceptable for the M6 scaffold and first rendering pass (PRD §8.11).
-tiny-skia = { version = "0.11", default-features = false, features = ["std", "simd"] }
+tiny-skia = { path = "vendor/tiny-skia", version = "=0.11.4", default-features = false, features = ["std", "simd"] }
 
 # --- pdf-ocr: pure-Rust PaddleOCR (PP-OCRv5) engine (M8+, `paddle-ocr` feature).
 #
