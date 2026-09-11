@@ -191,6 +191,29 @@ pub(crate) struct Frag {
     pub(crate) tab: bool,
 }
 
+/// Signed gaps change the pen, not the preceding glyph's advance-cell extent.
+/// This is the existing advance metric, not an outline/italic ink bounding box.
+fn painted_width(frag: &Frag) -> f64 {
+    frag.width - frag.tracking.min(0.0)
+}
+
+/// Rightmost untracked advance-cell edge, independent of overlapping pen positions.
+/// Returns None on the untouched positive-only path.
+fn signed_extent<'a>(frags: impl Iterator<Item = &'a Frag> + Clone) -> Option<f64> {
+    if !frags.clone().any(|f| f.tracking < 0.0) {
+        return None;
+    }
+    let mut pen = 0.0_f64;
+    let mut right = 0.0_f64;
+    let mut last_gap = 0.0;
+    for f in frags {
+        right = right.max(pen + f.width - f.tracking);
+        pen += f.width;
+        last_gap = f.tracking;
+    }
+    Some(right.max(pen - last_gap))
+}
+
 /// One wrapped output line.
 pub(crate) struct LineOut {
     pub(crate) frags: Vec<Frag>,
@@ -225,6 +248,16 @@ fn is_cjk(ch: char) -> bool {
         || (0x20000..=0x3FFFF).contains(&cp) // extension planes
 }
 
+/// The scalar used for a collapsible whitespace advance. Keep preflight and
+/// tokens aligned: CJK/fullwidth spaces and NBSP retain their own glyph.
+pub(crate) fn spacing_char(ch: char) -> char {
+    if !is_cjk(ch) && ch != '\u{a0}' && ch.is_whitespace() {
+        ' '
+    } else {
+        ch
+    }
+}
+
 /// Appends `frag` to `frags`, merging with the tail when both are non-space
 /// and face / size / color / decorations match.
 fn push_frag(frags: &mut Vec<Frag>, frag: Frag) {
@@ -255,7 +288,7 @@ fn push_frag(frags: &mut Vec<Frag>, frag: Frag) {
 /// Resolve only the new optional style. The legacy None/identity path retains
 /// its original validation and arithmetic. Metric headroom also rejects scripts
 /// whose derived envelope cannot form finite line dimensions.
-fn run_geometry(ts: &mut Typesetter, run: &Run) -> Option<(f64, f64)> {
+pub(crate) fn run_geometry(ts: &mut Typesetter, run: &Run) -> Option<(f64, f64)> {
     let style = &run.style;
     if !(style.size.is_finite() && style.size > 0.0) {
         return None;
@@ -309,7 +342,7 @@ pub(crate) fn tokens(ts: &mut Typesetter, runs: &[Run]) -> Vec<Tok> {
 
     let has_tracking = runs
         .iter()
-        .any(|run| run.style.character_spacing.points() > 0.0);
+        .any(|run| run.style.character_spacing.points() != 0.0);
     let mut cluster_spacing = 0.0;
     for (run_index, run) in runs.iter().enumerate() {
         let style = &run.style;
@@ -333,7 +366,9 @@ pub(crate) fn tokens(ts: &mut Typesetter, runs: &[Run]) -> Vec<Tok> {
                     cluster_spacing = style.character_spacing.points();
                 }
                 let next = chars.peek().copied().or(next_run_char);
-                if next.is_some_and(unicode_normalization::char::is_combining_mark) {
+                if next.is_some_and(unicode_normalization::char::is_combining_mark)
+                    || (next.is_none() && cluster_spacing < 0.0)
+                {
                     0.0
                 } else {
                     cluster_spacing
@@ -393,7 +428,7 @@ pub(crate) fn tokens(ts: &mut Typesetter, runs: &[Run]) -> Vec<Tok> {
                         width,
                         tracking,
                         space: true,
-                        stretched: tracking > 0.0,
+                        stretched: tracking != 0.0,
                         tab: false,
                     },
                 });
@@ -415,7 +450,7 @@ pub(crate) fn tokens(ts: &mut Typesetter, runs: &[Run]) -> Vec<Tok> {
                 width,
                 tracking,
                 space: false,
-                stretched: tracking > 0.0,
+                stretched: tracking != 0.0,
                 tab: false,
             };
             if breaks_anywhere {
@@ -451,6 +486,39 @@ fn flush_word(out: &mut Vec<Tok>, word: &mut Vec<Frag>, word_w: &mut f64) {
 /// breaks (auto table-column sizing). Tabs advance to the next `tab_interval`
 /// multiple, matching the wrap-time pen behaviour.
 pub(crate) fn natural_width(toks: &[Tok], tab_interval: f64) -> f64 {
+    if toks.iter().any(|t| match t {
+        Tok::Word { frags, .. } => frags.iter().any(|f| f.tracking < 0.0),
+        Tok::Space { frag } => frag.tracking < 0.0,
+        _ => false,
+    }) {
+        let mut pen = 0.0_f64;
+        let mut right = 0.0_f64;
+        let mut max_right = 0.0_f64;
+        for tok in toks {
+            match tok {
+                Tok::Break => {
+                    max_right = max_right.max(right);
+                    pen = 0.0;
+                    right = 0.0;
+                }
+                Tok::Tab { .. } => {
+                    pen = next_tab_stop(pen, tab_interval);
+                    right = right.max(pen);
+                }
+                Tok::Word { frags, .. } => {
+                    for f in frags {
+                        right = right.max(pen + f.width - f.tracking);
+                        pen += f.width;
+                    }
+                }
+                Tok::Space { frag } => {
+                    right = right.max(pen + frag.width - frag.tracking);
+                    pen += frag.width;
+                }
+            }
+        }
+        return max_right.max(right);
+    }
     let mut max_w: f64 = 0.0;
     let mut cur = 0.0;
     for tok in toks {
@@ -492,6 +560,11 @@ pub(crate) fn wrap(
     w_rest: f64,
     tab_interval: f64,
 ) -> Vec<LineOut> {
+    let has_signed = toks.iter().any(|t| match t {
+        Tok::Word { frags, .. } => frags.iter().any(|f| f.tracking < 0.0),
+        Tok::Space { frag } => frag.tracking < 0.0,
+        _ => false,
+    });
     let mut lines: Vec<LineOut> = Vec::new();
     let mut cur: Vec<Frag> = Vec::new();
     let mut cur_w = 0.0f64;
@@ -514,9 +587,14 @@ pub(crate) fn wrap(
             }
         }
         if !cur.is_empty() || keep_empty {
+            let width = if has_signed {
+                signed_extent(cur.iter()).unwrap_or(*cur_w)
+            } else {
+                *cur_w
+            };
             lines.push(LineOut {
                 frags: std::mem::take(cur),
-                width: *cur_w,
+                width,
                 hard,
             });
         } else {
@@ -551,7 +629,7 @@ pub(crate) fn wrap(
             }
             Tok::Word { frags, width } => {
                 let trailing = frags.last().map_or(0.0, |frag| frag.tracking);
-                let tracked_word = frags.iter().any(|frag| frag.tracking > 0.0);
+                let tracked_word = frags.iter().any(|frag| frag.tracking != 0.0);
                 // CJK bases are separate word tokens. A following tracked mark
                 // must join its base before any later scalar can wrap.
                 let starts_combining = tracked_word
@@ -559,15 +637,32 @@ pub(crate) fn wrap(
                         .first()
                         .and_then(|frag| frag.text.chars().next())
                         .is_some_and(unicode_normalization::char::is_combining_mark);
-                if !cur.is_empty() && cur_w + width - trailing > limit + EPS && !starts_combining {
+                if !cur.is_empty()
+                    && (if has_signed {
+                        signed_extent(cur.iter().chain(frags.iter()))
+                            .unwrap_or(cur_w + width - trailing)
+                    } else {
+                        cur_w + width - trailing
+                    }) > limit + EPS
+                    && !starts_combining
+                {
                     flush(&mut cur, &mut cur_w, &mut lines, false, false);
                     after_soft = true;
                 }
                 let limit = if lines.is_empty() { w_first } else { w_rest };
-                if *width - trailing > limit + EPS
+                if (if has_signed {
+                    signed_extent(frags.iter()).unwrap_or(*width - trailing)
+                } else {
+                    *width - trailing
+                }) > limit + EPS
                     || (starts_combining
                         && !cur.is_empty()
-                        && cur_w + width - trailing > limit + EPS)
+                        && (if has_signed {
+                            signed_extent(cur.iter().chain(frags.iter()))
+                                .unwrap_or(cur_w + width - trailing)
+                        } else {
+                            cur_w + width - trailing
+                        }) > limit + EPS)
                 {
                     // Force-split at character granularity.
                     for frag in frags {
@@ -1555,12 +1650,12 @@ fn emit_line(ctx: &mut Ctx, line: &LineOut, x0: f64, baseline: f64) {
     for frag in &line.frags {
         let baseline = baseline - frag.baseline_shift;
         if let Some(hl) = frag.highlight {
-            if frag.width > EPS {
+            if painted_width(frag) > EPS {
                 let m = *ctx.ts.faces().metrics(frag.face);
                 ctx.op(Op::FillRect {
                     x,
                     y: baseline - m.ascent * frag.size,
-                    w: frag.width,
+                    w: painted_width(frag),
                     h: (m.ascent + m.descent) * frag.size,
                     color: hl,
                 });
@@ -1613,14 +1708,14 @@ fn emit_line(ctx: &mut Ctx, line: &LineOut, x0: f64, baseline: f64) {
     let mut x = x0;
     for frag in &line.frags {
         let baseline = baseline - frag.baseline_shift;
-        if frag.width > EPS && (frag.underline || frag.strike) {
+        if painted_width(frag) > EPS && (frag.underline || frag.strike) {
             let m = *ctx.ts.faces().metrics(frag.face);
             if frag.underline {
                 let y = baseline - m.underline_position * frag.size;
                 ctx.op(Op::Line {
                     x1: x,
                     y1: y,
-                    x2: x + frag.width,
+                    x2: x + painted_width(frag),
                     y2: y,
                     color: frag.color,
                     width: (m.underline_thickness * frag.size).max(0.1),
@@ -1631,7 +1726,7 @@ fn emit_line(ctx: &mut Ctx, line: &LineOut, x0: f64, baseline: f64) {
                 ctx.op(Op::Line {
                     x1: x,
                     y1: y,
-                    x2: x + frag.width,
+                    x2: x + painted_width(frag),
                     y2: y,
                     color: frag.color,
                     width: (m.strikeout_thickness * frag.size).max(0.1),
@@ -1658,7 +1753,7 @@ fn emit_line(ctx: &mut Ctx, line: &LineOut, x0: f64, baseline: f64) {
                 );
                 match span.as_mut() {
                     Some(s) if *s.uri == **uri => {
-                        s.x1 = x + frag.width;
+                        s.x1 = s.x1.max(x + painted_width(frag));
                         s.top = s.top.min(top);
                         s.bot = s.bot.max(bot);
                     }
@@ -1666,7 +1761,7 @@ fn emit_line(ctx: &mut Ctx, line: &LineOut, x0: f64, baseline: f64) {
                         flush_link(ctx, &mut span);
                         span = Some(LinkSpan {
                             x0: x,
-                            x1: x + frag.width,
+                            x1: x + painted_width(frag),
                             top,
                             bot,
                             uri: uri.clone(),

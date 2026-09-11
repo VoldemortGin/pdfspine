@@ -11,6 +11,16 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
+### Rust typesetting signed spacing
+
+- Added `CharacterSpacing::resolved_signed` without changing the existing
+  nonnegative constructor or zero/positive-only layout. Four checked Typesetter
+  layout/measure methods return typed font-dependent spacing diagnostics;
+  legacy methods report `SignedSpacingFallback` and preserve text with a
+  paragraph-local zero-gap fallback. Signed layouts separate advance-cell
+  extents from pen movement; this is not outline shaping or automatic OOXML
+  condensation policy. No consumer or Python fitz API change.
+
 ### Table evaluation infrastructure
 
 - Added explicit evaluator backend/options, runtime/model provenance and versioned

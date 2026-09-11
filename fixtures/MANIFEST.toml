@@ -436,3 +436,12 @@ sha256 = "0426a0a7eb42424cd6bc6fbb2fbf529ac102d66b997812c6a770c86bdecc04f1"
 cleared_by = "pdfspine-typeset"
 cleared_date = "2026-09-11"
 notes = "Self-authored resolved script geometry; embedded Liberation font subset under SIL OFL 1.1 (see bundled font license)."
+
+[[fixture]]
+path = "typeset/typeset-lo-condensed.pdf"
+source = "generated:crates/pdf-typeset/examples/make_typeset_fixtures.rs"
+license = "CC0-1.0"
+sha256 = "e91a188ab10f1f89833fdd87f7b844a8fb9ff141a9c4f7e760cc24f7e0db107c"
+cleared_by = "pdfspine-typeset"
+cleared_date = "2026-09-11"
+notes = "Self-authored resolved -1pt cluster-gap sample; embedded Liberation font subset under SIL OFL 1.1 (see bundled font license)."

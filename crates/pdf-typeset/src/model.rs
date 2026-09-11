@@ -36,7 +36,8 @@ impl Run {
 /// Finite, nonnegative extra advance after a base scalar and its following
 /// combining marks, in points. Paragraph ends and soft wraps omit the final
 /// extra advance; explicit hard breaks retain it. This does not add shaping
-/// or full grapheme-cluster segmentation. Negative spacing is not supported.
+/// or full grapheme-cluster segmentation. [`Self::resolved_signed`] opts into
+/// engine-defined condensed cluster gaps; it is not an OOXML clamp policy.
 #[derive(Copy, Clone, Debug, Default, PartialEq)]
 pub struct CharacterSpacing(f64);
 
@@ -72,6 +73,23 @@ impl CharacterSpacing {
             return Err(CharacterSpacingError::Negative);
         }
         Ok(Self(points))
+    }
+
+    /// Construct a finite, caller-resolved signed cluster gap in points.
+    ///
+    /// No saturation or font-specific policy is inferred. Negative values need
+    /// font/text-dependent preparation: prefer the Typesetter `try_*` methods
+    /// for typed errors. Infallible methods preserve text by resetting negative
+    /// gaps in unsupported paragraphs and recording `SignedSpacingFallback`.
+    /// Existing positive and zero values retain their old layout behavior.
+    ///
+    /// # Errors
+    /// Rejects NaN and infinity.
+    pub fn resolved_signed(points: f64) -> Result<Self, CharacterSpacingError> {
+        if !points.is_finite() {
+            return Err(CharacterSpacingError::NonFinite);
+        }
+        Ok(Self(if points == 0.0 { 0.0 } else { points }))
     }
 
     /// The validated spacing in points.
