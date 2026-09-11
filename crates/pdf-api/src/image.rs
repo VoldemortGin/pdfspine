@@ -229,15 +229,20 @@ impl DisplayList {
 
 /// Records `page`'s ordered drawcall stream into a [`DisplayList`] (PyMuPDF
 /// `Page.get_displaylist`).
-#[must_use]
-pub fn page_get_displaylist(page: &Page) -> DisplayList {
+///
+/// # Errors
+/// Propagates resource snapshot lock errors.
+pub fn page_get_displaylist(page: &Page) -> Result<DisplayList> {
     page_get_displaylist_with_annots(page, true)
 }
 
 /// Records a snapshot with optional visible annotation appearances.
-#[must_use]
-pub fn page_get_displaylist_with_annots(page: &Page, annots: bool) -> DisplayList {
-    let doc = page.document().clone();
+///
+/// # Errors
+/// Propagates resource snapshot lock errors.
+pub fn page_get_displaylist_with_annots(page: &Page, annots: bool) -> Result<DisplayList> {
+    let doc = Arc::new(page.document().snapshot()?);
+    let page = Page::new(Arc::clone(&doc), page.number(), page.obj_ref());
     let recording = page.dict().map(|dict| {
         pdf_text::ContentInterpreter::new(&doc).run_page_recorded_with_annots(&dict, annots)
     });
@@ -260,14 +265,14 @@ pub fn page_get_displaylist_with_annots(page: &Page, annots: bool) -> DisplayLis
     let cropbox = page.cropbox();
     let rotation = page.rotation();
     let inner = RenderDisplayList::from_ops(ops, cropbox, rotation);
-    DisplayList {
+    Ok(DisplayList {
         inner,
         doc,
         text,
         text_resources,
         cropbox,
         rotation,
-    }
+    })
 }
 
 /// Whether `page` is an image-only page (in scope for `get_pixmap`, PRD §3.3).

@@ -299,3 +299,32 @@ origin 为 (0,0)，源 origin 不参与坐标计算。width/height 为整数（b
 
 回归位于 `python/tests/test_pixmap_warp.py` 与 `pdf-image::warp`；没有改写页面
 renderer 的采样、抗锯齿或现有图像绘制路径。
+
+## 动态 subset 字体名（2026-09-11）
+
+`Tools.set_subset_fontnames(on=None)` 的非 None 值按 Python truthiness 设置；
+None 查询，False 重置。所有成功调用统一返回 bool（本机 PyMuPDF 1.28.2 初始查询
+返回 int 0，之后返回 bool）。`__bool__` 抛错时不改状态。
+
+开关动态影响 DICT/RAWDICT/JSON/RAWJSON 与 texttrace，包含已经创建的 Page、
+DisplayList 和 extend_textpage 组合 TextPage；原文档编辑/关闭后仍使用已拥有的
+原始字体名。每次输出只读取一次状态，不在 span 间重新读取。HTML/XHTML/XML、
+plain text、words、bboxlog 继续使用原始 canonical 布局，与开关无关。
+
+True 只在已有 span 内按连续 raw 字体名分组，不重新做布局或跨 span 合并。
+同值不同字体资源不会因 Arc 地址不同而分开。合成空格继承后一个真实 glyph 的
+字体身份，原有 seq 规则不变。每个子 span 的 bbox/quad、device matrix/origin、
+rendered size 与 seq 由该段字符确定，flags 沿用原 span 的同样式约束。
+
+原始 Tm/CTM 只记录于旧 span 的首 glyph；后续拆分段无法可靠重建时输出 None/null，
+不能冒充旧首 glyph 的数值。Rust `DictSpan.text_matrix` 和 `ctm` 因此改为
+`Option<MatrixTuple>`；默认 False 与仍始于原首字符的段保留 Some/原六元组。
+每个 char 的实际 device matrix/quad 不受此可选扩展字段限制。
+
+现有 canonical 前缀规则保持不变：只剥恰好六位 ASCII 大写字符后的 `+`。
+本机 oracle 也剥六位 lowercase/mixed/digits；pdfspine 在这些非标准名字上本来就
+保留全名，两种模式均保持原行为，本项不扩改字体匹配或布局规则。
+
+额外的可选共享 raw name 字段在创建期间保存，普通非 subset 字体不分配 raw name；
+并非全路径零开销。成本与默认输出回归见本轮验收记录。可执行测试：
+`python/tests/test_subset_fontnames.py` 与 `pdf-text::font_display::tests`。

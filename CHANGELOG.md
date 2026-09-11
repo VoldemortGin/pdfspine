@@ -18,6 +18,32 @@ feature-complete, but the public API and on-disk formats may still change.
   siblings and repeat on page fragments in flow, text boxes and cells. The
   default remains borderless; `between` and non-solid styles are not represented.
 
+### DisplayList resource revisions
+
+- Display lists capture resource state before recording, so later edits to
+  indirect soft masks, Indexed palettes and ICC device-alternate metadata do not
+  alter their raster. Source close remains supported; ordinary Page rendering is
+  unchanged. Source bytes and immutable xref tables are shared, while pending
+  edits, authentication and layer state are captured with independent caches.
+- Unreleased Rust API change: `page_get_displaylist` and
+  `page_get_displaylist_with_annots` now return `Result<DisplayList>`; callers
+  must propagate or handle snapshot errors. Python signatures are unchanged.
+  This does not implement `Page.run` or `DisplayList.run` callbacks.
+
+### Dynamic subset font names
+
+- Added `Tools.set_subset_fontnames(on=None)`: truthy values enable original
+  subset names in DICT/RAWDICT/JSON/RAWJSON and texttrace, including already
+  created Page, DisplayList and extended TextPages after source edits or close.
+  Resetting False restores the original span grouping; HTML/XML/plain text and
+  layout remain unchanged. None queries and all successful calls return bool.
+- Raw font names are shared per recorded font and retained per character.
+  This adds creation/storage cost even while the display option is disabled.
+  The optional display mode splits existing spans by raw name and preserves
+  accurate character/device geometry. Later split spans expose unavailable
+  source `text_matrix`/`ctm` as None/null; Rust `DictSpan` now represents those
+  two fields as `Option<MatrixTuple>`. Default False still emits the same tuples.
+
 ### Glyph mask rendering
 
 - Specialize partial byte-mask coverage in a provenance-checked, BSD-licensed

@@ -27,6 +27,7 @@ fn letter() -> Rect {
 /// A glyph with an explicit advance width (so we control inter-char gaps).
 fn g(c: &str, ox: f64, oy: f64, size: f64, w: f64) -> PositionedGlyph {
     PositionedGlyph {
+        raw_font_name: None,
         unicode: SmolStr::new(c),
         code: c.chars().next().map_or(0, |ch| ch as u32),
         origin: Point::new(ox, oy),

@@ -13,7 +13,7 @@
 //! (Vector path entries are not reconstructed from the structured page, which
 //! drops un-texted vector geometry; this matches the text-centric trace.)
 
-use crate::model::{BlockKind, Span, TextPage};
+use crate::model::{BlockKind, TextPage};
 
 /// One glyph in a [`TraceSpan`]: `(unicode_codepoint, glyph_id, origin, bbox)`
 /// mirroring PyMuPDF's texttrace `chars` tuple. `glyph_id` is the font glyph
@@ -83,7 +83,12 @@ fn unpack_color(rgb: u32) -> (f64, f64, f64) {
 
 /// Builds one [`TraceSpan`] from a structured [`Span`] (+ its line's direction /
 /// writing mode), assigning `seqno`.
-fn trace_span(span: &Span, dir: (f64, f64), wmode: u8, seqno: usize) -> TraceSpan {
+fn trace_span(
+    span: &crate::font_display::SpanView<'_>,
+    dir: (f64, f64),
+    wmode: u8,
+    seqno: usize,
+) -> TraceSpan {
     let chars = span
         .chars
         .iter()
@@ -119,6 +124,7 @@ fn trace_span(span: &Span, dir: (f64, f64), wmode: u8, seqno: usize) -> TraceSpa
 /// (PyMuPDF `Page.get_texttrace`).
 #[must_use]
 pub fn get_texttrace(tp: &TextPage) -> Vec<TraceSpan> {
+    let subset = crate::font_display::set_subset_fontnames(None);
     let mut out = Vec::new();
     let mut seqno = 0usize;
     for block in &tp.blocks {
@@ -127,8 +133,12 @@ pub fn get_texttrace(tp: &TextPage) -> Vec<TraceSpan> {
         }
         for line in &block.lines {
             let dir = line.dir;
-            for span in &line.spans {
-                out.push(trace_span(span, dir, line.wmode, seqno));
+            for span in line
+                .spans
+                .iter()
+                .flat_map(|span| crate::font_display::span_views(span, subset))
+            {
+                out.push(trace_span(&span, dir, line.wmode, seqno));
                 seqno += 1;
             }
         }
@@ -171,6 +181,7 @@ mod tests {
 
     fn sample_page() -> TextPage {
         let ch = Char {
+            raw_font_name: None,
             origin: Point::new(72.0, 100.0),
             bbox: Rect::new(72.0, 84.0, 86.0, 104.0),
             c: 'H',

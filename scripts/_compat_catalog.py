@@ -1662,7 +1662,13 @@ add_many(
     ["image_profile"],
     "raster header profile dict (shared with module-level image_profile)",
 )
-add_many("Tools", DEFERRED, "M4", ["set_subset_fontnames"])
+add_many(
+    "Tools",
+    IMPLEMENTED,
+    "M4",
+    ["set_subset_fontnames"],
+    "dynamic subset names in structured text and trace; canonical layout unchanged",
+)
 add_many(
     "Tools",
     OUT_OF_SCOPE,

@@ -144,7 +144,7 @@ fn map_err(e: ApiError) -> PyErr {
 /// guards this list against drift from `_compat_deferred.DEFERRED`.
 const PIXMAP_DEFERRED: &[&str] = &[];
 const DISPLAYLIST_DEFERRED: &[&str] = &["run"];
-const TOOLS_DEFERRED: &[&str] = &["set_subset_fontnames"];
+const TOOLS_DEFERRED: &[&str] = &[];
 
 /// Raises `PdfUnsupportedError` when `name` is a deferred member of `group`, else
 /// the plain `AttributeError` Python expects for a genuinely unknown attribute.
@@ -721,6 +721,7 @@ fn dict_blocks_to_py<'py>(
     sort: bool,
 ) -> PyResult<Bound<'py, PyDict>> {
     // Only the final Python-object construction holds the GIL.
+    let subset = pdf_api::font_display::set_subset_fontnames(None);
     let root = PyDict::new(py);
     root.set_item(intern!(py, "width"), tp.width)?;
     root.set_item(intern!(py, "height"), tp.height)?;
@@ -737,7 +738,7 @@ fn dict_blocks_to_py<'py>(
 
     let list = PyList::empty(py);
     for &i in &order {
-        list.append(dict_block_to_py(py, &blocks[i], raw)?)?;
+        list.append(dict_block_to_py(py, &blocks[i], raw, subset)?)?;
     }
     root.set_item(intern!(py, "blocks"), list)?;
     Ok(root)
@@ -760,6 +761,7 @@ fn dict_block_to_py<'py>(
     py: Python<'py>,
     block: &pdf_api::DictBlockRef<'_>,
     raw: bool,
+    subset: bool,
 ) -> PyResult<Bound<'py, PyDict>> {
     let d = PyDict::new(py);
     match block {
@@ -771,7 +773,7 @@ fn dict_block_to_py<'py>(
             d.set_item(intern!(py, "seq"), b.seq)?;
             let lines = PyList::empty(py);
             for line in &b.lines {
-                lines.append(dict_line_to_py(py, line, raw)?)?;
+                lines.append(dict_line_to_py(py, line, raw, subset)?)?;
             }
             d.set_item(intern!(py, "lines"), lines)?;
         }
@@ -800,12 +802,17 @@ fn dict_line_to_py<'py>(
     py: Python<'py>,
     line: &pdf_api::Line,
     raw: bool,
+    subset: bool,
 ) -> PyResult<Bound<'py, PyDict>> {
     let d = PyDict::new(py);
     d.set_item(intern!(py, "spans"), {
         let spans = PyList::empty(py);
-        for span in &line.spans {
-            spans.append(dict_span_to_py(py, span, raw)?)?;
+        for span in line
+            .spans
+            .iter()
+            .flat_map(|span| pdf_api::font_display::span_views(span, subset))
+        {
+            spans.append(dict_span_to_py(py, &span, raw)?)?;
         }
         spans
     })?;
@@ -925,7 +932,7 @@ where
 
 fn dict_span_to_py<'py>(
     py: Python<'py>,
-    span: &pdf_api::Span,
+    span: &pdf_api::font_display::SpanView<'_>,
     raw: bool,
 ) -> PyResult<Bound<'py, PyDict>> {
     let d = PyDict::new(py);
@@ -933,7 +940,7 @@ fn dict_span_to_py<'py>(
     // span dict and every call, instead of allocating fresh key strings.
     d.set_item(intern!(py, "size"), span.rendered_size)?;
     d.set_item(intern!(py, "flags"), span.flags as i32)?;
-    d.set_item(intern!(py, "font"), span.font.as_str())?;
+    d.set_item(intern!(py, "font"), span.font)?;
     d.set_item(intern!(py, "color"), span.color as i32)?;
     d.set_item(intern!(py, "ascender"), span.ascender)?;
     d.set_item(intern!(py, "descender"), span.descender)?;
@@ -955,14 +962,16 @@ fn dict_span_to_py<'py>(
         intern!(py, "matrix"),
         untracked_tuple(py, matrix_tuple(span.matrix))?,
     )?;
-    d.set_item(
-        intern!(py, "text_matrix"),
-        untracked_tuple(py, matrix_tuple(span.text_matrix))?,
-    )?;
-    d.set_item(
-        intern!(py, "ctm"),
-        untracked_tuple(py, matrix_tuple(span.ctm))?,
-    )?;
+    for (key, value) in [
+        (intern!(py, "text_matrix"), span.text_matrix),
+        (intern!(py, "ctm"), span.ctm),
+    ] {
+        if let Some(value) = value {
+            d.set_item(key, untracked_tuple(py, matrix_tuple(value))?)?;
+        } else {
+            d.set_item(key, py.None())?;
+        }
+    }
     d.set_item(intern!(py, "dir"), untracked_tuple(py, span.dir)?)?;
     d.set_item(
         intern!(py, "quad"),
@@ -974,7 +983,7 @@ fn dict_span_to_py<'py>(
     if !raw || span.chars.is_empty() {
         d.set_item(
             intern!(py, "text"),
-            if raw { "" } else { span.text.as_str() },
+            if raw { "" } else { span.text.as_ref() },
         )?;
     } else {
         let chars = PyList::empty(py);
@@ -984,7 +993,7 @@ fn dict_span_to_py<'py>(
         // One float cache shared across every character of this span. Immutable
         // floats only; dicts, lists and tuples stay distinct per character.
         let mut floats = SpanGeometryFloats::with_capacity(py, span.chars.len());
-        for ch in &span.chars {
+        for ch in span.chars {
             let c = PyDict::new(py);
             c.set_item(
                 intern!(py, "origin"),
@@ -2135,7 +2144,7 @@ impl PyPage {
                     }
                     TextPageSource::Extended(resources) => (**resources).clone(),
                 };
-                let recorded = pdf_api::page_get_displaylist_with_annots(&self.page, true);
+                let recorded = pdf_api::page_get_displaylist_with_annots(&self.page, true)?;
                 let new = recorded.get_textpage_transformed(
                     flags,
                     Matrix::new(a, b, c, d, e, f),
@@ -2580,7 +2589,9 @@ impl PyPage {
     /// (PyMuPDF `Page.get_displaylist`). Replay it with `dl.get_pixmap(...)`.
     #[pyo3(signature = (annots=true))]
     fn get_displaylist(&self, py: Python<'_>, annots: bool) -> PyResult<PyDisplayList> {
-        let inner = py.detach(|| pdf_api::page_get_displaylist_with_annots(&self.page, annots));
+        let inner = py
+            .detach(|| pdf_api::page_get_displaylist_with_annots(&self.page, annots))
+            .map_err(map_err)?;
         Ok(PyDisplayList {
             inner: Arc::new(inner),
         })
@@ -5813,7 +5824,7 @@ impl PyTools {
         }
     }
 
-    /// A deferred baseline member (e.g. `set_subset_fontnames`) raises `PdfUnsupportedError` instead of a bare
+    /// A deferred baseline member raises `PdfUnsupportedError` instead of a bare
     /// `AttributeError` (PRD §7 / §9.5).
     fn __getattr__(&self, name: &str) -> PyResult<Py<PyAny>> {
         deferred_getattr("Tools", TOOLS_DEFERRED, name)
@@ -5823,6 +5834,16 @@ impl PyTools {
     #[pyo3(signature = (stem=None))]
     fn set_annot_stem(&self, stem: Option<&str>) -> String {
         pdf_api::set_annot_stem(stem)
+    }
+
+    /// Queries or changes raw subset names in structured text presentation.
+    #[pyo3(signature = (on=None))]
+    fn set_subset_fontnames(&self, on: Option<&Bound<'_, PyAny>>) -> PyResult<bool> {
+        let value = on
+            .filter(|value| !value.is_none())
+            .map(|value| value.is_truthy())
+            .transpose()?;
+        Ok(pdf_api::font_display::set_subset_fontnames(value))
     }
 
     /// A fresh, process-unique positive id (PyMuPDF `Tools.gen_id`).

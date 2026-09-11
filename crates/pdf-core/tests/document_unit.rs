@@ -344,3 +344,63 @@ fn stream_raw_003_raw_bounds_validated() {
     let err = doc.stream_raw_bytes(&bad).unwrap_err();
     assert!(matches!(err, Error::Source { .. }), "{err:?}");
 }
+
+#[test]
+fn snapshot_shares_source_but_freezes_overlay_and_metadata() {
+    let doc = open(&minimal_doc());
+    let reference = doc.add_object(Object::Integer(7)).unwrap();
+    doc.set_trailer_key("Info", Object::Reference(reference))
+        .unwrap();
+    doc.resolve(doc.root().unwrap()).unwrap();
+    doc.mark_redaction_applied();
+    let view = pdf_core::ocg::LayerView {
+        config: Some(2),
+        overrides: [(19, false)].into_iter().collect(),
+    };
+    doc.set_layer_view(view.clone());
+    let before = doc.save_to_vec(&Default::default()).unwrap();
+    let frozen = doc.snapshot().unwrap();
+    assert_eq!(
+        doc.source().bytes().as_ptr(),
+        frozen.source().bytes().as_ptr()
+    );
+    assert!(std::ptr::eq(doc.xref(), frozen.xref()));
+    assert_eq!(frozen.cached_object_count(), 0);
+    assert!(frozen.redaction_applied());
+    doc.set_layer_view(Default::default());
+    assert_eq!(frozen.layer_view(), view);
+    assert_eq!(doc.save_to_vec(&Default::default()).unwrap(), before);
+    doc.update_object(reference, Object::Integer(9)).unwrap();
+    doc.set_trailer_key("Info", Object::Null).unwrap();
+    assert_eq!(*frozen.resolve(reference).unwrap(), Object::Integer(7));
+    assert_eq!(frozen.effective_trailer_ref("Info"), Some(reference));
+    drop(doc);
+    assert!(frozen.resolve(frozen.root().unwrap()).is_ok());
+}
+
+#[test]
+fn snapshot_concurrent_overlay_capture_has_one_object_revision() {
+    let doc = std::sync::Arc::new(open(&minimal_doc()));
+    let reference = doc
+        .add_object(Object::Array(vec![Object::Integer(0); 2]))
+        .unwrap();
+    std::thread::scope(|scope| {
+        let writer = std::sync::Arc::clone(&doc);
+        scope.spawn(move || {
+            for revision in 1..1000 {
+                writer
+                    .update_object(reference, Object::Array(vec![Object::Integer(revision); 2]))
+                    .unwrap();
+            }
+        });
+        for _ in 0..100 {
+            let frozen = doc.snapshot().unwrap();
+            let object = frozen.resolve(reference).unwrap();
+            let Object::Array(values) = object.as_ref() else {
+                panic!("array")
+            };
+            assert_eq!(values[0], values[1]);
+            assert_eq!(frozen.resolve(reference).unwrap(), object);
+        }
+    });
+}
