@@ -126,17 +126,8 @@ def test_unknown_attribute_is_plain_attributeerror(doc_and_page) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Annot / Font — exist as descriptors; calling raises PdfUnsupportedError
+# Font — deferred descriptors raise PdfUnsupportedError on use
 # ---------------------------------------------------------------------------
-def test_annot_get_textbox_raises_on_call() -> None:
-    doc = pdfspine.open()
-    page = doc.new_page()
-    annot = page.add_redact_annot(pdfspine.Rect(0, 0, 10, 10))
-    with pytest.raises(PdfUnsupportedError):
-        annot.get_textbox(pdfspine.Rect(0, 0, 10, 10))
-    doc.close()
-
-
 @pytest.mark.parametrize("member", sorted(_by_group()["Font"]))
 def test_font_deferred_member_raises_on_use(member) -> None:
     font = pdfspine.Font("helv")

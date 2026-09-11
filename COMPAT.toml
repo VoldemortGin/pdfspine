@@ -3481,28 +3481,28 @@ name = "Annot.get_text"
 group = "Annot"
 disposition = "implemented"
 milestone = "M4"
-note = "get_textbox needs the annot's OWN appearance textpage (fitz semantics), not page-region delegation"
+note = "Legacy page-region text helpers"
 
 [[symbol]]
 name = "Annot.get_textpage"
 group = "Annot"
 disposition = "implemented"
 milestone = "M4"
-note = "get_textbox needs the annot's OWN appearance textpage (fitz semantics), not page-region delegation"
+note = "Legacy page-region text helpers"
 
 [[symbol]]
 name = "Annot.next"
 group = "Annot"
 disposition = "implemented"
 milestone = "M4"
-note = "get_textbox needs the annot's OWN appearance textpage (fitz semantics), not page-region delegation"
+note = "Legacy page-region text helpers"
 
 [[symbol]]
 name = "Annot.get_textbox"
 group = "Annot"
-disposition = "deferred"
+disposition = "implemented"
 milestone = "M4"
-note = "get_textbox needs the annot's OWN appearance textpage (fitz semantics), not page-region delegation"
+note = "Own visible AP text; bbox-overlap query; prebuilt textpage unsupported (ValueError)"
 
 [[symbol]]
 name = "Annot.get_pixmap"

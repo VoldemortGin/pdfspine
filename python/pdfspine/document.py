@@ -608,19 +608,17 @@ class Annot:
         """The embedded file's bytes (PyMuPDF ``annot.get_file``)."""
         return self._annot.get_file()
 
-    def get_textbox(self, *args, **kwargs) -> str:
-        """DEFERRED — PyMuPDF ``annot.get_textbox`` reads the annotation's OWN
-        appearance textpage and requires a ``rect`` argument; pdfspine has no
-        annotation-appearance textpage yet, and delegating to the page region
-        would be semantically opposite. Use :meth:`Page.get_textbox` instead.
-        """
-        raise PdfUnsupportedError(
-            "Annot.get_textbox is not implemented yet: it needs the annotation's "
-            "own appearance textpage (fitz semantics), which differs from page "
-            "region text. Use Page.get_textbox. See the pdfspine parity matrix."
-        )
+    def get_textbox(self, rect, textpage=None) -> str:
+        """Text in ``rect`` from this annotation's own appearance.
 
-    # --- setters / mutators ---
+        Character bounding boxes overlap the query in rotated page coordinates.
+        Prebuilt annotation-owned text pages are not currently supported; a
+        supplied ``textpage`` raises ``ValueError``, as in PyMuPDF 1.28.2.
+        """
+        if textpage is not None:
+            raise ValueError("not a textpage of this page")
+        return self._annot.get_textbox(_rt(rect))
+
     def set_rotation(self, rotation: int) -> None:
         """Sets the ``/Rotate`` value (PyMuPDF ``annot.set_rotation``)."""
         self._annot.set_rotation(int(rotation))

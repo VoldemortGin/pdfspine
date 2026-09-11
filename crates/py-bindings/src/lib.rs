@@ -1039,6 +1039,14 @@ struct PyAnnot {
 
 #[pymethods]
 impl PyAnnot {
+    /// Text from this annotation's own appearance in the query rectangle.
+    fn get_textbox(&self, py: Python<'_>, rect: (f64, f64, f64, f64)) -> String {
+        py.detach(|| {
+            self.annot
+                .get_textbox(Rect::new(rect.0, rect.1, rect.2, rect.3))
+        })
+    }
+
     /// The annotation object number (PyMuPDF `Annot.xref`).
     #[getter]
     fn xref(&self) -> u32 {
