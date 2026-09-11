@@ -418,3 +418,21 @@ cleared_by   = "validation-harness"
 cleared_date = "2026-06-15"
 notes        = "US federal government work (17 U.S.C. 105); NIST SP 800-63-3"
 # <<< validation-harness corpus (auto-generated) <<<
+
+[[fixture]]
+path = "typeset/typeset-lo-script-doc.pdf"
+source = "generated:crates/pdf-typeset/examples/make_typeset_fixtures.rs"
+license = "CC0-1.0"
+sha256 = "1495d5a95ae54163198f5fae3f7fae65e71989a8ccb20fdd892f5af6af88ed15"
+cleared_by = "pdfspine-typeset"
+cleared_date = "2026-09-11"
+notes = "Self-authored resolved script geometry; embedded Liberation font subset under SIL OFL 1.1 (see bundled font license)."
+
+[[fixture]]
+path = "typeset/typeset-lo-script-slide.pdf"
+source = "generated:crates/pdf-typeset/examples/make_typeset_fixtures.rs"
+license = "CC0-1.0"
+sha256 = "0426a0a7eb42424cd6bc6fbb2fbf529ac102d66b997812c6a770c86bdecc04f1"
+cleared_by = "pdfspine-typeset"
+cleared_date = "2026-09-11"
+notes = "Self-authored resolved script geometry; embedded Liberation font subset under SIL OFL 1.1 (see bundled font license)."
