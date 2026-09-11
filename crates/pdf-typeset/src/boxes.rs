@@ -26,6 +26,50 @@ const AUTOFIT_ITERS: u32 = 16;
 /// Lays out one text box and returns its positioned page-coordinate ops
 /// (a single [`Op::Group`] when rotated and/or clipped).
 pub(crate) fn layout_text_box(ts: &mut Typesetter, spec: &TextBoxSpec) -> Vec<Op> {
+    let result: Result<Vec<Op>, std::convert::Infallible> =
+        layout_text_box_with(ts, spec, |ts, spec, scale, width| {
+            Ok(lay(ts, spec, scale, width))
+        });
+    match result {
+        Ok(ops) => ops,
+        Err(never) => match never {},
+    }
+}
+
+pub(crate) fn layout_text_box_with_connections(
+    ts: &mut Typesetter,
+    spec: &TextBoxSpec,
+    connections: &crate::ParagraphConnections,
+) -> Result<Vec<Op>, crate::ConnectionError> {
+    layout_text_box_with(ts, spec, |ts, spec, scale, width| {
+        let scaled;
+        let blocks = if (scale - 1.0).abs() < EPS {
+            &spec.blocks
+        } else {
+            scaled = scale_blocks(&spec.blocks, scale);
+            &scaled
+        };
+        // Revalidate geometry after proportional scaling; structural paths stay
+        // unchanged, and separator widths are not part of the scaled run model.
+        crate::connections::validate(ts, blocks, connections)?;
+        let (ops, h, w, _) = crate::flow::box_layout_with_connections(
+            ts,
+            blocks,
+            width,
+            spec.wrap,
+            false,
+            connections,
+            &[],
+        )?;
+        Ok((ops, h, w))
+    })
+}
+
+fn layout_text_box_with<E>(
+    ts: &mut Typesetter,
+    spec: &TextBoxSpec,
+    mut lay: impl FnMut(&mut Typesetter, &TextBoxSpec, f64, f64) -> Result<(Vec<Op>, f64, f64), E>,
+) -> Result<Vec<Op>, E> {
     let bx = spec.rect.x0.min(spec.rect.x1);
     let by = spec.rect.y0.min(spec.rect.y1);
     let bw = (spec.rect.x1 - spec.rect.x0).abs().max(1.0);
@@ -36,7 +80,7 @@ pub(crate) fn layout_text_box(ts: &mut Typesetter, spec: &TextBoxSpec) -> Vec<Op
         scale = 1.0; // normAutofit fontScale is in (0, 1]
     }
 
-    let (mut ops, mut content_h, mut content_max_x) = lay(ts, spec, scale, bw);
+    let (mut ops, mut content_h, mut content_max_x) = lay(ts, spec, scale, bw)?;
     if spec.font_scale.is_some() && content_h > bh + EPS {
         // Autofit: largest scale in [MIN_AUTOFIT_SCALE, scale] whose content
         // fits the box height (`lo` tracks the best known fit).
@@ -44,14 +88,14 @@ pub(crate) fn layout_text_box(ts: &mut Typesetter, spec: &TextBoxSpec) -> Vec<Op
         let mut hi = scale;
         for _ in 0..AUTOFIT_ITERS {
             let mid = 0.5 * (lo + hi);
-            let (_, h, _) = lay(ts, spec, mid, bw);
+            let (_, h, _) = lay(ts, spec, mid, bw)?;
             if h <= bh + EPS {
                 lo = mid;
             } else {
                 hi = mid;
             }
         }
-        let (o, h, mx) = lay(ts, spec, lo, bw);
+        let (o, h, mx) = lay(ts, spec, lo, bw)?;
         ops = o;
         content_h = h;
         content_max_x = mx;
@@ -66,7 +110,7 @@ pub(crate) fn layout_text_box(ts: &mut Typesetter, spec: &TextBoxSpec) -> Vec<Op
 
     let rotated = spec.rotation_deg.is_finite() && spec.rotation_deg.rem_euclid(360.0) != 0.0;
     if !(rotated || spec.clip) {
-        return ops;
+        return Ok(ops);
     }
 
     let transform = rotated.then(|| {
@@ -99,11 +143,11 @@ pub(crate) fn layout_text_box(ts: &mut Typesetter, spec: &TextBoxSpec) -> Vec<Op
             });
         }
     }
-    vec![Op::Group {
+    Ok(vec![Op::Group {
         transform,
         clip,
         ops,
-    }]
+    }])
 }
 
 /// One layout pass at `scale` (run sizes multiplied before layout — the

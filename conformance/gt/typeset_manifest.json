@@ -45,6 +45,11 @@
    "id": "typeset-lo-dashed-border.pdf",
    "pdf": "../../fixtures/typeset/typeset-lo-dashed-border.pdf",
    "gt_text": "Typeset LibreOffice Oracle Sample This document is authored twice: once as a minimal docx converted to PDF by LibreOffice, and once through the pdf typeset engine with the bundled Liberation Serif face. The two renderings are rasterized by the same in repo renderer and compared with SSIM. Agreement is advisory rather than exact because line breaking, leading and justification differ slightly between engines. The expected band for this pair is between zero point eight zero and zero point nine zero structural similarity. A large regression such as missing text, wrong font size, broken wrapping or displaced margins drops the score far below the band and is investigated locally before any release."
+  },
+  {
+   "id": "typeset-lo-connection.pdf",
+   "pdf": "../../fixtures/typeset/typeset-lo-connection.pdf",
+   "gt_text": "A paragraph. B paragraph."
   }
  ]
 }
