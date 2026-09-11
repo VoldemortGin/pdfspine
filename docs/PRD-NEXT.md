@@ -410,11 +410,15 @@
     emits Rust branch coverage.
   - *Size:* **S–M**.
 
-- [ ] **7. OCR & supply-chain hygiene.**
+- [x] **7. OCR & supply-chain hygiene — acceptance complete (2026-09-11).**
   - *Goal:* three small pre-existing items.
   - *Why / where:*
-    - the `AI → Al` homoglyph in the Latin OCR benchmark
-      (`docs/BENCHMARKS.md` §6);
+    - **Accepted remaining OCR quality miss:** four `AI → Al` cases in
+      scan_02/05/09/13 (`docs/BENCHMARKS.md` §6). Current scan_02 reproduces the
+      miss on the completed `d05f9df` extension; the prior claim of identical
+      Arial glyphs is corrected to visual confusion. Recognition is not fixed:
+      true GT/predictions, Latin 0.9899 and `parallel → parall` remain unchanged;
+      no runtime/model/heuristic or must-stay-wrong test was added;
     - ocrspine's earlier reported formatting violations were not reproduced by
       its scoped 2026-09-10 `cargo fmt --all --check` (passes). Its dependency
       and model-version documentation was updated separately in `a47ab8d`;
@@ -427,9 +431,10 @@
       51 records end **2027-09-05**. Reaching that date does not invalidate
       already covered locked dependencies; reminders exit successfully and
       never renew trust or change criteria. Invalid input remains an operational
-      error. The OCR homoglyph item remains open.
-  - *Acceptance:* the homoglyph resolved or documented as an accepted miss; a
-    scheduled CI job that warns ahead of the vet-trust expiry.
+      error. The OCR quality miss is accepted as documented above.
+  - *Acceptance:* the documented accepted-miss branch is satisfied; the
+    scheduled coverage-window advisory is implemented. This closes this hygiene
+    task, not general OCR accuracy, and does not alter trust coverage or models.
   - *Size:* **S**.
 
 - [x] **8. OCG `/Intent`-mismatch hiding — done (2026-09-10).**
