@@ -1,0 +1,751 @@
+{
+  "cells": [
+    {
+      "canonical_columns": [
+        0
+      ],
+      "canonical_rows": [
+        0
+      ],
+      "normalized_text": "December 31,",
+      "raw": {
+        "column_nums": [
+          0
+        ],
+        "is_column_header": true,
+        "is_projected_row_header": false,
+        "json_text_content": "December 31,",
+        "pdf_bbox": [
+          49.98540115356445,
+          585.7560424804688,
+          170.3913116455078,
+          594.4306640625
+        ],
+        "pdf_text_content": "December 31,",
+        "pdf_text_tight_bbox": [
+          49.98540115356445,
+          585.7560424804688,
+          100.47795104980469,
+          594.4306640625
+        ],
+        "row_nums": [
+          0
+        ]
+      },
+      "source_cell_index": 0,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        1
+      ],
+      "canonical_rows": [
+        0
+      ],
+      "normalized_text": "2016",
+      "raw": {
+        "column_nums": [
+          1
+        ],
+        "is_column_header": true,
+        "is_projected_row_header": false,
+        "json_text_content": "2016",
+        "pdf_bbox": [
+          446.9556884765625,
+          585.7560424804688,
+          489.95001220703125,
+          594.4306640625
+        ],
+        "pdf_text_content": "2016",
+        "pdf_text_tight_bbox": [
+          460.7388916015625,
+          585.984619140625,
+          475.85003662109375,
+          593.5748901367188
+        ],
+        "row_nums": [
+          0
+        ]
+      },
+      "source_cell_index": 1,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        2
+      ],
+      "canonical_rows": [
+        0
+      ],
+      "normalized_text": "2015",
+      "raw": {
+        "column_nums": [
+          2
+        ],
+        "is_column_header": true,
+        "is_projected_row_header": false,
+        "json_text_content": "2015",
+        "pdf_bbox": [
+          499.3650817871094,
+          585.7560424804688,
+          542.3617553710938,
+          594.4306640625
+        ],
+        "pdf_text_content": "2015",
+        "pdf_text_tight_bbox": [
+          513.1485595703125,
+          585.984619140625,
+          528.2597045898438,
+          593.5748901367188
+        ],
+        "row_nums": [
+          0
+        ]
+      },
+      "source_cell_index": 2,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        0
+      ],
+      "canonical_rows": [
+        1
+      ],
+      "normalized_text": "Income taxes receivable—current",
+      "raw": {
+        "column_nums": [
+          0
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "Income taxes receivable—current",
+        "pdf_bbox": [
+          49.98540115356445,
+          595.4619140625,
+          170.3913116455078,
+          604.1365356445312
+        ],
+        "pdf_text_content": "Income taxes receivable—current",
+        "pdf_text_tight_bbox": [
+          49.98540115356445,
+          595.4619140625,
+          165.6315460205078,
+          604.1365356445312
+        ],
+        "row_nums": [
+          1
+        ]
+      },
+      "source_cell_index": 3,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        1
+      ],
+      "canonical_rows": [
+        1
+      ],
+      "normalized_text": "$145",
+      "raw": {
+        "column_nums": [
+          1
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "$145",
+        "pdf_bbox": [
+          446.9556884765625,
+          595.4619140625,
+          489.95001220703125,
+          604.1365356445312
+        ],
+        "pdf_text_content": "$ 145",
+        "pdf_text_tight_bbox": [
+          446.9556884765625,
+          595.4619140625,
+          489.9468994140625,
+          604.1365356445312
+        ],
+        "row_nums": [
+          1
+        ]
+      },
+      "source_cell_index": 4,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        2
+      ],
+      "canonical_rows": [
+        1
+      ],
+      "normalized_text": "$166",
+      "raw": {
+        "column_nums": [
+          2
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "$166",
+        "pdf_bbox": [
+          499.3650817871094,
+          595.4619140625,
+          542.3617553710938,
+          604.1365356445312
+        ],
+        "pdf_text_content": "$ 166",
+        "pdf_text_tight_bbox": [
+          499.3650817871094,
+          595.4619140625,
+          542.3555908203125,
+          604.1365356445312
+        ],
+        "row_nums": [
+          1
+        ]
+      },
+      "source_cell_index": 5,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        0
+      ],
+      "canonical_rows": [
+        2
+      ],
+      "normalized_text": "Total income taxes receivable",
+      "raw": {
+        "column_nums": [
+          0
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "Total income taxes receivable",
+        "pdf_bbox": [
+          49.98540115356445,
+          605.1677856445312,
+          170.3913116455078,
+          613.8424072265625
+        ],
+        "pdf_text_content": "Total income taxes receivable",
+        "pdf_text_tight_bbox": [
+          55.808929443359375,
+          605.1677856445312,
+          158.51382446289062,
+          613.8424072265625
+        ],
+        "row_nums": [
+          2
+        ]
+      },
+      "source_cell_index": 6,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        1
+      ],
+      "canonical_rows": [
+        2
+      ],
+      "normalized_text": "$145",
+      "raw": {
+        "column_nums": [
+          1
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "$145",
+        "pdf_bbox": [
+          446.9556884765625,
+          605.1677856445312,
+          489.95001220703125,
+          613.8424072265625
+        ],
+        "pdf_text_content": "$ 145",
+        "pdf_text_tight_bbox": [
+          446.9556884765625,
+          605.1677856445312,
+          489.9468994140625,
+          613.8424072265625
+        ],
+        "row_nums": [
+          2
+        ]
+      },
+      "source_cell_index": 7,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        2
+      ],
+      "canonical_rows": [
+        2
+      ],
+      "normalized_text": "$166",
+      "raw": {
+        "column_nums": [
+          2
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "$166",
+        "pdf_bbox": [
+          499.3650817871094,
+          605.1677856445312,
+          542.3617553710938,
+          613.8424072265625
+        ],
+        "pdf_text_content": "$ 166",
+        "pdf_text_tight_bbox": [
+          499.3650817871094,
+          605.1677856445312,
+          542.3555908203125,
+          613.8424072265625
+        ],
+        "row_nums": [
+          2
+        ]
+      },
+      "source_cell_index": 8,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        0
+      ],
+      "canonical_rows": [
+        3
+      ],
+      "normalized_text": "Income taxes payable—current",
+      "raw": {
+        "column_nums": [
+          0
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "Income taxes payable—current",
+        "pdf_bbox": [
+          49.98540115356445,
+          614.8736572265625,
+          170.3913116455078,
+          623.5482788085938
+        ],
+        "pdf_text_content": "Income taxes payable—current",
+        "pdf_text_tight_bbox": [
+          49.98541259765625,
+          614.8736572265625,
+          157.43980407714844,
+          623.5482788085938
+        ],
+        "row_nums": [
+          3
+        ]
+      },
+      "source_cell_index": 9,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        1
+      ],
+      "canonical_rows": [
+        3
+      ],
+      "normalized_text": "$149",
+      "raw": {
+        "column_nums": [
+          1
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "$149",
+        "pdf_bbox": [
+          446.9556884765625,
+          614.8736572265625,
+          489.95001220703125,
+          623.5482788085938
+        ],
+        "pdf_text_content": "$ 149",
+        "pdf_text_tight_bbox": [
+          446.9556884765625,
+          614.8736572265625,
+          489.9468994140625,
+          623.5482788085938
+        ],
+        "row_nums": [
+          3
+        ]
+      },
+      "source_cell_index": 10,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        2
+      ],
+      "canonical_rows": [
+        3
+      ],
+      "normalized_text": "$264",
+      "raw": {
+        "column_nums": [
+          2
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "$264",
+        "pdf_bbox": [
+          499.3650817871094,
+          614.8736572265625,
+          542.3617553710938,
+          623.5482788085938
+        ],
+        "pdf_text_content": "$ 264",
+        "pdf_text_tight_bbox": [
+          499.3650817871094,
+          614.8736572265625,
+          542.3555908203125,
+          623.5482788085938
+        ],
+        "row_nums": [
+          3
+        ]
+      },
+      "source_cell_index": 11,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        0
+      ],
+      "canonical_rows": [
+        4
+      ],
+      "normalized_text": "Income taxes payable—noncurrent",
+      "raw": {
+        "column_nums": [
+          0
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "Income taxes payable—noncurrent",
+        "pdf_bbox": [
+          49.98540115356445,
+          624.5795288085938,
+          170.3913116455078,
+          633.254150390625
+        ],
+        "pdf_text_content": "Income taxes payable—noncurrent",
+        "pdf_text_tight_bbox": [
+          49.98541259765625,
+          624.5795288085938,
+          170.3913116455078,
+          633.254150390625
+        ],
+        "row_nums": [
+          4
+        ]
+      },
+      "source_cell_index": 12,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        1
+      ],
+      "canonical_rows": [
+        4
+      ],
+      "normalized_text": "22",
+      "raw": {
+        "column_nums": [
+          1
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "22",
+        "pdf_bbox": [
+          446.9556884765625,
+          624.5795288085938,
+          489.95001220703125,
+          633.254150390625
+        ],
+        "pdf_text_content": "22",
+        "pdf_text_tight_bbox": [
+          481.3144836425781,
+          624.5795288085938,
+          489.95001220703125,
+          633.254150390625
+        ],
+        "row_nums": [
+          4
+        ]
+      },
+      "source_cell_index": 13,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        2
+      ],
+      "canonical_rows": [
+        4
+      ],
+      "normalized_text": "35",
+      "raw": {
+        "column_nums": [
+          2
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "35",
+        "pdf_bbox": [
+          499.3650817871094,
+          624.5795288085938,
+          542.3617553710938,
+          633.254150390625
+        ],
+        "pdf_text_content": "35",
+        "pdf_text_tight_bbox": [
+          533.7261962890625,
+          624.5795288085938,
+          542.3617553710938,
+          633.254150390625
+        ],
+        "row_nums": [
+          4
+        ]
+      },
+      "source_cell_index": 14,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        0
+      ],
+      "canonical_rows": [
+        5
+      ],
+      "normalized_text": "Total income taxes payable",
+      "raw": {
+        "column_nums": [
+          0
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "Total income taxes payable",
+        "pdf_bbox": [
+          49.98540115356445,
+          634.285400390625,
+          170.3913116455078,
+          642.9600219726562
+        ],
+        "pdf_text_content": "Total income taxes payable",
+        "pdf_text_tight_bbox": [
+          55.808929443359375,
+          634.285400390625,
+          150.32205200195312,
+          642.9600219726562
+        ],
+        "row_nums": [
+          5
+        ]
+      },
+      "source_cell_index": 15,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        1
+      ],
+      "canonical_rows": [
+        5
+      ],
+      "normalized_text": "$171",
+      "raw": {
+        "column_nums": [
+          1
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "$171",
+        "pdf_bbox": [
+          446.9556884765625,
+          634.285400390625,
+          489.95001220703125,
+          642.9600219726562
+        ],
+        "pdf_text_content": "$ 171",
+        "pdf_text_tight_bbox": [
+          446.9556884765625,
+          634.285400390625,
+          489.9468994140625,
+          642.9600219726562
+        ],
+        "row_nums": [
+          5
+        ]
+      },
+      "source_cell_index": 16,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        2
+      ],
+      "canonical_rows": [
+        5
+      ],
+      "normalized_text": "$299",
+      "raw": {
+        "column_nums": [
+          2
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "$299",
+        "pdf_bbox": [
+          499.3650817871094,
+          634.285400390625,
+          542.3617553710938,
+          642.9600219726562
+        ],
+        "pdf_text_content": "$ 299",
+        "pdf_text_tight_bbox": [
+          499.3650817871094,
+          634.285400390625,
+          542.3555908203125,
+          642.9600219726562
+        ],
+        "row_nums": [
+          5
+        ]
+      },
+      "source_cell_index": 17,
+      "text_source": "json_text_content"
+    }
+  ],
+  "normalization": "Unicode NFC + whitespace collapse/strip",
+  "review_status": "unreviewed",
+  "source_table_metadata": {
+    "columns": {
+      "0": {
+        "pdf_column_bbox": [
+          49.98540115356445,
+          585.7560424804688,
+          170.3913116455078,
+          642.9600219726562
+        ]
+      },
+      "1": {
+        "pdf_column_bbox": [
+          446.9556884765625,
+          585.7560424804688,
+          489.95001220703125,
+          642.9600219726562
+        ]
+      },
+      "2": {
+        "pdf_column_bbox": [
+          499.3650817871094,
+          585.7560424804688,
+          542.3617553710938,
+          642.9600219726562
+        ]
+      }
+    },
+    "document_id": "AES_2016_page_188",
+    "document_table_index": 0,
+    "exclude_for_detection": true,
+    "exclude_for_structure": false,
+    "fintabnet_source_file_name": "FinTabNet_1.0.0_cell_train.jsonl",
+    "fintabnet_source_line_index": 54496,
+    "fintabnet_source_table_id": 90169,
+    "pdf_file_name": "page_188.pdf",
+    "pdf_folder": "AES/2016/",
+    "pdf_full_page_bbox": [
+      0.0,
+      0.0,
+      594.0,
+      774.0
+    ],
+    "pdf_page_index": 0,
+    "pdf_table_bbox": [
+      49.98540115356445,
+      585.7560424804688,
+      542.3617553710938,
+      642.9600219726562
+    ],
+    "rows": {
+      "0": {
+        "is_column_header": true,
+        "is_projected_row_header": false,
+        "pdf_row_bbox": [
+          49.98540115356445,
+          585.7560424804688,
+          542.3617553710938,
+          594.4306640625
+        ]
+      },
+      "1": {
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "pdf_row_bbox": [
+          49.98540115356445,
+          595.4619140625,
+          542.3617553710938,
+          604.1365356445312
+        ]
+      },
+      "2": {
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "pdf_row_bbox": [
+          49.98540115356445,
+          605.1677856445312,
+          542.3617553710938,
+          613.8424072265625
+        ]
+      },
+      "3": {
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "pdf_row_bbox": [
+          49.98540115356445,
+          614.8736572265625,
+          542.3617553710938,
+          623.5482788085938
+        ]
+      },
+      "4": {
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "pdf_row_bbox": [
+          49.98540115356445,
+          624.5795288085938,
+          542.3617553710938,
+          633.254150390625
+        ]
+      },
+      "5": {
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "pdf_row_bbox": [
+          49.98540115356445,
+          634.285400390625,
+          542.3617553710938,
+          642.9600219726562
+        ]
+      }
+    },
+    "split": "train",
+    "structure_id": "AES_2016_page_188_0"
+  },
+  "structure_id": "AES_2016_page_188_0"
+}

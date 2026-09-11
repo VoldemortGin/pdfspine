@@ -1,0 +1,4277 @@
+{
+  "cells": [
+    {
+      "canonical_columns": [
+        0
+      ],
+      "canonical_rows": [
+        0
+      ],
+      "normalized_text": "Property, City, State, Zip Code",
+      "raw": {
+        "column_nums": [
+          0
+        ],
+        "is_column_header": true,
+        "is_projected_row_header": false,
+        "json_text_content": "Property, City, State, Zip Code",
+        "pdf_bbox": [
+          72.0,
+          162.55999755859375,
+          178.37681579589844,
+          187.74400329589844
+        ],
+        "pdf_text_content": "Property, City, State, Zip Code",
+        "pdf_text_tight_bbox": [
+          72.0,
+          178.55999755859375,
+          178.37681579589844,
+          187.74400329589844
+        ],
+        "row_nums": [
+          0
+        ]
+      },
+      "source_cell_index": 0,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        1
+      ],
+      "canonical_rows": [
+        0
+      ],
+      "normalized_text": "Year Completed",
+      "raw": {
+        "column_nums": [
+          1
+        ],
+        "is_column_header": true,
+        "is_projected_row_header": false,
+        "json_text_content": "Year Completed",
+        "pdf_bbox": [
+          222.3000030517578,
+          162.55999755859375,
+          259.62799072265625,
+          187.74400329589844
+        ],
+        "pdf_text_content": "Year Completed",
+        "pdf_text_tight_bbox": [
+          222.3000030517578,
+          170.55999755859375,
+          259.62799072265625,
+          187.74400329589844
+        ],
+        "row_nums": [
+          0
+        ]
+      },
+      "source_cell_index": 1,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        2
+      ],
+      "canonical_rows": [
+        0
+      ],
+      "normalized_text": "Year Acquired",
+      "raw": {
+        "column_nums": [
+          2
+        ],
+        "is_column_header": true,
+        "is_projected_row_header": false,
+        "json_text_content": "Year Acquired",
+        "pdf_bbox": [
+          264.5936584472656,
+          162.55999755859375,
+          298.823974609375,
+          187.74400329589844
+        ],
+        "pdf_text_content": "Year Acquired",
+        "pdf_text_tight_bbox": [
+          265.6995849609375,
+          170.55999755859375,
+          297.6995849609375,
+          187.74400329589844
+        ],
+        "row_nums": [
+          0
+        ]
+      },
+      "source_cell_index": 2,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        3
+      ],
+      "canonical_rows": [
+        0
+      ],
+      "normalized_text": "Square Feet(1) /Apartment Units",
+      "raw": {
+        "column_nums": [
+          3
+        ],
+        "is_column_header": true,
+        "is_projected_row_header": false,
+        "json_text_content": "Square Feet(1) /Apartment Units",
+        "pdf_bbox": [
+          303.79998779296875,
+          162.55999755859375,
+          354.2344055175781,
+          187.74400329589844
+        ],
+        "pdf_text_content": "Square Feet(1) /Apartment Units",
+        "pdf_text_tight_bbox": [
+          303.79998779296875,
+          162.55999755859375,
+          354.2344055175781,
+          187.74400329589844
+        ],
+        "row_nums": [
+          0
+        ]
+      },
+      "source_cell_index": 3,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        4
+      ],
+      "canonical_rows": [
+        0
+      ],
+      "normalized_text": "Average Rent Per Square Foot",
+      "raw": {
+        "column_nums": [
+          4
+        ],
+        "is_column_header": true,
+        "is_projected_row_header": false,
+        "json_text_content": "Average Rent Per Square Foot",
+        "pdf_bbox": [
+          359.20001220703125,
+          162.55999755859375,
+          406.0904235839844,
+          187.74400329589844
+        ],
+        "pdf_text_content": "Average Rent Per Square Foot",
+        "pdf_text_tight_bbox": [
+          359.20001220703125,
+          162.55999755859375,
+          406.0904235839844,
+          187.74400329589844
+        ],
+        "row_nums": [
+          0
+        ]
+      },
+      "source_cell_index": 4,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        5
+      ],
+      "canonical_rows": [
+        0
+      ],
+      "normalized_text": "Percentage Leased(2)",
+      "raw": {
+        "column_nums": [
+          5
+        ],
+        "is_column_header": true,
+        "is_projected_row_header": false,
+        "json_text_content": "Percentage Leased(2)",
+        "pdf_bbox": [
+          411.1000061035156,
+          162.55999755859375,
+          448.8600158691406,
+          187.74400329589844
+        ],
+        "pdf_text_content": "Percentage Leased(2)",
+        "pdf_text_tight_bbox": [
+          411.1000061035156,
+          170.55999755859375,
+          448.8600158691406,
+          187.74400329589844
+        ],
+        "row_nums": [
+          0
+        ]
+      },
+      "source_cell_index": 5,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        6
+      ],
+      "canonical_rows": [
+        0
+      ],
+      "normalized_text": "Principal Tenant(s)",
+      "raw": {
+        "column_nums": [
+          6
+        ],
+        "is_column_header": true,
+        "is_projected_row_header": false,
+        "json_text_content": "Principal Tenant(s)",
+        "pdf_bbox": [
+          453.849609375,
+          162.55999755859375,
+          530.1387939453125,
+          187.74400329589844
+        ],
+        "pdf_text_content": "Principal Tenant(s)",
+        "pdf_text_tight_bbox": [
+          463.75,
+          178.55999755859375,
+          530.1387939453125,
+          187.74400329589844
+        ],
+        "row_nums": [
+          0
+        ]
+      },
+      "source_cell_index": 6,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "canonical_rows": [
+        1
+      ],
+      "normalized_text": "California",
+      "raw": {
+        "column_nums": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": true,
+        "json_text_content": "California",
+        "pdf_bbox": [
+          72.0,
+          192.55999755859375,
+          530.1387939453125,
+          201.74400329589844
+        ],
+        "pdf_text_content": "California",
+        "pdf_text_tight_bbox": [
+          72.0,
+          192.55999755859375,
+          107.11199951171875,
+          201.74400329589844
+        ],
+        "row_nums": [
+          1
+        ]
+      },
+      "source_cell_index": 7,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        0
+      ],
+      "canonical_rows": [
+        2
+      ],
+      "normalized_text": "150 Post StreetSan Francisco, CA 94108",
+      "raw": {
+        "column_nums": [
+          0
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "150 Post StreetSan Francisco, CA 94108",
+        "pdf_bbox": [
+          72.0,
+          202.80799865722656,
+          178.37681579589844,
+          221.74400329589844
+        ],
+        "pdf_text_content": "150 Post Street San Francisco, CA 94108",
+        "pdf_text_tight_bbox": [
+          72.0,
+          202.80799865722656,
+          162.2008056640625,
+          221.74400329589844
+        ],
+        "row_nums": [
+          2
+        ]
+      },
+      "source_cell_index": 8,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        1
+      ],
+      "canonical_rows": [
+        2
+      ],
+      "normalized_text": "1908, 1965",
+      "raw": {
+        "column_nums": [
+          1
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "1908, 1965",
+        "pdf_bbox": [
+          222.3000030517578,
+          202.80799865722656,
+          259.62799072265625,
+          221.74400329589844
+        ],
+        "pdf_text_content": "1908, 1965",
+        "pdf_text_tight_bbox": [
+          222.94960021972656,
+          202.80799865722656,
+          258.9495849609375,
+          211.74400329589844
+        ],
+        "row_nums": [
+          2
+        ]
+      },
+      "source_cell_index": 9,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        2
+      ],
+      "canonical_rows": [
+        2
+      ],
+      "normalized_text": "1997",
+      "raw": {
+        "column_nums": [
+          2
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "1997",
+        "pdf_bbox": [
+          264.5936584472656,
+          202.80799865722656,
+          298.823974609375,
+          221.74400329589844
+        ],
+        "pdf_text_content": "1997",
+        "pdf_text_tight_bbox": [
+          273.6999816894531,
+          202.80799865722656,
+          289.6999816894531,
+          211.74400329589844
+        ],
+        "row_nums": [
+          2
+        ]
+      },
+      "source_cell_index": 10,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        3
+      ],
+      "canonical_rows": [
+        2
+      ],
+      "normalized_text": "102,000",
+      "raw": {
+        "column_nums": [
+          3
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "102,000",
+        "pdf_bbox": [
+          303.79998779296875,
+          202.80799865722656,
+          354.2344055175781,
+          221.74400329589844
+        ],
+        "pdf_text_content": "102,000",
+        "pdf_text_tight_bbox": [
+          315.9999694824219,
+          202.80799865722656,
+          341.9999694824219,
+          211.74400329589844
+        ],
+        "row_nums": [
+          2
+        ]
+      },
+      "source_cell_index": 11,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        4
+      ],
+      "canonical_rows": [
+        2
+      ],
+      "normalized_text": "$42.36",
+      "raw": {
+        "column_nums": [
+          4
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "$42.36",
+        "pdf_bbox": [
+          359.20001220703125,
+          202.80799865722656,
+          406.0904235839844,
+          221.74400329589844
+        ],
+        "pdf_text_content": "$42.36",
+        "pdf_text_tight_bbox": [
+          371.6503601074219,
+          202.80799865722656,
+          393.6503601074219,
+          211.74400329589844
+        ],
+        "row_nums": [
+          2
+        ]
+      },
+      "source_cell_index": 12,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        5
+      ],
+      "canonical_rows": [
+        2
+      ],
+      "normalized_text": "100%",
+      "raw": {
+        "column_nums": [
+          5
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "100%",
+        "pdf_bbox": [
+          411.1000061035156,
+          202.80799865722656,
+          448.8600158691406,
+          221.74400329589844
+        ],
+        "pdf_text_content": "100%",
+        "pdf_text_tight_bbox": [
+          420.6503601074219,
+          202.80799865722656,
+          439.3143615722656,
+          211.74400329589844
+        ],
+        "row_nums": [
+          2
+        ]
+      },
+      "source_cell_index": 13,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        6
+      ],
+      "canonical_rows": [
+        2
+      ],
+      "normalized_text": "Brooks BrothersH& M",
+      "raw": {
+        "column_nums": [
+          6
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "Brooks BrothersH& M",
+        "pdf_bbox": [
+          453.849609375,
+          202.80799865722656,
+          530.1387939453125,
+          221.74400329589844
+        ],
+        "pdf_text_content": "Brooks Brothers H & M",
+        "pdf_text_tight_bbox": [
+          453.849609375,
+          202.80799865722656,
+          506.50238037109375,
+          221.74400329589844
+        ],
+        "row_nums": [
+          2
+        ]
+      },
+      "source_cell_index": 14,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        0
+      ],
+      "canonical_rows": [
+        3
+      ],
+      "normalized_text": "Colorado BlvdPasadena, CA(3)",
+      "raw": {
+        "column_nums": [
+          0
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "Colorado BlvdPasadena, CA(3)",
+        "pdf_bbox": [
+          72.0,
+          225.80799865722656,
+          178.37681579589844,
+          244.74400329589844
+        ],
+        "pdf_text_content": "Colorado Blvd Pasadena, CA(3)",
+        "pdf_text_tight_bbox": [
+          72.0,
+          225.80799865722656,
+          134.19041442871094,
+          244.74400329589844
+        ],
+        "row_nums": [
+          3
+        ]
+      },
+      "source_cell_index": 15,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        1
+      ],
+      "canonical_rows": [
+        3
+      ],
+      "normalized_text": "1905-1988",
+      "raw": {
+        "column_nums": [
+          1
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "1905-1988",
+        "pdf_bbox": [
+          222.3000030517578,
+          225.80799865722656,
+          259.62799072265625,
+          244.74400329589844
+        ],
+        "pdf_text_content": "1905-1988",
+        "pdf_text_tight_bbox": [
+          223.60000610351562,
+          225.80799865722656,
+          258.2576599121094,
+          234.74400329589844
+        ],
+        "row_nums": [
+          3
+        ]
+      },
+      "source_cell_index": 16,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        2
+      ],
+      "canonical_rows": [
+        3
+      ],
+      "normalized_text": "1996/1998",
+      "raw": {
+        "column_nums": [
+          2
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "1996/1998",
+        "pdf_bbox": [
+          264.5936584472656,
+          225.80799865722656,
+          298.823974609375,
+          244.74400329589844
+        ],
+        "pdf_text_content": "1996/1998",
+        "pdf_text_tight_bbox": [
+          264.5936584472656,
+          225.80799865722656,
+          298.8113098144531,
+          234.74400329589844
+        ],
+        "row_nums": [
+          3
+        ]
+      },
+      "source_cell_index": 17,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        3
+      ],
+      "canonical_rows": [
+        3
+      ],
+      "normalized_text": "69,000",
+      "raw": {
+        "column_nums": [
+          3
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "69,000",
+        "pdf_bbox": [
+          303.79998779296875,
+          225.80799865722656,
+          354.2344055175781,
+          244.74400329589844
+        ],
+        "pdf_text_content": "69,000",
+        "pdf_text_tight_bbox": [
+          318.0113220214844,
+          225.80799865722656,
+          340.0073547363281,
+          234.74400329589844
+        ],
+        "row_nums": [
+          3
+        ]
+      },
+      "source_cell_index": 18,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        4
+      ],
+      "canonical_rows": [
+        3
+      ],
+      "normalized_text": "$37.58",
+      "raw": {
+        "column_nums": [
+          4
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "$37.58",
+        "pdf_bbox": [
+          359.20001220703125,
+          225.80799865722656,
+          406.0904235839844,
+          244.74400329589844
+        ],
+        "pdf_text_content": "$37.58",
+        "pdf_text_tight_bbox": [
+          371.65777587890625,
+          225.80799865722656,
+          393.65380859375,
+          234.74400329589844
+        ],
+        "row_nums": [
+          3
+        ]
+      },
+      "source_cell_index": 19,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        5
+      ],
+      "canonical_rows": [
+        3
+      ],
+      "normalized_text": "99%",
+      "raw": {
+        "column_nums": [
+          5
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "99%",
+        "pdf_bbox": [
+          411.1000061035156,
+          225.80799865722656,
+          448.8600158691406,
+          244.74400329589844
+        ],
+        "pdf_text_content": "99%",
+        "pdf_text_tight_bbox": [
+          422.65380859375,
+          225.80799865722656,
+          437.31622314453125,
+          234.74400329589844
+        ],
+        "row_nums": [
+          3
+        ]
+      },
+      "source_cell_index": 20,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        6
+      ],
+      "canonical_rows": [
+        3
+      ],
+      "normalized_text": "Pottery BarnBanana Republic",
+      "raw": {
+        "column_nums": [
+          6
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "Pottery BarnBanana Republic",
+        "pdf_bbox": [
+          453.849609375,
+          225.80799865722656,
+          530.1387939453125,
+          244.74400329589844
+        ],
+        "pdf_text_content": "Pottery Barn Banana Republic",
+        "pdf_text_tight_bbox": [
+          453.849609375,
+          225.80799865722656,
+          508.73760986328125,
+          244.74400329589844
+        ],
+        "row_nums": [
+          3
+        ]
+      },
+      "source_cell_index": 21,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        0
+      ],
+      "canonical_rows": [
+        4
+      ],
+      "normalized_text": "Crow Canyon CommonsSan Ramon, CA(3)(12)",
+      "raw": {
+        "column_nums": [
+          0
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "Crow Canyon CommonsSan Ramon, CA(3)(12)",
+        "pdf_bbox": [
+          72.0,
+          248.80799865722656,
+          178.37681579589844,
+          277.7439880371094
+        ],
+        "pdf_text_content": "Crow Canyon Commons San Ramon, CA(3)(12)",
+        "pdf_text_tight_bbox": [
+          72.0,
+          248.80799865722656,
+          154.86801147460938,
+          267.7439880371094
+        ],
+        "row_nums": [
+          4
+        ]
+      },
+      "source_cell_index": 22,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        1
+      ],
+      "canonical_rows": [
+        4
+      ],
+      "normalized_text": "1980-2006",
+      "raw": {
+        "column_nums": [
+          1
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "1980-2006",
+        "pdf_bbox": [
+          222.3000030517578,
+          248.80799865722656,
+          259.62799072265625,
+          277.7439880371094
+        ],
+        "pdf_text_content": "1980-2006",
+        "pdf_text_tight_bbox": [
+          223.60000610351562,
+          248.80799865722656,
+          258.2576599121094,
+          257.7439880371094
+        ],
+        "row_nums": [
+          4
+        ]
+      },
+      "source_cell_index": 23,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        2
+      ],
+      "canonical_rows": [
+        4
+      ],
+      "normalized_text": "2005/2007",
+      "raw": {
+        "column_nums": [
+          2
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "2005/2007",
+        "pdf_bbox": [
+          264.5936584472656,
+          248.80799865722656,
+          298.823974609375,
+          277.7439880371094
+        ],
+        "pdf_text_content": "2005/2007",
+        "pdf_text_tight_bbox": [
+          264.5944519042969,
+          248.80799865722656,
+          298.8121032714844,
+          257.7439880371094
+        ],
+        "row_nums": [
+          4
+        ]
+      },
+      "source_cell_index": 24,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        3
+      ],
+      "canonical_rows": [
+        4
+      ],
+      "normalized_text": "242,000",
+      "raw": {
+        "column_nums": [
+          3
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "242,000",
+        "pdf_bbox": [
+          303.79998779296875,
+          248.80799865722656,
+          354.2344055175781,
+          277.7439880371094
+        ],
+        "pdf_text_content": "242,000",
+        "pdf_text_tight_bbox": [
+          316.0121154785156,
+          248.80799865722656,
+          342.0073547363281,
+          257.7439880371094
+        ],
+        "row_nums": [
+          4
+        ]
+      },
+      "source_cell_index": 25,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        4
+      ],
+      "canonical_rows": [
+        4
+      ],
+      "normalized_text": "$19.02",
+      "raw": {
+        "column_nums": [
+          4
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "$19.02",
+        "pdf_bbox": [
+          359.20001220703125,
+          248.80799865722656,
+          406.0904235839844,
+          277.7439880371094
+        ],
+        "pdf_text_content": "$19.02",
+        "pdf_text_tight_bbox": [
+          371.65777587890625,
+          248.80799865722656,
+          393.65380859375,
+          257.7439880371094
+        ],
+        "row_nums": [
+          4
+        ]
+      },
+      "source_cell_index": 26,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        5
+      ],
+      "canonical_rows": [
+        4
+      ],
+      "normalized_text": "89%",
+      "raw": {
+        "column_nums": [
+          5
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "89%",
+        "pdf_bbox": [
+          411.1000061035156,
+          248.80799865722656,
+          448.8600158691406,
+          277.7439880371094
+        ],
+        "pdf_text_content": "89%",
+        "pdf_text_tight_bbox": [
+          422.65380859375,
+          248.80799865722656,
+          437.31622314453125,
+          257.7439880371094
+        ],
+        "row_nums": [
+          4
+        ]
+      },
+      "source_cell_index": 27,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        6
+      ],
+      "canonical_rows": [
+        4
+      ],
+      "normalized_text": "LuckyLoehmann’sRite Aid",
+      "raw": {
+        "column_nums": [
+          6
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "LuckyLoehmann’sRite Aid",
+        "pdf_bbox": [
+          453.849609375,
+          248.80799865722656,
+          530.1387939453125,
+          277.7439880371094
+        ],
+        "pdf_text_content": "Lucky Loehmann’s Rite Aid",
+        "pdf_text_tight_bbox": [
+          453.849609375,
+          248.80799865722656,
+          493.84161376953125,
+          277.7439880371094
+        ],
+        "row_nums": [
+          4
+        ]
+      },
+      "source_cell_index": 28,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        0
+      ],
+      "canonical_rows": [
+        5
+      ],
+      "normalized_text": "Escondido PromenadeEscondido, CA 92029(4)(13)",
+      "raw": {
+        "column_nums": [
+          0
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "Escondido PromenadeEscondido, CA 92029(4)(13)",
+        "pdf_bbox": [
+          72.0,
+          281.8080139160156,
+          178.37681579589844,
+          300.7439880371094
+        ],
+        "pdf_text_content": "Escondido Promenade Escondido, CA 92029(4)(13)",
+        "pdf_text_tight_bbox": [
+          72.0,
+          281.8080139160156,
+          173.5568084716797,
+          300.7439880371094
+        ],
+        "row_nums": [
+          5
+        ]
+      },
+      "source_cell_index": 29,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        1
+      ],
+      "canonical_rows": [
+        5
+      ],
+      "normalized_text": "1987",
+      "raw": {
+        "column_nums": [
+          1
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "1987",
+        "pdf_bbox": [
+          222.3000030517578,
+          281.8080139160156,
+          259.62799072265625,
+          300.7439880371094
+        ],
+        "pdf_text_content": "1987",
+        "pdf_text_tight_bbox": [
+          232.94960021972656,
+          281.8080139160156,
+          248.9495849609375,
+          290.7439880371094
+        ],
+        "row_nums": [
+          5
+        ]
+      },
+      "source_cell_index": 30,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        2
+      ],
+      "canonical_rows": [
+        5
+      ],
+      "normalized_text": "1996/2010",
+      "raw": {
+        "column_nums": [
+          2
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "1996/2010",
+        "pdf_bbox": [
+          264.5936584472656,
+          281.8080139160156,
+          298.823974609375,
+          300.7439880371094
+        ],
+        "pdf_text_content": "1996/2010",
+        "pdf_text_tight_bbox": [
+          264.5999755859375,
+          281.8080139160156,
+          298.823974609375,
+          290.7439880371094
+        ],
+        "row_nums": [
+          5
+        ]
+      },
+      "source_cell_index": 31,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        3
+      ],
+      "canonical_rows": [
+        5
+      ],
+      "normalized_text": "222,000",
+      "raw": {
+        "column_nums": [
+          3
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "222,000",
+        "pdf_bbox": [
+          303.79998779296875,
+          281.8080139160156,
+          354.2344055175781,
+          300.7439880371094
+        ],
+        "pdf_text_content": "222,000",
+        "pdf_text_tight_bbox": [
+          315.9999694824219,
+          281.8080139160156,
+          341.9999694824219,
+          290.7439880371094
+        ],
+        "row_nums": [
+          5
+        ]
+      },
+      "source_cell_index": 32,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        4
+      ],
+      "canonical_rows": [
+        5
+      ],
+      "normalized_text": "$23.76",
+      "raw": {
+        "column_nums": [
+          4
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "$23.76",
+        "pdf_bbox": [
+          359.20001220703125,
+          281.8080139160156,
+          406.0904235839844,
+          300.7439880371094
+        ],
+        "pdf_text_content": "$23.76",
+        "pdf_text_tight_bbox": [
+          371.6503601074219,
+          281.8080139160156,
+          393.6503601074219,
+          290.7439880371094
+        ],
+        "row_nums": [
+          5
+        ]
+      },
+      "source_cell_index": 33,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        5
+      ],
+      "canonical_rows": [
+        5
+      ],
+      "normalized_text": "98%",
+      "raw": {
+        "column_nums": [
+          5
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "98%",
+        "pdf_bbox": [
+          411.1000061035156,
+          281.8080139160156,
+          448.8600158691406,
+          300.7439880371094
+        ],
+        "pdf_text_content": "98%",
+        "pdf_text_tight_bbox": [
+          422.6503601074219,
+          281.8080139160156,
+          437.3143615722656,
+          290.7439880371094
+        ],
+        "row_nums": [
+          5
+        ]
+      },
+      "source_cell_index": 34,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        6
+      ],
+      "canonical_rows": [
+        5
+      ],
+      "normalized_text": "Toys R UsTJMaxx",
+      "raw": {
+        "column_nums": [
+          6
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "Toys R UsTJMaxx",
+        "pdf_bbox": [
+          453.849609375,
+          281.8080139160156,
+          530.1387939453125,
+          300.7439880371094
+        ],
+        "pdf_text_content": "Toys R Us TJ Maxx",
+        "pdf_text_tight_bbox": [
+          453.849609375,
+          281.8080139160156,
+          488.0887756347656,
+          300.7439880371094
+        ],
+        "row_nums": [
+          5
+        ]
+      },
+      "source_cell_index": 35,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        0
+      ],
+      "canonical_rows": [
+        6
+      ],
+      "normalized_text": "Fifth AvenueSan Diego, CA",
+      "raw": {
+        "column_nums": [
+          0
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "Fifth AvenueSan Diego, CA",
+        "pdf_bbox": [
+          72.0,
+          304.8080139160156,
+          178.37681579589844,
+          323.7439880371094
+        ],
+        "pdf_text_content": "Fifth Avenue San Diego, CA",
+        "pdf_text_tight_bbox": [
+          72.0,
+          304.8080139160156,
+          128.6623992919922,
+          323.7439880371094
+        ],
+        "row_nums": [
+          6
+        ]
+      },
+      "source_cell_index": 36,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        1
+      ],
+      "canonical_rows": [
+        6
+      ],
+      "normalized_text": "1888-1995",
+      "raw": {
+        "column_nums": [
+          1
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "1888-1995",
+        "pdf_bbox": [
+          222.3000030517578,
+          304.8080139160156,
+          259.62799072265625,
+          323.7439880371094
+        ],
+        "pdf_text_content": "1888-1995",
+        "pdf_text_tight_bbox": [
+          223.60000610351562,
+          304.8080139160156,
+          258.2640075683594,
+          313.7439880371094
+        ],
+        "row_nums": [
+          6
+        ]
+      },
+      "source_cell_index": 37,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        2
+      ],
+      "canonical_rows": [
+        6
+      ],
+      "normalized_text": "1996-1997",
+      "raw": {
+        "column_nums": [
+          2
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "1996-1997",
+        "pdf_bbox": [
+          264.5936584472656,
+          304.8080139160156,
+          298.823974609375,
+          323.7439880371094
+        ],
+        "pdf_text_content": "1996- 1997",
+        "pdf_text_tight_bbox": [
+          273.70001220703125,
+          304.8080139160156,
+          292.36480712890625,
+          323.7439880371094
+        ],
+        "row_nums": [
+          6
+        ]
+      },
+      "source_cell_index": 38,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        3
+      ],
+      "canonical_rows": [
+        6
+      ],
+      "normalized_text": "51,000",
+      "raw": {
+        "column_nums": [
+          3
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "51,000",
+        "pdf_bbox": [
+          303.79998779296875,
+          304.8080139160156,
+          354.2344055175781,
+          323.7439880371094
+        ],
+        "pdf_text_content": "51,000",
+        "pdf_text_tight_bbox": [
+          318.0,
+          304.8080139160156,
+          340.0,
+          313.7439880371094
+        ],
+        "row_nums": [
+          6
+        ]
+      },
+      "source_cell_index": 39,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        4
+      ],
+      "canonical_rows": [
+        6
+      ],
+      "normalized_text": "$27.46",
+      "raw": {
+        "column_nums": [
+          4
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "$27.46",
+        "pdf_bbox": [
+          359.20001220703125,
+          304.8080139160156,
+          406.0904235839844,
+          323.7439880371094
+        ],
+        "pdf_text_content": "$27.46",
+        "pdf_text_tight_bbox": [
+          371.650390625,
+          304.8080139160156,
+          393.650390625,
+          313.7439880371094
+        ],
+        "row_nums": [
+          6
+        ]
+      },
+      "source_cell_index": 40,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        5
+      ],
+      "canonical_rows": [
+        6
+      ],
+      "normalized_text": "93%",
+      "raw": {
+        "column_nums": [
+          5
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "93%",
+        "pdf_bbox": [
+          411.1000061035156,
+          304.8080139160156,
+          448.8600158691406,
+          323.7439880371094
+        ],
+        "pdf_text_content": "93%",
+        "pdf_text_tight_bbox": [
+          422.650390625,
+          304.8080139160156,
+          437.31439208984375,
+          313.7439880371094
+        ],
+        "row_nums": [
+          6
+        ]
+      },
+      "source_cell_index": 41,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        6
+      ],
+      "canonical_rows": [
+        6
+      ],
+      "normalized_text": "Urban Outfitters",
+      "raw": {
+        "column_nums": [
+          6
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "Urban Outfitters",
+        "pdf_bbox": [
+          453.849609375,
+          304.8080139160156,
+          530.1387939453125,
+          323.7439880371094
+        ],
+        "pdf_text_content": "Urban Outfitters",
+        "pdf_text_tight_bbox": [
+          453.85040283203125,
+          304.8080139160156,
+          506.514404296875,
+          313.7439880371094
+        ],
+        "row_nums": [
+          6
+        ]
+      },
+      "source_cell_index": 42,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        0
+      ],
+      "canonical_rows": [
+        7
+      ],
+      "normalized_text": "Hermosa AvenueHermosa Beach, CA",
+      "raw": {
+        "column_nums": [
+          0
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "Hermosa AvenueHermosa Beach, CA",
+        "pdf_bbox": [
+          72.0,
+          327.8080139160156,
+          178.37681579589844,
+          346.7439880371094
+        ],
+        "pdf_text_content": "Hermosa Avenue Hermosa Beach, CA",
+        "pdf_text_tight_bbox": [
+          72.0,
+          327.8080139160156,
+          145.96240234375,
+          346.7439880371094
+        ],
+        "row_nums": [
+          7
+        ]
+      },
+      "source_cell_index": 43,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        1
+      ],
+      "canonical_rows": [
+        7
+      ],
+      "normalized_text": "1922",
+      "raw": {
+        "column_nums": [
+          1
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "1922",
+        "pdf_bbox": [
+          222.3000030517578,
+          327.8080139160156,
+          259.62799072265625,
+          346.7439880371094
+        ],
+        "pdf_text_content": "1922",
+        "pdf_text_tight_bbox": [
+          232.94960021972656,
+          327.8080139160156,
+          248.9495849609375,
+          336.7439880371094
+        ],
+        "row_nums": [
+          7
+        ]
+      },
+      "source_cell_index": 44,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        2
+      ],
+      "canonical_rows": [
+        7
+      ],
+      "normalized_text": "1997",
+      "raw": {
+        "column_nums": [
+          2
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "1997",
+        "pdf_bbox": [
+          264.5936584472656,
+          327.8080139160156,
+          298.823974609375,
+          346.7439880371094
+        ],
+        "pdf_text_content": "1997",
+        "pdf_text_tight_bbox": [
+          273.6999816894531,
+          327.8080139160156,
+          289.6999816894531,
+          336.7439880371094
+        ],
+        "row_nums": [
+          7
+        ]
+      },
+      "source_cell_index": 45,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        3
+      ],
+      "canonical_rows": [
+        7
+      ],
+      "normalized_text": "23,000",
+      "raw": {
+        "column_nums": [
+          3
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "23,000",
+        "pdf_bbox": [
+          303.79998779296875,
+          327.8080139160156,
+          354.2344055175781,
+          346.7439880371094
+        ],
+        "pdf_text_content": "23,000",
+        "pdf_text_tight_bbox": [
+          317.9999694824219,
+          327.8080139160156,
+          339.9999694824219,
+          336.7439880371094
+        ],
+        "row_nums": [
+          7
+        ]
+      },
+      "source_cell_index": 46,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        4
+      ],
+      "canonical_rows": [
+        7
+      ],
+      "normalized_text": "$31.59",
+      "raw": {
+        "column_nums": [
+          4
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "$31.59",
+        "pdf_bbox": [
+          359.20001220703125,
+          327.8080139160156,
+          406.0904235839844,
+          346.7439880371094
+        ],
+        "pdf_text_content": "$31.59",
+        "pdf_text_tight_bbox": [
+          371.6503601074219,
+          327.8080139160156,
+          393.6503601074219,
+          336.7439880371094
+        ],
+        "row_nums": [
+          7
+        ]
+      },
+      "source_cell_index": 47,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        5
+      ],
+      "canonical_rows": [
+        7
+      ],
+      "normalized_text": "100%",
+      "raw": {
+        "column_nums": [
+          5
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "100%",
+        "pdf_bbox": [
+          411.1000061035156,
+          327.8080139160156,
+          448.8600158691406,
+          346.7439880371094
+        ],
+        "pdf_text_content": "100%",
+        "pdf_text_tight_bbox": [
+          420.6503601074219,
+          327.8080139160156,
+          439.3143615722656,
+          336.7439880371094
+        ],
+        "row_nums": [
+          7
+        ]
+      },
+      "source_cell_index": 48,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        6
+      ],
+      "canonical_rows": [
+        7
+      ],
+      "normalized_text": "",
+      "raw": {
+        "column_nums": [
+          6
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "",
+        "pdf_bbox": [
+          453.849609375,
+          327.8080139160156,
+          530.1387939453125,
+          346.7439880371094
+        ],
+        "pdf_text_content": "",
+        "pdf_text_tight_bbox": [],
+        "row_nums": [
+          7
+        ]
+      },
+      "source_cell_index": 49,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        0
+      ],
+      "canonical_rows": [
+        8
+      ],
+      "normalized_text": "Hollywood BlvdHollywood, CA(5)",
+      "raw": {
+        "column_nums": [
+          0
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "Hollywood BlvdHollywood, CA(5)",
+        "pdf_bbox": [
+          72.0,
+          350.8080139160156,
+          178.37681579589844,
+          379.7439880371094
+        ],
+        "pdf_text_content": "Hollywood Blvd Hollywood, CA(5)",
+        "pdf_text_tight_bbox": [
+          72.0,
+          350.8080139160156,
+          140.4407958984375,
+          369.7439880371094
+        ],
+        "row_nums": [
+          8
+        ]
+      },
+      "source_cell_index": 50,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        1
+      ],
+      "canonical_rows": [
+        8
+      ],
+      "normalized_text": "1921-1991",
+      "raw": {
+        "column_nums": [
+          1
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "1921-1991",
+        "pdf_bbox": [
+          222.3000030517578,
+          350.8080139160156,
+          259.62799072265625,
+          379.7439880371094
+        ],
+        "pdf_text_content": "1921-1991",
+        "pdf_text_tight_bbox": [
+          223.60000610351562,
+          350.8080139160156,
+          258.2640075683594,
+          359.7439880371094
+        ],
+        "row_nums": [
+          8
+        ]
+      },
+      "source_cell_index": 51,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        2
+      ],
+      "canonical_rows": [
+        8
+      ],
+      "normalized_text": "1999",
+      "raw": {
+        "column_nums": [
+          2
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "1999",
+        "pdf_bbox": [
+          264.5936584472656,
+          350.8080139160156,
+          298.823974609375,
+          379.7439880371094
+        ],
+        "pdf_text_content": "1999",
+        "pdf_text_tight_bbox": [
+          273.7008056640625,
+          350.8080139160156,
+          289.7008056640625,
+          359.7439880371094
+        ],
+        "row_nums": [
+          8
+        ]
+      },
+      "source_cell_index": 52,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        3
+      ],
+      "canonical_rows": [
+        8
+      ],
+      "normalized_text": "153,000",
+      "raw": {
+        "column_nums": [
+          3
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "153,000",
+        "pdf_bbox": [
+          303.79998779296875,
+          350.8080139160156,
+          354.2344055175781,
+          379.7439880371094
+        ],
+        "pdf_text_content": "153,000",
+        "pdf_text_tight_bbox": [
+          316.00079345703125,
+          350.8080139160156,
+          342.00079345703125,
+          359.7439880371094
+        ],
+        "row_nums": [
+          8
+        ]
+      },
+      "source_cell_index": 53,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        4
+      ],
+      "canonical_rows": [
+        8
+      ],
+      "normalized_text": "$21.90",
+      "raw": {
+        "column_nums": [
+          4
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "$21.90",
+        "pdf_bbox": [
+          359.20001220703125,
+          350.8080139160156,
+          406.0904235839844,
+          379.7439880371094
+        ],
+        "pdf_text_content": "$21.90",
+        "pdf_text_tight_bbox": [
+          371.65118408203125,
+          350.8080139160156,
+          393.65118408203125,
+          359.7439880371094
+        ],
+        "row_nums": [
+          8
+        ]
+      },
+      "source_cell_index": 54,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        5
+      ],
+      "canonical_rows": [
+        8
+      ],
+      "normalized_text": "75%",
+      "raw": {
+        "column_nums": [
+          5
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "75%",
+        "pdf_bbox": [
+          411.1000061035156,
+          350.8080139160156,
+          448.8600158691406,
+          379.7439880371094
+        ],
+        "pdf_text_content": "75%",
+        "pdf_text_tight_bbox": [
+          422.65118408203125,
+          350.8080139160156,
+          437.315185546875,
+          359.7439880371094
+        ],
+        "row_nums": [
+          8
+        ]
+      },
+      "source_cell_index": 55,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        6
+      ],
+      "canonical_rows": [
+        8
+      ],
+      "normalized_text": "DSWL.A. FitnessFresh & Easy",
+      "raw": {
+        "column_nums": [
+          6
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "DSWL.A. FitnessFresh & Easy",
+        "pdf_bbox": [
+          453.849609375,
+          350.8080139160156,
+          530.1387939453125,
+          379.7439880371094
+        ],
+        "pdf_text_content": "DSW L.A. Fitness Fresh & Easy",
+        "pdf_text_tight_bbox": [
+          453.849609375,
+          350.8080139160156,
+          497.3520202636719,
+          379.7439880371094
+        ],
+        "row_nums": [
+          8
+        ]
+      },
+      "source_cell_index": 56,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        0
+      ],
+      "canonical_rows": [
+        9
+      ],
+      "normalized_text": "Kings CourtLos Gatos, CA 95032(3)(6)",
+      "raw": {
+        "column_nums": [
+          0
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "Kings CourtLos Gatos, CA 95032(3)(6)",
+        "pdf_bbox": [
+          72.0,
+          383.8080139160156,
+          178.37681579589844,
+          402.7439880371094
+        ],
+        "pdf_text_content": "Kings Court Los Gatos, CA 95032(3)(6)",
+        "pdf_text_tight_bbox": [
+          72.0,
+          383.8080139160156,
+          168.45681762695312,
+          402.7439880371094
+        ],
+        "row_nums": [
+          9
+        ]
+      },
+      "source_cell_index": 57,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        1
+      ],
+      "canonical_rows": [
+        9
+      ],
+      "normalized_text": "1960",
+      "raw": {
+        "column_nums": [
+          1
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "1960",
+        "pdf_bbox": [
+          222.3000030517578,
+          383.8080139160156,
+          259.62799072265625,
+          402.7439880371094
+        ],
+        "pdf_text_content": "1960",
+        "pdf_text_tight_bbox": [
+          232.94960021972656,
+          383.8080139160156,
+          248.9495849609375,
+          392.7439880371094
+        ],
+        "row_nums": [
+          9
+        ]
+      },
+      "source_cell_index": 58,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        2
+      ],
+      "canonical_rows": [
+        9
+      ],
+      "normalized_text": "1998",
+      "raw": {
+        "column_nums": [
+          2
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "1998",
+        "pdf_bbox": [
+          264.5936584472656,
+          383.8080139160156,
+          298.823974609375,
+          402.7439880371094
+        ],
+        "pdf_text_content": "1998",
+        "pdf_text_tight_bbox": [
+          273.6999816894531,
+          383.8080139160156,
+          289.6999816894531,
+          392.7439880371094
+        ],
+        "row_nums": [
+          9
+        ]
+      },
+      "source_cell_index": 59,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        3
+      ],
+      "canonical_rows": [
+        9
+      ],
+      "normalized_text": "79,000",
+      "raw": {
+        "column_nums": [
+          3
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "79,000",
+        "pdf_bbox": [
+          303.79998779296875,
+          383.8080139160156,
+          354.2344055175781,
+          402.7439880371094
+        ],
+        "pdf_text_content": "79,000",
+        "pdf_text_tight_bbox": [
+          317.9999694824219,
+          383.8080139160156,
+          339.9999694824219,
+          392.7439880371094
+        ],
+        "row_nums": [
+          9
+        ]
+      },
+      "source_cell_index": 60,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        4
+      ],
+      "canonical_rows": [
+        9
+      ],
+      "normalized_text": "$28.43",
+      "raw": {
+        "column_nums": [
+          4
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "$28.43",
+        "pdf_bbox": [
+          359.20001220703125,
+          383.8080139160156,
+          406.0904235839844,
+          402.7439880371094
+        ],
+        "pdf_text_content": "$28.43",
+        "pdf_text_tight_bbox": [
+          371.6503601074219,
+          383.8080139160156,
+          393.6503601074219,
+          392.7439880371094
+        ],
+        "row_nums": [
+          9
+        ]
+      },
+      "source_cell_index": 61,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        5
+      ],
+      "canonical_rows": [
+        9
+      ],
+      "normalized_text": "97%",
+      "raw": {
+        "column_nums": [
+          5
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "97%",
+        "pdf_bbox": [
+          411.1000061035156,
+          383.8080139160156,
+          448.8600158691406,
+          402.7439880371094
+        ],
+        "pdf_text_content": "97%",
+        "pdf_text_tight_bbox": [
+          422.6503601074219,
+          383.8080139160156,
+          437.3143615722656,
+          392.7439880371094
+        ],
+        "row_nums": [
+          9
+        ]
+      },
+      "source_cell_index": 62,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        6
+      ],
+      "canonical_rows": [
+        9
+      ],
+      "normalized_text": "Lunardi’s SupermarketCVS",
+      "raw": {
+        "column_nums": [
+          6
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "Lunardi’s SupermarketCVS",
+        "pdf_bbox": [
+          453.849609375,
+          383.8080139160156,
+          530.1387939453125,
+          402.7439880371094
+        ],
+        "pdf_text_content": "Lunardi’s Supermarket CVS",
+        "pdf_text_tight_bbox": [
+          453.849609375,
+          383.8080139160156,
+          527.78076171875,
+          402.7439880371094
+        ],
+        "row_nums": [
+          9
+        ]
+      },
+      "source_cell_index": 63,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        0
+      ],
+      "canonical_rows": [
+        10
+      ],
+      "normalized_text": "Old Town CenterLos Gatos, CA 95030",
+      "raw": {
+        "column_nums": [
+          0
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "Old Town CenterLos Gatos, CA 95030",
+        "pdf_bbox": [
+          72.0,
+          406.8080139160156,
+          178.37681579589844,
+          435.7439880371094
+        ],
+        "pdf_text_content": "Old Town Center Los Gatos, CA 95030",
+        "pdf_text_tight_bbox": [
+          72.0,
+          406.8080139160156,
+          149.80081176757812,
+          425.7439880371094
+        ],
+        "row_nums": [
+          10
+        ]
+      },
+      "source_cell_index": 64,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        1
+      ],
+      "canonical_rows": [
+        10
+      ],
+      "normalized_text": "1962, 1998",
+      "raw": {
+        "column_nums": [
+          1
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "1962, 1998",
+        "pdf_bbox": [
+          222.3000030517578,
+          406.8080139160156,
+          259.62799072265625,
+          435.7439880371094
+        ],
+        "pdf_text_content": "1962, 1998",
+        "pdf_text_tight_bbox": [
+          222.94960021972656,
+          406.8080139160156,
+          258.9495849609375,
+          415.7439880371094
+        ],
+        "row_nums": [
+          10
+        ]
+      },
+      "source_cell_index": 65,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        2
+      ],
+      "canonical_rows": [
+        10
+      ],
+      "normalized_text": "1997",
+      "raw": {
+        "column_nums": [
+          2
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "1997",
+        "pdf_bbox": [
+          264.5936584472656,
+          406.8080139160156,
+          298.823974609375,
+          435.7439880371094
+        ],
+        "pdf_text_content": "1997",
+        "pdf_text_tight_bbox": [
+          273.6999816894531,
+          406.8080139160156,
+          289.6999816894531,
+          415.7439880371094
+        ],
+        "row_nums": [
+          10
+        ]
+      },
+      "source_cell_index": 66,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        3
+      ],
+      "canonical_rows": [
+        10
+      ],
+      "normalized_text": "95,000",
+      "raw": {
+        "column_nums": [
+          3
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "95,000",
+        "pdf_bbox": [
+          303.79998779296875,
+          406.8080139160156,
+          354.2344055175781,
+          435.7439880371094
+        ],
+        "pdf_text_content": "95,000",
+        "pdf_text_tight_bbox": [
+          317.9999694824219,
+          406.8080139160156,
+          339.9999694824219,
+          415.7439880371094
+        ],
+        "row_nums": [
+          10
+        ]
+      },
+      "source_cell_index": 67,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        4
+      ],
+      "canonical_rows": [
+        10
+      ],
+      "normalized_text": "$30.04",
+      "raw": {
+        "column_nums": [
+          4
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "$30.04",
+        "pdf_bbox": [
+          359.20001220703125,
+          406.8080139160156,
+          406.0904235839844,
+          435.7439880371094
+        ],
+        "pdf_text_content": "$30.04",
+        "pdf_text_tight_bbox": [
+          371.6503601074219,
+          406.8080139160156,
+          393.6503601074219,
+          415.7439880371094
+        ],
+        "row_nums": [
+          10
+        ]
+      },
+      "source_cell_index": 68,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        5
+      ],
+      "canonical_rows": [
+        10
+      ],
+      "normalized_text": "97%",
+      "raw": {
+        "column_nums": [
+          5
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "97%",
+        "pdf_bbox": [
+          411.1000061035156,
+          406.8080139160156,
+          448.8600158691406,
+          435.7439880371094
+        ],
+        "pdf_text_content": "97%",
+        "pdf_text_tight_bbox": [
+          422.6503601074219,
+          406.8080139160156,
+          437.3143615722656,
+          415.7439880371094
+        ],
+        "row_nums": [
+          10
+        ]
+      },
+      "source_cell_index": 69,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        6
+      ],
+      "canonical_rows": [
+        10
+      ],
+      "normalized_text": "Borders BooksGapKidsBanana Republic",
+      "raw": {
+        "column_nums": [
+          6
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "Borders BooksGapKidsBanana Republic",
+        "pdf_bbox": [
+          453.849609375,
+          406.8080139160156,
+          530.1387939453125,
+          435.7439880371094
+        ],
+        "pdf_text_content": "Borders Books Gap Kids Banana Republic",
+        "pdf_text_tight_bbox": [
+          453.849609375,
+          406.8080139160156,
+          508.73760986328125,
+          435.7439880371094
+        ],
+        "row_nums": [
+          10
+        ]
+      },
+      "source_cell_index": 70,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        0
+      ],
+      "canonical_rows": [
+        11
+      ],
+      "normalized_text": "Santana Row—RetailSan Jose, CA 95128",
+      "raw": {
+        "column_nums": [
+          0
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "Santana Row—RetailSan Jose, CA 95128",
+        "pdf_bbox": [
+          72.0,
+          439.8080139160156,
+          178.37681579589844,
+          498.7439880371094
+        ],
+        "pdf_text_content": "Santana Row—Retail San Jose, CA 95128",
+        "pdf_text_tight_bbox": [
+          72.0,
+          439.8080139160156,
+          144.9008026123047,
+          458.7439880371094
+        ],
+        "row_nums": [
+          11
+        ]
+      },
+      "source_cell_index": 71,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        1
+      ],
+      "canonical_rows": [
+        11
+      ],
+      "normalized_text": "2002, 2009",
+      "raw": {
+        "column_nums": [
+          1
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "2002, 2009",
+        "pdf_bbox": [
+          222.3000030517578,
+          439.8080139160156,
+          259.62799072265625,
+          498.7439880371094
+        ],
+        "pdf_text_content": "2002, 2009",
+        "pdf_text_tight_bbox": [
+          222.94960021972656,
+          439.8080139160156,
+          258.9495849609375,
+          448.7439880371094
+        ],
+        "row_nums": [
+          11
+        ]
+      },
+      "source_cell_index": 72,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        2
+      ],
+      "canonical_rows": [
+        11
+      ],
+      "normalized_text": "1997",
+      "raw": {
+        "column_nums": [
+          2
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "1997",
+        "pdf_bbox": [
+          264.5936584472656,
+          439.8080139160156,
+          298.823974609375,
+          498.7439880371094
+        ],
+        "pdf_text_content": "1997",
+        "pdf_text_tight_bbox": [
+          273.6999816894531,
+          439.8080139160156,
+          289.6999816894531,
+          448.7439880371094
+        ],
+        "row_nums": [
+          11
+        ]
+      },
+      "source_cell_index": 73,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        3
+      ],
+      "canonical_rows": [
+        11
+      ],
+      "normalized_text": "608,000",
+      "raw": {
+        "column_nums": [
+          3
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "608,000",
+        "pdf_bbox": [
+          303.79998779296875,
+          439.8080139160156,
+          354.2344055175781,
+          498.7439880371094
+        ],
+        "pdf_text_content": "608,000",
+        "pdf_text_tight_bbox": [
+          315.9999694824219,
+          439.8080139160156,
+          341.9999694824219,
+          448.7439880371094
+        ],
+        "row_nums": [
+          11
+        ]
+      },
+      "source_cell_index": 74,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        4
+      ],
+      "canonical_rows": [
+        11
+      ],
+      "normalized_text": "$44.31",
+      "raw": {
+        "column_nums": [
+          4
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "$44.31",
+        "pdf_bbox": [
+          359.20001220703125,
+          439.8080139160156,
+          406.0904235839844,
+          498.7439880371094
+        ],
+        "pdf_text_content": "$44.31",
+        "pdf_text_tight_bbox": [
+          371.6503601074219,
+          439.8080139160156,
+          393.6503601074219,
+          448.7439880371094
+        ],
+        "row_nums": [
+          11
+        ]
+      },
+      "source_cell_index": 75,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        5
+      ],
+      "canonical_rows": [
+        11
+      ],
+      "normalized_text": "99%",
+      "raw": {
+        "column_nums": [
+          5
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "99%",
+        "pdf_bbox": [
+          411.1000061035156,
+          439.8080139160156,
+          448.8600158691406,
+          498.7439880371094
+        ],
+        "pdf_text_content": "99%",
+        "pdf_text_tight_bbox": [
+          422.6503601074219,
+          439.8080139160156,
+          437.3143615722656,
+          448.7439880371094
+        ],
+        "row_nums": [
+          11
+        ]
+      },
+      "source_cell_index": 76,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        6
+      ],
+      "canonical_rows": [
+        11
+      ],
+      "normalized_text": "Crate & BarrelBorders BooksContainer StoreBest BuyCineArts TheatreHotelValencia",
+      "raw": {
+        "column_nums": [
+          6
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "Crate & BarrelBorders BooksContainer StoreBest BuyCineArts TheatreHotelValencia",
+        "pdf_bbox": [
+          453.849609375,
+          439.8080139160156,
+          530.1387939453125,
+          498.7439880371094
+        ],
+        "pdf_text_content": "Crate & Barrel Borders Books Container Store Best Buy CineArts Theatre Hotel Valencia",
+        "pdf_text_tight_bbox": [
+          453.849609375,
+          439.8080139160156,
+          509.13201904296875,
+          498.7439880371094
+        ],
+        "row_nums": [
+          11
+        ]
+      },
+      "source_cell_index": 77,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        0
+      ],
+      "canonical_rows": [
+        12
+      ],
+      "normalized_text": "Santana Row—ResidentialSan Jose, CA 95128",
+      "raw": {
+        "column_nums": [
+          0
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "Santana Row—ResidentialSan Jose, CA 95128",
+        "pdf_bbox": [
+          72.0,
+          502.8080139160156,
+          178.37681579589844,
+          521.7440185546875
+        ],
+        "pdf_text_content": "Santana Row—Residential San Jose, CA 95128",
+        "pdf_text_tight_bbox": [
+          72.0,
+          502.8080139160156,
+          158.41200256347656,
+          521.7440185546875
+        ],
+        "row_nums": [
+          12
+        ]
+      },
+      "source_cell_index": 78,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        1
+      ],
+      "canonical_rows": [
+        12
+      ],
+      "normalized_text": "2003-2006",
+      "raw": {
+        "column_nums": [
+          1
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "2003-2006",
+        "pdf_bbox": [
+          222.3000030517578,
+          502.8080139160156,
+          259.62799072265625,
+          521.7440185546875
+        ],
+        "pdf_text_content": "2003-2006",
+        "pdf_text_tight_bbox": [
+          223.60000610351562,
+          502.8080139160156,
+          258.2640075683594,
+          511.7439880371094
+        ],
+        "row_nums": [
+          12
+        ]
+      },
+      "source_cell_index": 79,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        2
+      ],
+      "canonical_rows": [
+        12
+      ],
+      "normalized_text": "1997",
+      "raw": {
+        "column_nums": [
+          2
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "1997",
+        "pdf_bbox": [
+          264.5936584472656,
+          502.8080139160156,
+          298.823974609375,
+          521.7440185546875
+        ],
+        "pdf_text_content": "1997",
+        "pdf_text_tight_bbox": [
+          273.7008056640625,
+          502.8080139160156,
+          289.7008056640625,
+          511.7439880371094
+        ],
+        "row_nums": [
+          12
+        ]
+      },
+      "source_cell_index": 80,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        3
+      ],
+      "canonical_rows": [
+        12
+      ],
+      "normalized_text": "295 units",
+      "raw": {
+        "column_nums": [
+          3
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "295 units",
+        "pdf_bbox": [
+          303.79998779296875,
+          502.8080139160156,
+          354.2344055175781,
+          521.7440185546875
+        ],
+        "pdf_text_content": "295 units",
+        "pdf_text_tight_bbox": [
+          314.251220703125,
+          502.8080139160156,
+          343.81121826171875,
+          511.7439880371094
+        ],
+        "row_nums": [
+          12
+        ]
+      },
+      "source_cell_index": 81,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        4
+      ],
+      "canonical_rows": [
+        12
+      ],
+      "normalized_text": "N/A",
+      "raw": {
+        "column_nums": [
+          4
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "N/A",
+        "pdf_bbox": [
+          359.20001220703125,
+          502.8080139160156,
+          406.0904235839844,
+          521.7440185546875
+        ],
+        "pdf_text_content": "N/A",
+        "pdf_text_tight_bbox": [
+          375.751220703125,
+          502.8080139160156,
+          389.5272216796875,
+          511.7439880371094
+        ],
+        "row_nums": [
+          12
+        ]
+      },
+      "source_cell_index": 82,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        5
+      ],
+      "canonical_rows": [
+        12
+      ],
+      "normalized_text": "96%",
+      "raw": {
+        "column_nums": [
+          5
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "96%",
+        "pdf_bbox": [
+          411.1000061035156,
+          502.8080139160156,
+          448.8600158691406,
+          521.7440185546875
+        ],
+        "pdf_text_content": "96%",
+        "pdf_text_tight_bbox": [
+          422.6512145996094,
+          502.8080139160156,
+          437.3152160644531,
+          511.7439880371094
+        ],
+        "row_nums": [
+          12
+        ]
+      },
+      "source_cell_index": 83,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        6
+      ],
+      "canonical_rows": [
+        12
+      ],
+      "normalized_text": "",
+      "raw": {
+        "column_nums": [
+          6
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "",
+        "pdf_bbox": [
+          453.849609375,
+          502.8080139160156,
+          530.1387939453125,
+          521.7440185546875
+        ],
+        "pdf_text_content": "",
+        "pdf_text_tight_bbox": [],
+        "row_nums": [
+          12
+        ]
+      },
+      "source_cell_index": 84,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        0
+      ],
+      "canonical_rows": [
+        13
+      ],
+      "normalized_text": "Third Street PromenadeSanta Monica, CA",
+      "raw": {
+        "column_nums": [
+          0
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "Third Street PromenadeSanta Monica, CA",
+        "pdf_bbox": [
+          72.0,
+          525.8079833984375,
+          178.37681579589844,
+          564.7440185546875
+        ],
+        "pdf_text_content": "Third Street Promenade Santa Monica, CA",
+        "pdf_text_tight_bbox": [
+          72.0,
+          525.8079833984375,
+          148.34242248535156,
+          544.7440185546875
+        ],
+        "row_nums": [
+          13
+        ]
+      },
+      "source_cell_index": 85,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        1
+      ],
+      "canonical_rows": [
+        13
+      ],
+      "normalized_text": "1888-2000",
+      "raw": {
+        "column_nums": [
+          1
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "1888-2000",
+        "pdf_bbox": [
+          222.3000030517578,
+          525.8079833984375,
+          259.62799072265625,
+          564.7440185546875
+        ],
+        "pdf_text_content": "1888-2000",
+        "pdf_text_tight_bbox": [
+          223.60000610351562,
+          525.8079833984375,
+          258.2640075683594,
+          534.7440185546875
+        ],
+        "row_nums": [
+          13
+        ]
+      },
+      "source_cell_index": 86,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        2
+      ],
+      "canonical_rows": [
+        13
+      ],
+      "normalized_text": "1996-2000",
+      "raw": {
+        "column_nums": [
+          2
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "1996-2000",
+        "pdf_bbox": [
+          264.5936584472656,
+          525.8079833984375,
+          298.823974609375,
+          564.7440185546875
+        ],
+        "pdf_text_content": "1996- 2000",
+        "pdf_text_tight_bbox": [
+          273.70001220703125,
+          525.8079833984375,
+          292.36480712890625,
+          544.7440185546875
+        ],
+        "row_nums": [
+          13
+        ]
+      },
+      "source_cell_index": 87,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        3
+      ],
+      "canonical_rows": [
+        13
+      ],
+      "normalized_text": "209,000",
+      "raw": {
+        "column_nums": [
+          3
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "209,000",
+        "pdf_bbox": [
+          303.79998779296875,
+          525.8079833984375,
+          354.2344055175781,
+          564.7440185546875
+        ],
+        "pdf_text_content": "209,000",
+        "pdf_text_tight_bbox": [
+          316.0,
+          525.8079833984375,
+          342.0,
+          534.7440185546875
+        ],
+        "row_nums": [
+          13
+        ]
+      },
+      "source_cell_index": 88,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        4
+      ],
+      "canonical_rows": [
+        13
+      ],
+      "normalized_text": "$61.59",
+      "raw": {
+        "column_nums": [
+          4
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "$61.59",
+        "pdf_bbox": [
+          359.20001220703125,
+          525.8079833984375,
+          406.0904235839844,
+          564.7440185546875
+        ],
+        "pdf_text_content": "$61.59",
+        "pdf_text_tight_bbox": [
+          371.650390625,
+          525.8079833984375,
+          393.650390625,
+          534.7440185546875
+        ],
+        "row_nums": [
+          13
+        ]
+      },
+      "source_cell_index": 89,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        5
+      ],
+      "canonical_rows": [
+        13
+      ],
+      "normalized_text": "97%",
+      "raw": {
+        "column_nums": [
+          5
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "97%",
+        "pdf_bbox": [
+          411.1000061035156,
+          525.8079833984375,
+          448.8600158691406,
+          564.7440185546875
+        ],
+        "pdf_text_content": "97%",
+        "pdf_text_tight_bbox": [
+          422.650390625,
+          525.8079833984375,
+          437.31439208984375,
+          534.7440185546875
+        ],
+        "row_nums": [
+          13
+        ]
+      },
+      "source_cell_index": 90,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        6
+      ],
+      "canonical_rows": [
+        13
+      ],
+      "normalized_text": "Abercrombie & FitchJ. CrewOld NavyBanana Republic",
+      "raw": {
+        "column_nums": [
+          6
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "Abercrombie & FitchJ. CrewOld NavyBanana Republic",
+        "pdf_bbox": [
+          453.849609375,
+          525.8079833984375,
+          530.1387939453125,
+          564.7440185546875
+        ],
+        "pdf_text_content": "Abercrombie & Fitch J. Crew Old Navy Banana Republic",
+        "pdf_text_tight_bbox": [
+          453.849609375,
+          525.8079833984375,
+          522.6488037109375,
+          564.7440185546875
+        ],
+        "row_nums": [
+          13
+        ]
+      },
+      "source_cell_index": 91,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        0
+      ],
+      "canonical_rows": [
+        14
+      ],
+      "normalized_text": "WestgateSan Jose, CA",
+      "raw": {
+        "column_nums": [
+          0
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "WestgateSan Jose, CA",
+        "pdf_bbox": [
+          72.0,
+          568.8079833984375,
+          178.37681579589844,
+          637.7440185546875
+        ],
+        "pdf_text_content": "Westgate San Jose, CA",
+        "pdf_text_tight_bbox": [
+          72.0,
+          568.8079833984375,
+          122.86239624023438,
+          587.7440185546875
+        ],
+        "row_nums": [
+          14
+        ]
+      },
+      "source_cell_index": 92,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        1
+      ],
+      "canonical_rows": [
+        14
+      ],
+      "normalized_text": "1960-1966",
+      "raw": {
+        "column_nums": [
+          1
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "1960-1966",
+        "pdf_bbox": [
+          222.3000030517578,
+          568.8079833984375,
+          259.62799072265625,
+          637.7440185546875
+        ],
+        "pdf_text_content": "1960-1966",
+        "pdf_text_tight_bbox": [
+          223.60000610351562,
+          568.8079833984375,
+          258.2640075683594,
+          577.7440185546875
+        ],
+        "row_nums": [
+          14
+        ]
+      },
+      "source_cell_index": 93,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        2
+      ],
+      "canonical_rows": [
+        14
+      ],
+      "normalized_text": "2004",
+      "raw": {
+        "column_nums": [
+          2
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "2004",
+        "pdf_bbox": [
+          264.5936584472656,
+          568.8079833984375,
+          298.823974609375,
+          637.7440185546875
+        ],
+        "pdf_text_content": "2004",
+        "pdf_text_tight_bbox": [
+          273.7008056640625,
+          568.8079833984375,
+          289.7008056640625,
+          577.7440185546875
+        ],
+        "row_nums": [
+          14
+        ]
+      },
+      "source_cell_index": 94,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        3
+      ],
+      "canonical_rows": [
+        14
+      ],
+      "normalized_text": "644,000",
+      "raw": {
+        "column_nums": [
+          3
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "644,000",
+        "pdf_bbox": [
+          303.79998779296875,
+          568.8079833984375,
+          354.2344055175781,
+          637.7440185546875
+        ],
+        "pdf_text_content": "644,000",
+        "pdf_text_tight_bbox": [
+          316.00079345703125,
+          568.8079833984375,
+          342.00079345703125,
+          577.7440185546875
+        ],
+        "row_nums": [
+          14
+        ]
+      },
+      "source_cell_index": 95,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        4
+      ],
+      "canonical_rows": [
+        14
+      ],
+      "normalized_text": "$12.96",
+      "raw": {
+        "column_nums": [
+          4
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "$12.96",
+        "pdf_bbox": [
+          359.20001220703125,
+          568.8079833984375,
+          406.0904235839844,
+          637.7440185546875
+        ],
+        "pdf_text_content": "$12.96",
+        "pdf_text_tight_bbox": [
+          371.65118408203125,
+          568.8079833984375,
+          393.65118408203125,
+          577.7440185546875
+        ],
+        "row_nums": [
+          14
+        ]
+      },
+      "source_cell_index": 96,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        5
+      ],
+      "canonical_rows": [
+        14
+      ],
+      "normalized_text": "95%",
+      "raw": {
+        "column_nums": [
+          5
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "95%",
+        "pdf_bbox": [
+          411.1000061035156,
+          568.8079833984375,
+          448.8600158691406,
+          637.7440185546875
+        ],
+        "pdf_text_content": "95%",
+        "pdf_text_tight_bbox": [
+          422.65118408203125,
+          568.8079833984375,
+          437.315185546875,
+          577.7440185546875
+        ],
+        "row_nums": [
+          14
+        ]
+      },
+      "source_cell_index": 97,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        6
+      ],
+      "canonical_rows": [
+        14
+      ],
+      "normalized_text": "SafewayTargetBurlington CoatFactoryBarnes & NobleRoss Dress ForLessMichaels",
+      "raw": {
+        "column_nums": [
+          6
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "SafewayTargetBurlington CoatFactoryBarnes & NobleRoss Dress ForLessMichaels",
+        "pdf_bbox": [
+          453.849609375,
+          568.8079833984375,
+          530.1387939453125,
+          637.7440185546875
+        ],
+        "pdf_text_content": "Safeway Target Burlington Coat Factory Barnes & Noble Ross Dress For Less Michaels",
+        "pdf_text_tight_bbox": [
+          453.849609375,
+          568.8079833984375,
+          519.364013671875,
+          637.7440185546875
+        ],
+        "row_nums": [
+          14
+        ]
+      },
+      "source_cell_index": 98,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "canonical_rows": [
+        15
+      ],
+      "normalized_text": "Connecticut",
+      "raw": {
+        "column_nums": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": true,
+        "json_text_content": "Connecticut",
+        "pdf_bbox": [
+          72.0,
+          638.5599975585938,
+          530.1387939453125,
+          647.7440185546875
+        ],
+        "pdf_text_content": "Connecticut",
+        "pdf_text_tight_bbox": [
+          72.0,
+          638.5599975585938,
+          113.3280029296875,
+          647.7440185546875
+        ],
+        "row_nums": [
+          15
+        ]
+      },
+      "source_cell_index": 99,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        0
+      ],
+      "canonical_rows": [
+        16
+      ],
+      "normalized_text": "BristolBristol, CT 06010",
+      "raw": {
+        "column_nums": [
+          0
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "BristolBristol, CT 06010",
+        "pdf_bbox": [
+          72.0,
+          648.8079833984375,
+          178.37681579589844,
+          667.7440185546875
+        ],
+        "pdf_text_content": "Bristol Bristol, CT 06010",
+        "pdf_text_tight_bbox": [
+          72.0,
+          648.8079833984375,
+          137.9503936767578,
+          667.7440185546875
+        ],
+        "row_nums": [
+          16
+        ]
+      },
+      "source_cell_index": 100,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        1
+      ],
+      "canonical_rows": [
+        16
+      ],
+      "normalized_text": "1959",
+      "raw": {
+        "column_nums": [
+          1
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "1959",
+        "pdf_bbox": [
+          222.3000030517578,
+          648.8079833984375,
+          259.62799072265625,
+          667.7440185546875
+        ],
+        "pdf_text_content": "1959",
+        "pdf_text_tight_bbox": [
+          232.94960021972656,
+          648.8079833984375,
+          248.9495849609375,
+          657.7440185546875
+        ],
+        "row_nums": [
+          16
+        ]
+      },
+      "source_cell_index": 101,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        2
+      ],
+      "canonical_rows": [
+        16
+      ],
+      "normalized_text": "1995",
+      "raw": {
+        "column_nums": [
+          2
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "1995",
+        "pdf_bbox": [
+          264.5936584472656,
+          648.8079833984375,
+          298.823974609375,
+          667.7440185546875
+        ],
+        "pdf_text_content": "1995",
+        "pdf_text_tight_bbox": [
+          273.6999816894531,
+          648.8079833984375,
+          289.6999816894531,
+          657.7440185546875
+        ],
+        "row_nums": [
+          16
+        ]
+      },
+      "source_cell_index": 102,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        3
+      ],
+      "canonical_rows": [
+        16
+      ],
+      "normalized_text": "269,000",
+      "raw": {
+        "column_nums": [
+          3
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "269,000",
+        "pdf_bbox": [
+          303.79998779296875,
+          648.8079833984375,
+          354.2344055175781,
+          667.7440185546875
+        ],
+        "pdf_text_content": "269,000",
+        "pdf_text_tight_bbox": [
+          315.9999694824219,
+          648.8079833984375,
+          341.9999694824219,
+          657.7440185546875
+        ],
+        "row_nums": [
+          16
+        ]
+      },
+      "source_cell_index": 103,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        4
+      ],
+      "canonical_rows": [
+        16
+      ],
+      "normalized_text": "$12.24",
+      "raw": {
+        "column_nums": [
+          4
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "$12.24",
+        "pdf_bbox": [
+          359.20001220703125,
+          648.8079833984375,
+          406.0904235839844,
+          667.7440185546875
+        ],
+        "pdf_text_content": "$12.24",
+        "pdf_text_tight_bbox": [
+          371.6503601074219,
+          648.8079833984375,
+          393.6503601074219,
+          657.7440185546875
+        ],
+        "row_nums": [
+          16
+        ]
+      },
+      "source_cell_index": 104,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        5
+      ],
+      "canonical_rows": [
+        16
+      ],
+      "normalized_text": "94%",
+      "raw": {
+        "column_nums": [
+          5
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "94%",
+        "pdf_bbox": [
+          411.1000061035156,
+          648.8079833984375,
+          448.8600158691406,
+          667.7440185546875
+        ],
+        "pdf_text_content": "94%",
+        "pdf_text_tight_bbox": [
+          422.6503601074219,
+          648.8079833984375,
+          437.3143615722656,
+          657.7440185546875
+        ],
+        "row_nums": [
+          16
+        ]
+      },
+      "source_cell_index": 105,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        6
+      ],
+      "canonical_rows": [
+        16
+      ],
+      "normalized_text": "Stop & ShopTJMaxx",
+      "raw": {
+        "column_nums": [
+          6
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "Stop & ShopTJMaxx",
+        "pdf_bbox": [
+          453.849609375,
+          648.8079833984375,
+          530.1387939453125,
+          667.7440185546875
+        ],
+        "pdf_text_content": "Stop & Shop TJ Maxx",
+        "pdf_text_tight_bbox": [
+          453.849609375,
+          648.8079833984375,
+          495.1487731933594,
+          667.7440185546875
+        ],
+        "row_nums": [
+          16
+        ]
+      },
+      "source_cell_index": 106,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        0
+      ],
+      "canonical_rows": [
+        17
+      ],
+      "normalized_text": "Greenwich AvenueGreenwich Avenue, CT",
+      "raw": {
+        "column_nums": [
+          0
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "Greenwich AvenueGreenwich Avenue, CT",
+        "pdf_bbox": [
+          72.0,
+          671.8079833984375,
+          178.37681579589844,
+          690.7440185546875
+        ],
+        "pdf_text_content": "Greenwich Avenue Greenwich Avenue, CT",
+        "pdf_text_tight_bbox": [
+          72.0,
+          671.8079833984375,
+          156.22482299804688,
+          690.7440185546875
+        ],
+        "row_nums": [
+          17
+        ]
+      },
+      "source_cell_index": 107,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        1
+      ],
+      "canonical_rows": [
+        17
+      ],
+      "normalized_text": "1993",
+      "raw": {
+        "column_nums": [
+          1
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "1993",
+        "pdf_bbox": [
+          222.3000030517578,
+          671.8079833984375,
+          259.62799072265625,
+          690.7440185546875
+        ],
+        "pdf_text_content": "1993",
+        "pdf_text_tight_bbox": [
+          232.94960021972656,
+          671.8079833984375,
+          248.9495849609375,
+          680.7440185546875
+        ],
+        "row_nums": [
+          17
+        ]
+      },
+      "source_cell_index": 108,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        2
+      ],
+      "canonical_rows": [
+        17
+      ],
+      "normalized_text": "1995",
+      "raw": {
+        "column_nums": [
+          2
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "1995",
+        "pdf_bbox": [
+          264.5936584472656,
+          671.8079833984375,
+          298.823974609375,
+          690.7440185546875
+        ],
+        "pdf_text_content": "1995",
+        "pdf_text_tight_bbox": [
+          273.6999816894531,
+          671.8079833984375,
+          289.6999816894531,
+          680.7440185546875
+        ],
+        "row_nums": [
+          17
+        ]
+      },
+      "source_cell_index": 109,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        3
+      ],
+      "canonical_rows": [
+        17
+      ],
+      "normalized_text": "36,000",
+      "raw": {
+        "column_nums": [
+          3
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "36,000",
+        "pdf_bbox": [
+          303.79998779296875,
+          671.8079833984375,
+          354.2344055175781,
+          690.7440185546875
+        ],
+        "pdf_text_content": "36,000",
+        "pdf_text_tight_bbox": [
+          317.9999694824219,
+          671.8079833984375,
+          339.9999694824219,
+          680.7440185546875
+        ],
+        "row_nums": [
+          17
+        ]
+      },
+      "source_cell_index": 110,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        4
+      ],
+      "canonical_rows": [
+        17
+      ],
+      "normalized_text": "$53.00",
+      "raw": {
+        "column_nums": [
+          4
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "$53.00",
+        "pdf_bbox": [
+          359.20001220703125,
+          671.8079833984375,
+          406.0904235839844,
+          690.7440185546875
+        ],
+        "pdf_text_content": "$53.00",
+        "pdf_text_tight_bbox": [
+          371.6503601074219,
+          671.8079833984375,
+          393.6503601074219,
+          680.7440185546875
+        ],
+        "row_nums": [
+          17
+        ]
+      },
+      "source_cell_index": 111,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        5
+      ],
+      "canonical_rows": [
+        17
+      ],
+      "normalized_text": "100%",
+      "raw": {
+        "column_nums": [
+          5
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "100%",
+        "pdf_bbox": [
+          411.1000061035156,
+          671.8079833984375,
+          448.8600158691406,
+          690.7440185546875
+        ],
+        "pdf_text_content": "100%",
+        "pdf_text_tight_bbox": [
+          420.6503601074219,
+          671.8079833984375,
+          439.3143615722656,
+          680.7440185546875
+        ],
+        "row_nums": [
+          17
+        ]
+      },
+      "source_cell_index": 112,
+      "text_source": "json_text_content"
+    },
+    {
+      "canonical_columns": [
+        6
+      ],
+      "canonical_rows": [
+        17
+      ],
+      "normalized_text": "Saks Fifth Avenue",
+      "raw": {
+        "column_nums": [
+          6
+        ],
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "json_text_content": "Saks Fifth Avenue",
+        "pdf_bbox": [
+          453.849609375,
+          671.8079833984375,
+          530.1387939453125,
+          690.7440185546875
+        ],
+        "pdf_text_content": "Saks Fifth Avenue",
+        "pdf_text_tight_bbox": [
+          453.8503723144531,
+          671.8079833984375,
+          513.3303833007812,
+          680.7440185546875
+        ],
+        "row_nums": [
+          17
+        ]
+      },
+      "source_cell_index": 113,
+      "text_source": "json_text_content"
+    }
+  ],
+  "normalization": "Unicode NFC + whitespace collapse/strip",
+  "review_status": "unreviewed",
+  "source_table_metadata": {
+    "columns": {
+      "0": {
+        "pdf_column_bbox": [
+          72.0,
+          162.55999755859375,
+          178.37681579589844,
+          690.7440185546875
+        ]
+      },
+      "1": {
+        "pdf_column_bbox": [
+          222.3000030517578,
+          162.55999755859375,
+          259.62799072265625,
+          690.7440185546875
+        ]
+      },
+      "2": {
+        "pdf_column_bbox": [
+          264.5936584472656,
+          162.55999755859375,
+          298.823974609375,
+          690.7440185546875
+        ]
+      },
+      "3": {
+        "pdf_column_bbox": [
+          303.79998779296875,
+          162.55999755859375,
+          354.2344055175781,
+          690.7440185546875
+        ]
+      },
+      "4": {
+        "pdf_column_bbox": [
+          359.20001220703125,
+          162.55999755859375,
+          406.0904235839844,
+          690.7440185546875
+        ]
+      },
+      "5": {
+        "pdf_column_bbox": [
+          411.1000061035156,
+          162.55999755859375,
+          448.8600158691406,
+          690.7440185546875
+        ]
+      },
+      "6": {
+        "pdf_column_bbox": [
+          453.849609375,
+          162.55999755859375,
+          530.1387939453125,
+          690.7440185546875
+        ]
+      }
+    },
+    "document_id": "FRT_2010_page_42",
+    "document_table_index": 0,
+    "exclude_for_detection": false,
+    "exclude_for_structure": false,
+    "fintabnet_source_file_name": "FinTabNet_1.0.0_cell_train.jsonl",
+    "fintabnet_source_line_index": 88736,
+    "fintabnet_source_table_id": 145543,
+    "pdf_file_name": "page_42.pdf",
+    "pdf_folder": "FRT/2010/",
+    "pdf_full_page_bbox": [
+      0.0,
+      0.0,
+      612.0,
+      792.0
+    ],
+    "pdf_page_index": 0,
+    "pdf_table_bbox": [
+      72.0,
+      162.55999755859375,
+      530.1387939453125,
+      690.7440185546875
+    ],
+    "rows": {
+      "0": {
+        "is_column_header": true,
+        "is_projected_row_header": false,
+        "pdf_row_bbox": [
+          72.0,
+          162.55999755859375,
+          530.1387939453125,
+          187.74400329589844
+        ]
+      },
+      "1": {
+        "is_column_header": false,
+        "is_projected_row_header": true,
+        "pdf_row_bbox": [
+          72.0,
+          192.55999755859375,
+          530.1387939453125,
+          201.74400329589844
+        ]
+      },
+      "10": {
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "pdf_row_bbox": [
+          72.0,
+          406.8080139160156,
+          530.1387939453125,
+          435.7439880371094
+        ]
+      },
+      "11": {
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "pdf_row_bbox": [
+          72.0,
+          439.8080139160156,
+          530.1387939453125,
+          498.7439880371094
+        ]
+      },
+      "12": {
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "pdf_row_bbox": [
+          72.0,
+          502.8080139160156,
+          530.1387939453125,
+          521.7440185546875
+        ]
+      },
+      "13": {
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "pdf_row_bbox": [
+          72.0,
+          525.8079833984375,
+          530.1387939453125,
+          564.7440185546875
+        ]
+      },
+      "14": {
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "pdf_row_bbox": [
+          72.0,
+          568.8079833984375,
+          530.1387939453125,
+          637.7440185546875
+        ]
+      },
+      "15": {
+        "is_column_header": false,
+        "is_projected_row_header": true,
+        "pdf_row_bbox": [
+          72.0,
+          638.5599975585938,
+          530.1387939453125,
+          647.7440185546875
+        ]
+      },
+      "16": {
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "pdf_row_bbox": [
+          72.0,
+          648.8079833984375,
+          530.1387939453125,
+          667.7440185546875
+        ]
+      },
+      "17": {
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "pdf_row_bbox": [
+          72.0,
+          671.8079833984375,
+          530.1387939453125,
+          690.7440185546875
+        ]
+      },
+      "2": {
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "pdf_row_bbox": [
+          72.0,
+          202.80799865722656,
+          530.1387939453125,
+          221.74400329589844
+        ]
+      },
+      "3": {
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "pdf_row_bbox": [
+          72.0,
+          225.80799865722656,
+          530.1387939453125,
+          244.74400329589844
+        ]
+      },
+      "4": {
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "pdf_row_bbox": [
+          72.0,
+          248.80799865722656,
+          530.1387939453125,
+          277.7439880371094
+        ]
+      },
+      "5": {
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "pdf_row_bbox": [
+          72.0,
+          281.8080139160156,
+          530.1387939453125,
+          300.7439880371094
+        ]
+      },
+      "6": {
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "pdf_row_bbox": [
+          72.0,
+          304.8080139160156,
+          530.1387939453125,
+          323.7439880371094
+        ]
+      },
+      "7": {
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "pdf_row_bbox": [
+          72.0,
+          327.8080139160156,
+          530.1387939453125,
+          346.7439880371094
+        ]
+      },
+      "8": {
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "pdf_row_bbox": [
+          72.0,
+          350.8080139160156,
+          530.1387939453125,
+          379.7439880371094
+        ]
+      },
+      "9": {
+        "is_column_header": false,
+        "is_projected_row_header": false,
+        "pdf_row_bbox": [
+          72.0,
+          383.8080139160156,
+          530.1387939453125,
+          402.7439880371094
+        ]
+      }
+    },
+    "split": "train",
+    "structure_id": "FRT_2010_page_42_0"
+  },
+  "structure_id": "FRT_2010_page_42_0"
+}
