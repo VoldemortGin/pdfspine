@@ -31,6 +31,7 @@ pub use error::{Error, Result};
 pub use pdf_core::page::Page;
 pub use pdf_core::repair::ParseMode;
 pub use pdf_core::{OnRepaired, SaveOptions, XrefStyle};
+pub use pdf_edit::set_annot_stem;
 pub use pdf_text::search as search_textpage;
 pub use recorded_text::RecordedTextResources;
 
@@ -2171,6 +2172,12 @@ impl AnnotHandle {
             name: a.name(),
             title: a.title(),
         }
+    }
+
+    /// The annotation's `/Name` appearance/icon name, separate from its `/NM` ID.
+    #[must_use]
+    pub fn icon_name(&self) -> String {
+        self.annot().icon_name()
     }
 
     /// The `(stroke /C, fill /IC)` colors as RGB tuples (PyMuPDF `Annot.colors`).

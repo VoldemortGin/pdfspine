@@ -413,12 +413,12 @@ class Annot:
         core = self._annot.info()
         return {
             "content": core.get("content", ""),
-            "name": core.get("name", ""),
+            "name": core.get("icon_name", ""),
             "title": core.get("title", ""),
             "creationDate": "",
             "modDate": "",
             "subject": "",
-            "id": "",
+            "id": core.get("id", ""),
         }
 
     @property
@@ -520,7 +520,9 @@ class Annot:
     def set_info(self, info=None, *, content=None, title=None, name=None) -> None:
         """Sets the annotation info (PyMuPDF ``annot.set_info``).
 
-        Accepts an ``info=`` dict or the ``content=``/``title=``/``name=`` keywords.
+        Accepts an ``info=`` dict or ``content=``/``title=`` keywords. The legacy
+        pdfspine-only ``name=`` extension writes the `/NM` ID, returned as
+        ``info["id"]``; use ``set_name`` to change the appearance/icon name.
         """
         if info is not None:
             content = info.get("content", content)
@@ -3431,7 +3433,7 @@ class Page:
         """
         if isinstance(ident, str):
             for annot in self.annots():
-                if annot.info["name"] == ident:
+                if annot.info["id"] == ident:
                     return annot
             raise ValueError(f"annot name {ident!r} is not an annot of this page")
         if isinstance(ident, int) and not isinstance(ident, bool):

@@ -247,7 +247,7 @@ def test_docpy_033_load_annot_by_name_and_xref() -> None:
         xref = annot.xref
 
         assert page.load_annot("TAG1").xref == xref
-        assert page.load_annot(xref).info["name"] == "TAG1"
+        assert page.load_annot(xref).info["id"] == "TAG1"
         with pytest.raises(ValueError, match="not an annot"):
             page.load_annot("nope")
         with pytest.raises(ValueError, match="not an annot"):

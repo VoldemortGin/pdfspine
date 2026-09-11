@@ -1620,7 +1620,14 @@ add_many(
 # ---------------------------------------------------------------------------
 # 17. Tools / TOOLS singleton
 # ---------------------------------------------------------------------------
-add_many("Tools", DEFERRED, "M3", ["gen_id", "set_annot_stem"])
+add_many("Tools", DEFERRED, "M3", ["gen_id"])
+add_many(
+    "Tools",
+    IMPLEMENTED,
+    "M3",
+    ["set_annot_stem"],
+    "Process-wide stem for new annotation/widget NM IDs; existing IDs are preserved",
+)
 add_many(
     "Tools",
     DEFERRED,

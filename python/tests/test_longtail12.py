@@ -131,7 +131,7 @@ def test_load_annot_by_xref_and_name() -> None:
     annot = page.add_text_annot((50, 50), "hi")
     loaded = page.load_annot(annot.xref)
     assert loaded.xref == annot.xref
-    name = annot.info["name"]
+    name = annot.info["id"]
     if name:
         assert page.load_annot(name).xref == annot.xref
 
