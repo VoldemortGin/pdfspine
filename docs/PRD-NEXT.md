@@ -301,6 +301,7 @@
     public cases pass; seven legacy writing probes retain PDF/block/pixel hashes.
     Final integrated Rust/Python checks pass **1963 / 1361 tests**, with 66
     existing Python skips; final extension fingerprint `125521030a0a`.
+    Drift and wheel/sdist installation smoke also pass.
     The same seven legacy probes remain identical with that final extension.
     Evidence: `insert-font-integrated-gate.log` and
     `insert-font-legacy-integrated-final.json` in the external deferred-plan bundle.
