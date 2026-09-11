@@ -16,8 +16,11 @@
 > forms, redact (destructively), open image files as documents, **render pages to
 > images**, and **OCR** (Tesseract + a pure-Rust PaddleOCR engine, stronger on CJK).
 > **91.4%** (703 / 769) of the PyMuPDF 1.24 public API is implemented and tested
-> (climbing), with **1,702 Rust tests + 814 Python tests** passing in the 0.7.0
-> release gate. In the dated 58-document benchmark, its aggregate mean text scores
+> in the **current local source**. Published **v0.8.0** covers **90.2% (694 / 769)**.
+> The named 2026-09-11 local full gate passed **2,027 Rust + 1,518 Python tests**
+> (68 existing Python skips); later changes have targeted checks, not a new full
+> suite. See [validation baselines](docs/validation-baselines.md) for exact source
+> and binary identities. In the dated 58-document benchmark, its aggregate mean text scores
 > trail fitz by 0.2–1.4 percentage points (and it beats fitz on Arabic / RTL); rendering
 > is at/near parity (SSIM 0.984 mean, 2026-06-21) though about 1.3× slower than fitz
 > (11.40 vs 8.93 ms, `conformance/BENCH.md`, 2026-09-05), and the pure-Rust PaddleOCR
@@ -78,7 +81,7 @@ Planned next: reading-order residuals, Type0/Type3 glyph-rendering edges,
 broader CJK coverage. See [`PRD.md`](https://github.com/VoldemortGin/pdfspine/blob/main/PRD.md) / [`docs/ROADMAP.md`](https://github.com/VoldemortGin/pdfspine/blob/main/docs/ROADMAP.md).
 Out of scope: digital-signature *creation*.
 
-### Glyph geometry (0.7.0)
+### Glyph geometry
 
 The structured `dict` / `rawdict` / `json` / `rawjson` formats expose span
 `matrix`, `text_matrix`, `ctm`, `dir`, `quad`, `seq`, `declared_size`, and

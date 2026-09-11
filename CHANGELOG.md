@@ -11,6 +11,12 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
+### Documentation validation baselines
+
+- Separated the current local API catalog from published v0.8.0 coverage and
+  linked the named signed-spacing full gate. Later evaluator checks are shown
+  as targeted validation; historical release-gate records remain unchanged.
+
 ### TableFormer evaluation adapter
 
 - Added explicit fixed-model fast/accurate raw-structure goldcrop experiments,

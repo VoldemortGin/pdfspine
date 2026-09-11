@@ -60,15 +60,22 @@ pdfspine exists to be the **permissively-licensed, drop-in-shaped** alternative:
 
 ## Status
 
-The current baseline targets **PyMuPDF 1.24.x**. The machine-readable
+The current local source targets **PyMuPDF 1.24.x**. The machine-readable
 `COMPAT.toml` tracks the disposition of every public PyMuPDF symbol:
 
 | Disposition | Count | Meaning |
 |---|---:|---|
-| Implemented | 694 | Present and does not raise on use |
-| Deferred | 9 | Known, planned for a later milestone |
+| Implemented | 703 | Present and does not raise on use |
+| Deferred | 0 | Known, planned for a later milestone |
 | Out-of-scope | 66 | Intentionally never in v1 |
-| **Total baseline** | **769** | **90.2% implemented** |
+| **Total baseline** | **769** | **91.4% implemented** |
+
+Published **v0.8.0** at `f1f6ab4208876b0ba867edd76cc4e5da7ad8add2`
+has **694/769 (90.2%) implemented, 9 deferred**. The newer catalog above is
+unreleased. The named 2026-09-11 local full gate passed **2,027 Rust / 1,518
+Python tests**, with 68 existing Python skips; later TableFormer work has only
+its stated related checks. See [validation baselines](validation-baselines.md)
+for exact checkpoint identities and the distinction from release validation.
 
 Anything not yet implemented raises a typed, catchable
 `PdfUnsupportedError` (never a bare `AttributeError`), so you always get a clear
