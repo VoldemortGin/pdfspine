@@ -606,6 +606,14 @@ fn main() {
             lo_doc_fixture(true, CharacterSpacing::default(), false),
         ),
         ("typeset-lo-slide.pdf", lo_slide_fixture()),
+        (
+            "typeset-lo-condensed.pdf",
+            lo_doc_fixture(
+                false,
+                CharacterSpacing::resolved_signed(-1.0).expect("resolved fixture gap"),
+                false,
+            ),
+        ),
         ("typeset-lo-script-doc.pdf", lo_script_fixture(false)),
         ("typeset-lo-script-slide.pdf", lo_script_fixture(true)),
         (
