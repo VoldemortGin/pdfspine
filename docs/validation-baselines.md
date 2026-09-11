@@ -15,6 +15,37 @@ rather than native-handle compatibility. See [PARITY](../PARITY.md) and the
 
 ## Most recent recorded full gate
 
+The **2026-09-11 local paragraph-connection gate** passed **2,046 Rust tests and
+1,535 Python tests**, with **68 existing Python skips**. All five phases passed:
+Rust fmt/clippy/tests/deny, extension, Python, drift, and installed wheel/sdist
+smokes. The complete vendor inventory was included in the sdist checks. This
+is an unreleased checkpoint for the additive checked-only Rust connection API,
+not a new published-release validation.
+
+- Tested source / implementation: `267961bb5ead0b83f9bdc414d69e0a464ba505fe`.
+- Extension input fingerprint: `792abbb2b8eb8bfb31ee0916e31dcebedffc10755f888bd544f1a9ad2cb0a9de`.
+- Actual native extension SHA256: `fe8ba4d7c88df62c88e4defbd2b73d33e7748369e3156351010d91a2b5eaf5d6`.
+- Archived log: `typeset-between-readonly/main-final-gate.log`, SHA256
+  `3b071ae30896be56e2faeb7f1b17a92100e8bc278a66936f8e135a2fa57a8da5`; `final-integration.json` records the local merge and phase results.
+  These paths are relative to the experiment archive described below.
+
+The extension was rebuilt and verified. Its SHA remains unchanged because
+`pdf-typeset` is not a Python-extension dependency. Twelve focused Rust cases
+and the crate's 229 tests cover the new behavior. The four old checked return
+types still compile/run against the candidate. Eleven previous generated PDFs
+and all twelve old reference buffers remain byte-identical; the full 13-page
+reference check passes at explicit **100dpi**, minimum SSIM **0.9991**. The new
+fixture reads back `A paragraph. B paragraph.`. The first reference invocation
+incorrectly used 150dpi and mismatched old dimensions; only the new reference
+and invocation were corrected to the existing 100dpi contract. No old reference
+was regenerated. Subsequent checkpoint edits do not change product sources.
+
+See [paragraph connections](typeset-paragraph-connections.md) for the same-page
+38→39pt and changing-page 1→5-line red/green evidence, the limited LO comparison,
+provider-error boundary, and unsupported raw OOXML / variable-width policies.
+
+## Earlier paragraph-dash full gate
+
 The **2026-09-11 local paragraph-dash gate** passed **2,034 Rust tests and 1,535
 Python tests**, with **68 existing Python skips**. All five phases passed: Rust
 fmt/clippy/tests/deny, extension, Python, drift and wheel/sdist installation.

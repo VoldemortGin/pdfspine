@@ -915,6 +915,31 @@ pub(crate) fn layout_flow(
     ctx.pages
 }
 
+pub(crate) fn layout_flow_with_connections(
+    ts: &mut Typesetter,
+    blocks: &[Block],
+    provider: &mut dyn PageProvider,
+    connections: &crate::ParagraphConnections,
+) -> Result<Vec<PageOps>, crate::ConnectionError> {
+    let geom = provider.next_page().sanitized();
+    let mut ctx = Ctx {
+        ts,
+        pages: vec![PageOps {
+            width: geom.width,
+            height: geom.height,
+            ops: Vec::new(),
+        }],
+        page: 0,
+        y: geom.margin_top,
+        pending: 0.0,
+        max_x: 0.0,
+        measure: None,
+        mode: Mode::Paged { provider, geom },
+    };
+    layout_blocks_with_connections(&mut ctx, blocks, connections, &[])?;
+    Ok(ctx.pages)
+}
+
 /// Lays out `blocks` into an unbounded box of `width` (origin `(0, 0)`,
 /// top-left coords): the shared core behind text boxes and table cells.
 /// Returns `(ops, content_height, content_max_x)`; `wrap == false` breaks
@@ -984,6 +1009,42 @@ fn box_layout(
     (ops, height, max_x, lines)
 }
 
+pub(crate) fn box_layout_with_connections(
+    ts: &mut Typesetter,
+    blocks: &[Block],
+    width: f64,
+    wrap: bool,
+    collect_lines: bool,
+    connections: &crate::ParagraphConnections,
+    prefix: &[crate::BlockPathStep],
+) -> Result<(Vec<Op>, f64, f64, Vec<LineMetrics>), crate::ConnectionError> {
+    let width = if width.is_finite() {
+        width.max(1.0)
+    } else {
+        1.0
+    };
+    let mut ctx = Ctx {
+        ts,
+        pages: vec![PageOps {
+            width,
+            height: f64::INFINITY,
+            ops: Vec::new(),
+        }],
+        page: 0,
+        y: 0.0,
+        pending: 0.0,
+        max_x: 0.0,
+        measure: collect_lines.then(Vec::new),
+        mode: Mode::Boxed { width, wrap },
+    };
+    layout_blocks_with_connections(&mut ctx, blocks, connections, prefix)?;
+    let height = ctx.y;
+    let max_x = ctx.max_x;
+    let lines = ctx.measure.take().unwrap_or_default();
+    let ops = ctx.pages.swap_remove(0).ops;
+    Ok((ops, height, max_x, lines))
+}
+
 /// A paragraph's border extent on one page, in top-left coordinates.
 struct BorderFragment {
     page: usize,
@@ -1003,9 +1064,10 @@ struct BorderGroup<'b> {
     paragraph: usize,
     plan_width: Option<f64>,
     reserves: Vec<Vec<f64>>,
+    transitions: Vec<crate::connections::Transition>,
 }
 
-fn border_left(props: &ParaProps) -> f64 {
+pub(crate) fn border_left(props: &ParaProps) -> f64 {
     props.indent_left.max(0.0)
         + if props.first_line_indent.is_finite() {
             props.first_line_indent.min(0.0)
@@ -1086,10 +1148,11 @@ impl BorderGroup<'_> {
             Block::Paragraph(p, _) => paragraph_borders(p).bottom.map_or(0.0, |e| e.extent()),
             _ => 0.0,
         };
-        if self
-            .blocks
-            .iter()
-            .all(|b| bottom(b) == bottom(&self.blocks[0]))
+        if self.transitions.iter().all(|t| !t.active())
+            && self
+                .blocks
+                .iter()
+                .all(|b| bottom(b) == bottom(&self.blocks[0]))
         {
             return;
         }
@@ -1159,9 +1222,15 @@ impl BorderGroup<'_> {
         let mut next: Option<(usize, f64, f64)> = None;
         let positive = |n: f64| if n.is_finite() && n > 0.0 { n } else { 0.0 };
         for (j, lines) in heights.into_iter().rev() {
-            self.reserves[j] = vec![0.0; lines.len()];
+            let count = lines.len();
+            self.reserves[j] = vec![0.0; count];
             for (i, height) in lines.into_iter().enumerate().rev() {
-                let mut reserve = bottom(&self.blocks[j]);
+                let mut reserve =
+                    if i + 1 == count && self.transitions.get(j).is_some_and(|t| t.outgoing) {
+                        0.0
+                    } else {
+                        bottom(&self.blocks[j])
+                    };
                 if let Some((next_para, next_height, next_reserve)) = next {
                     let gap = if next_para == j {
                         0.0
@@ -1183,7 +1252,9 @@ impl BorderGroup<'_> {
 
     fn finish(self, ctx: &mut Ctx) {
         if let Some(last) = self.fragments.last() {
-            ctx.y += last.borders.bottom.map_or(0.0, |e| e.extent());
+            if last.bottom_edge {
+                ctx.y += last.borders.bottom.map_or(0.0, |e| e.extent());
+            }
         }
         for f in self.fragments {
             let left = f.left - f.borders.left.map_or(0.0, |e| e.extent());
@@ -1285,6 +1356,72 @@ pub(crate) fn layout_blocks(ctx: &mut Ctx, blocks: &[Block]) {
     }
 }
 
+/// Checked traversal uses structural prefixes only; cells and autofit clones
+/// preserve these paths. Ordinary lists without a descendant use the old path.
+pub(crate) fn layout_blocks_with_connections(
+    ctx: &mut Ctx,
+    blocks: &[Block],
+    connections: &crate::ParagraphConnections,
+    prefix: &[crate::BlockPathStep],
+) -> Result<(), crate::ConnectionError> {
+    if !connections.has_descendant(prefix) {
+        layout_blocks(ctx, blocks);
+        return Ok(());
+    }
+    let mut group = BorderGroup::default();
+    for (index, block) in blocks.iter().enumerate() {
+        match block {
+            Block::Paragraph(props, runs) => {
+                let transition = connections.transition(blocks, prefix, index);
+                let use_border = bordered(props) || transition.active();
+                if use_border && group.blocks.is_empty() {
+                    let mut end = index;
+                    while blocks
+                        .get(end + 1)
+                        .is_some_and(|next| borders_join(&blocks[end], next))
+                        && !connections.contains_boundary(prefix, end, end + 1)
+                    {
+                        end += 1;
+                    }
+                    group.blocks = &blocks[index..=end];
+                    group.transitions = (index..=end)
+                        .map(|i| connections.transition(blocks, prefix, i))
+                        .collect();
+                }
+                let join_background = props.shading.is_some()
+                    && index > 0
+                    && matches!(&blocks[index-1],Block::Paragraph(previous,previous_runs)
+                        if previous.shading==props.shading && previous.indent_left==props.indent_left
+                        && previous.indent_right==props.indent_right
+                        && previous_runs.iter().any(|run|run.style.size.is_finite()&&run.style.size>0.0));
+                layout_paragraph_checked(
+                    ctx,
+                    props,
+                    runs,
+                    join_background,
+                    use_border.then_some(&mut group),
+                )?;
+                group.paragraph += 1;
+                if !blocks
+                    .get(index + 1)
+                    .is_some_and(|next| borders_join(block, next))
+                    || connections.contains_boundary(prefix, index, index + 1)
+                {
+                    std::mem::take(&mut group).finish(ctx);
+                }
+            }
+            Block::Table(spec) => {
+                let mut path = prefix.to_vec();
+                path.push(crate::BlockPathStep::Block(index));
+                crate::table::layout_table_with_connections(ctx, spec, connections, &path)?;
+            }
+            Block::Image(spec) => layout_image(ctx, spec),
+            Block::PageBreak => ctx.page_break(),
+        }
+    }
+    Ok(())
+}
+
 // --- paragraph -------------------------------------------------------------------
 
 fn paragraph_line_height(spacing: LineSpacing, natural: f64) -> f64 {
@@ -1314,8 +1451,37 @@ fn layout_paragraph(
     props: &crate::model::ParaProps,
     runs: &[Run],
     join_background: bool,
-    mut border_group: Option<&mut BorderGroup<'_>>,
+    border_group: Option<&mut BorderGroup<'_>>,
 ) {
+    layout_paragraph_checked(ctx, props, runs, join_background, border_group)
+        .expect("ordinary border layout has no checked connection errors");
+}
+
+fn layout_paragraph_checked(
+    ctx: &mut Ctx,
+    props: &crate::model::ParaProps,
+    runs: &[Run],
+    join_background: bool,
+    border_group: Option<&mut BorderGroup<'_>>,
+) -> Result<(), crate::ConnectionError> {
+    layout_paragraph_checked_inner(ctx, props, runs, join_background, border_group, true)
+}
+
+fn layout_paragraph_checked_inner(
+    ctx: &mut Ctx,
+    props: &crate::model::ParaProps,
+    runs: &[Run],
+    join_background: bool,
+    mut border_group: Option<&mut BorderGroup<'_>>,
+    allow_restart: bool,
+) -> Result<(), crate::ConnectionError> {
+    let transition = border_group
+        .as_ref()
+        .and_then(|g| g.transitions.get(g.paragraph))
+        .cloned()
+        .unwrap_or_default();
+    let original_left = ctx.left();
+    let original_width = ctx.right() - ctx.left();
     let preceding_page = ctx.page;
     let preceding_bottom = ctx.y;
     ctx.gap(props.space_before);
@@ -1346,7 +1512,7 @@ fn layout_paragraph(
         if ref_frag.is_none() {
             // No runs at all: nothing to size a line box from.
             ctx.gap(props.space_after);
-            return;
+            return Ok(());
         }
         lines.push(LineOut {
             frags: Vec::new(),
@@ -1379,19 +1545,77 @@ fn layout_paragraph(
             });
         }
         if let Some(group) = border_group.as_deref_mut() {
-            let borders = paragraph_borders(props);
+            transition.check_width(ctx.right() - ctx.left())?;
+            let ordinary = paragraph_borders(props);
+            let mut borders = ordinary;
+            if i == 0 {
+                if let Some(separator) = transition.incoming {
+                    borders.top = Some(separator);
+                }
+            }
             let top_extent = borders.top.map_or(0.0, |e| e.extent());
-            let bottom_extent = borders.bottom.map_or(0.0, |e| e.extent());
+            let terminal_outgoing = transition.outgoing && i + 1 == lines.len();
+            let bottom_extent = if terminal_outgoing {
+                0.0
+            } else {
+                borders.bottom.map_or(0.0, |e| e.extent())
+            };
             let same_page = group.fragments.last().is_some_and(|f| f.page == ctx.page);
             group.reserve_plan(ctx, &lines, ref_frag);
-            let reserve = group
+            let mut reserve = group
                 .reserves
                 .get(group.paragraph)
                 .and_then(|r| r.get(i))
                 .copied()
                 .unwrap_or(bottom_extent);
-            ctx.ensure(lh + reserve + if same_page { 0.0 } else { top_extent });
+            let opening = if same_page { 0.0 } else { top_extent };
+            let old_page = ctx.page;
+            ctx.ensure(lh + reserve + opening);
+            if old_page != ctx.page {
+                if transition.active()
+                    && (ctx.left() != original_left || ctx.right() - ctx.left() != original_width)
+                {
+                    if i == 0 && allow_restart {
+                        if let Some(sink) = ctx.measure.as_mut() {
+                            sink.pop();
+                        }
+                        group.plan_width = None;
+                        // No text or fragment of this paragraph has been emitted.
+                        // Restart once at the fresh page: ensure cannot request
+                        // another page at its top; an oversized opening errors.
+                        return layout_paragraph_checked_inner(
+                            ctx,
+                            props,
+                            runs,
+                            join_background,
+                            Some(group),
+                            false,
+                        );
+                    }
+                    if ctx.right() - ctx.left() != original_width {
+                        return Err(transition.changing_geometry());
+                    }
+                }
+                transition.check_width(ctx.right() - ctx.left())?;
+                group.reserve_plan(ctx, &lines, ref_frag);
+                reserve = group
+                    .reserves
+                    .get(group.paragraph)
+                    .and_then(|r| r.get(i))
+                    .copied()
+                    .unwrap_or(bottom_extent);
+            }
             let same_page = group.fragments.last().is_some_and(|f| f.page == ctx.page);
+            let opening = if same_page { 0.0 } else { top_extent };
+            if transition.active() {
+                let required = lh + reserve + opening;
+                if !required.is_finite()
+                    || !(ctx.y + required).is_finite()
+                    || ctx.y + required > ctx.bottom() + EPS
+                {
+                    return Err(transition.error());
+                }
+            }
             if border_fragment.is_none_or(|n| group.fragments[n].page != ctx.page) {
                 let top = if same_page && i == 0 {
                     let previous = group
@@ -1416,12 +1640,13 @@ fn layout_paragraph(
                     bottom: ctx.y + lh + bottom_extent,
                     borders,
                     top_edge: !same_page,
-                    bottom_edge: true,
+                    bottom_edge: !terminal_outgoing,
                 });
                 border_fragment = Some(group.fragments.len() - 1);
             }
             if let Some(n) = border_fragment {
                 group.fragments[n].bottom = ctx.y + lh + bottom_extent;
+                group.fragments[n].bottom_edge = !terminal_outgoing;
             }
         } else {
             ctx.ensure(lh);
@@ -1458,8 +1683,13 @@ fn layout_paragraph(
             metrics.descent
         };
         let baseline = ctx.y + lh - descent;
-        let line_left = if i == 0 { first_left } else { left };
-        let align_w = right - line_left;
+        let origin_shift = if transition.active() {
+            ctx.left() - original_left
+        } else {
+            0.0
+        };
+        let line_left = if i == 0 { first_left } else { left } + origin_shift;
+        let align_w = right + origin_shift - line_left;
         let offset = match props.align {
             Align::Left | Align::Justify => 0.0,
             Align::Center => (align_w - line.width) / 2.0,
@@ -1468,7 +1698,7 @@ fn layout_paragraph(
         let x0 = line_left + offset;
         if i == 0 {
             if let Some(label) = &props.list {
-                draw_list_label(ctx, label, runs, first_left, baseline);
+                draw_list_label(ctx, label, runs, first_left + origin_shift, baseline);
             }
         }
         emit_line(ctx, line, x0, baseline);
@@ -1483,6 +1713,7 @@ fn layout_paragraph(
         ctx.pages[page].ops.insert(before_text, background);
     }
     ctx.gap(props.space_after);
+    Ok(())
 }
 
 /// Widens the line's space fragments so its width reaches `target` (justify).

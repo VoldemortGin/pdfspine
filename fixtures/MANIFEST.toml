@@ -454,3 +454,12 @@ sha256 = "1dd7a85dbf80be7fe4f4743377b992eb3940ac39a7435277b90fcbeb6cd1f4da"
 cleared_by = "validation-harness (crates/pdf-typeset/examples/make_typeset_fixtures.rs)"
 cleared_date = "2026-09-11"
 notes = "Explicit caller-resolved 8/2.5pt paragraph dash; OFL Liberation subsets; phase zero per edge"
+
+[[fixture]]
+path = "typeset/typeset-lo-connection.pdf"
+source = "generated:crates/pdf-typeset/examples/make_typeset_fixtures.rs"
+license = "CC0-1.0"
+sha256 = "8510a2a0cd632006f13b44dbd7fb77e3e285d4b35e485cd356e93d1f08acff0b"
+cleared_by = "pdfspine-typeset"
+cleared_date = "2026-09-11"
+notes = "Self-authored caller-resolved solid paragraph connection; embedded Liberation subset under SIL OFL 1.1."

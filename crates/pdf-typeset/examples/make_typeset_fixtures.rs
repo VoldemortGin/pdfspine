@@ -1,6 +1,6 @@
 //! Generate the committed typeset conformance fixtures (PRD §10 TS-7).
 //!
-//! Writes six deterministic, license-clean PDFs under `fixtures/typeset/`
+//! Writes deterministic, license-clean PDFs under `fixtures/typeset/`
 //! using the **bundled-face resolver only** (`FontResolver::with_platform`,
 //! fixed to [`Platform::MacOs`] substitution tables so the output is identical
 //! on every host — no system-font dependence). The emitted bytes are
@@ -607,6 +607,54 @@ fn lo_script_fixture(slide: bool) -> Vec<u8> {
     engine.emit(&pages).expect("emit script fixture").pdf
 }
 
+/// Mirrors the self-authored between probe: same outer styles, incoming
+/// resolved 3pt blue separator, Exact14, 6pt paragraph gap. No OOXML policy.
+fn lo_connection_fixture() -> Vec<u8> {
+    use pdf_typeset::{
+        BlockPathStep, ParagraphBorder, ParagraphBorders, ParagraphConnection, ParagraphConnections,
+    };
+    let edge = Some(
+        ParagraphBorder::new(
+            BorderEdge {
+                width: 1.0,
+                color: Rgb::from_rgb(0xcc3300),
+            },
+            0.0,
+        )
+        .unwrap(),
+    );
+    let paragraph = |text: &str| {
+        let mut p = ParaProps::new();
+        p.spacing = LineSpacing::Exact(14.0);
+        p.space_after = 6.0;
+        p.borders = Some(Box::new(ParagraphBorders {
+            top: edge,
+            right: edge,
+            bottom: edge,
+            left: edge,
+        }));
+        Block::Paragraph(p, vec![Run::new(text, RunStyle::new(SERIF, 12.0))])
+    };
+    let blocks = [paragraph("A paragraph."), paragraph("B paragraph.")];
+    let connections = ParagraphConnections::new(vec![ParagraphConnection::new(
+        vec![BlockPathStep::Block(0)],
+        vec![BlockPathStep::Block(1)],
+        BorderEdge {
+            width: 3.0,
+            color: Rgb::from_rgb(0x0033cc),
+        },
+    )
+    .unwrap()]);
+    let mut engine = engine();
+    let mut geom = PageGeom::new(612.0, 792.0, 36.0);
+    geom.margin_left = 72.0;
+    geom.margin_right = 72.0;
+    let pages = engine
+        .try_layout_flow_with_connections(&blocks, &mut FixedPages::new(geom), &connections)
+        .expect("valid explicit connection");
+    engine.emit(&pages).expect("emit connection fixture").pdf
+}
+
 fn main() {
     // Resolve fixtures/typeset relative to this crate so the example works
     // from any cwd (CI runs it from the repo root).
@@ -617,6 +665,7 @@ fn main() {
     std::fs::create_dir_all(&out_dir).expect("create fixtures/typeset");
 
     for (name, bytes) in [
+        ("typeset-lo-connection.pdf", lo_connection_fixture()),
         ("typeset-flow.pdf", flow_fixture()),
         ("typeset-box.pdf", box_fixture()),
         (

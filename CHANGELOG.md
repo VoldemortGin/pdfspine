@@ -11,6 +11,17 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
+### Explicit paragraph connections
+
+- Added a checked-only Rust `ParagraphConnections` overlay and four additive
+  `try_*_with_connections` methods returning typed `LayoutError`. Explicit solid
+  incoming separators share measurement and page-fit reservation, preserving
+  each paragraph's side style. Existing `ParaProps`, checked return types and
+  empty-overlay behavior remain unchanged. Paths are revalidated per call;
+  bounded variable-page behavior and unsupported inputs are documented in
+  `docs/typeset-paragraph-connections.md`. No OOXML presence policy or consumer
+  default is added.
+
 ### Caller-resolved paragraph dash pairs
 
 - Added validated on/off lengths to Rust `ParagraphBorder` with phase-zero butt

@@ -152,6 +152,38 @@ def build_docx(path: Path, *, shading: bool = False, tracking: bool = False, bor
     ])
 
 
+def build_connection_sample(path: Path) -> None:
+    """Two exact14 paragraphs, zero-clearance incoming 3pt blue separator.
+
+    OOXML presence/precedence is resolved manually for this one fixture; the
+    engine API does not interpret w:between.
+    """
+    build_docx(path)
+    with zipfile.ZipFile(path) as zf:
+        members = {name: zf.read(name).decode("utf-8") for name in zf.namelist()}
+    paragraphs = []
+    for label, between_size, between_color in [("A", 8, "CC3300"), ("B", 24, "0033CC")]:
+        edges = "".join(
+            f'<w:{side} w:val="single" w:sz="8" w:space="0" w:color="CC3300"/>'
+            for side in ("top", "left", "bottom", "right")
+        )
+        paragraphs.append(
+            f'<w:p><w:pPr><w:pBdr>{edges}<w:between w:val="single" '
+            f'w:sz="{between_size}" w:space="0" w:color="{between_color}"/></w:pBdr>'
+            '<w:spacing w:before="0" w:after="120" w:line="280" w:lineRule="exact"/>'
+            '</w:pPr><w:r><w:rPr><w:rFonts w:ascii="Liberation Serif" '
+            'w:hAnsi="Liberation Serif"/><w:sz w:val="24"/></w:rPr>'
+            f'<w:t>{label} paragraph.</w:t></w:r></w:p>'
+        )
+    members["word/document.xml"] = (
+        f'{XML_DECL}<w:document xmlns:w="{NS_W}"><w:body>{"".join(paragraphs)}'
+        '<w:sectPr><w:pgSz w:w="12240" w:h="15840"/>'
+        '<w:pgMar w:top="720" w:right="1440" w:bottom="720" w:left="1440"/>'
+        '</w:sectPr></w:body></w:document>'
+    )
+    _zip_write(path, list(members.items()))
+
+
 def build_pptx(path: Path) -> None:
     """One 10x7.5-in slide, two zero-inset boxes — mirrors typeset-lo-slide."""
     emu = lambda pt: str(round(pt * 12700))  # noqa: E731 — 1 pt = 12700 EMU
@@ -470,6 +502,8 @@ def main(argv: list[str] | None = None) -> int:
     build_docx(border_docx, border=True)
     dashed_docx = cache / "sample-dashed-border.docx"
     build_docx(dashed_docx, dashed_border=True)
+    connection_docx = cache / "sample-connection.docx"
+    build_connection_sample(connection_docx)
     script_docx = cache / "sample-script-doc.docx"
     script_pptx = cache / "sample-script-slide.pptx"
     build_script_sample(script_docx, slide=False)
@@ -486,6 +520,7 @@ def main(argv: list[str] | None = None) -> int:
             ("docx-condensed", condensed_docx, ROOT / "fixtures" / "typeset" / "typeset-lo-condensed.pdf"),
             ("docx-border", border_docx, ROOT / "fixtures" / "typeset" / "typeset-lo-border.pdf"),
             ("docx-dashed-border", dashed_docx, ROOT / "fixtures" / "typeset" / "typeset-lo-dashed-border.pdf"),
+            ("docx-connection", connection_docx, ROOT / "fixtures" / "typeset" / "typeset-lo-connection.pdf"),
             ("docx-script", script_docx, ROOT / "fixtures" / "typeset" / "typeset-lo-script-doc.pdf"),
             ("pptx-script", script_pptx, ROOT / "fixtures" / "typeset" / "typeset-lo-script-slide.pdf"),
         ]:

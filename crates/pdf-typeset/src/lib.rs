@@ -48,6 +48,7 @@
 //! (bundled faces only) restores full determinism for tests.
 
 mod boxes;
+mod connections;
 mod emit;
 mod faces;
 pub mod flow;
@@ -69,6 +70,10 @@ pub use pdf_core::geom::{Matrix, Point, Rect};
 /// `0.0..=1.0`; `pdf_edit::Color` re-exported under the PRD §10 model name).
 pub use pdf_edit::Color as Rgb;
 
+pub use connections::{
+    BlockPath, BlockPathStep, ConnectionError, ConnectionReason, LayoutError, ParagraphConnection,
+    ParagraphConnections,
+};
 pub use flow::{FixedPages, LineMetrics, Measurement, PageGeom, PageProvider};
 pub use fontres::{FontResolver, Platform, ResolvedFace, Substitutions};
 pub use model::{
@@ -279,6 +284,85 @@ impl Typesetter {
     ) -> std::result::Result<Measurement, SignedSpacingError> {
         let width = (spec.rect.x1 - spec.rect.x0).abs().max(1.0);
         self.try_measure_blocks(&spec.blocks, width, spec.wrap)
+    }
+
+    /// Checked flow with explicit paragraph boundary connections.
+    /// Static validation precedes page-provider calls; geometry failures do not
+    /// return partial ops but do not roll back provider side effects.
+    /// # Errors
+    /// Reports signed-spacing or connection errors without a lossy fallback.
+    pub fn try_layout_flow_with_connections(
+        &mut self,
+        blocks: &[Block],
+        pages: &mut dyn PageProvider,
+        connections: &ParagraphConnections,
+    ) -> std::result::Result<Vec<PageOps>, LayoutError> {
+        if connections.is_empty() {
+            return self.try_layout_flow(blocks, pages).map_err(Into::into);
+        }
+        if let Some(e) = signed_spacing::check(self, blocks).into_iter().next() {
+            return Err(e.into());
+        }
+        connections::validate(self, blocks, connections)?;
+        flow::layout_flow_with_connections(self, blocks, pages, connections).map_err(Into::into)
+    }
+    /// Checked measurement with explicit paragraph boundary connections.
+    /// # Errors
+    /// Reports signed-spacing or connection errors without a lossy fallback.
+    pub fn try_measure_blocks_with_connections(
+        &mut self,
+        blocks: &[Block],
+        width: f64,
+        wrap: bool,
+        connections: &ParagraphConnections,
+    ) -> std::result::Result<Measurement, LayoutError> {
+        if connections.is_empty() {
+            return self
+                .try_measure_blocks(blocks, width, wrap)
+                .map_err(Into::into);
+        }
+        if let Some(e) = signed_spacing::check(self, blocks).into_iter().next() {
+            return Err(e.into());
+        }
+        connections::validate(self, blocks, connections)?;
+        let (_, height, max_width, lines) =
+            flow::box_layout_with_connections(self, blocks, width, wrap, true, connections, &[])?;
+        Ok(Measurement {
+            lines,
+            height,
+            max_width,
+        })
+    }
+    /// Checked text-box layout with structural connections preserved by autofit.
+    /// # Errors
+    /// Reports signed-spacing or connection errors; no partial ops are returned.
+    pub fn try_layout_text_box_with_connections(
+        &mut self,
+        spec: &TextBoxSpec,
+        connections: &ParagraphConnections,
+    ) -> std::result::Result<Vec<Op>, LayoutError> {
+        if connections.is_empty() {
+            return self.try_layout_text_box(spec).map_err(Into::into);
+        }
+        if let Some(e) = signed_spacing::check_box(self, spec).into_iter().next() {
+            return Err(e.into());
+        }
+        connections::validate(self, &spec.blocks, connections)?;
+        boxes::layout_text_box_with_connections(self, spec, connections).map_err(Into::into)
+    }
+    /// Natural connected text-box measurement, before autofit and anchoring.
+    /// # Errors
+    /// Reports signed-spacing or connection errors without returning a measurement.
+    pub fn try_measure_text_box_with_connections(
+        &mut self,
+        spec: &TextBoxSpec,
+        connections: &ParagraphConnections,
+    ) -> std::result::Result<Measurement, LayoutError> {
+        if connections.is_empty() {
+            return self.try_measure_text_box(spec).map_err(Into::into);
+        }
+        let width = (spec.rect.x1 - spec.rect.x0).abs().max(1.0);
+        self.try_measure_blocks_with_connections(&spec.blocks, width, spec.wrap, connections)
     }
 
     /// Lays out `blocks` as paginated flow (docspine body); `pages` supplies

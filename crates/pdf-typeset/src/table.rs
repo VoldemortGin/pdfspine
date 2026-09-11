@@ -30,6 +30,43 @@ pub(crate) fn layout_table(ctx: &mut Ctx, spec: &TableSpec) {
     }
 }
 
+/// Connection-aware traversal reuses the row measurement/anchoring/emitter.
+pub(crate) fn layout_table_with_connections(
+    ctx: &mut Ctx,
+    spec: &TableSpec,
+    connections: &crate::ParagraphConnections,
+    prefix: &[crate::BlockPathStep],
+) -> Result<(), crate::ConnectionError> {
+    if !connections.has_descendant(prefix) {
+        layout_table(ctx, spec);
+        return Ok(());
+    }
+    if spec.columns.is_empty() || spec.rows.is_empty() {
+        return Ok(());
+    }
+    ctx.flush_gap();
+    let avail = (ctx.right() - ctx.left()).max(1.0);
+    let widths = column_widths(ctx.ts, spec, avail);
+    let left = ctx.left();
+    for (r, row) in spec.rows.iter().enumerate() {
+        layout_row_with(ctx, row, &widths, left, |ts, c, blocks, inner| {
+            let mut path = prefix.to_vec();
+            path.extend([crate::BlockPathStep::Row(r), crate::BlockPathStep::Cell(c)]);
+            let (ops, h, w, _) = crate::flow::box_layout_with_connections(
+                ts,
+                blocks,
+                inner,
+                true,
+                false,
+                connections,
+                &path,
+            )?;
+            Ok((ops, h, w))
+        })?;
+    }
+    Ok(())
+}
+
 /// Resolves the column grid: fixed widths as requested, auto widths measured
 /// from the widest natural cell line; when the preferred total overflows the
 /// available width, columns whose preference fits their fair share keep it and
@@ -118,6 +155,23 @@ fn natural_blocks_width(ts: &mut Typesetter, blocks: &[Block]) -> f64 {
 /// content and per-edge borders. Vertical anchoring (TS-11) happens **after**
 /// the row height is fixed, so it never interferes with content-driven growth.
 fn layout_row(ctx: &mut Ctx, row: &TableRow, widths: &[f64], left: f64) {
+    let result: Result<(), std::convert::Infallible> =
+        layout_row_with(ctx, row, widths, left, |ts, _, blocks, inner| {
+            Ok(layout_box_content(ts, blocks, inner, true))
+        });
+    match result {
+        Ok(()) => {}
+        Err(never) => match never {},
+    }
+}
+
+fn layout_row_with<E>(
+    ctx: &mut Ctx,
+    row: &TableRow,
+    widths: &[f64],
+    left: f64,
+    mut layout: impl FnMut(&mut Typesetter, usize, &[Block], f64) -> Result<(Vec<Op>, f64, f64), E>,
+) -> Result<(), E> {
     let ncols = widths.len();
     // (ops, content_height) per cell, at its local origin.
     let mut laid: Vec<(Vec<Op>, f64)> = Vec::with_capacity(ncols);
@@ -127,7 +181,7 @@ fn layout_row(ctx: &mut Ctx, row: &TableRow, widths: &[f64], left: f64) {
             Some(cell) => {
                 let pad = cell.padding.max(0.0);
                 let inner = (width - 2.0 * pad).max(1.0);
-                let (ops, h, _) = layout_box_content(ctx.ts, &cell.blocks, inner, true);
+                let (ops, h, _) = layout(ctx.ts, c, &cell.blocks, inner)?;
                 row_h = row_h.max(h + 2.0 * pad);
                 laid.push((ops, h));
             }
@@ -165,6 +219,7 @@ fn layout_row(ctx: &mut Ctx, row: &TableRow, widths: &[f64], left: f64) {
     }
     ctx.y += row_h;
     ctx.max_x = ctx.max_x.max(x);
+    Ok(())
 }
 
 /// Paints a cell's per-edge borders as 4 independent line ops (`None` edges
