@@ -21,6 +21,11 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ### Fixed
 
+- `Page.get_displaylist(annots=True)` now records visible annotation/widget
+  appearances for text and raster replay; `annots=False` excludes them. This
+  fixes the prior DisplayList annotation omission without changing direct
+  `Page.get_pixmap`. Existing raster resource dependencies remain unchanged.
+
 - **PMC caption and dropped-initial reading order.** Wide image captions stay
   together after surrounding columns, using original text blocks and preserving
   existing body order. Large paragraph initials rejoin their first line without
@@ -66,6 +71,12 @@ feature-complete, but the public API and on-disk formats may still change.
 ## [0.8.0] — 2026-09-10
 
 ### Added
+
+- `DisplayList.get_textpage(flags=3)` returns a public `TextPage` backed by
+  recorded text, resolved font names and independently owned image resources.
+  Text extraction survives source edits/closure and respects creation flags;
+  encoded image payloads decode lazily. API parity is 695/769 (90.4%); eight
+  deferred symbols remain.
 
 - **ONNX vision backend for `find_tables` (opt-in, torch-free).**
   `page.find_tables(strategy="vision", backend="onnx", vision_options=…)` detects

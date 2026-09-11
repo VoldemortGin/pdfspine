@@ -197,3 +197,32 @@ get_text('blocks', sort=True)       5/5       5/5
 1. 逐页文本哈希序列与 PyMuPDF 完全一致（覆盖 P0）；
 2. 每页块数量与 PyMuPDF 的差异在阈值内（覆盖 P1）；
 3. 2024 年报 p29 在 `text`/`blocks` 两种 option 下 `sort=True` 结果一致（覆盖 P2）。
+
+
+## DisplayList 文字快照的返回类型与资源边界（2026-09-10）
+
+本机 PyMuPDF 1.28.2 的 `DisplayList.get_textpage(flags=3)` 返回底层
+`mupdf.FzStextPage`，需再用 `pymupdf.TextPage(...)` 包装。pdfspine 直接返回已有
+公开 `pdfspine.TextPage`，提供 `extractText/DICT/RAWDICT/JSON/WORDS/search` 等方法；
+这是刻意的可用性归一化，不仿造 native handle。
+
+- DisplayList 创建时配对保存语义记录和绘制指令；文字包括不可见/裁剪模式文本。
+  字体名称在对应 Form 的资源上下文解析，图像以记录 identity 关联，命名颜色空间
+  在各次绘制的上下文解析。图像编码流与必要解码资源独立复制，首次需要图片时才解码。
+- `flags=3` 默认不包含图片；`flags=7` 保留图片；`flags=11` 禁止自动插空格。
+  后续提取沿用 TextPage 创建 flags。源内容、字体、图像修改及文档关闭不改变文字快照。
+- `Page.get_displaylist(annots=True)` 默认包含可见 FreeText/widget 的当前 `/AP /N`
+  外观；`annots=False` 排除。考虑 `/AS`、`/Rect`、`/BBox`、`/Matrix`、隐藏标志与 `/OC`。
+  这修正了旧 DisplayList 忽略注释的行为；直接 `Page.get_pixmap` 路径没有改动。
+- 独立快照保证限于新 TextPage 语义/图片资源。既有 DisplayList raster 对源 ICC、
+  palette、mask 等资源的依赖未在本轮改为深快照，不能把文字关闭后存活测试当作
+  所有 raster 资源编辑后的隔离证明。旧字体 bbox/版面排序及不支持的颜色模型也未改写。
+
+可执行对照在 `python/tests/test_displaylist_textpage.py`；比较文本、字体、origin、
+页面尺寸、图片 bbox 与实际 RGB 像素，未声称不同引擎字形 bbox 完全一致。
+
+命名颜色空间的补充边界：Form 内 inline `/CS /CS1` 的局部 RGB/灰度资源与
+PyMuPDF 对照一致，包括 `/F /Fl` 压缩流。图像 XObject 的 `/ColorSpace /CS1`
+由 pdfspine 文字快照按当前资源上下文解析；本机 PyMuPDF 1.28.2 对该 XObject
+写法报 unknown colorspace 并忽略图片，因此此项仅有本引擎实际像素回归，
+不记作 oracle 相等案例。

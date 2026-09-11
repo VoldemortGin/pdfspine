@@ -131,6 +131,17 @@ impl DisplayList {
         }
     }
 
+    /// Builds a display list from an already recorded stream, without parsing
+    /// the page again. Geometry has the same PDF-space basis as `from_page`.
+    #[must_use]
+    pub fn from_ops(ops: Vec<RenderOp>, cropbox: Rect, rotate: i32) -> Self {
+        Self {
+            ops,
+            cropbox,
+            rotate,
+        }
+    }
+
     /// The display list's source rect (the page CropBox), PyMuPDF
     /// `DisplayList.rect`.
     #[must_use]

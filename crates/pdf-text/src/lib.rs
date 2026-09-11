@@ -39,7 +39,7 @@ pub use model::{
     flags, rendered_font_size, Block, BlockKind, Char, DrawPath, ImageBlock, ImageRef,
     InterpretResult, Line, PaintKind, PathItem, PositionedGlyph, Span, TextPage, Word, WritingDir,
 };
-pub use renderops::{ImageOp, RenderOp, RenderSink, ShadingOp, TextRun};
+pub use renderops::{ImageOp, PageRecording, RenderOp, RenderSink, ShadingOp, TextRun};
 pub use search::{search, SearchOptions};
 pub use serialize::{
     clip_textpage, defaults, dict_blocks, extract_selection, get_textbox, textflags, to_blocks,

@@ -870,7 +870,17 @@ pub fn get_text(page: &Page, opt: &str, flags: Option<u32>, tp: Option<&TextPage
     // dict/json image blocks inline the real encoded bytes, resolved by name →
     // xref → extract_image (fitz always inlines image bytes in these modes).
     let img_resolver = PageImageResolver::new(page);
+    serialize_textpage(tp, opt, flags, &img_resolver)
+}
 
+/// Serializes an existing model with either live-page or owned image resources.
+#[must_use]
+pub(crate) fn serialize_textpage(
+    tp: &TextPage,
+    opt: &str,
+    flags: Option<u32>,
+    img_resolver: &dyn ImageResolver,
+) -> TextOutput {
     match opt {
         "blocks" => TextOutput::Blocks(pdf_text::to_blocks(tp, flags.unwrap_or(defaults::BLOCKS))),
         "words" => TextOutput::Words(pdf_text::to_words(tp, flags.unwrap_or(defaults::WORDS))),
@@ -878,25 +888,25 @@ pub fn get_text(page: &Page, opt: &str, flags: Option<u32>, tp: Option<&TextPage
             tp,
             false,
             flags.unwrap_or(defaults::DICT),
-            &img_resolver,
+            img_resolver,
         )),
         "rawdict" => TextOutput::Dict(pdf_text::to_dict_with_images(
             tp,
             true,
             flags.unwrap_or(defaults::RAWDICT),
-            &img_resolver,
+            img_resolver,
         )),
         "json" => TextOutput::Text(pdf_text::to_json_with_images(
             tp,
             false,
             flags.unwrap_or(defaults::JSON),
-            &img_resolver,
+            img_resolver,
         )),
         "rawjson" => TextOutput::Text(pdf_text::to_json_with_images(
             tp,
             true,
             flags.unwrap_or(defaults::RAWJSON),
-            &img_resolver,
+            img_resolver,
         )),
         "html" => TextOutput::Text(pdf_text::to_html(tp, flags.unwrap_or(defaults::HTML))),
         "xhtml" => TextOutput::Text(pdf_text::to_xhtml(tp, flags.unwrap_or(defaults::XHTML))),
@@ -970,7 +980,7 @@ impl ImageResolver for PageImageResolver<'_> {
 /// image-block raster header: `colorspace` is the component count (fitz's
 /// convention) and `xres`/`yres` default to 96 DPI (matching `extractIMGINFO`).
 /// Returns `None` when the xref is not an extractable image XObject.
-fn extract_resolved_image(doc: &DocumentStore, xref: u32) -> Option<ResolvedImage> {
+pub(crate) fn extract_resolved_image(doc: &DocumentStore, xref: u32) -> Option<ResolvedImage> {
     let ex = getpixmap::extract_image(doc, xref).ok()?;
     Some(ResolvedImage {
         ext: ex.ext,

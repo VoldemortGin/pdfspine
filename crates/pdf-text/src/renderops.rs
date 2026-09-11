@@ -149,6 +149,20 @@ pub struct ShadingOp {
     pub alpha: u8,
 }
 
+/// One interpretation retained for both rendering and owned text extraction.
+#[derive(Debug)]
+pub struct PageRecording {
+    /// Semantic glyph/image inventory, including images without readable streams.
+    pub content: crate::model::InterpretResult,
+    /// Unchanged ordered raster operations.
+    pub ops: Vec<RenderOp>,
+    /// One entry per semantic image: its operation index, when bytes were readable.
+    /// Record identity disambiguates resource names reused inside different forms.
+    pub image_ops: Vec<Option<usize>>,
+    /// Named image colorspaces resolved in each placement's resource context.
+    pub image_color_spaces: Vec<Option<Object>>,
+}
+
 /// An ordered render-op sink the interpreter writes to when rendering.
 ///
 /// The default implementation in `render_page` is a `Vec<RenderOp>`; a

@@ -132,9 +132,32 @@ pub fn page_render(page: &Page, args: &RenderArgs) -> Result<Pixmap> {
 pub struct DisplayList {
     inner: RenderDisplayList,
     doc: Arc<DocumentStore>,
+    text: pdf_text::InterpretResult,
+    text_resources: Arc<crate::RecordedTextResources>,
+    cropbox: pdf_core::geom::Rect,
+    rotation: i32,
 }
 
 impl DisplayList {
+    /// Builds text from the owned semantic recording, not the live page.
+    #[must_use]
+    pub fn get_textpage(&self, flags: u32) -> pdf_text::TextPage {
+        pdf_text::textpage_from_glyphs_flagged(
+            &self.text.glyphs,
+            &self.text.images,
+            self.cropbox,
+            self.rotation,
+            Some(self.cropbox),
+            flags,
+        )
+    }
+
+    /// Owned image payloads remain valid after edits or source closure.
+    #[must_use]
+    pub fn text_resources(&self) -> Arc<crate::RecordedTextResources> {
+        self.text_resources.clone()
+    }
+
     /// The number of recorded drawcalls (diagnostic).
     #[must_use]
     pub fn len(&self) -> usize {
@@ -169,9 +192,43 @@ impl DisplayList {
 /// `Page.get_displaylist`).
 #[must_use]
 pub fn page_get_displaylist(page: &Page) -> DisplayList {
+    page_get_displaylist_with_annots(page, true)
+}
+
+/// Records a snapshot with optional visible annotation appearances.
+#[must_use]
+pub fn page_get_displaylist_with_annots(page: &Page, annots: bool) -> DisplayList {
     let doc = page.document().clone();
-    let inner = RenderDisplayList::from_page(&doc, page);
-    DisplayList { inner, doc }
+    let recording = page.dict().map(|dict| {
+        pdf_text::ContentInterpreter::new(&doc).run_page_recorded_with_annots(&dict, annots)
+    });
+    let (text, ops, image_ops, color_spaces) = match recording {
+        Some(recording) => (
+            recording.content,
+            recording.ops,
+            recording.image_ops,
+            recording.image_color_spaces,
+        ),
+        None => (
+            pdf_text::InterpretResult::default(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        ),
+    };
+    let text_resources =
+        crate::RecordedTextResources::capture(&doc, &ops, &image_ops, &color_spaces);
+    let cropbox = page.cropbox();
+    let rotation = page.rotation();
+    let inner = RenderDisplayList::from_ops(ops, cropbox, rotation);
+    DisplayList {
+        inner,
+        doc,
+        text,
+        text_resources,
+        cropbox,
+        rotation,
+    }
 }
 
 /// Whether `page` is an image-only page (in scope for `get_pixmap`, PRD §3.3).

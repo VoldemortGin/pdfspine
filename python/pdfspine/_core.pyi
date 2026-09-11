@@ -7,6 +7,8 @@ classes below are, however, re-exported unwrapped as the public types.
 
 from typing import Any, Iterator, Sequence, final
 
+from .document import TextPage as _PublicTextPage
+
 __version__: str
 __all__ = [
     "__version__",
@@ -448,7 +450,7 @@ class Page:
         alpha: bool = ...,
         clip: _Tuple4 | None = ...,
     ) -> Pixmap: ...
-    def get_displaylist(self) -> DisplayList: ...
+    def get_displaylist(self, annots: bool = ...) -> DisplayList: ...
     def find_tables(
         self,
         *,
@@ -912,6 +914,7 @@ class Pixmap:
 
 @final
 class DisplayList:
+    def get_textpage(self, flags: int = ...) -> _PublicTextPage: ...
     @property
     def rect(self) -> _Tuple4: ...
     def __len__(self) -> int: ...

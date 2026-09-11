@@ -3427,7 +3427,7 @@ fn build_font_resolver<'a>(doc: &'a DocumentStore, page_dict: &pdf_core::Dict) -
 
 /// The `/BaseFont` of a font dict (following a Type0 descendant), tag-stripped
 /// (`ABCDEF+Helvetica` → `Helvetica`).
-fn base_font_name(doc: &DocumentStore, font: &pdf_core::Dict) -> Option<SmolStr> {
+pub(crate) fn base_font_name(doc: &DocumentStore, font: &pdf_core::Dict) -> Option<SmolStr> {
     let direct = font
         .get(&Name::new("BaseFont"))
         .and_then(Object::as_name)

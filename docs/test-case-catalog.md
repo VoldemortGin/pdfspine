@@ -3165,3 +3165,21 @@ fixtures are self-generated raw PDF bytes, no network.
 | `FILLED-RECT-002` | white fills dropped by default, kept with `include_white=True` | extension | green |
 | `FILLED-RECT-003` | page without fill paths → empty tuple | extension | green |
 | `FILLED-RECT-004` | returned value objects are frozen dataclasses | extension | green |
+
+### `DisplayList.get_textpage` — `DL-TEXT-*`
+
+Implemented by `python/tests/test_displaylist_textpage.py`; live oracle cases use
+real PyMuPDF in `.venv-oracle` (or `PDFSPINE_ORACLE_PYTHON`).
+
+| ID | feature | spec ref | status |
+|---|---|---|---|
+| `DL-TEXT-001` | public TextPage wrapper, source edit/close, text/search/native dict/JSON | PRD-NEXT §0 #4 | green |
+| `DL-TEXT-002` | Tr 0/3/7, flags 3/7/11, images excluded by default | PRD-NEXT §0 #4 | green |
+| `DL-TEXT-003` | Form-local duplicate font/image/ColorSpace names and owned RGB/gray/inline image bytes | PRD-NEXT §0 #4 | green |
+| `DL-TEXT-004` | CropBox/Rotate, AP default/0/1, visibility flags/OC, widget AS, nonzero BBox and Matrix | PRD-NEXT §0 #4 | green |
+| `DL-TEXT-005` | annotation raster equals equivalent page Forms; text/image survives AP deletion and close | PRD-NEXT §0 #4 | green |
+| `DL-TEXT-006` | live oracle text/font/origin/size/image bounds/pixels; named inline CS with Flate F/DP | PRD-NEXT §0 #4 | green |
+
+Rust unit tests in `pdf-edit::merge::snapshot_tests` cover cycles, recursion limits,
+metadata exclusion and independent roots. `pdf-api::recorded_text::tests` proves
+capture and flags=3 do not decode images; extraction with images resolves lazily.
