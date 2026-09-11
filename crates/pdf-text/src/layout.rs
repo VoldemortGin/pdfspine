@@ -463,6 +463,7 @@ fn normalize_rotate(r: i32) -> i32 {
 /// like `ﬁ` maps to several). All scalars share the glyph cell geometry.
 #[derive(Clone, Debug)]
 struct DevGlyph {
+    raw_font_name: Option<std::sync::Arc<SmolStr>>,
     origin: Point,
     bbox: Rect,
     text: SmolStr,
@@ -573,6 +574,7 @@ impl DevGlyph {
         )
         .transform(&render_matrix);
         DevGlyph {
+            raw_font_name: g.raw_font_name.clone(),
             origin,
             bbox,
             text,
@@ -2074,6 +2076,7 @@ fn build_line(glyphs: &[&DevGlyph], seq: usize, inhibit_spaces: bool) -> Line {
                 target.text.push(' ');
                 let sb = synth_space_bbox(prev_pen_x, g);
                 target.chars.push(Char {
+                    raw_font_name: g.raw_font_name.clone(),
                     origin: g.origin,
                     bbox: sb,
                     c: ' ',
@@ -2097,6 +2100,7 @@ fn build_line(glyphs: &[&DevGlyph], seq: usize, inhibit_spaces: bool) -> Line {
         for c in g.text.chars() {
             target.text.push(c);
             target.chars.push(Char {
+                raw_font_name: g.raw_font_name.clone(),
                 origin: g.origin,
                 bbox: g.bbox,
                 c,
@@ -3487,12 +3491,27 @@ fn build_font_resolver<'a>(doc: &'a DocumentStore, page_dict: &pdf_core::Dict) -
 /// The `/BaseFont` of a font dict (following a Type0 descendant), tag-stripped
 /// (`ABCDEF+Helvetica` → `Helvetica`).
 pub(crate) fn base_font_name(doc: &DocumentStore, font: &pdf_core::Dict) -> Option<SmolStr> {
+    map_base_font_name(doc, font, |name| Some(strip_subset_tag(name)))
+}
+
+/// Captures only names whose prefix canonical layout actually removes.
+pub(crate) fn subset_base_font_name(doc: &DocumentStore, font: &pdf_core::Dict) -> Option<SmolStr> {
+    map_base_font_name(doc, font, |name| {
+        (without_subset_tag(name) != name).then(|| SmolStr::new(name))
+    })
+}
+
+fn map_base_font_name(
+    doc: &DocumentStore,
+    font: &pdf_core::Dict,
+    map: impl Fn(&str) -> Option<SmolStr>,
+) -> Option<SmolStr> {
     let direct = font
         .get(&Name::new("BaseFont"))
         .and_then(Object::as_name)
         .and_then(Name::as_str);
     if let Some(n) = direct {
-        return Some(strip_subset_tag(n));
+        return map(n);
     }
     // Type0: descendant carries the BaseFont too, but the parent usually has it.
     let df = doc
@@ -3510,17 +3529,21 @@ pub(crate) fn base_font_name(doc: &DocumentStore, font: &pdf_core::Dict) -> Opti
         .get(&Name::new("BaseFont"))
         .and_then(Object::as_name)
         .and_then(Name::as_str)?;
-    Some(strip_subset_tag(n))
+    map(n)
 }
 
 /// Strips a `ABCDEF+` subset tag from a font name.
 fn strip_subset_tag(name: &str) -> SmolStr {
+    SmolStr::new(without_subset_tag(name))
+}
+
+fn without_subset_tag(name: &str) -> &str {
     if let Some((tag, rest)) = name.split_once('+') {
         if tag.len() == 6 && tag.chars().all(|c| c.is_ascii_uppercase()) {
-            return SmolStr::new(rest);
+            return rest;
         }
     }
-    SmolStr::new(name)
+    name
 }
 
 // === tests ================================================================
@@ -3537,6 +3560,7 @@ mod tests {
     /// inter-column gutter (the property the detector relies on).
     fn g(c: &str, ox: f64, oy: f64, w: f64, size: f64) -> PositionedGlyph {
         PositionedGlyph {
+            raw_font_name: None,
             unicode: SmolStr::new(c),
             code: c.chars().next().map_or(0, |ch| ch as u32),
             origin: Point::new(ox, oy),
@@ -4238,6 +4262,7 @@ mod tests {
     /// Indices in the run map 1:1 to `dev`, so positions are implicit.
     fn dg(text: &str) -> DevGlyph {
         DevGlyph {
+            raw_font_name: None,
             origin: Point::new(0.0, 0.0),
             bbox: Rect::new(0.0, 0.0, 1.0, 1.0),
             text: SmolStr::new(text),
@@ -4421,6 +4446,7 @@ mod tests {
     /// user-space coordinates; `size` stays 1.0, mimicking `Tf 1`.
     fn scaled_cell(c: &str, ox: f64, oy: f64, w: f64, scale: f64) -> PositionedGlyph {
         PositionedGlyph {
+            raw_font_name: None,
             unicode: SmolStr::new(c),
             code: c.chars().next().map_or(0, |ch| ch as u32),
             origin: Point::new(ox, oy),

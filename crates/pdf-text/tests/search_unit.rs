@@ -14,6 +14,7 @@ fn ch(c: char, x: f64, w: f64, y0: f64, y1: f64) -> Char {
     let bbox = Rect::new(x, y0, x + w, y1);
     let size = y1 - y0;
     Char {
+        raw_font_name: None,
         origin: Point::new(x, y1),
         bbox,
         c,

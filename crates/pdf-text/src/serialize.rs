@@ -201,9 +201,11 @@ pub struct DictSpan {
     pub matrix: MatrixTuple,
     /// The first glyph's text matrix `Tm` — the raw content-stream value in
     /// **PDF user space**, with no page transform folded in.
-    pub text_matrix: MatrixTuple,
+    /// `None` for a later subset-name display run whose source Tm is unavailable.
+    pub text_matrix: Option<MatrixTuple>,
     /// The first glyph's CTM — likewise the raw **user-space** value.
-    pub ctm: MatrixTuple,
+    /// `None` for a later subset-name display run whose source CTM is unavailable.
+    pub ctm: Option<MatrixTuple>,
     /// The span's baseline direction as a device-space unit vector.
     pub dir: (f64, f64),
     /// The span's directional envelope in device space: the extent of its glyph
@@ -877,10 +879,11 @@ fn to_dict_impl(
     flags: u32,
     resolver: Option<&dyn ImageResolver>,
 ) -> TextDict {
+    let subset = crate::font_display::set_subset_fontnames(None);
     let blocks = dict_blocks(tp, flags, resolver)
         .into_iter()
         .map(|block| match block {
-            DictBlockRef::Text(block) => DictBlock::Text(text_block(block, raw)),
+            DictBlockRef::Text(block) => DictBlock::Text(text_block(block, raw, subset)),
             DictBlockRef::Image(image) => DictBlock::Image(image),
         })
         .collect();
@@ -891,8 +894,12 @@ fn to_dict_impl(
     }
 }
 
-fn text_block(block: &Block, raw: bool) -> DictTextBlock {
-    let lines = block.lines.iter().map(|l| dict_line(l, raw)).collect();
+fn text_block(block: &Block, raw: bool, subset: bool) -> DictTextBlock {
+    let lines = block
+        .lines
+        .iter()
+        .map(|l| dict_line(l, raw, subset))
+        .collect();
     DictTextBlock {
         number: block.number as i32,
         bbox: rect_tuple(block.bbox),
@@ -901,8 +908,13 @@ fn text_block(block: &Block, raw: bool) -> DictTextBlock {
     }
 }
 
-fn dict_line(line: &Line, raw: bool) -> DictLine {
-    let spans = line.spans.iter().map(|s| dict_span(s, raw)).collect();
+fn dict_line(line: &Line, raw: bool, subset: bool) -> DictLine {
+    let spans = line
+        .spans
+        .iter()
+        .flat_map(|span| crate::font_display::span_views(span, subset))
+        .map(|span| dict_span(&span, raw))
+        .collect();
     DictLine {
         bbox: rect_tuple(line.bbox),
         wmode: line.wmode as i32,
@@ -913,11 +925,11 @@ fn dict_line(line: &Line, raw: bool) -> DictLine {
     }
 }
 
-fn dict_span(span: &Span, raw: bool) -> DictSpan {
+fn dict_span(span: &crate::font_display::SpanView<'_>, raw: bool) -> DictSpan {
     let (text, chars) = if raw {
         (String::new(), span.chars.iter().map(dict_char).collect())
     } else {
-        (span.text.clone(), Vec::new())
+        (span.text.to_string(), Vec::new())
     };
     DictSpan {
         size: span.rendered_size,
@@ -931,8 +943,8 @@ fn dict_span(span: &Span, raw: bool) -> DictSpan {
         declared_size: span.size,
         rendered_size: span.rendered_size,
         matrix: matrix_tuple(&span.matrix),
-        text_matrix: matrix_tuple(&span.text_matrix),
-        ctm: matrix_tuple(&span.ctm),
+        text_matrix: span.text_matrix.as_ref().map(matrix_tuple),
+        ctm: span.ctm.as_ref().map(matrix_tuple),
         dir: span.dir,
         quad: quad_tuple(&span.quad),
         seq: span.seq,
@@ -1149,8 +1161,13 @@ fn json_span(s: &mut String, span: &DictSpan, raw: bool) {
     json_comma_raw(s, "declared_size", &fmt_num(span.declared_size));
     json_comma_raw(s, "rendered_size", &fmt_num(span.rendered_size));
     json_comma_matrix(s, "matrix", span.matrix);
-    json_comma_matrix(s, "text_matrix", span.text_matrix);
-    json_comma_matrix(s, "ctm", span.ctm);
+    for (name, value) in [("text_matrix", span.text_matrix), ("ctm", span.ctm)] {
+        if let Some(value) = value {
+            json_comma_matrix(s, name, value);
+        } else {
+            json_comma_raw(s, name, "null");
+        }
+    }
     json_comma_nums(s, "dir", &[span.dir.0, span.dir.1]);
     json_comma_quad(s, "quad", span.quad);
     json_comma_raw(s, "seq", &span.seq.to_string());
