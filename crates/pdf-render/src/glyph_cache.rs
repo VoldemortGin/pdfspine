@@ -61,7 +61,8 @@ struct CachedMask {
     h: u32,
     ox: i32,
     oy: i32,
-    data: Vec<u8>,
+    // Own the rasterizer allocation; copying its coverage bytes is unnecessary.
+    mask: Mask,
 }
 
 /// Per-render glyph coverage cache. Lives on the page's `FontCache`, so it is
@@ -116,23 +117,25 @@ impl GlyphMaskCache {
             phase: (px * PHASE_STEPS + py) as u8,
         };
 
-        if !self.masks.contains_key(&mask_key) {
-            let qx = px as f32 / PHASE_STEPS as f32;
-            let qy = py as f32 / PHASE_STEPS as f32;
-            match rasterize(path, transform, qx, qy) {
-                Some(cached) => {
-                    if self.bytes + cached.data.len() > MAX_CACHE_BYTES {
-                        self.masks.clear();
-                        self.bytes = 0;
-                    }
-                    self.bytes += cached.data.len();
-                    self.masks.insert(mask_key, cached);
+        if let Some(cached) = self.masks.get(&mask_key) {
+            blit(pixmap, clip, cached, itx, ity, rgb);
+            return;
+        }
+        let qx = px as f32 / PHASE_STEPS as f32;
+        let qy = py as f32 / PHASE_STEPS as f32;
+        match rasterize(path, transform, qx, qy) {
+            Some(cached) => {
+                if self.bytes + cached.mask.data().len() > MAX_CACHE_BYTES {
+                    self.masks.clear();
+                    self.bytes = 0;
                 }
-                None => {
-                    // Oversized / degenerate: draw directly (rare).
-                    fill_direct(pixmap, clip, path, transform, rgb);
-                    return;
-                }
+                self.bytes += cached.mask.data().len();
+                self.masks.insert(mask_key, cached);
+            }
+            None => {
+                // Oversized / degenerate: draw directly (rare).
+                fill_direct(pixmap, clip, path, transform, rgb);
+                return;
             }
         }
 
@@ -207,7 +210,7 @@ fn rasterize(path: &tiny_skia::Path, transform: Transform, qx: f32, qy: f32) -> 
         h,
         ox: x0,
         oy: y0,
-        data: mask.data().to_vec(),
+        mask,
     })
 }
 
@@ -242,7 +245,7 @@ fn blit(
                 let mrow = j as usize * mw;
                 let drow = (oy + j) as usize * pw_us;
                 for i in i0..i1 {
-                    let cov = m.data[mrow + i as usize] as u16;
+                    let cov = m.mask.data()[mrow + i as usize] as u16;
                     if cov == 0 {
                         continue;
                     }
@@ -275,7 +278,7 @@ fn blit(
                 let drow = py * pw_us;
                 let crow = py * cw_us;
                 for i in i0..i1 {
-                    let cov = m.data[mrow + i as usize] as u16;
+                    let cov = m.mask.data()[mrow + i as usize] as u16;
                     if cov == 0 {
                         continue;
                     }

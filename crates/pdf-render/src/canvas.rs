@@ -45,6 +45,14 @@ pub struct Canvas {
     clip_stack: Vec<Option<Arc<Mask>>>,
 }
 
+/// Rounded division by 255 without a widening integer division. For byte
+/// coverages the intermediate remains within u16, including fully opaque input.
+#[inline]
+fn intersect_coverage(a: u8, b: u8) -> u8 {
+    let product = u16::from(a) * u16::from(b) + 128;
+    ((product + (product >> 8)) >> 8) as u8
+}
+
 impl Canvas {
     /// Builds a blank `w × h` device-pixel canvas.
     ///
@@ -166,7 +174,7 @@ impl Canvas {
                 let existing = Arc::make_mut(existing);
                 for (a, b) in existing.data_mut().iter_mut().zip(mask.data().iter()) {
                     // Premultiply-style coverage intersection: a·b / 255.
-                    *a = ((u16::from(*a) * u16::from(*b) + 127) / 255) as u8;
+                    *a = intersect_coverage(*a, *b);
                 }
             }
             None => self.clip = Some(Arc::new(mask)),
@@ -302,6 +310,18 @@ impl Canvas {
 mod tests {
     use super::*;
     use tiny_skia::Mask;
+
+    #[test]
+    fn clip_coverage_matches_rounded_division_for_every_byte_pair() {
+        for a in 0..=255u16 {
+            for b in 0..=255u16 {
+                assert_eq!(
+                    intersect_coverage(a as u8, b as u8),
+                    ((a * b + 127) / 255) as u8
+                );
+            }
+        }
+    }
 
     /// RENDER-VEC-CANVAS-SAVE-RESTORE: `save`/`restore` snapshot and pop the
     /// clip stack (the q/Q contract M6d drives). A `Q` without a `q` is a no-op.
