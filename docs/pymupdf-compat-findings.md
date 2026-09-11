@@ -227,6 +227,29 @@ PyMuPDF 对照一致，包括 `/F /Fl` 压缩流。图像 XObject 的 `/ColorSpa
 写法报 unknown colorspace 并忽略图片，因此此项仅有本引擎实际像素回归，
 不记作 oracle 相等案例。
 
+## 注释 ID stem 与图标名称（2026-09-10）
+
+`TOOLS.set_annot_stem(stem: str | None = None) -> str` 使用进程级配置，默认
+`fitz`；`None` 查询，字符串设置并返回前 50 个 Unicode 标量字符，空字符串有效。
+它影响之后创建的普通注释 `/NM`（`<stem>-A<n>`）和 widget（`<stem>-W<n>`），
+在目标页所有现存 `/NM` 中寻找最小空缺编号。已有 ID 不改写；删除后空缺可复用，
+保存重开仍保留 ID。`Tools()` 实例共享同一配置。
+
+本机 PyMuPDF 1.28.2 对照覆盖 ASCII/空 stem、截断、编号空缺、页面隔离和 widget。
+pdfspine 明确拒绝 bytes/list 等非字符串，不复刻 oracle 接受部分可切片类型的偶然行为；
+非 ASCII `/NM` 使用合法 PDF Unicode 文本编码，不复刻 oracle 的损坏编码。
+
+`Annot.info['id']` 读取 `/NM`，`info['name']` 读取图标 `/Name`（如 Note/Help）；
+这是对旧 Python 读取行为的纠正。Rust 既有 `AnnotInfo.name`/`Annot::name()` 仍表示
+`/NM`，新增 `icon_name()` 读取图标。既有 `set_info(name=...)` 继续作为本项目扩展
+写 `/NM`，结果通过 `info['id']` 和 `Page.load_annot(id)` 读取；此 setter 参数并非
+PyMuPDF 接口，设置图标仍用 `Annot.set_name()`。
+
+创建路径的 ID 扫描与 page `/Annots` 追加共享互斥锁，自动 Popup 和显式新建 Popup
+追加也使用该锁，widget 的 `/AcroForm /Fields` 注册受同锁保护。外观生成在锁外，
+配置读锁不跨越文档访问。此保证限定这些创建路径，不是任意 xref 编辑的事务承诺。
+回归见 `python/tests/test_tools_annot_stem.py` 与 `pdf-edit` 注释模块并发测试。
+`Tools.set_subset_fontnames` 仍未实现。
 
 ## TextPage 原子追加与矩阵边界（2026-09-10）
 

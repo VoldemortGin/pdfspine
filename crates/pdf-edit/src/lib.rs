@@ -41,7 +41,7 @@ pub use annot::{
     add_ink_annot, add_line_annot, add_polygon_annot, add_polyline_annot, add_rect_annot,
     add_redact_annot, add_squiggly_annot, add_stamp_annot, add_strikeout_annot, add_text_annot,
     add_underline_annot, add_widget, annot_count, annot_entries, annot_names, annot_refs, annots,
-    delete_annot, first_annot, Annot, AnnotType, WidgetSpec,
+    delete_annot, first_annot, set_annot_stem, Annot, AnnotType, WidgetSpec,
 };
 pub use catalog::{
     language, mark_info, normalize_language, page_layout, page_mode, set_language, set_mark_info,

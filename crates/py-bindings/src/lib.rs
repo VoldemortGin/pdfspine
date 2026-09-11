@@ -143,7 +143,7 @@ fn map_err(e: ApiError) -> PyErr {
 /// guards this list against drift from `_compat_deferred.DEFERRED`.
 const PIXMAP_DEFERRED: &[&str] = &["warp"];
 const DISPLAYLIST_DEFERRED: &[&str] = &["run"];
-const TOOLS_DEFERRED: &[&str] = &["set_annot_stem", "set_subset_fontnames"];
+const TOOLS_DEFERRED: &[&str] = &["set_subset_fontnames"];
 
 /// Raises `PdfUnsupportedError` when `name` is a deferred member of `group`, else
 /// the plain `AttributeError` Python expects for a genuinely unknown attribute.
@@ -1063,6 +1063,8 @@ impl PyAnnot {
         let info = self.annot.info();
         let d = PyDict::new(py);
         d.set_item("content", info.content)?;
+        d.set_item("id", &info.name)?;
+        d.set_item("icon_name", self.annot.icon_name())?;
         d.set_item("name", info.name)?;
         d.set_item("title", info.title)?;
         Ok(d)
@@ -5743,11 +5745,16 @@ impl PyTools {
         }
     }
 
-    /// A deferred baseline member (e.g. `set_annot_stem` /
-    /// `set_subset_fontnames`) raises `PdfUnsupportedError` instead of a bare
+    /// A deferred baseline member (e.g. `set_subset_fontnames`) raises `PdfUnsupportedError` instead of a bare
     /// `AttributeError` (PRD §7 / §9.5).
     fn __getattr__(&self, name: &str) -> PyResult<Py<PyAny>> {
         deferred_getattr("Tools", TOOLS_DEFERRED, name)
+    }
+
+    /// Sets or queries the process-wide prefix for newly created annotation IDs.
+    #[pyo3(signature = (stem=None))]
+    fn set_annot_stem(&self, stem: Option<&str>) -> String {
+        pdf_api::set_annot_stem(stem)
     }
 
     /// A fresh, process-unique positive id (PyMuPDF `Tools.gen_id`).

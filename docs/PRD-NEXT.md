@@ -58,9 +58,9 @@
   this machine). **The worktree paths baked into those scripts are stale** —
   repoint them to this main checkout before reuse.
 - **Docs status split.** `PRD.md` is the **frozen v1 scope/history** doc and is
-  intentionally *not* updated for post-v1 features (its only live status markers
-  — `Tools.set_annot_stem` Deferred, the "vector page" Deferred (M6) — are still
-  correct); this file (`PRD-NEXT.md` §0) is the live queue. Per-symbol
+  intentionally *not* updated for post-v1 features; its old Deferred markers
+  are historical, not current status. This file (`PRD-NEXT.md` §0) is the live
+  queue. Per-symbol
   disposition lives only in `COMPAT.toml`, generated from
   `scripts/_compat_catalog.py` — **never hand-edit `COMPAT.toml`**.
 
@@ -226,7 +226,7 @@
     SSIM (one was already measured slower and rejected).
   - *Size:* **L**.
 
-- [ ] **4. Deferred APIs — 2 of the original 9 landed; 7 remain.**
+- [ ] **4. Deferred APIs — 3 of the original 9 landed; 6 remain.**
   - *Landed:* `DisplayList.get_textpage(flags=3)` returns a usable public
     `TextPage` wrapper from owned semantic/font/image resources; source edits
     and closure do not invalidate text extraction. Paired recording avoids a
@@ -251,13 +251,25 @@
     Final B gate: **1948 Rust / 1292 Python tests**, 66 existing Python skips;
     extension, drift checks and wheel/sdist install smoke all pass. The installed
     wheel also passes an explicit append/transform/duplicate-number smoke.
+  - *Also landed:* `TOOLS.set_annot_stem(stem=None)` queries/sets the shared prefix
+    for new annotation/widget `/NM` IDs, finding the smallest available per-page
+    A/W suffix. Existing IDs survive stem changes and save/reopen; deletion frees
+    gaps. Strings truncate to 50 Unicode scalar characters and use valid PDF text;
+    non-string inputs are rejected. `Annot.info` now distinguishes ID `/NM` from
+    icon `/Name`; legacy `set_info(name=...)` remains an ID-writing extension.
+    Annotation/Popup appends and widget Fields registration are serialized across
+    these creation paths. Focused validation: 301 pdf-edit tests, 92 Python tests
+    (3 existing skips), including 16 new public cases and a live ASCII oracle.
+    Final combined five-phase gate: **1953 Rust / 1307 Python tests**, 66 existing
+    Python skips; extension, drift and wheel/sdist install smoke pass.
+    `Tools.set_subset_fontnames` is not implemented by this increment.
   - *Remaining order:* device callbacks `Page.run` /
     `DisplayList.run`; `Page.insert_font`, `Pixmap.warp`, `Annot.get_textbox`,
-    `Tools.set_annot_stem` / `Tools.set_subset_fontnames` remain deferred.
+    `Tools.set_subset_fontnames` remain deferred.
   - *Evidence:* `python/tests/test_displaylist_textpage.py` covers flags, invisible
     text, Form resources, source edit/close, CropBox/Rotate, annotations and live
     PyMuPDF 1.28.2 comparisons; Rust tests cover lazy decoding and snapshot bounds.
-    Catalog parity is 696/769 = 90.5%, deferred = 7. No callback framework is added.
+    Catalog parity is 697/769 = 90.6%, deferred = 6. No callback framework is added.
     Full five-phase gate passes (1255 Python tests, 66 existing skips). The same
     35 available render inputs retain identical dimensions/full pixel hashes in
     direct Page rendering and `annots=0` DisplayList replay; eight historical

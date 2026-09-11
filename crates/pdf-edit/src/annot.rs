@@ -14,6 +14,9 @@
 //! `/BBox` is set to the annotation `/Rect` with `/Matrix` identity, and the
 //! stream draws in the rect's own (translated) coordinate frame.
 
+use std::collections::HashSet;
+use std::sync::{LazyLock, Mutex, RwLock};
+
 use pdf_core::error::{Error, Result};
 use pdf_core::geom::{Matrix, Point, Quad, Rect};
 use pdf_core::object::{Dict, Name, ObjRef, Object, StreamObj};
@@ -22,6 +25,29 @@ use pdf_core::{DocumentStore, PdfString, StringKind};
 
 use crate::color::Color;
 use crate::content::{escape_pdf_literal, fmt_num, PageContent};
+
+// Configuration is sampled without retaining its lock. The separate allocation
+// lock protects the page name scan + NM write + append; appearance generation
+// runs outside it. DocumentStore exposes single-operation locks, not a transaction.
+static ANNOT_STEM: LazyLock<RwLock<String>> = LazyLock::new(|| RwLock::new("fitz".into()));
+static ANNOT_ID_ALLOCATION: Mutex<()> = Mutex::new(());
+
+/// Sets the process-wide prefix for new annotation/widget IDs, or queries it.
+/// Strings are truncated to 50 Unicode scalar values; existing IDs are unchanged.
+pub fn set_annot_stem(stem: Option<&str>) -> String {
+    if let Some(stem) = stem {
+        let mut value = ANNOT_STEM
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        *value = stem.chars().take(50).collect();
+        value.clone()
+    } else {
+        ANNOT_STEM
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    }
+}
 
 /// The annotation subtype (`/Subtype`). Mirrors the PyMuPDF / ISO 32000-1 family
 /// implemented in M4b. Stored on the dict as the corresponding name.
@@ -252,6 +278,20 @@ impl<'a> Annot<'a> {
     #[must_use]
     pub fn name(&self) -> String {
         self.string_key("NM")
+    }
+
+    /// The `/Name` appearance/icon name, distinct from the `/NM` identifier.
+    #[must_use]
+    pub fn icon_name(&self) -> String {
+        self.dict()
+            .ok()
+            .and_then(|d| {
+                d.get(&Name::new("Name"))
+                    .and_then(Object::as_name)
+                    .and_then(Name::as_str)
+                    .map(str::to_owned)
+            })
+            .unwrap_or_default()
     }
 
     fn string_key(&self, key: &str) -> String {
@@ -1012,12 +1052,39 @@ fn finalize_annot<'a>(
     let obj = doc.add_object(Object::Dictionary(d))?;
     let annot = Annot { doc, leaf, obj };
     annot.update()?;
-    append_to_annots(doc, leaf, obj)?;
+    let stem = set_annot_stem(None);
+    let _allocation = ANNOT_ID_ALLOCATION
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let mut dict = annot.dict()?;
+    if let std::collections::btree_map::Entry::Vacant(slot) = dict.entry(Name::new("NM")) {
+        let names: HashSet<String> = annot_names(doc, page).into_iter().collect();
+        let marker = if ty == AnnotType::Widget { "W" } else { "A" };
+        let mut number = 0usize;
+        let name = loop {
+            let candidate = format!("{stem}-{marker}{number}");
+            if !names.contains(&candidate) {
+                break candidate;
+            }
+            number += 1;
+        };
+        slot.insert(text_string(&name));
+        annot.write_dict(dict)?;
+    }
+    append_to_annots_locked(doc, leaf, obj)?;
     Ok(annot)
 }
 
 /// Appends `obj` to the page leaf's `/Annots` array (creating it if absent).
 fn append_to_annots(doc: &DocumentStore, leaf: ObjRef, obj: ObjRef) -> Result<()> {
+    let _allocation = ANNOT_ID_ALLOCATION
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    append_to_annots_locked(doc, leaf, obj)
+}
+
+/// Caller holds `ANNOT_ID_ALLOCATION` across the page read/modify/write.
+fn append_to_annots_locked(doc: &DocumentStore, leaf: ObjRef, obj: ObjRef) -> Result<()> {
     let mut pd = doc
         .resolve(leaf)?
         .as_dict()
@@ -1523,6 +1590,9 @@ pub fn add_widget<'a>(doc: &'a DocumentStore, page: usize, spec: &WidgetSpec) ->
 /// Ensures the catalog `/AcroForm` exists (with a `/DR` font resource + `/DA`)
 /// and appends `field` to its `/Fields` array.
 fn register_acroform_field(doc: &DocumentStore, field: ObjRef) -> Result<()> {
+    let _allocation = ANNOT_ID_ALLOCATION
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let root = doc
         .root()
         .ok_or(Error::InvalidArgument("document has no /Root"))?;
@@ -2710,6 +2780,177 @@ mod tests {
             rect_array(&Rect::new(0.0, 0.0, 100.0, 100.0)),
         );
         doc.add_object(Object::Dictionary(d)).unwrap()
+    }
+
+    #[test]
+    fn annotation_ids_are_unique_for_concurrent_page_appends() {
+        let doc = doc_with_annot();
+        std::thread::scope(|scope| {
+            let mut workers = Vec::new();
+            for _ in 0..8 {
+                let doc = &doc;
+                workers.push(scope.spawn(move || {
+                    add_rect_annot(doc, 0, Rect::new(10.0, 10.0, 30.0, 30.0), None, None)
+                        .unwrap()
+                        .name()
+                }));
+            }
+            let names: HashSet<_> = workers
+                .into_iter()
+                .map(|worker| worker.join().unwrap())
+                .collect();
+            assert_eq!(names.len(), 8);
+            let persisted: HashSet<_> = annot_names(&doc, 0).into_iter().collect();
+            assert_eq!(persisted, names);
+        });
+    }
+
+    #[test]
+    fn popup_append_waits_for_id_allocation() {
+        let doc = doc_with_annot();
+        let leaf = pagetree::page_refs(&doc)[0];
+        let popup = doc.add_object(Object::Dictionary(Dict::new())).unwrap();
+        std::thread::scope(|scope| {
+            let allocation = ANNOT_ID_ALLOCATION
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let (started_tx, started_rx) = std::sync::mpsc::channel();
+            let (done_tx, done_rx) = std::sync::mpsc::channel();
+            let doc = &doc;
+            scope.spawn(move || {
+                started_tx.send(()).unwrap();
+                append_to_annots(doc, leaf, popup).unwrap();
+                done_tx.send(()).unwrap();
+            });
+            started_rx.recv().unwrap();
+            let early = done_rx.recv_timeout(std::time::Duration::from_millis(30));
+            drop(allocation);
+            assert!(matches!(
+                early,
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+            ));
+            done_rx
+                .recv_timeout(std::time::Duration::from_secs(2))
+                .unwrap();
+        });
+    }
+
+    #[test]
+    fn concurrent_notes_keep_parents_and_popups() {
+        for _ in 0..20 {
+            let doc = doc_with_annot();
+            let barrier = std::sync::Barrier::new(8);
+            std::thread::scope(|scope| {
+                let workers: Vec<_> = (0..8)
+                    .map(|_| {
+                        let doc = &doc;
+                        let barrier = &barrier;
+                        scope.spawn(move || {
+                            barrier.wait();
+                            add_text_annot(doc, 0, Point::new(10.0, 10.0), "note", "Note")
+                                .unwrap()
+                                .obj
+                        })
+                    })
+                    .collect();
+                let parents: HashSet<_> = workers.into_iter().map(|w| w.join().unwrap()).collect();
+                assert_eq!(parents.len(), 8);
+                let leaf = pagetree::page_refs(&doc)[0];
+                let page = doc.resolve(leaf).unwrap();
+                let refs: HashSet<_> = page.as_dict().unwrap()[&Name::new("Annots")]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .filter_map(Object::as_reference)
+                    .collect();
+                assert_eq!(refs.len(), 16);
+                let names: HashSet<_> = annot_names(&doc, 0).into_iter().collect();
+                assert_eq!(names.len(), 8);
+                for parent in parents {
+                    assert!(refs.contains(&parent));
+                    let note = doc.resolve(parent).unwrap();
+                    let popup = note.as_dict().unwrap()[&Name::new("Popup")]
+                        .as_reference()
+                        .unwrap();
+                    assert!(refs.contains(&popup));
+                    let popup_dict = doc.resolve(popup).unwrap();
+                    assert_eq!(
+                        popup_dict.as_dict().unwrap()[&Name::new("Parent")].as_reference(),
+                        Some(parent)
+                    );
+                }
+            });
+        }
+    }
+
+    #[test]
+    fn concurrent_widgets_keep_acroform_fields() {
+        let doc = doc_with_annot();
+        std::thread::scope(|scope| {
+            let workers: Vec<_> = (0..8)
+                .map(|i| {
+                    let doc = &doc;
+                    scope.spawn(move || {
+                        let spec = WidgetSpec {
+                            rect: Rect::new(10.0, 10.0, 40.0, 30.0),
+                            field_name: format!("field-{i}"),
+                            field_type: 7,
+                            field_value: String::new(),
+                            field_flags: 0,
+                            choice_values: Vec::new(),
+                            text_color: (0.0, 0.0, 0.0),
+                            text_font: String::new(),
+                            text_fontsize: 10.0,
+                        };
+                        add_widget(doc, 0, &spec).unwrap().obj
+                    })
+                })
+                .collect();
+            let widgets: HashSet<_> = workers.into_iter().map(|w| w.join().unwrap()).collect();
+            assert_eq!(widgets.len(), 8);
+            assert_eq!(
+                annot_refs(&doc, 0).into_iter().collect::<HashSet<_>>(),
+                widgets
+            );
+            assert_eq!(
+                annot_names(&doc, 0)
+                    .into_iter()
+                    .collect::<HashSet<_>>()
+                    .len(),
+                8
+            );
+            let root = doc.resolve(doc.root().unwrap()).unwrap();
+            let af = &root.as_dict().unwrap()[&Name::new("AcroForm")];
+            let af = match af {
+                Object::Reference(r) => doc.resolve(*r).unwrap(),
+                other => std::sync::Arc::new(other.clone()),
+            };
+            let fields = af.as_dict().unwrap()[&Name::new("Fields")]
+                .as_array()
+                .unwrap();
+            assert_eq!(
+                fields
+                    .iter()
+                    .filter_map(Object::as_reference)
+                    .collect::<HashSet<_>>(),
+                widgets
+            );
+        });
+    }
+
+    #[test]
+    fn finalize_preserves_explicit_annotation_id() {
+        let doc = doc_with_annot();
+        let mut dict = Dict::new();
+        dict.insert(
+            Name::new("Rect"),
+            rect_array(&Rect::new(10.0, 10.0, 30.0, 30.0)),
+        );
+        dict.insert(Name::new("NM"), text_string("existing-id"));
+        let annot = finalize_annot(&doc, 0, dict, AnnotType::Square).unwrap();
+        assert_eq!(annot.name(), "existing-id");
+        annot.update().unwrap();
+        assert_eq!(annot.name(), "existing-id");
     }
 
     #[test]
