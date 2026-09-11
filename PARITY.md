@@ -117,7 +117,7 @@ per-symbol truth (every name, disposition, milestone, note) is in [`COMPAT.toml`
 
 ### Partial (headline paths landed, long tail deferred)
 
-- [x] **`Page` (112/117)** — text extraction (`get_text` all variants, `get_textpage`, `search_for`, `TEXTFLAGS`,
+- [x] **`Page` (113/117)** — text extraction (`get_text` all variants, `get_textpage`, `extend_textpage`, `search_for`, `TEXTFLAGS`,
   OCR textpage), inventory (`get_fonts`/`get_images`/`get_xobjects`/`get_image_info`/`get_image_bbox`/
   `get_image_rects`/`get_drawings`/`get_cdrawings`/`cluster_drawings`), the full annotation `add_*` family
   (incl. `add_caret_annot`/`add_widget`) + `delete`/`delete_widget`/`apply_redactions`, widgets

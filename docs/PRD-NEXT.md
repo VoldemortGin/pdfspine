@@ -58,9 +58,9 @@
   this machine). **The worktree paths baked into those scripts are stale** —
   repoint them to this main checkout before reuse.
 - **Docs status split.** `PRD.md` is the **frozen v1 scope/history** doc and is
-  intentionally *not* updated for post-v1 features (its only live status markers
-  — `Tools.set_annot_stem` Deferred, the "vector page" Deferred (M6) — are still
-  correct); this file (`PRD-NEXT.md` §0) is the live queue. Per-symbol
+  intentionally *not* updated for post-v1 features; its old Deferred markers
+  are historical, not current status. This file (`PRD-NEXT.md` §0) is the live
+  queue. Per-symbol
   disposition lives only in `COMPAT.toml`, generated from
   `scripts/_compat_catalog.py` — **never hand-edit `COMPAT.toml`**.
 
@@ -260,6 +260,8 @@
     Annotation/Popup appends and widget Fields registration are serialized across
     these creation paths. Focused validation: 301 pdf-edit tests, 92 Python tests
     (3 existing skips), including 16 new public cases and a live ASCII oracle.
+    Final combined five-phase gate: **1953 Rust / 1307 Python tests**, 66 existing
+    Python skips; extension, drift and wheel/sdist install smoke pass.
     `Tools.set_subset_fontnames` is not implemented by this increment.
   - *Remaining order:* device callbacks `Page.run` /
     `DisplayList.run`; `Page.insert_font`, `Pixmap.warp`, `Annot.get_textbox`,

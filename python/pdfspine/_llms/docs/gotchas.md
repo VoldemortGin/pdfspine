@@ -34,19 +34,19 @@
 
 ## 5. 未实现的能力会显式报错（不是静默错值）
 
-- deferred（9 个，计划做）和 out-of-scope（66 个，v1 不做）符号调用时抛 `PdfUnsupportedError`。
+- deferred（6 个，计划做）和 out-of-scope（66 个，v1 不做）符号调用时抛 `PdfUnsupportedError`。
 - 最大的 out-of-scope 块：`Story` / `Xml` / `Archive`（HTML/CSS → PDF 排版引擎，整块不做）。还有部分渲染期 `Tools` 旋钮、Widget JavaScript 钩子、数字签名**创建**。
-- 已知 deferred（全部 9 个）：`Page.insert_font`/`run`/`extend_textpage`；`DisplayList.run`/`get_textpage`；`Annot.get_textbox`；`Pixmap.warp`；`Tools.set_annot_stem`/`set_subset_fontnames`。
+- 已知 deferred（全部 6 个）：`Page.insert_font`/`run`；`DisplayList.run`；`Annot.get_textbox`；`Pixmap.warp`；`Tools.set_subset_fontnames`。
 - 权威清单：包内随附的 PARITY 概览，或仓库 `COMPAT.toml`（per-symbol）。
 
 ## 6. 与真 PyMuPDF 的差异点
 
 - **异常类型不同名**：pdfspine 用 `PdfError` 体系，不是 PyMuPDF 的 `FileDataError` 等。shim 提供别名（`FileDataError = PdfSyntaxError`、`EmptyFileError = PdfSyntaxError`、`mupdf_display_errors = PdfError`），但若你**直接** `import pdfspine`（不经 shim），就该 catch `pdfspine.PdfError` 系列。
-- **覆盖率不是 100%**：当前为 90.2%（694/769）。迁移前用 `COMPAT.toml` 核对你依赖的符号。
+- **覆盖率不是 100%**：当前为 90.6%（697/769）。迁移前用 `COMPAT.toml` 核对你依赖的符号。
 - **渲染/文本是 near-parity 而非逐字节相同**：渲染 SSIM 0.984 均值 / 0.989 中位（2026-06-21 实测）；文本在 born-digital 上 parity，Arabic/RTL 更好。像素级/字节级完全一致不要假设。
 - **redaction 是破坏性的**：`apply_redactions()` 真正删除被覆盖内容，不可逆。
 - **camelCase 别名存在但建议用 snake_case**：`getToC`/`insertPDF`/`getPixmap`/`newPage` 等保留以兼容旧代码，新代码用 `get_toc`/`insert_pdf`/`get_pixmap`/`new_page`。
-- **OCG 可见性按 ISO 32000-1 求值，有三处刻意偏离 MuPDF/PyMuPDF**（影响渲染 / `get_text` / `get_drawings`，不影响 `get_ocgs()` 等报告值）：(1) OCMD `/P /AllOn` 与 `/AnyOff` 按 §8.11.2.2 求值（MuPDF 1.28 算错）；(2) OCMD `/VE` 表达式被求值且优先于 `/OCGs` + `/P`（MuPDF 忽略 `/VE`）；(3) 配置里 OFF、但 `/Usage /View /ViewState /ON` 且被活动配置 `/AS`（`/Event /View`）条目列出的 OCG，pdfspine **显示**，MuPDF/PyMuPDF 忽略 `/AS` 而**隐藏**（§8.11.4.4）。其余判定行（含 `/ViewState /OFF` 无条件隐藏、`/Print`/`/Export` 忽略）已与 PyMuPDF 1.27.2 实测一致；`/Intent` 不匹配时的隐藏尚未实现。清单见 `docs/pymupdf-compat-findings.md` 附录。
+- **OCG 可见性按 ISO 32000-1 求值，有三处刻意偏离 MuPDF/PyMuPDF**（影响渲染 / `get_text` / `get_drawings`，不影响 `get_ocgs()` 等报告值）：(1) OCMD `/P /AllOn` 与 `/AnyOff` 按 §8.11.2.2 求值（MuPDF 1.28 算错）；(2) OCMD `/VE` 表达式被求值且优先于 `/OCGs` + `/P`（MuPDF 忽略 `/VE`）；(3) 配置里 OFF、但 `/Usage /View /ViewState /ON` 且被活动配置 `/AS`（`/Event /View`）条目列出的 OCG，pdfspine **显示**，MuPDF/PyMuPDF 忽略 `/AS` 而**隐藏**（§8.11.4.4）。其余判定行（含 `/ViewState /OFF` 无条件隐藏、`/Print`/`/Export` 忽略）已与 PyMuPDF 1.27.2 实测一致；`/Intent` 配置与 OCG 的匹配已实现，缺省/空配置的差异见当前行为记录。清单见 `docs/pymupdf-compat-findings.md` 附录。
 
 ## 7. open() 的行为细节
 
