@@ -11,6 +11,16 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
+### Pixmap warping
+
+- Added `Pixmap.warp` with bilinear quad mapping, correct pixel-center sampling,
+  independent alpha-bearing Gray/RGB/CMYK pixels, inherited DPI, local source
+  coordinates, edge clamping and checked allocation. Zero output dimensions are
+  supported; nonfinite, nonconvex and degenerate quads are rejected.
+- The usable method intentionally fixes upstream wrapper conversion failure and
+  uses standard interpolation instead of native phase/weight anomalies. Existing
+  page rendering is unchanged; see the compatibility behavior record.
+
 ### Annotation appearance text
 
 - `Annot.get_textbox(rect, textpage=None)` now extracts the annotation's own

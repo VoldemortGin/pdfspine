@@ -226,7 +226,7 @@
     SSIM (one was already measured slower and rejected).
   - *Size:* **L**.
 
-- [ ] **4. Deferred APIs — 3 of the original 9 landed; 6 remain.**
+- [ ] **4. Deferred APIs — 5 of the original 9 landed; 4 remain.**
   - *Landed:* `DisplayList.get_textpage(flags=3)` returns a usable public
     `TextPage` wrapper from owned semantic/font/image resources; source edits
     and closure do not invalidate text extraction. Paired recording avoids a
@@ -276,13 +276,24 @@
     byte-for-byte, without new GT scoring. Final Rust/Python gates pass **1953 /
     1326 tests**, with 66 existing Python skips; extension fingerprint
     `cacd5ba28ba4`. Drift and wheel/sdist install smoke also pass.
+  - *Also landed:* `Pixmap.warp(quad, width, height)` uses bilinear quad mapping
+    and standard premultiplied-channel sampling with correct pixel centers.
+    It returns independent alpha-bearing Gray/RGB/CMYK samples, keeps DPI,
+    resets origin, clamps edges, and allows zero output dimensions. Invalid
+    geometry and excessive allocation are rejected. Public PyMuPDF wrappers fail
+    argument conversion locally; metadata comparisons use an explicit native
+    adapter, while pixel tests use independent mathematical expectations rather
+    than native phase/weight errors. Six new Rust and 16 public Python cases
+    cover identity, colors, asymmetric quads, alpha, ownership and limits.
+    Related checks: 114 pdf-image tests, 45 Python tests (2 existing skips),
+    and workspace clippy with all targets/features pass. See the behavior record.
   - *Remaining order:* device callbacks `Page.run` /
-    `DisplayList.run`; `Page.insert_font`, `Pixmap.warp`,
+    `DisplayList.run`; `Page.insert_font`,
     `Tools.set_subset_fontnames` remain deferred.
   - *Evidence:* `python/tests/test_displaylist_textpage.py` covers flags, invisible
     text, Form resources, source edit/close, CropBox/Rotate, annotations and live
     PyMuPDF 1.28.2 comparisons; Rust tests cover lazy decoding and snapshot bounds.
-    Catalog parity is 698/769 = 90.8%, deferred = 5. No callback framework is added.
+    Catalog parity is 699/769 = 90.9%, deferred = 4. No callback framework is added.
     Full five-phase gate passes (1255 Python tests, 66 existing skips). The same
     35 available render inputs retain identical dimensions/full pixel hashes in
     direct Page rendering and `annots=0` DisplayList replay; eight historical
