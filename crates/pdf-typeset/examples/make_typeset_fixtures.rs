@@ -1,6 +1,6 @@
 //! Generate the committed typeset conformance fixtures (PRD §10 TS-7).
 //!
-//! Writes four deterministic, license-clean PDFs under `fixtures/typeset/`
+//! Writes five deterministic, license-clean PDFs under `fixtures/typeset/`
 //! using the **bundled-face resolver only** (`FontResolver::with_platform`,
 //! fixed to [`Platform::MacOs`] substitution tables so the output is identical
 //! on every host — no system-font dependence). The emitted bytes are
@@ -20,6 +20,7 @@
 //!   box would raster differently here than in external readers.
 //! * `typeset-lo-doc.pdf`   — Letter page mirroring the `sample.docx` built by
 //!   `conformance/gt/typeset_lo_oracle.py` (local-only LibreOffice oracle).
+//! * `typeset-lo-shading.pdf` — the DOCX sample with solid paragraph shading.
 //! * `typeset-lo-slide.pdf` — 10×7.5 in slide mirroring that script's
 //!   `sample.pptx`, laid out under [`LineHeightRule::FontIndependent`] so the
 //!   line pitch matches PowerPoint / Impress font-independent 1.2-em spacing.
@@ -387,14 +388,17 @@ fn box_fixture() -> Vec<u8> {
 // Letter page, 1 in margins, Liberation Serif (LibreOffice's docx default).
 // Keep this text in sync with DOC_TITLE/DOC_PARAS in typeset_lo_oracle.py.
 // --------------------------------------------------------------------------
-fn lo_doc_fixture() -> Vec<u8> {
+fn lo_doc_fixture(shading: bool) -> Vec<u8> {
     let mut title = RunStyle::new(SERIF, 24.0);
     title.bold = true;
     let mut title_para = ParaProps::new();
     title_para.space_after = 12.0;
+    let background = shading.then_some(Rgb::new(244.0 / 255.0, 177.0 / 255.0, 131.0 / 255.0));
+    title_para.shading = background;
     let body = |text: &str| {
         let mut p = ParaProps::new();
         p.space_after = 10.0;
+        p.shading = background;
         Block::Paragraph(p, vec![Run::new(text, RunStyle::new(SERIF, 12.0))])
     };
 
@@ -513,7 +517,8 @@ fn main() {
     for (name, bytes) in [
         ("typeset-flow.pdf", flow_fixture()),
         ("typeset-box.pdf", box_fixture()),
-        ("typeset-lo-doc.pdf", lo_doc_fixture()),
+        ("typeset-lo-doc.pdf", lo_doc_fixture(false)),
+        ("typeset-lo-shading.pdf", lo_doc_fixture(true)),
         ("typeset-lo-slide.pdf", lo_slide_fixture()),
     ] {
         let path = out_dir.join(name);

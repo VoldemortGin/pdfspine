@@ -167,6 +167,10 @@ impl ListLabel {
 #[non_exhaustive]
 #[derive(Clone, Debug, PartialEq)]
 pub struct ParaProps {
+    /// Optional solid paragraph background, spanning the indented paragraph
+    /// width. Adjacent paragraphs with the same fill and horizontal indents
+    /// also shade their intervening spacing; page breaks stop that join.
+    pub shading: Option<Rgb>,
     /// Horizontal alignment (including justify).
     pub align: Align,
     /// Line spacing rule.
@@ -192,6 +196,7 @@ impl ParaProps {
     #[must_use]
     pub fn new() -> Self {
         ParaProps {
+            shading: None,
             align: Align::Left,
             spacing: LineSpacing::default(),
             space_before: 0.0,
