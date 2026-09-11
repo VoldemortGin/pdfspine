@@ -1,6 +1,6 @@
 //! Generate the committed typeset conformance fixtures (PRD §10 TS-7).
 //!
-//! Writes five deterministic, license-clean PDFs under `fixtures/typeset/`
+//! Writes six deterministic, license-clean PDFs under `fixtures/typeset/`
 //! using the **bundled-face resolver only** (`FontResolver::with_platform`,
 //! fixed to [`Platform::MacOs`] substitution tables so the output is identical
 //! on every host — no system-font dependence). The emitted bytes are
@@ -21,6 +21,7 @@
 //! * `typeset-lo-doc.pdf`   — Letter page mirroring the `sample.docx` built by
 //!   `conformance/gt/typeset_lo_oracle.py` (local-only LibreOffice oracle).
 //! * `typeset-lo-shading.pdf` — the DOCX sample with solid paragraph shading.
+//! * `typeset-lo-tracking.pdf` — the DOCX sample with 1pt character spacing.
 //! * `typeset-lo-slide.pdf` — 10×7.5 in slide mirroring that script's
 //!   `sample.pptx`, laid out under [`LineHeightRule::FontIndependent`] so the
 //!   line pitch matches PowerPoint / Impress font-independent 1.2-em spacing.
@@ -34,10 +35,10 @@
 use std::path::{Path, PathBuf};
 
 use pdf_typeset::{
-    preset, Align, Block, BorderEdge, CellBorders, ColumnWidth, Fill, FixedPages, FontResolver,
-    ImageSpec, LineHeightRule, LineSpacing, ListLabel, Op, PageGeom, PageOps, ParaProps, Platform,
-    Rect, Rgb, Run, RunStyle, Stroke, TableCell, TableRow, TableSpec, TextBoxSpec, Typesetter,
-    VAnchor,
+    preset, Align, Block, BorderEdge, CellBorders, CharacterSpacing, ColumnWidth, Fill, FixedPages,
+    FontResolver, ImageSpec, LineHeightRule, LineSpacing, ListLabel, Op, PageGeom, PageOps,
+    ParaProps, Platform, Rect, Rgb, Run, RunStyle, Stroke, TableCell, TableRow, TableSpec,
+    TextBoxSpec, Typesetter, VAnchor,
 };
 
 const SANS: &str = "Liberation Sans";
@@ -388,9 +389,10 @@ fn box_fixture() -> Vec<u8> {
 // Letter page, 1 in margins, Liberation Serif (LibreOffice's docx default).
 // Keep this text in sync with DOC_TITLE/DOC_PARAS in typeset_lo_oracle.py.
 // --------------------------------------------------------------------------
-fn lo_doc_fixture(shading: bool) -> Vec<u8> {
+fn lo_doc_fixture(shading: bool, tracking: CharacterSpacing) -> Vec<u8> {
     let mut title = RunStyle::new(SERIF, 24.0);
     title.bold = true;
+    title.character_spacing = tracking;
     let mut title_para = ParaProps::new();
     title_para.space_after = 12.0;
     let background = shading.then_some(Rgb::new(244.0 / 255.0, 177.0 / 255.0, 131.0 / 255.0));
@@ -399,7 +401,9 @@ fn lo_doc_fixture(shading: bool) -> Vec<u8> {
         let mut p = ParaProps::new();
         p.space_after = 10.0;
         p.shading = background;
-        Block::Paragraph(p, vec![Run::new(text, RunStyle::new(SERIF, 12.0))])
+        let mut style = RunStyle::new(SERIF, 12.0);
+        style.character_spacing = tracking;
+        Block::Paragraph(p, vec![Run::new(text, style)])
     };
 
     let blocks = vec![
@@ -517,9 +521,22 @@ fn main() {
     for (name, bytes) in [
         ("typeset-flow.pdf", flow_fixture()),
         ("typeset-box.pdf", box_fixture()),
-        ("typeset-lo-doc.pdf", lo_doc_fixture(false)),
-        ("typeset-lo-shading.pdf", lo_doc_fixture(true)),
+        (
+            "typeset-lo-doc.pdf",
+            lo_doc_fixture(false, CharacterSpacing::default()),
+        ),
+        (
+            "typeset-lo-shading.pdf",
+            lo_doc_fixture(true, CharacterSpacing::default()),
+        ),
         ("typeset-lo-slide.pdf", lo_slide_fixture()),
+        (
+            "typeset-lo-tracking.pdf",
+            lo_doc_fixture(
+                false,
+                CharacterSpacing::new(1.0).expect("valid fixture tracking"),
+            ),
+        ),
     ] {
         let path = out_dir.join(name);
         std::fs::write(&path, &bytes).expect("write fixture");

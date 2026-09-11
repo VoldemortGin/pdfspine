@@ -33,10 +33,67 @@ impl Run {
     }
 }
 
+/// Finite, nonnegative extra advance after a base scalar and its following
+/// combining marks, in points. Paragraph ends and soft wraps omit the final
+/// extra advance; explicit hard breaks retain it. This does not add shaping
+/// or full grapheme-cluster segmentation. Negative spacing is not supported.
+#[derive(Copy, Clone, Debug, Default, PartialEq)]
+pub struct CharacterSpacing(f64);
+
+/// A rejected character-spacing value.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum CharacterSpacingError {
+    /// NaN and infinite spacing cannot define a layout distance.
+    NonFinite,
+    /// Condensed text requires a separate signed-spacing policy.
+    Negative,
+}
+
+impl std::fmt::Display for CharacterSpacingError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::NonFinite => "character spacing must be finite",
+            Self::Negative => "negative character spacing is not supported",
+        })
+    }
+}
+impl std::error::Error for CharacterSpacingError {}
+
+impl CharacterSpacing {
+    /// Construct extra character spacing in points.
+    ///
+    /// # Errors
+    /// Rejects negative and nonfinite values without clamping them.
+    pub fn new(points: f64) -> Result<Self, CharacterSpacingError> {
+        if !points.is_finite() {
+            return Err(CharacterSpacingError::NonFinite);
+        }
+        if points < 0.0 {
+            return Err(CharacterSpacingError::Negative);
+        }
+        Ok(Self(points))
+    }
+
+    /// The validated spacing in points.
+    #[must_use]
+    pub fn points(self) -> f64 {
+        self.0
+    }
+
+    /// Font autoshrink applies the same bounded scale to the extra advance.
+    pub(crate) fn shrunk(self, scale: f64) -> Self {
+        Self(self.0 * scale)
+    }
+}
+
 /// Per-run character formatting (docx `rPr` / pptx `rPr` subset).
 #[non_exhaustive]
 #[derive(Clone, Debug, PartialEq)]
 pub struct RunStyle {
+    /// Additional character advance; zero preserves the original layout.
+    /// Combining marks retain their base-relative position, with spacing after
+    /// the combining sequence. This does not introduce a shaping engine.
+    pub character_spacing: CharacterSpacing,
     /// The requested font family (resolved via `fontres`, PRD §10 TS-2).
     pub family: String,
     /// Font size in points.
@@ -66,6 +123,7 @@ impl RunStyle {
     #[must_use]
     pub fn new(family: impl Into<String>, size: f64) -> Self {
         RunStyle {
+            character_spacing: CharacterSpacing::default(),
             family: family.into(),
             size,
             bold: false,

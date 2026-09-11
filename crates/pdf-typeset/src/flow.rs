@@ -175,6 +175,8 @@ pub(crate) struct Frag {
     pub(crate) link: Option<Rc<str>>,
     pub(crate) text: String,
     pub(crate) width: f64,
+    /// Extra advance after this scalar (deferred until a combining sequence ends).
+    pub(crate) tracking: f64,
     /// A collapsible inter-word space (justify widens these).
     pub(crate) space: bool,
     /// Width was widened by justify (breaks the text-op merge chain).
@@ -225,6 +227,7 @@ fn push_frag(frags: &mut Vec<Frag>, frag: Frag) {
         if let Some(last) = frags.last_mut() {
             if !last.space
                 && !last.stretched
+                && !frag.stretched
                 && last.face == frag.face
                 && (last.size - frag.size).abs() < EPS
                 && last.color == frag.color
@@ -251,7 +254,11 @@ pub(crate) fn tokens(ts: &mut Typesetter, runs: &[Run]) -> Vec<Tok> {
     let mut word: Vec<Frag> = Vec::new();
     let mut word_w = 0.0f64;
 
-    for run in runs {
+    let has_tracking = runs
+        .iter()
+        .any(|run| run.style.character_spacing.points() > 0.0);
+    let mut cluster_spacing = 0.0;
+    for (run_index, run) in runs.iter().enumerate() {
         let style = &run.style;
         let size = style.size;
         if !(size.is_finite() && size > 0.0) {
@@ -259,7 +266,29 @@ pub(crate) fn tokens(ts: &mut Typesetter, runs: &[Run]) -> Vec<Tok> {
         }
         let base = ts.base_face(style);
         let link: Option<Rc<str>> = style.link.as_deref().map(Rc::from);
-        for ch in run.text.chars() {
+        let next_run_char = has_tracking
+            .then(|| {
+                runs[run_index + 1..]
+                    .iter()
+                    .filter(|run| run.style.size.is_finite() && run.style.size > 0.0)
+                    .find_map(|run| run.text.chars().next())
+            })
+            .flatten();
+        let mut chars = run.text.chars().peekable();
+        while let Some(ch) = chars.next() {
+            let tracking = if has_tracking {
+                if !unicode_normalization::char::is_combining_mark(ch) {
+                    cluster_spacing = style.character_spacing.points();
+                }
+                let next = chars.peek().copied().or(next_run_char);
+                if next.is_some_and(unicode_normalization::char::is_combining_mark) {
+                    0.0
+                } else {
+                    cluster_spacing
+                }
+            } else {
+                0.0
+            };
             if ch == '\n' {
                 flush_word(&mut out, &mut word, &mut word_w);
                 out.push(Tok::Break);
@@ -279,6 +308,7 @@ pub(crate) fn tokens(ts: &mut Typesetter, runs: &[Run]) -> Vec<Tok> {
                         link: None,
                         text: String::new(),
                         width: 0.0,
+                        tracking: 0.0,
                         space: true,
                         stretched: true,
                         tab: true,
@@ -293,7 +323,7 @@ pub(crate) fn tokens(ts: &mut Typesetter, runs: &[Run]) -> Vec<Tok> {
             if !breaks_anywhere && ch != '\u{a0}' && ch.is_whitespace() {
                 flush_word(&mut out, &mut word, &mut word_w);
                 let face = ts.char_face(&base, ' ');
-                let width = ts.faces().advance(face, ' ', size);
+                let width = ts.faces().advance(face, ' ', size) + tracking;
                 out.push(Tok::Space {
                     frag: Frag {
                         face,
@@ -305,15 +335,16 @@ pub(crate) fn tokens(ts: &mut Typesetter, runs: &[Run]) -> Vec<Tok> {
                         link: link.clone(),
                         text: " ".to_string(),
                         width,
+                        tracking,
                         space: true,
-                        stretched: false,
+                        stretched: tracking > 0.0,
                         tab: false,
                     },
                 });
                 continue;
             }
             let face = ts.char_face(&base, ch);
-            let width = ts.faces().advance(face, ch, size);
+            let width = ts.faces().advance(face, ch, size) + tracking;
             let frag = Frag {
                 face,
                 size,
@@ -324,8 +355,9 @@ pub(crate) fn tokens(ts: &mut Typesetter, runs: &[Run]) -> Vec<Tok> {
                 link: link.clone(),
                 text: ch.to_string(),
                 width,
+                tracking,
                 space: false,
-                stretched: false,
+                stretched: tracking > 0.0,
                 tab: false,
             };
             if breaks_anywhere {
@@ -339,7 +371,9 @@ pub(crate) fn tokens(ts: &mut Typesetter, runs: &[Run]) -> Vec<Tok> {
                 push_frag(&mut word, frag);
             }
         }
-        flush_word(&mut out, &mut word, &mut word_w);
+        if !next_run_char.is_some_and(unicode_normalization::char::is_combining_mark) {
+            flush_word(&mut out, &mut word, &mut word_w);
+        }
     }
     flush_word(&mut out, &mut word, &mut word_w);
     out
@@ -414,6 +448,13 @@ pub(crate) fn wrap(
             let f = cur.pop().unwrap_or_else(|| unreachable!());
             *cur_w -= f.width;
         }
+        if !hard {
+            if let Some(last) = cur.last_mut() {
+                last.width -= last.tracking;
+                *cur_w -= last.tracking;
+                last.tracking = 0.0;
+            }
+        }
         if !cur.is_empty() || keep_empty {
             lines.push(LineOut {
                 frags: std::mem::take(cur),
@@ -451,18 +492,35 @@ pub(crate) fn wrap(
                 cur.push(f);
             }
             Tok::Word { frags, width } => {
-                if !cur.is_empty() && cur_w + width > limit + EPS {
+                let trailing = frags.last().map_or(0.0, |frag| frag.tracking);
+                let tracked_word = frags.iter().any(|frag| frag.tracking > 0.0);
+                // CJK bases are separate word tokens. A following tracked mark
+                // must join its base before any later scalar can wrap.
+                let starts_combining = tracked_word
+                    && frags
+                        .first()
+                        .and_then(|frag| frag.text.chars().next())
+                        .is_some_and(unicode_normalization::char::is_combining_mark);
+                if !cur.is_empty() && cur_w + width - trailing > limit + EPS && !starts_combining {
                     flush(&mut cur, &mut cur_w, &mut lines, false, false);
                     after_soft = true;
                 }
                 let limit = if lines.is_empty() { w_first } else { w_rest };
-                if *width > limit + EPS {
+                if *width - trailing > limit + EPS
+                    || (starts_combining
+                        && !cur.is_empty()
+                        && cur_w + width - trailing > limit + EPS)
+                {
                     // Force-split at character granularity.
                     for frag in frags {
                         for ch in frag.text.chars() {
-                            let cw = faces.advance(frag.face, ch, frag.size);
+                            let cw = faces.advance(frag.face, ch, frag.size) + frag.tracking;
                             let limit = if lines.is_empty() { w_first } else { w_rest };
-                            if !cur.is_empty() && cur_w + cw > limit + EPS {
+                            if !cur.is_empty()
+                                && cur_w + cw - frag.tracking > limit + EPS
+                                && (!tracked_word
+                                    || !unicode_normalization::char::is_combining_mark(ch))
+                            {
                                 flush(&mut cur, &mut cur_w, &mut lines, false, false);
                                 after_soft = true;
                             }
@@ -1027,6 +1085,7 @@ fn draw_list_label(ctx: &mut Ctx, label: &ListLabel, runs: &[Run], first_left: f
     style.underline = false;
     style.strike = false;
     style.highlight = None;
+    style.character_spacing = crate::model::CharacterSpacing::default();
     if let Some(family) = &label.font {
         style.family.clone_from(family);
     }
