@@ -33,5 +33,6 @@ pub mod error;
 pub mod getpixmap;
 pub mod imagedoc;
 pub mod pixmap;
+pub mod warp;
 
 pub use error::{Error, Result};

@@ -273,3 +273,29 @@ PyMuPDF 接口，设置图标仍用 `Annot.set_name()`。
 
 可执行回归：`python/tests/test_extend_textpage.py`。只覆盖本追加接口，不加入
 DeviceWrapper / Page.run / DisplayList.run 回调框架。
+
+## Pixmap.warp 的可用性与数学采样合同（2026-09-10）
+
+`Pixmap.warp(quad, width, height)` 对局部像素边界坐标中的四边形作双线性坐标映射，
+再以标准双线性权重采样原有预乘颜色/alpha 通道；同尺寸全图矩形保持像素不偏移。
+支持 `ul/ur/ll/lr` 点（点有 `x/y`）的 Quad-like 对象。四角必须有限、严格凸且非退化，
+不改变全局 `Quad.is_convex` 的历史行为。越界采样夹到源边缘。
+
+输出有独立像素存储，保留 Gray/RGB/CMYK 与 DPI，总有 alpha（原无 alpha 时补 255），
+origin 为 (0,0)，源 origin 不参与坐标计算。width/height 为整数（bool 沿用整数绑定），
+允许零维合法空结果；负数/不可表示的维度、非法四角明确报错，超过既有 256M 像素
+上限或存储分配失败返回资源限制错误，拒绝在检查前分配巨大缓冲区。
+
+证据必须分开解释：
+
+- 本机 PyMuPDF 1.28.2 与基线 1.24.14 的公开 wrapper 对正常 Quad 均在 native
+  参数转换失败；pdfspine 提供可用方法是刻意修正，不复刻此 TypeError。
+- 用显式周长顺序适配的 1.28.2 native 调用确认颜色空间、总 alpha、DPI、局部坐标、
+  零尺寸与夹边元数据行为。两幅 256×256 x/y ramp、非对称四边形的趋势支持双线性
+  四角映射（平均坐标误差约 0.4px），排除 projective homography（约 9.6–33.6px）。
+- native 小图存在额外采样相位和非标准权重：半像素四个单点基底权重为
+  `[1/4,0,1/4,1/2]`。pdfspine 不复刻这些异常；像素验收使用独立数学预期，包含
+  identity、四色中心、斜四边形梯度与有效预乘 alpha。不能称 native 像素位同。
+
+回归位于 `python/tests/test_pixmap_warp.py` 与 `pdf-image::warp`；没有改写页面
+renderer 的采样、抗锯齿或现有图像绘制路径。

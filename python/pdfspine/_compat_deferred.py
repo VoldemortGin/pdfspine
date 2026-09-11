@@ -12,7 +12,6 @@ DEFERRED: frozenset[str] = frozenset(
         "DisplayList.run",
         "Page.insert_font",
         "Page.run",
-        "Pixmap.warp",
         "Tools.set_subset_fontnames",
     }
 )

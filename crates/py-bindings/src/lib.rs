@@ -25,7 +25,8 @@ use pdf_api::{
 };
 use pyo3::create_exception;
 use pyo3::exceptions::{
-    PyAttributeError, PyFileNotFoundError, PyIndexError, PyOSError, PyRuntimeError, PyValueError,
+    PyAttributeError, PyFileNotFoundError, PyIndexError, PyOSError, PyRuntimeError, PyTypeError,
+    PyValueError,
 };
 use pyo3::ffi;
 use pyo3::intern;
@@ -141,7 +142,7 @@ fn map_err(e: ApiError) -> PyErr {
 /// catchable `PdfUnsupportedError` the §7 fitz-migration contract promises,
 /// instead of a bare `AttributeError`. `test_core_alias_deferred_set_matches_rust`
 /// guards this list against drift from `_compat_deferred.DEFERRED`.
-const PIXMAP_DEFERRED: &[&str] = &["warp"];
+const PIXMAP_DEFERRED: &[&str] = &[];
 const DISPLAYLIST_DEFERRED: &[&str] = &["run"];
 const TOOLS_DEFERRED: &[&str] = &["set_subset_fontnames"];
 
@@ -4917,6 +4918,32 @@ impl PyPixmap {
     /// `Pixmap.set_pixel`). Copy-on-write if a buffer view is live.
     fn set_pixel(&mut self, x: u32, y: u32, value: Vec<u8>) -> PyResult<()> {
         pdf_api::pixmap_set_pixel(&mut self.pix, x, y, &value).map_err(map_err)
+    }
+
+    /// Resamples a finite convex Quad into independent, alpha-bearing pixels.
+    fn warp(&self, quad: &Bound<'_, PyAny>, width: i64, height: i64) -> PyResult<Self> {
+        let mut corners = [[0.0; 2]; 4];
+        for (corner, name) in corners.iter_mut().zip(["ul", "ur", "ll", "lr"]) {
+            let point = quad
+                .getattr(name)
+                .map_err(|_| PyTypeError::new_err("quad must expose ul, ur, ll, lr points"))?;
+            corner[0] = point.getattr("x")?.extract()?;
+            corner[1] = point.getattr("y")?.extract()?;
+        }
+        let width =
+            u32::try_from(width).map_err(|_| PyValueError::new_err("invalid warp width"))?;
+        let height =
+            u32::try_from(height).map_err(|_| PyValueError::new_err("invalid warp height"))?;
+        let pix =
+            pdf_api::pixmap_warp(&self.pix, corners, width, height).map_err(
+                |error| match error {
+                    pdf_api::Error::Unsupported(message) => PyValueError::new_err(message),
+                    other => map_err(other),
+                },
+            )?;
+        let mut result = Self::new(pix);
+        result.dpi = self.dpi;
+        Ok(result)
     }
 
     /// Sets every alpha byte to `value` (PyMuPDF `Pixmap.set_alpha` constant).

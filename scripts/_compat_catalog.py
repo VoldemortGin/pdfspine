@@ -1085,11 +1085,10 @@ add_many(
 )
 add_many(
     "Pixmap",
-    DEFERRED,
+    IMPLEMENTED,
     "M5",
-    [
-        "warp",
-    ],
+    ["warp"],
+    "owned bilinear quad warp; corrected pixel centers and interpolation; always alpha; local coordinates",
 )
 add_many(
     "Pixmap",
