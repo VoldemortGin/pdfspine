@@ -488,6 +488,15 @@
   compiled-Rust comparison are in `/Volumes/ExternalSSD/tmp/ocg-intent/`.
 
 - [ ] **9. Table-structure backend benchmark + ONNX validation (P3-6, proposed).**
+  - *Complete diagnostic collection (2026-09-11):* all six native lines/text,
+    TATR and ONNX page-e2e / goldcrop tracks processed **40 pages / 60 tables**,
+    split into 10 development / 30 evaluation pages. See
+    `conformance/gt/TABLE-DIAGNOSTICS-2026-09-11.md` and its exact hash/config
+    provenance JSON. Four e2e tracks reuse ec7b199; two goldcrop tracks use
+    38cdcba after extent-proof validation. Original failed 14/60 crop runs remain
+    evidence. All official aggregates are null, comparable=false and status
+    incomplete because input review is still unreviewed. These diagnostics do
+    not establish human gold, an untouched holdout or ADR/default acceptance.
   - *Cropped source proof (2026-09-11):* FinTabNet goldcrop now binds the original
     `pdf_full_page_bbox` to each request, accepts only zero-origin visible extents
     agreeing within 0.001 point on unrotated pages, and uses identity coordinates.
