@@ -13,7 +13,8 @@
 
 - **Repository:** `/Users/linhan/startup/spine/pdfspine`, branch `main`.
   The reading-order follow-up below started at **`93298af`** (the 2026-09-10
-  backlog update); the SECCI increment started at **`3faa62d`**. Use the log
+  backlog update); SECCI started at **`3faa62d`**, and the conservative FR
+  header increment at **`b0414f7`**. Use the log
   for the current post-fix HEAD; clean up only the completed item's branch /
   worktree, preserving other active tasks. Inspect with
   `git -C /Users/linhan/startup/spine/pdfspine log --oneline --first-parent -6`
@@ -100,13 +101,14 @@
   **The next open backlog item is #1.**
 
 - [ ] **1. Reading-order follow-ups** (from the 2026-09-09 stage-3 attribution;
-  sub-items 1 and 2 completed below).
+  sub-items 1–3 completed within their conservative scopes below).
   - *Goal:* close the four residual reading-order gaps left after stage 3 + D4.
   - *Why / evidence:* `docs/reading-order-root-cause.md` "后续该修" + the variant
     table. The hard bars are met at HEAD (PMC 7 order 0.9600 vs fitz 0.9605;
-    EUR-Lex 40 lev 0.9392 / order 0.9794; FR misplaced 24/2493 vs fitz 64/2517;
-    FR fragmented 247 pages vs fitz 0). Sub-items 1 and 2 are complete within
-    the conservative scopes below; two follow-ups remain open.
+    EUR-Lex 40 lev 0.9392 / order 0.9794; FR misplaced 22/2493 vs fitz 64/2517;
+    FR fragmented 82 pages vs fitz 0). Sub-items 1–3 are complete within
+    the conservative scopes below; sub-item 4 remains open, with form/header
+    edge cases explicitly retained for future refinements.
   - *Where:* `crates/pdf-text/src/layout.rs` — `find_column_cut`, `cut_lines`,
     `emit_column_cut` / `SPANNING_BANDS_PARTITION_ROWS`, `group_blocks_columned`,
     `detect_page_gutters` / `split_on_gutter`.
@@ -142,10 +144,23 @@
        residuals without guessing empty rows that have no geometric boundary.
        Final full-document corpus and gate evidence is in the
        **SECCI label/value** section of `docs/reading-order-root-cause.md`.
-       Sub-item **3** is next.
-    3. **D4 header de-fragmentation, remaining 247 pages** toward fitz's 0
-       (`independent_run_gap` etc.); D4 only did the gutter-coverage split
-       (530 → 247).
+    3. **D4 isolated header de-fragmentation — done (2026-09-10, conservative).**
+       Recover complete same-baseline running-header lines from original glyphs
+       after the original line geometry has finished region / XY-cut ordering.
+       Only an isolated top horizontal run bridging a body gutter qualifies;
+       repeated narrow columns / table starts retain their boundaries. Complete
+       painted-character provenance must match before consuming each fragment.
+       This fixes the full header on FR-2026-01-07 p62/p67/p88 and reduces
+       fragmented pages **247 → 82**, with misplaced **24 → 22**. The remaining
+       82 fragmented pages stay unchanged when safe identification fails.
+       All 2551 FR pages retain identical bbox/text/relative order for blocks
+       with y0 > 60pt; previously exposed cross-column sentence interruptions
+       are restored. EUR-Lex 40/3365 pages and the 300-document prefix digest
+       are unchanged. Actual GT worker inputs for EUR-Lex/born are byte-identical
+       to `secci-final`, so their validated scores are reused rather than claimed
+       as a new full GT run; PMC is freshly rescored and unchanged. Full evidence
+       and gate results are in the **FR 孤立刊头** section of the root-cause report.
+       Sub-item **4** is next.
     4. **PMC order 0.9605 / PMC212689 0.749 targets** still unmet — the PLoS
        3-column, mid-page spanning-caption float-vs-rows semantics that stage 3
        did not touch.
@@ -160,16 +175,17 @@
     tests; re-score with `/Volumes/ExternalSSD/tmp/ro34/summarize.py <tagA> <tagB>`.
   - *Size:* **L**.
 
-- [ ] **2. govdocs1-00074 near-blank render.**
-  - *Goal:* fix the near-blank raster for this document.
-  - *Why / evidence:* it renders near-blank at fitz SSIM **0.2654** (pre-existing
-    and untouched — noted in the render-performance record, History). Corpus in
-    `fixtures/corpus`.
-  - *Where:* `crates/pdf-render/` — root cause not yet diagnosed (the previous
-    agent was cut off while reading).
-  - *Acceptance:* SSIM against `.venv-oracle` fitz rises out of the near-blank
-    band with no regression elsewhere (the P1-3 render gate stays green).
-  - *Size:* **M**.
+- [x] **2. govdocs1-00074 near-blank render — done (2026-09-10).**
+  `pdf-image` now chooses JPEG output from the SOF component count. The header
+  probe had temporarily classified three-component Adobe APP14 RGB as CMYK,
+  causing decode failure and silently skipped image strips. Real p0 SSIM rises
+  **0.2654 → 0.9960**. Of the historical 43 render samples, **35** remain on
+  disk; the other **34 available outputs are byte-identical**, with no regression.
+  Eight historical PDFs are missing and official recovery requests fail TLS;
+  this is not a complete 43-document rerun. P1-3's three committed references
+  pass (>0.9997). Clean-room codec/render regressions and 273 targeted Rust
+  tests passed. Root cause, exact coverage and evidence paths are recorded in
+  `conformance/gt/RENDER-REPORT.md` (2026-09-10 update).
 
 - [ ] **3. Render, remaining cost.**
   - *Goal:* shave the last render hot spots, after item 2.

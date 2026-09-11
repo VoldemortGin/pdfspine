@@ -5,6 +5,8 @@
 //! zune-jpeg primary can be cross-checked against the `jpeg-decoder` oracle on
 //! freshly-encoded pixels (PRD §8.4.1 multi-oracle discipline).
 
+#[path = "codec_common/adobe_jpeg.rs"]
+mod adobe_jpeg;
 mod codec_common;
 
 use codec_common::*;
@@ -13,6 +15,68 @@ use pdf_image::codecs::{dct, ColorSpaceHint};
 
 use image::codecs::jpeg::JpegEncoder;
 use image::ExtendedColorType;
+
+#[test]
+fn dct_adobe_rgb_numeric_component_ids() {
+    let doc = empty_doc();
+    let jpeg = adobe_jpeg::adobe_jpeg(0, &[64, 128, 192]);
+    let img = dct::decode(&doc, &jpeg, &dict([])).expect("Adobe RGB decodes");
+    assert_eq!((img.width, img.height, img.components), (8, 8, 3));
+    assert_eq!(img.colorspace, ColorSpaceHint::Rgb);
+    assert_eq!(img.data, [64, 128, 192].repeat(64));
+    assert_eq!(img.data, adobe_oracle_decode(&jpeg, 0, 3));
+}
+
+#[test]
+fn dct_adobe_component_count_preserves_transforms_and_decode() {
+    let doc = empty_doc();
+    for (transform, samples) in [
+        (0, &[64, 128, 192][..]),
+        (1, &[64, 128, 192][..]),
+        (0, &[64, 128, 192, 128][..]),
+    ] {
+        let jpeg = adobe_jpeg::adobe_jpeg(transform, samples);
+        let decoded = dct::decode(&doc, &jpeg, &dict([]))
+            .unwrap_or_else(|e| panic!("transform {transform}, components {}: {e}", samples.len()));
+        assert_eq!(decoded.components as usize, samples.len());
+        assert_eq!(
+            decoded.data,
+            adobe_oracle_decode(&jpeg, transform, samples.len()),
+            "transform {transform}"
+        );
+
+        let identity = array((0..samples.len()).flat_map(|_| [int(0), int(1)]));
+        let inverted = array((0..samples.len()).flat_map(|_| [int(1), int(0)]));
+        let raw = dct::decode(&doc, &jpeg, &dict([("Decode", identity)])).unwrap();
+        let inv = dct::decode(&doc, &jpeg, &dict([("Decode", inverted)])).unwrap();
+        assert_eq!(
+            inv.data,
+            raw.data.iter().map(|v| 255 - v).collect::<Vec<_>>()
+        );
+    }
+}
+
+#[test]
+fn dct_adobe_ycck_unsupported_conversion_is_typed_error() {
+    // Valid YCCK coefficients: the four samples denote Y/Cb/Cr/K, not RGB.
+    // The independent oracle accepts the image. zune-jpeg 0.5.15 has no
+    // YCCK→CMYK conversion; retain its existing typed failure in this RGB fix.
+    let jpeg = adobe_jpeg::adobe_jpeg(2, &[64, 128, 192, 128]);
+    assert_eq!(oracle_decode(&jpeg).1.len(), 8 * 8 * 4);
+    let err = dct::decode(&empty_doc(), &jpeg, &dict([])).unwrap_err();
+    assert_eq!(err.kind(), "decode");
+}
+
+fn adobe_oracle_decode(jpeg: &[u8], transform: u8, components: usize) -> Vec<u8> {
+    let mut decoder = jpeg_decoder::Decoder::new(std::io::Cursor::new(jpeg));
+    if transform == 0 && components == 3 {
+        // jpeg-decoder prioritizes numeric IDs 1/2/3 over APP14 and guesses
+        // YCbCr. Supply the authored fixture's RGB transform explicitly so
+        // this oracle cross-checks entropy/IDCT without repeating that guess.
+        decoder.set_color_transform(jpeg_decoder::ColorTransform::RGB);
+    }
+    decoder.decode().expect("Adobe JPEG oracle")
+}
 
 /// Encodes raw samples to a baseline JPEG using the `image` crate.
 fn encode_jpeg(data: &[u8], w: u32, h: u32, ct: ExtendedColorType, quality: u8) -> Vec<u8> {

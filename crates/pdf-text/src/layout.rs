@@ -310,12 +310,13 @@ fn textpage_core(
     }
 
     // 2/3. lines + spans.
-    let lines = group_lines(&dev, flags & textflags::INHIBIT_SPACES != 0);
+    let (lines, header_replacements) = group_lines(&dev, flags & textflags::INHIBIT_SPACES != 0);
 
     // 4. blocks — column-aware paragraph grouping: cut the lines into column
     //    regions first (so a paragraph block never straddles two columns), then
     //    group each column's lines into paragraphs by vertical gaps.
     let mut blocks = group_blocks_columned(lines, width, height);
+    replace_header_fragments(&mut blocks, header_replacements);
 
     // image blocks (device-space bbox via the placement CTM → page transform).
     for img in images {
@@ -625,9 +626,9 @@ fn name_flags(name: &str) -> u32 {
 /// Clusters device glyphs into lines by cross-axis (baseline) proximity, then
 /// splits each baseline run on column gutters and into spans. Lines are returned
 /// in top-to-bottom order.
-fn group_lines(dev: &[DevGlyph], inhibit_spaces: bool) -> Vec<Line> {
+fn group_lines(dev: &[DevGlyph], inhibit_spaces: bool) -> (Vec<Line>, Vec<HeaderReplacement>) {
     if dev.is_empty() {
-        return Vec::new();
+        return (Vec::new(), Vec::new());
     }
 
     // Cluster by baseline (cross-axis). We keep paint order within a cluster so
@@ -707,13 +708,39 @@ fn group_lines(dev: &[DevGlyph], inhibit_spaces: bool) -> Vec<Line> {
     // small for the local 4×font-size fallback to catch.
     let body_h = median_glyph_height(dev);
     let gutters = detect_page_gutters(&runs, dev);
+    let top_header = isolated_top_header_run(&runs, dev, &gutters);
 
     let mut final_runs: Vec<Vec<usize>> = Vec::new();
-    for idxs in runs {
+    let mut header_replacements = Vec::new();
+    for (run_index, idxs) in runs.into_iter().enumerate() {
         // A single baseline cluster may straddle a column gutter; split it into
         // separate lines at each detected gutter it crosses (the principled cut),
         // or — as a fallback when no gutter applies — at a large along-axis gap.
-        for col_run in split_on_gutter(&idxs, dev, &gutters, body_h) {
+        let original = split_on_gutter(&idxs, dev, &gutters, body_h, false);
+        if top_header == Some(run_index) {
+            for merged in split_on_gutter(&idxs, dev, &gutters, body_h, true) {
+                let members: std::collections::BTreeSet<usize> = merged.iter().copied().collect();
+                let mut source_seqs: Vec<usize> = original
+                    .iter()
+                    .filter(|part| part.first().is_some_and(|first| members.contains(first)))
+                    .filter_map(|part| part.iter().map(|&i| dev[i].seq).min())
+                    .collect();
+                if source_seqs.len() > 1 {
+                    source_seqs.sort_unstable();
+                    let mut header_seqs: Vec<usize> = original
+                        .iter()
+                        .filter_map(|part| part.iter().map(|&i| dev[i].seq).min())
+                        .collect();
+                    header_seqs.sort_unstable();
+                    header_replacements.push(HeaderReplacement {
+                        source_seqs,
+                        header_seqs,
+                        line: line_from_run(merged, dev, inhibit_spaces),
+                    });
+                }
+            }
+        }
+        for col_run in original {
             // A per-column run can still hold two *distinct* baselines that the
             // content-order baseline sweep over-merged: when one column's line
             // baseline sits between two adjacent lines of the other column (tight
@@ -737,22 +764,98 @@ fn group_lines(dev: &[DevGlyph], inhibit_spaces: bool) -> Vec<Line> {
     // x-containment keeps it column-safe (a left-column marker is never inside a
     // right-column line's x-span).
     reattach_fragment_runs(&mut final_runs, dev);
-    let mut lines = Vec::with_capacity(final_runs.len());
-    for mut run in final_runs {
-        // 另一条 run 画在本行墨迹之上的空白 glyph 不进入本行：不进 spans/chars、
-        // 不产生词界、也不参与字号 / 字距掩码的统计。在 RTL 重排之前做，此时
-        // run 仍按前进方向升序。
-        drop_phantom_whitespace(&mut run, dev);
-        if is_rtl_run(&run, dev) {
-            reorder_rtl_line(&mut run, dev);
-        }
-        // Content-order key: the smallest source-glyph index in this run, i.e. the
-        // earliest-painted glyph of the line (document order).
-        let seq = run.iter().map(|&i| dev[i].seq).min().unwrap_or(0);
-        let line_glyphs: Vec<&DevGlyph> = run.iter().map(|&i| &dev[i]).collect();
-        lines.push(build_line(&line_glyphs, seq, inhibit_spaces));
+    let lines = final_runs
+        .into_iter()
+        .map(|run| line_from_run(run, dev, inhibit_spaces))
+        .collect();
+    (lines, header_replacements)
+}
+
+fn line_from_run(mut run: Vec<usize>, dev: &[DevGlyph], inhibit_spaces: bool) -> Line {
+    drop_phantom_whitespace(&mut run, dev);
+    if is_rtl_run(&run, dev) {
+        reorder_rtl_line(&mut run, dev);
     }
-    lines
+    let seq = run.iter().map(|&i| dev[i].seq).min().unwrap_or(0);
+    let line_glyphs: Vec<&DevGlyph> = run.iter().map(|&i| &dev[i]).collect();
+    build_line(&line_glyphs, seq, inhibit_spaces)
+}
+
+struct HeaderReplacement {
+    source_seqs: Vec<usize>,
+    header_seqs: Vec<usize>,
+    line: Line,
+}
+
+/// Repair the structured header only after the original geometry has finished
+/// region partitioning. Never let a wider header feed back into body/footnote
+/// XY-cut decisions, and never consume a block containing unrelated lines.
+fn replace_header_fragments(blocks: &mut Vec<Block>, replacements: Vec<HeaderReplacement>) {
+    for replacement in replacements {
+        let is_member = |line: &Line| replacement.source_seqs.binary_search(&line.seq).is_ok();
+        let mut found = Vec::new();
+        let mut source_chars = Vec::new();
+        let mut mixed = false;
+        for block in blocks.iter() {
+            let count = block.lines.iter().filter(|line| is_member(line)).count();
+            if count > 0 {
+                source_chars.extend(
+                    block
+                        .lines
+                        .iter()
+                        .filter(|line| is_member(line))
+                        .flat_map(|line| line.spans.iter())
+                        .flat_map(|span| span.chars.iter())
+                        .filter(|ch| !ch.synthetic)
+                        .map(|ch| (ch.seq, ch.c)),
+                );
+                mixed |= block
+                    .lines
+                    .iter()
+                    .any(|line| replacement.header_seqs.binary_search(&line.seq).is_err());
+                found.extend(
+                    block
+                        .lines
+                        .iter()
+                        .filter(|line| is_member(line))
+                        .map(|line| line.seq),
+                );
+            }
+        }
+        found.sort_unstable();
+        source_chars.sort_unstable();
+        let mut merged_chars: Vec<_> = replacement
+            .line
+            .spans
+            .iter()
+            .flat_map(|span| span.chars.iter())
+            .filter(|ch| !ch.synthetic)
+            .map(|ch| (ch.seq, ch.c))
+            .collect();
+        merged_chars.sort_unstable();
+        // The fragment reattacher ran after planning. A minimum line seq alone
+        // cannot prove that it did not absorb another run: require the complete
+        // painted-character multiset, allowing only regenerated synthetic spaces.
+        if mixed || found != replacement.source_seqs || source_chars != merged_chars {
+            continue;
+        }
+        let mut merged = Some(make_text_block(vec![replacement.line]));
+        let mut out = Vec::with_capacity(blocks.len());
+        for mut block in blocks.drain(..) {
+            if !block.lines.iter().any(is_member) {
+                out.push(block);
+                continue;
+            }
+            if let Some(header) = merged.take() {
+                out.push(header);
+            }
+            block.lines.retain(|line| !is_member(line));
+            if !block.lines.is_empty() {
+                out.push(make_text_block(block.lines));
+            }
+        }
+        *blocks = out;
+    }
 }
 
 /// Reattaches orphaned super/subscript fragment runs to the line run that
@@ -936,6 +1039,7 @@ fn split_on_baseline(idxs: &[usize], dev: &[DevGlyph]) -> Vec<Vec<usize>> {
 struct Gutter {
     lo: f64,
     hi: f64,
+    aligned_rows: bool,
 }
 
 impl Gutter {
@@ -1090,11 +1194,123 @@ fn detect_page_gutters(runs: &[Vec<usize>], dev: &[DevGlyph]) -> Vec<Gutter> {
         // so a one-off stray glyph in the margin never manufactures a column.
         const MINOR_SIDE_FLOOR: u32 = 2;
         if major >= side_floor && minor >= MINOR_SIDE_FLOOR {
-            gutters.push(Gutter { lo, hi });
+            // Repeated same-baseline whitespace is positive evidence for a
+            // genuine narrow column. Repeated starts against the valley's right
+            // edge also preserve unequal-length table cells; their other rows
+            // may leave much wider gaps. Count once per candidate, stopping after
+            // two distinct physical baselines; an isolated spanning header's
+            // word space cannot establish this evidence by itself.
+            let mid = (lo + hi) * 0.5;
+            let mut baselines: Vec<f64> = Vec::with_capacity(2);
+            for run in runs {
+                for pair in run.windows(2) {
+                    let left = &dev[pair[0]];
+                    let right = &dev[pair[1]];
+                    let cross = left.cross();
+                    let gap = right.along_span().0 - left.along_span().1;
+                    let size = dev_glyph_effective_size(left).max(dev_glyph_effective_size(right));
+                    if left.bbox.normalize().x0 < mid - 0.5
+                        && right.bbox.normalize().x0 >= mid - 0.5
+                        && (cross - right.cross()).abs() <= LINE_BASELINE_EPSILON
+                        && gap >= (hi - lo) * GUTTER_COVER_FRAC
+                        && (gap < size * 0.4 || right.bbox.normalize().x0 <= hi + bin_w)
+                        && !baselines
+                            .iter()
+                            .any(|b| (cross - b).abs() <= LINE_BASELINE_EPSILON)
+                    {
+                        baselines.push(cross);
+                        break;
+                    }
+                }
+                if baselines.len() == 2 {
+                    break;
+                }
+            }
+            gutters.push(Gutter {
+                lo,
+                hi,
+                aligned_rows: baselines.len() == 2,
+            });
         }
     }
     gutters.sort_by(|a, b| a.mid().total_cmp(&b.mid()));
     gutters
+}
+
+/// Only an isolated, strictly horizontal top band may suppress a false word-gap
+/// gutter. Use actual device bounds, not the paint-order cluster representative;
+/// rotated text and all lower body/footer runs retain the old split path.
+fn isolated_top_header_run(
+    runs: &[Vec<usize>],
+    dev: &[DevGlyph],
+    gutters: &[Gutter],
+) -> Option<usize> {
+    let (index, run) = runs
+        .iter()
+        .enumerate()
+        .filter(|(_, run)| {
+            !run.is_empty()
+                && run.iter().all(|&i| {
+                    dev[i].wmode == 0
+                        && dev[i].dir.0 > 0.0
+                        && dev[i].dir.1.abs() <= LINE_BASELINE_EPSILON
+                })
+        })
+        .min_by(|(_, a), (_, b)| {
+            let top = |run: &[usize]| {
+                run.iter()
+                    .map(|&i| dev[i].bbox.normalize().y0)
+                    .fold(f64::INFINITY, f64::min)
+            };
+            top(a).total_cmp(&top(b))
+        })?;
+    let cross = dev[run[0]].cross();
+    if run
+        .iter()
+        .any(|&i| (dev[i].cross() - cross).abs() > LINE_BASELINE_EPSILON)
+    {
+        return None;
+    }
+    let size = run
+        .iter()
+        .map(|&i| dev_glyph_effective_size(&dev[i]))
+        .fold(0.0, f64::max);
+    let bottom = run
+        .iter()
+        .map(|&i| dev[i].bbox.normalize().y1)
+        .fold(f64::NEG_INFINITY, f64::max);
+    if size <= 0.0
+        || runs
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| *i != index)
+            .flat_map(|(_, run)| run)
+            .any(|&i| dev[i].bbox.normalize().y0 < bottom + size * 0.5)
+    {
+        return None;
+    }
+    // The top text must actually bridge a body-width gutter, not merely have
+    // a remote page number on the other side of a large blank interval.
+    // A remote page number may be larger than the running text. Use the
+    // dominant text scale for gutter width, keeping the conservative maximum
+    // above for vertical isolation.
+    let mut sizes: Vec<f64> = run
+        .iter()
+        .map(|&i| dev_glyph_effective_size(&dev[i]))
+        .collect();
+    sizes.sort_by(f64::total_cmp);
+    let typical_size = sizes[sizes.len() / 2];
+    let spans_body_gutter = gutters.iter().any(|gutter| {
+        gutter.width() + LINE_BASELINE_EPSILON >= typical_size * 0.4
+            && run.windows(2).any(|pair| {
+                let left = &dev[pair[0]];
+                let right = &dev[pair[1]];
+                left.bbox.normalize().x0 < gutter.mid()
+                    && right.bbox.normalize().x0 >= gutter.mid()
+                    && right.along_span().0 - left.along_span().1 < size * LINE_RUN_GAP_FRAC
+            })
+    });
+    spans_body_gutter.then_some(index)
 }
 
 /// Splits an advance-ordered baseline run into per-column sub-runs. A break is
@@ -1120,6 +1336,7 @@ fn split_on_gutter(
     dev: &[DevGlyph],
     gutters: &[Gutter],
     body_h: f64,
+    protect_header_words: bool,
 ) -> Vec<Vec<usize>> {
     let cluster_h = run_glyph_height(idxs, dev);
     let is_heading = body_h > 0.0 && cluster_h > body_h * 1.6;
@@ -1135,6 +1352,7 @@ fn split_on_gutter(
     // the crossing test uses device x against the band midpoint; the huge-gap
     // fallback uses the reading axis so it still works for rotated text.
     let mut prev_x0: Option<f64> = None;
+    let mut prev_cross: Option<f64> = None;
     for &i in idxs {
         let g = &dev[i];
         // Project the glyph's leading/trailing edges onto the reading axis.
@@ -1158,10 +1376,23 @@ fn split_on_gutter(
             // A genuine L+R two-column line leaves the whole band empty and cuts; a
             // full-width header whose word space merely lands on the gutter has a
             // gap far narrower than the band and stays one line, as PyMuPDF reads it.
+            // A tiny occupancy sliver is not a column boundary between two
+            // glyphs on the same physical baseline. Keep cross-baseline cuts:
+            // these can separate lines merged by the initial tolerant sweep.
+            let same_baseline_word_gap = (g.cross() - prev_cross.unwrap_or(g.cross())).abs()
+                <= LINE_BASELINE_EPSILON
+                && gap < gap_size * 0.4;
             let crosses_gutter = !touching
                 && gutters.iter().any(|g| {
                     let mid = g.mid();
-                    px < mid - 0.5 && x0 >= mid - 0.5 && gap >= g.width() * GUTTER_COVER_FRAC
+                    let narrow_word_sliver = protect_header_words
+                        && !g.aligned_rows
+                        && same_baseline_word_gap
+                        && g.width() < gap_size * 0.4;
+                    !narrow_word_sliver
+                        && px < mid - 0.5
+                        && x0 >= mid - 0.5
+                        && gap >= g.width() * GUTTER_COVER_FRAC
                 });
             // Fallback: two independently painted runs with a device-space gap
             // at the compatibility boundary form distinct lines. Use the true
@@ -1176,6 +1407,7 @@ fn split_on_gutter(
         prev_end = Some(end);
         prev_size = Some(effective_size);
         prev_x0 = Some(x0);
+        prev_cross = Some(g.cross());
     }
     if !cur.is_empty() {
         runs.push(cur);
