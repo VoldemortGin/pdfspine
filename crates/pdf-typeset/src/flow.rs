@@ -836,8 +836,12 @@ struct BorderFragment {
 }
 
 #[derive(Default)]
-struct BorderGroup {
+struct BorderGroup<'b> {
     fragments: Vec<BorderFragment>,
+    blocks: &'b [Block],
+    paragraph: usize,
+    plan_width: Option<f64>,
+    reserves: Vec<Vec<f64>>,
 }
 
 fn border_left(props: &ParaProps) -> f64 {
@@ -878,7 +882,125 @@ fn borders_join(a: &Block, b: &Block) -> bool {
     }
 }
 
-impl BorderGroup {
+impl BorderGroup<'_> {
+    // Only varying bottom extents need lookahead: an internal bottom can be
+    // suppressed by admitting later lines whose actual closing edge is smaller.
+    fn reserve_plan(
+        &mut self,
+        ctx: &mut Ctx,
+        current: &[LineOut],
+        reference: Option<(FaceId, f64)>,
+    ) {
+        let width = ctx.right() - ctx.left();
+        if self.plan_width == Some(width) {
+            return;
+        }
+        self.plan_width = Some(width);
+        let bottom = |block: &Block| match block {
+            Block::Paragraph(p, _) => paragraph_borders(p).bottom.map_or(0.0, |e| e.extent()),
+            _ => 0.0,
+        };
+        if self
+            .blocks
+            .iter()
+            .all(|b| bottom(b) == bottom(&self.blocks[0]))
+        {
+            return;
+        }
+        let mut heights = Vec::new();
+        let rule = ctx.ts.line_height_rule();
+        for (j, block) in self.blocks.iter().enumerate().skip(self.paragraph) {
+            let Block::Paragraph(p, runs) = block else {
+                unreachable!("border group contains paragraphs")
+            };
+            let row_heights = if j == self.paragraph {
+                current
+                    .iter()
+                    .map(|line| {
+                        paragraph_line_height(
+                            p.spacing,
+                            line_metrics(ctx.ts.faces(), line, reference, rule).2,
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            } else {
+                let left = p.indent_left.max(0.0);
+                let right = (width - p.indent_right.max(0.0)).max(left + 1.0);
+                let first = if p.first_line_indent.is_finite() {
+                    p.first_line_indent
+                } else {
+                    0.0
+                };
+                let (w_first, w_rest) = if ctx.wrap_enabled() {
+                    ((right - left - first).max(1.0), (right - left).max(1.0))
+                } else {
+                    (f64::INFINITY, f64::INFINITY)
+                };
+                let toks = tokens(ctx.ts, runs);
+                let lines = wrap(
+                    ctx.ts.faces(),
+                    &toks,
+                    w_first,
+                    w_rest,
+                    ctx.ts.tab_interval(),
+                );
+                let reference = runs
+                    .iter()
+                    .find(|r| r.style.size.is_finite() && r.style.size > 0.0)
+                    .map(|r| {
+                        let face = ctx.ts.base_face(&r.style);
+                        (ctx.ts.face_id(&face), r.style.size)
+                    });
+                if lines.is_empty() {
+                    let empty = LineOut {
+                        frags: Vec::new(),
+                        width: 0.0,
+                        hard: false,
+                    };
+                    vec![paragraph_line_height(
+                        p.spacing,
+                        line_metrics(ctx.ts.faces(), &empty, reference, rule).2,
+                    )]
+                } else {
+                    lines
+                        .iter()
+                        .map(|line| {
+                            paragraph_line_height(
+                                p.spacing,
+                                line_metrics(ctx.ts.faces(), line, reference, rule).2,
+                            )
+                        })
+                        .collect()
+                }
+            };
+            heights.push((j, row_heights));
+        }
+        self.reserves.resize_with(self.blocks.len(), Vec::new);
+        let mut next: Option<(usize, f64, f64)> = None;
+        let positive = |n: f64| if n.is_finite() && n > 0.0 { n } else { 0.0 };
+        for (j, lines) in heights.into_iter().rev() {
+            self.reserves[j] = vec![0.0; lines.len()];
+            for (i, height) in lines.into_iter().enumerate().rev() {
+                let mut reserve = bottom(&self.blocks[j]);
+                if let Some((next_para, next_height, next_reserve)) = next {
+                    let gap = if next_para == j {
+                        0.0
+                    } else {
+                        let (Block::Paragraph(a, _), Block::Paragraph(b, _)) =
+                            (&self.blocks[j], &self.blocks[next_para])
+                        else {
+                            unreachable!()
+                        };
+                        positive(a.space_after) + positive(b.space_before)
+                    };
+                    reserve = reserve.min(gap + next_height + next_reserve);
+                }
+                self.reserves[j][i] = reserve;
+                next = Some((j, height, reserve));
+            }
+        }
+    }
+
     fn finish(self, ctx: &mut Ctx) {
         if let Some(last) = self.fragments.last() {
             ctx.y += last.borders.bottom.map_or(0.0, |e| e.extent());
@@ -954,6 +1076,16 @@ pub(crate) fn layout_blocks(ctx: &mut Ctx, blocks: &[Block]) {
     for (index, block) in blocks.iter().enumerate() {
         match block {
             Block::Paragraph(props, runs) => {
+                if bordered(props) && border_group.blocks.is_empty() {
+                    let mut end = index;
+                    while blocks
+                        .get(end + 1)
+                        .is_some_and(|next| borders_join(&blocks[end], next))
+                    {
+                        end += 1;
+                    }
+                    border_group.blocks = &blocks[index..=end];
+                }
                 let join_background = props.shading.is_some()
                     && index > 0
                     && matches!(&blocks[index - 1], Block::Paragraph(previous, previous_runs)
@@ -968,6 +1100,7 @@ pub(crate) fn layout_blocks(ctx: &mut Ctx, blocks: &[Block]) {
                     join_background,
                     bordered(props).then_some(&mut border_group),
                 );
+                border_group.paragraph += 1;
                 if !blocks
                     .get(index + 1)
                     .is_some_and(|next| borders_join(block, next))
@@ -984,6 +1117,26 @@ pub(crate) fn layout_blocks(ctx: &mut Ctx, blocks: &[Block]) {
 
 // --- paragraph -------------------------------------------------------------------
 
+fn paragraph_line_height(spacing: LineSpacing, natural: f64) -> f64 {
+    match spacing {
+        LineSpacing::Multiple(m) => natural * if m.is_finite() && m > 0.0 { m } else { 1.0 },
+        LineSpacing::Exact(h) => {
+            if h.is_finite() && h > 0.0 {
+                h
+            } else {
+                natural
+            }
+        }
+        LineSpacing::AtLeast(h) => {
+            if h.is_finite() && h > 0.0 {
+                natural.max(h)
+            } else {
+                natural
+            }
+        }
+    }
+}
+
 /// Lays out one paragraph under its properties: indents, wrap, alignment
 /// (incl. justify), line spacing, list label, per-line pagination.
 fn layout_paragraph(
@@ -991,7 +1144,7 @@ fn layout_paragraph(
     props: &crate::model::ParaProps,
     runs: &[Run],
     join_background: bool,
-    mut border_group: Option<&mut BorderGroup>,
+    mut border_group: Option<&mut BorderGroup<'_>>,
 ) {
     let preceding_page = ctx.page;
     let preceding_bottom = ctx.y;
@@ -1053,23 +1206,7 @@ fn layout_paragraph(
     let mut border_fragment: Option<usize> = None;
     for (i, line) in lines.iter().enumerate() {
         let (asc, desc, natural) = line_metrics(ctx.ts.faces(), line, ref_frag, rule);
-        let lh = match props.spacing {
-            LineSpacing::Multiple(m) => natural * if m.is_finite() && m > 0.0 { m } else { 1.0 },
-            LineSpacing::Exact(h) => {
-                if h.is_finite() && h > 0.0 {
-                    h
-                } else {
-                    natural
-                }
-            }
-            LineSpacing::AtLeast(h) => {
-                if h.is_finite() && h > 0.0 {
-                    natural.max(h)
-                } else {
-                    natural
-                }
-            }
-        };
+        let lh = paragraph_line_height(props.spacing, natural);
         if let Some(sink) = ctx.measure.as_mut() {
             sink.push(LineMetrics {
                 ascent: asc,
@@ -1082,7 +1219,14 @@ fn layout_paragraph(
             let top_extent = borders.top.map_or(0.0, |e| e.extent());
             let bottom_extent = borders.bottom.map_or(0.0, |e| e.extent());
             let same_page = group.fragments.last().is_some_and(|f| f.page == ctx.page);
-            ctx.ensure(lh + bottom_extent + if same_page { 0.0 } else { top_extent });
+            group.reserve_plan(ctx, &lines, ref_frag);
+            let reserve = group
+                .reserves
+                .get(group.paragraph)
+                .and_then(|r| r.get(i))
+                .copied()
+                .unwrap_or(bottom_extent);
+            ctx.ensure(lh + reserve + if same_page { 0.0 } else { top_extent });
             let same_page = group.fragments.last().is_some_and(|f| f.page == ctx.page);
             if border_fragment.is_none_or(|n| group.fragments[n].page != ctx.page) {
                 let top = if same_page && i == 0 {

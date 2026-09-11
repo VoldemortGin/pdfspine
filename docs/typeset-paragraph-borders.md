@@ -30,6 +30,14 @@ positions. No horizontal step connector is invented when side positions differ.
 Different stroke styles, hanging/text bounds or an intervening block end a group.
 
 Each page fragment gets its own top and bottom edges and reserves their extents.
+For groups with different bottom extents, bounded lookahead uses actual wrapped
+line heights and paragraph gaps to choose a valid page-closing edge. This avoids
+premature breaks caused by reserving an internal edge that a following paragraph
+will suppress. Future-paragraph wrapping is replanned when the current page width
+changes; default-off and uniform-bottom groups do not need this prediction.
+A 42pt group with a suppressed 50pt internal bottom fits the remaining 60pt in
+both the regression and LO. The paired true-split case restores the first page's
+50pt bottom extent and the next page's top edge, with all text inside the fragments.
 A line too tall for an empty page overflows once, consistent with the existing
 engine policy; it cannot cause an empty-page loop. A styled empty paragraph has
 its normal line box; a paragraph without a usable run keeps the existing no-line
@@ -62,7 +70,7 @@ engine PDF fixtures remain byte-identical. Only the new fixture, its license/has
 manifest entry, readback entry and SSIM reference are added; old references are
 unchanged. LO stays local-only and advisory, not a CI dependency.
 
-Ten focused Rust cases cover validation/defaults, geometry, grouping, page-fit
+Fourteen focused Rust cases cover validation/defaults, geometry, grouping, page-fit
 reserve/oversized input, empty paragraphs, measurement/containers/asymmetric edges, shading with
 tracking/decorations/links and font autofit. The typeset readback gate covers five
 documents (order/F1 1.0); the render reference gate covers eight pages (minimum

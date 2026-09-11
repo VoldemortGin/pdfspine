@@ -343,3 +343,105 @@ fn asymmetric_edges_and_bottom_aligned_cell_reserve_only_present_edges() {
         [(46.0, 123.0, 150.0, 2.0), (255.5, 123.0, 150.0, 1.0)]
     );
 }
+
+#[test]
+fn suppressed_internal_bottom_space_does_not_force_an_early_page() {
+    let mut a = paragraph("alpha", 1.0, 0.0);
+    props(&mut a).borders.as_mut().unwrap().bottom = Some(edge(1.0, 49.0));
+    let b = paragraph("beta", 1.0, 0.0);
+    let mut engine = ts();
+    assert_eq!(
+        engine
+            .measure_blocks(&[a.clone(), b.clone()], 260.0, true)
+            .height,
+        42.0
+    );
+    let (pages, pdf) = export(
+        &[paragraph("before1\nbefore2", 0.0, 0.0), a, b],
+        PageGeom::new(300.0, 140.0, 20.0),
+    );
+    assert_eq!(
+        pages.len(),
+        1,
+        "42pt bordered group fits after 40pt plain text in a 100pt content area"
+    );
+    assert_eq!(
+        full_text(&pdf.pdf).split_whitespace().collect::<Vec<_>>(),
+        ["before1", "before2", "alpha", "beta"]
+    );
+}
+
+#[test]
+fn lookahead_still_moves_groups_without_a_legal_closing_edge() {
+    let mut a = paragraph("alpha", 1.0, 0.0);
+    props(&mut a).borders.as_mut().unwrap().bottom = Some(edge(1.0, 49.0));
+    let mut b = paragraph("beta", 1.0, 0.0);
+    props(&mut b).spacing = LineSpacing::Exact(40.0);
+    let (pages, _) = export(
+        &[paragraph("before1\nbefore2", 0.0, 0.0), a, b],
+        PageGeom::new(300.0, 140.0, 20.0),
+    );
+    assert_eq!(pages.len(), 2);
+    assert_eq!(baseline(&pages[0].ops).len(), 2);
+    for p in pages {
+        assert!(horizontals(&p.ops).iter().all(|(_, y, _)| *y <= 120.0));
+    }
+}
+#[test]
+fn variable_width_pages_replan_future_border_paragraphs() {
+    use pdf_typeset::PageProvider;
+    struct Pages(usize);
+    impl PageProvider for Pages {
+        fn next_page(&mut self) -> PageGeom {
+            self.0 += 1;
+            PageGeom::new(if self.0 == 1 { 300.0 } else { 140.0 }, 140.0, 20.0)
+        }
+    }
+    let mut a = paragraph("alpha\nalpha\nalpha", 1.0, 0.0);
+    props(&mut a).borders.as_mut().unwrap().bottom = Some(edge(1.0, 24.0));
+    let b = paragraph(
+        "beta beta beta beta beta beta beta beta beta beta beta beta",
+        1.0,
+        0.0,
+    );
+    let blocks = [paragraph("before1\nbefore2", 0.0, 0.0), a, b];
+    let mut engine = ts();
+    let pages = engine.layout_flow(&blocks, &mut Pages(0));
+    assert!(pages.len() > 1);
+    for p in &pages {
+        for (x1, y, x2) in horizontals(&p.ops) {
+            assert_eq!(x1, 19.0);
+            assert_eq!(x2, p.width - 19.0);
+            assert!(y >= 20.0 && y <= p.height - 20.0);
+        }
+    }
+    let pdf = engine.emit(&pages).unwrap();
+    assert_eq!(full_text(&pdf.pdf).split_whitespace().count(), 17);
+}
+
+#[test]
+fn real_split_restores_each_fragments_unsuppressed_edge_space() {
+    let mut a = paragraph("alpha", 1.0, 0.0);
+    props(&mut a).borders.as_mut().unwrap().bottom = Some(edge(1.0, 49.0));
+    let mut b = paragraph("beta", 1.0, 0.0);
+    props(&mut b).spacing = LineSpacing::Exact(60.0);
+    let (pages, pdf) = export(
+        &[paragraph("before", 0.0, 0.0), a, b],
+        PageGeom::new(300.0, 140.0, 20.0),
+    );
+    assert_eq!(pages.len(), 2);
+    assert_eq!(
+        horizontals(&pages[0].ops),
+        [(19.0, 40.5, 281.0), (19.0, 110.5, 281.0)]
+    );
+    assert_eq!(
+        horizontals(&pages[1].ops),
+        [(19.0, 20.5, 281.0), (19.0, 81.5, 281.0)]
+    );
+    assert!(baseline(&pages[0].ops).iter().all(|y| *y < 110.0));
+    assert!(baseline(&pages[1].ops).iter().all(|y| *y < 81.0));
+    assert_eq!(
+        full_text(&pdf.pdf).split_whitespace().collect::<Vec<_>>(),
+        ["before", "alpha", "beta"]
+    );
+}
