@@ -13,6 +13,12 @@ use std::fmt;
 #[non_exhaustive]
 #[derive(Clone, Debug, PartialEq)]
 pub enum ExportWarning {
+    /// Unsupported resolved negative gaps were reset to zero for this paragraph.
+    /// Caller text/model are retained; checked layout methods return the error instead.
+    SignedSpacingFallback {
+        /// The font/text-dependent failure and affected paragraph path.
+        error: crate::SignedSpacingError,
+    },
     /// The requested font family was not installed; a substitution-table
     /// candidate or the bundled final fallback was used instead.
     FontSubstituted {
@@ -79,6 +85,10 @@ pub enum ExportWarning {
 impl fmt::Display for ExportWarning {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::SignedSpacingFallback { error } => write!(
+                f,
+                "{error}; negative paragraph gaps reset to zero; existing style policy retained"
+            ),
             ExportWarning::FontSubstituted { requested, used } => {
                 write!(f, "font '{requested}' not available; substituted '{used}'")
             }

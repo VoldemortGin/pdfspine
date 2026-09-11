@@ -55,6 +55,7 @@ pub mod fontres;
 pub mod model;
 pub mod ops;
 pub mod preset;
+mod signed_spacing;
 mod table;
 pub mod warn;
 
@@ -77,6 +78,7 @@ pub use model::{
     ScriptPlacementError, TableCell, TableRow, TableSpec, TextBoxSpec, VAnchor,
 };
 pub use ops::{FaceId, Fill, LineCap, LineJoin, Op, PageOps, PathSeg, Stroke};
+pub use signed_spacing::{SignedSpacingError, SignedSpacingReason, SpacingPathStep};
 pub use warn::ExportWarning;
 
 /// Word's default tab-stop interval: 0.5 inch = 36 points.
@@ -223,11 +225,69 @@ impl Typesetter {
         }
     }
 
+    /// Checked flow layout for caller-resolved signed cluster gaps.
+    ///
+    /// # Errors
+    /// Returns a spacing diagnostic before consulting `pages` or returning any
+    /// operations. Font caches/warnings may be warmed. Other legacy layout
+    /// policies (including invalid nominal styles) are unchanged.
+    pub fn try_layout_flow(
+        &mut self,
+        blocks: &[Block],
+        pages: &mut dyn PageProvider,
+    ) -> std::result::Result<Vec<PageOps>, SignedSpacingError> {
+        if let Some(error) = signed_spacing::check(self, blocks).into_iter().next() {
+            return Err(error);
+        }
+        Ok(flow::layout_flow(self, blocks, pages))
+    }
+    /// Checked text-box layout, including bounded proportional autofit scales.
+    ///
+    /// # Errors
+    /// Returns unsupported signed-spacing geometry before returning operations.
+    pub fn try_layout_text_box(
+        &mut self,
+        spec: &TextBoxSpec,
+    ) -> std::result::Result<Vec<Op>, SignedSpacingError> {
+        if let Some(error) = signed_spacing::check_box(self, spec).into_iter().next() {
+            return Err(error);
+        }
+        Ok(boxes::layout_text_box(self, spec))
+    }
+    /// Checked measurement using the same signed-spacing preparation as flow.
+    ///
+    /// # Errors
+    /// Returns a typed diagnostic for unsupported signed cluster advances.
+    pub fn try_measure_blocks(
+        &mut self,
+        blocks: &[Block],
+        width: f64,
+        wrap: bool,
+    ) -> std::result::Result<Measurement, SignedSpacingError> {
+        if let Some(error) = signed_spacing::check(self, blocks).into_iter().next() {
+            return Err(error);
+        }
+        Ok(flow::measure_box_content(self, blocks, width, wrap))
+    }
+    /// Checked natural text-box measurement (before any autofit).
+    ///
+    /// # Errors
+    /// Returns a typed diagnostic for unsupported signed cluster advances.
+    pub fn try_measure_text_box(
+        &mut self,
+        spec: &TextBoxSpec,
+    ) -> std::result::Result<Measurement, SignedSpacingError> {
+        let width = (spec.rect.x1 - spec.rect.x0).abs().max(1.0);
+        self.try_measure_blocks(&spec.blocks, width, spec.wrap)
+    }
+
     /// Lays out `blocks` as paginated flow (docspine body); `pages` supplies
     /// each started page's geometry (per-section page size / margins). Always
     /// returns at least one page.
     pub fn layout_flow(&mut self, blocks: &[Block], pages: &mut dyn PageProvider) -> Vec<PageOps> {
-        flow::layout_flow(self, blocks, pages)
+        let errors = signed_spacing::check(self, blocks);
+        let prepared = signed_spacing::fallback(self, blocks, errors);
+        flow::layout_flow(self, &prepared, pages)
     }
 
     /// Lays out one absolutely-positioned text box (pptx shape text body /
@@ -235,7 +295,13 @@ impl Typesetter {
     /// a page's [`PageOps::ops`] (TS-5: vertical anchor, wrap-off,
     /// `normAutofit` scaling, rotation, clipping).
     pub fn layout_text_box(&mut self, spec: &TextBoxSpec) -> Vec<Op> {
-        boxes::layout_text_box(self, spec)
+        let errors = signed_spacing::check_box(self, spec);
+        if errors.is_empty() {
+            return boxes::layout_text_box(self, spec);
+        }
+        let mut prepared = spec.clone();
+        signed_spacing::fallback_in_place(self, &mut prepared.blocks, errors);
+        boxes::layout_text_box(self, &prepared)
     }
 
     /// Measures `blocks` at a fixed content `width` **without emitting**,
@@ -250,7 +316,9 @@ impl Typesetter {
     /// 与总高度、内容自然宽度。消费方用它做 autofit、表格按内容增高、单元格
     /// 垂直对齐等——度量结果与真实排版逐点一致。
     pub fn measure_blocks(&mut self, blocks: &[Block], width: f64, wrap: bool) -> Measurement {
-        flow::measure_box_content(self, blocks, width, wrap)
+        let errors = signed_spacing::check(self, blocks);
+        let prepared = signed_spacing::fallback(self, blocks, errors);
+        flow::measure_box_content(self, &prepared, width, wrap)
     }
 
     /// Measures a [`TextBoxSpec`]'s content at its rect width and wrap mode
@@ -265,7 +333,7 @@ impl Typesetter {
     /// autofit 缩放、垂直锚定、旋转与裁剪）。
     pub fn measure_text_box(&mut self, spec: &TextBoxSpec) -> Measurement {
         let width = (spec.rect.x1 - spec.rect.x0).abs().max(1.0);
-        flow::measure_box_content(self, &spec.blocks, width, spec.wrap)
+        self.measure_blocks(&spec.blocks, width, spec.wrap)
     }
 
     /// Serializes the laid-out pages into the final PDF, consuming the engine

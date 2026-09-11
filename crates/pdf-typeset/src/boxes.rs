@@ -19,7 +19,7 @@ use crate::warn::ExportWarning;
 use crate::{Matrix, Typesetter};
 
 /// Autofit binary-search floor (content that cannot fit even at 5% keeps 5%).
-const MIN_AUTOFIT_SCALE: f64 = 0.05;
+pub(crate) const MIN_AUTOFIT_SCALE: f64 = 0.05;
 /// Autofit binary-search iterations (fixed count ⇒ deterministic output).
 const AUTOFIT_ITERS: u32 = 16;
 
@@ -118,7 +118,7 @@ fn lay(ts: &mut Typesetter, spec: &TextBoxSpec, scale: f64, width: f64) -> (Vec<
 
 /// Deep-copies blocks with every run size multiplied by `s` (tables included;
 /// image display sizes and paragraph geometry stay untouched).
-fn scale_blocks(blocks: &[Block], s: f64) -> Vec<Block> {
+pub(crate) fn scale_blocks(blocks: &[Block], s: f64) -> Vec<Block> {
     blocks.iter().map(|b| scale_block(b, s)).collect()
 }
 
