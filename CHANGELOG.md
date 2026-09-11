@@ -19,7 +19,9 @@ feature-complete, but the public API and on-disk formats may still change.
   default View intent; reported layer-panel state is unchanged.
 - **Adobe RGB JPEG rendering.** Three-component Adobe APP14 images now decode
   as RGB instead of being skipped after a premature CMYK classification. This
-  restores the scanned strips in govdocs1-00074; native CMYK and explicit
+  restores the scanned strips in govdocs1-00074. Multi-image pages bypass the
+  single-image fast path, retaining the full page bounds and every strip.
+  Native CMYK and explicit
   `/Decode` handling retain their existing behavior.
 - **Fragmented running headers.** Isolated top-of-page text split at tiny false
   column gutters now recovers a complete structured header line after body

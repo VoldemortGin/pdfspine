@@ -179,7 +179,10 @@
 - [x] **2. govdocs1-00074 near-blank render — done (2026-09-10).**
   `pdf-image` now chooses JPEG output from the SOF component count. The header
   probe had temporarily classified three-component Adobe APP14 RGB as CMYK,
-  causing decode failure and silently skipped image strips. Real p0 SSIM rises
+  causing decode failure and silently skipped image strips. The public render
+  facade now sends multi-image scans to the full-page renderer instead of
+  returning only the first native image; a two-strip regression checks page
+  bounds and both images at 72/144 dpi. Real p0 SSIM rises
   **0.2654 → 0.9960**. Of the historical 43 render samples, **35** remain on
   disk; the other **34 available outputs are byte-identical**, with no regression.
   Eight historical PDFs are missing and official recovery requests fail TLS;
