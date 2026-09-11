@@ -13,6 +13,11 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ### Fixed
 
+- **Fragmented running headers.** Isolated top-of-page text split at tiny false
+  column gutters now recovers a complete structured header line after body
+  ordering. Original glyph provenance, independent page numbers, real narrow
+  columns, and all body/footnote ordering are preserved. Federal Register header
+  fragmentation falls from 247 to 82 pages in the evaluation corpus.
 - **SECCI label/value reading order.** Repeated aligned field placeholders now
   keep each complete label beside its value instead of reading the entire left
   column before all values. Multiline cells, adjacent labels, and plain answers

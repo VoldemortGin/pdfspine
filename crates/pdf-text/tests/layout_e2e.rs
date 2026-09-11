@@ -614,3 +614,351 @@ fn layout_e2e_014_multiline_and_empty_values_keep_cell_order() {
     }
     assert_eq!(lines, expected);
 }
+
+/// Equivalent 10pt glyphs may use Tf10/Tm1 or Tf1/Tm10. The column-gutter
+/// splitter must use their device size, otherwise a 2pt occupancy sliver cuts
+/// the normal word space in a full-width running header.
+#[test]
+fn layout_e2e_015_scaled_font_keeps_full_width_header_intact() {
+    let extract = |tf: i32, scale: f64| {
+        let mut content = format!("BT /F1 {tf} Tf ");
+        for (x, y, text) in [
+            (150.0, 750, "HEADER COLUMN"),
+            (216.62, 750, "/"),
+            (
+                223.24,
+                750,
+                "VOLUME AND DATE WITH A FULL WIDTH RUNNING HEADER",
+            ),
+        ] {
+            content.push_str(&format!("{scale} 0 0 {scale} {x} {y} Tm ({text}) Tj "));
+        }
+        // A slightly larger, remote page number shares the header baseline.
+        // Its size must not set the scale of the whole running-header text.
+        let number_scale = scale * 1.1;
+        content.push_str(&format!(
+            "{number_scale} 0 0 {number_scale} 560 750 Tm (527) Tj "
+        ));
+        for y in [690, 680, 670] {
+            content.push_str(&format!("{scale} 0 0 {scale} 218 {y} Tm (X) Tj "));
+        }
+        for x in [40, 225, 410] {
+            for row in 0..20 {
+                let y = 630 - row * 14;
+                content.push_str(&format!(
+                    "{scale} 0 0 {scale} {x} {y} Tm (ABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGHI) Tj "
+                ));
+            }
+        }
+        content.push_str("ET");
+        let widths = vec![500; 95];
+        let font = winansi_type1("Helvetica", 32, &widths);
+        let (doc, _) = PageDoc::new()
+            .font("F1", font)
+            .content(content.as_bytes())
+            .open();
+        let page = page_handle(doc);
+        build_textpage(page.document(), &page, &Limits::unbounded_decode())
+    };
+    let ordinary = line_texts(&extract(10, 1.0));
+    let scaled = line_texts(&extract(1, 10.0));
+    assert!(
+        ordinary
+            .iter()
+            .any(|s| s == "HEADER COLUMN / VOLUME AND DATE WITH A FULL WIDTH RUNNING HEADER"),
+        "ordinary {ordinary:?}"
+    );
+    assert_eq!(
+        scaled, ordinary,
+        "equivalent font transforms changed gutter splits"
+    );
+    assert_eq!(
+        line_texts(&extract(100, 0.1)),
+        ordinary,
+        "shrinking a large Tf changed gutter splits"
+    );
+}
+
+/// Real 4pt text still needs a narrow 3pt column gap: it is below the ordinary
+/// independent-run threshold, so the scale-aware gutter detector must retain it.
+#[test]
+fn layout_e2e_016_small_text_retains_true_narrow_column_gutter() {
+    let mut content = String::from("BT /F1 4 Tf ");
+    let suffix = "A".repeat(33);
+    for (side, x) in [("L", 40), ("R", 113)] {
+        for row in 0..8 {
+            let y = 700 - row * 6;
+            content.push_str(&format!("1 0 0 1 {x} {y} Tm ({side}{row}{suffix}) Tj "));
+        }
+    }
+    content.push_str("ET");
+    let font = winansi_type1("Helvetica", 32, &[500; 95]);
+    let (doc, _) = PageDoc::new()
+        .font("F1", font)
+        .content(content.as_bytes())
+        .open();
+    let page = page_handle(doc);
+    let lines = line_texts(&build_textpage(
+        page.document(),
+        &page,
+        &Limits::unbounded_decode(),
+    ));
+    assert_eq!(lines.len(), 16, "narrow true columns merged: {lines:?}");
+    for (i, line) in lines.iter().enumerate() {
+        let side = if i < 8 { "L" } else { "R" };
+        assert_eq!(line, &format!("{side}{}{suffix}", i % 8));
+    }
+}
+
+/// A neighboring column can seed a cluster halfway between two tight body
+/// baselines. The small-gap header guard must not suppress cross-baseline cuts
+/// or weave an independently raised marker into the following ordinary word.
+#[test]
+fn layout_e2e_017_header_guard_retains_mixed_baselines_and_markers() {
+    let mut content = String::from("BT /F1 1 Tf ");
+    for row in 0..16 {
+        let y = 700.0 - f64::from(row) * 12.0;
+        content.push_str(&format!("10 0 0 10 40 {y} Tm (LEFT COLUMN BODY TEXT) Tj "));
+    }
+    content.push_str("10 0 0 10 40 675.5 Tm (BRIDGING NEIGHBOR) Tj ");
+    content.push_str("8 0 0 8 222 680 Tm (Deputy Assistant Secretary) Tj ");
+    content.push_str("8 0 0 8 222 671 Tm (Negotiations performing duties) Tj ");
+    content.push_str("10 0 0 10 222 640 Tm (The Act) Tj ");
+    content.push_str("6 0 0 6 258.5 644 Tm (12) Tj ");
+    content.push_str("10 0 0 10 222 628 Tm (consistent with the rules) Tj ET");
+    let font = winansi_type1("Helvetica", 32, &[500; 95]);
+    let (doc, _) = PageDoc::new()
+        .font("F1", font)
+        .content(content.as_bytes())
+        .open();
+    let page = page_handle(doc);
+    let lines = line_texts(&build_textpage(
+        page.document(),
+        &page,
+        &Limits::unbounded_decode(),
+    ));
+    for expected in [
+        "Deputy Assistant Secretary",
+        "Negotiations performing duties",
+        "consistent with the rules",
+    ] {
+        assert!(lines.iter().any(|line| line == expected), "{lines:?}");
+    }
+    assert_eq!(lines.join(" ").matches("12").count(), 1);
+}
+
+/// Repeated aligned rows establish a real narrow column even when its gap is
+/// smaller than an ordinary 10pt word space and Tf scale lives in the matrix.
+#[test]
+fn layout_e2e_018_repeated_rows_keep_tiny_true_column_gutter() {
+    for rows in [2, 8] {
+        let mut content = String::from("BT /F1 1 Tf ");
+        let suffix = "A".repeat(33);
+        for (side, x) in [("L", 40), ("R", 218)] {
+            for row in 0..rows {
+                let y = 700 - row * 14;
+                content.push_str(&format!("10 0 0 10 {x} {y} Tm ({side}{row}{suffix}) Tj "));
+            }
+        }
+        // The existing page-gutter detector requires four baseline runs.
+        // Two unrelated lower lines keep that precondition independent of the
+        // number of aligned rows supporting the narrow column.
+        content.push_str("10 0 0 10 40 400 Tm (X) Tj 10 0 0 10 40 380 Tm (X) Tj ET");
+        let font = winansi_type1("Helvetica", 32, &[500; 95]);
+        let (doc, _) = PageDoc::new()
+            .font("F1", font)
+            .content(content.as_bytes())
+            .open();
+        let page = page_handle(doc);
+        let lines = line_texts(&build_textpage(
+            page.document(),
+            &page,
+            &Limits::unbounded_decode(),
+        ));
+        let lines: Vec<_> = lines.into_iter().filter(|line| line != "X").collect();
+        assert_eq!(
+            lines.len(),
+            rows * 2,
+            "true narrow columns merged: {lines:?}"
+        );
+        for (i, line) in lines.iter().enumerate() {
+            let side = if i < rows { "L" } else { "R" };
+            assert_eq!(line, &format!("{side}{}{suffix}", i % rows));
+        }
+    }
+}
+
+/// Unequal-length table cells share a right-column start even when only one
+/// row nearly touches it. Its left continuation must precede the right cell.
+#[test]
+fn layout_e2e_019_repeated_cell_start_keeps_long_cell_continuation() {
+    let content = b"BT /F1 1 Tf \
+        10 0 0 10 40 700 Tm (Institute of Physics and Power here) Tj \
+        10 0 0 10 40 688 Tm (Atomic Energy) Tj \
+        10 0 0 10 218 700 Tm (AlphaMed Inc.) Tj \
+        10 0 0 10 40 660 Tm (Another institute) Tj \
+        10 0 0 10 218 660 Tm (Another partner) Tj \
+        10 0 0 10 40 400 Tm (X) Tj \
+        10 0 0 10 40 380 Tm (X) Tj ET";
+    let font = winansi_type1("Helvetica", 32, &[500; 95]);
+    let (doc, _) = PageDoc::new().font("F1", font).content(content).open();
+    let page = page_handle(doc);
+    let lines = line_texts(&build_textpage(
+        page.document(),
+        &page,
+        &Limits::unbounded_decode(),
+    ));
+    let position = |text: &str| {
+        lines
+            .iter()
+            .position(|line| line == text)
+            .unwrap_or_else(|| panic!("missing {text}: {lines:?}"))
+    };
+    assert!(position("Institute of Physics and Power here") < position("Atomic Energy"));
+    assert!(position("Atomic Energy") < position("AlphaMed Inc."));
+}
+
+/// A header repair must not feed a wider line back into the three-column cut.
+/// Footnotes and printing metadata retain their existing body block geometry
+/// and sequence, even when the footnotes were painted before the body.
+#[test]
+fn layout_e2e_020_header_repair_preserves_three_column_body() {
+    let mut content = String::from("BT /F1 1 Tf ");
+    content.push_str("10 0 0 10 150 750 Tm (HEADER COLUMN) Tj ");
+    content.push_str("10 0 0 10 216.62 750 Tm (/) Tj ");
+    content
+        .push_str("10 0 0 10 223.24 750 Tm (VOLUME AND DATE WITH A FULL WIDTH RUNNING HEADER) Tj ");
+    for y in [690, 680, 670] {
+        content.push_str(&format!("10 0 0 10 218 {y} Tm (X) Tj "));
+    }
+    for (side, x) in [("L", 40), ("M", 225), ("R", 410)] {
+        content.push_str(&format!("8 0 0 8 {x} 100 Tm ({side} FOOTNOTE) Tj "));
+    }
+    let suffix = "A".repeat(32);
+    for (side, x) in [("L", 40), ("M", 225), ("R", 410)] {
+        for row in 0..20 {
+            let y = 630 - row * 14;
+            content.push_str(&format!(
+                "10 0 0 10 {x} {y} Tm ({side}{row:02}{suffix}) Tj "
+            ));
+        }
+    }
+    content.push_str("6 0 0 6 25 28 Tm (VerDate metadata) Tj ");
+    content.push_str("6 0 0 6 202 28 Tm (PO Frm Fmt Sfmt) Tj ");
+    content.push_str("6 0 0 6 348 28 Tm (PRINT FILE) Tj ET");
+    let font = winansi_type1("Helvetica", 32, &[500; 95]);
+    let (doc, _) = PageDoc::new()
+        .font("F1", font)
+        .content(content.as_bytes())
+        .open();
+    let page = page_handle(doc);
+    let tp = build_textpage(page.document(), &page, &Limits::unbounded_decode());
+    let body: Vec<_> = tp
+        .blocks
+        .iter()
+        .filter(|b| b.bbox.y0 > 60.0)
+        .map(|b| {
+            (
+                b.bbox,
+                b.lines
+                    .iter()
+                    .map(|line| {
+                        line.spans
+                            .iter()
+                            .map(|span| span.text.as_str())
+                            .collect::<String>()
+                    })
+                    .collect::<Vec<_>>(),
+            )
+        })
+        .collect();
+    let mut expected = vec![
+        vec!["X".to_string(); 3],
+        vec![
+            "L FOOTNOTE".to_string(),
+            "M FOOTNOTE".to_string(),
+            "R FOOTNOTE".to_string(),
+        ],
+    ];
+    for side in ["L", "M", "R"] {
+        expected.push(
+            (0..20)
+                .map(|row| format!("{side}{row:02}{suffix}"))
+                .collect(),
+        );
+    }
+    expected.push(vec![
+        "VerDate metadata".to_string(),
+        "PO Frm Fmt Sfmt".to_string(),
+        "PRINT FILE".to_string(),
+    ]);
+    assert_eq!(
+        body.iter()
+            .map(|(_, lines)| lines.clone())
+            .collect::<Vec<_>>(),
+        expected
+    );
+    let bounds = [
+        (218.0, 94.0, 223.0, 124.0),
+        (40.0, 685.6, 450.0, 693.6),
+        (40.0, 154.0, 215.0, 430.0),
+        (225.0, 154.0, 400.0, 430.0),
+        (410.0, 154.0, 585.0, 430.0),
+        (25.0, 759.2, 378.0, 765.2),
+    ];
+    for ((actual, _), expected) in body.iter().zip(bounds) {
+        for (a, e) in [actual.x0, actual.y0, actual.x1, actual.y1]
+            .into_iter()
+            .zip([expected.0, expected.1, expected.2, expected.3])
+        {
+            assert!(
+                (a - e).abs() < 1e-6,
+                "body block bounds changed: {actual:?}"
+            );
+        }
+    }
+    assert!(line_texts(&tp)
+        .iter()
+        .any(|line| line == "HEADER COLUMN / VOLUME AND DATE WITH A FULL WIDTH RUNNING HEADER"));
+}
+
+/// A late header repair must not discard a nearby glyph that the existing
+/// fragment reattacher absorbed after the replacement was planned. Reciprocal
+/// Tf scale makes that legacy reattachment radius much larger than device size.
+#[test]
+fn layout_e2e_021_header_repair_keeps_reattached_source_glyphs() {
+    let mut content = String::from("BT /F1 100 Tf ");
+    content.push_str("0.1 0 0 0.1 150 750 Tm (HEADER) Tj 0.1 0 0 0.1 184 750 Tm (COLUMN) Tj ");
+    content.push_str("0.1 0 0 0.1 216.62 750 Tm (/) Tj ");
+    content.push_str(
+        "0.1 0 0 0.1 223.24 750 Tm (VOLUME AND DATE WITH A FULL WIDTH RUNNING HEADER) Tj ",
+    );
+    content.push_str("0.1 0 0 0.1 179.5 730 Tm (#) Tj ");
+    // Tf1 body retains the small occupancy-valley candidates.
+    content.push_str("/F1 1 Tf ");
+    for y in [690, 680, 670] {
+        content.push_str(&format!("10 0 0 10 218 {y} Tm (X) Tj "));
+    }
+    for x in [40, 225, 410] {
+        for row in 0..20 {
+            let y = 630 - row * 14;
+            content.push_str(&format!(
+                "10 0 0 10 {x} {y} Tm (ABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGHI) Tj "
+            ));
+        }
+    }
+    content.push_str("ET");
+    let font = winansi_type1("Helvetica", 32, &[500; 95]);
+    let (doc, _) = PageDoc::new()
+        .font("F1", font)
+        .content(content.as_bytes())
+        .open();
+    let page = page_handle(doc);
+    let tp = build_textpage(page.document(), &page, &Limits::unbounded_decode());
+    let text = line_texts(&tp).join(" ");
+    assert_eq!(
+        text.matches('#').count(),
+        1,
+        "reattached glyph lost: {text}"
+    );
+}
