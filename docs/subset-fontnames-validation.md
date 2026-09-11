@@ -72,6 +72,11 @@ External artifacts on the development machine are in
 `subset-corpus.py`, both corpus JSON outputs and comparison, `subset-cost.py`,
 eight cost JSON runs and summary, and `subset-sizes/` plus its build log.
 The baseline Python package/extension copy and its source/module provenance are
-in `subset-baseline/`; this is a locally merged development baseline, not a
-new published release. Public regressions and shared-view tests are committed
+in `subset-baseline/`. It was captured at font-integration checkout `090dc85`,
+already containing font registration and warp but no subset-name change; the
+font worker confirmed SHA-256 `b5de0c540736d01193a126a6dec7e7d4f97d6722407791a81d71a50e7be77201`
+as its final gate binary (retained in the subsequent `f3572f1` merge). Font
+registration did not change the model declarations used for the size probe.
+This is a local development baseline, not a new published release.
+Public regressions and shared-view tests are committed
 with the implementation; final integration gates are recorded separately.
