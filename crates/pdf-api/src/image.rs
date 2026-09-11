@@ -132,7 +132,8 @@ pub fn page_render(page: &Page, args: &RenderArgs) -> Result<Pixmap> {
 pub struct DisplayList {
     pub(crate) inner: RenderDisplayList,
     pub(crate) doc: Arc<DocumentStore>,
-    text: pdf_text::InterpretResult,
+    pub(crate) text: pdf_text::InterpretResult,
+    pub(crate) replay_text: Vec<(usize, std::ops::Range<usize>)>,
     pub(crate) text_resources: Arc<crate::RecordedTextResources>,
     pub(crate) replay_images: Vec<Option<usize>>,
     pub(crate) cropbox: pdf_core::geom::Rect,
@@ -247,15 +248,17 @@ pub fn page_get_displaylist_with_annots(page: &Page, annots: bool) -> Result<Dis
     let recording = page.dict().map(|dict| {
         pdf_text::ContentInterpreter::new(&doc).run_page_recorded_with_annots(&dict, annots)
     });
-    let (text, ops, image_ops, color_spaces) = match recording {
+    let (text, ops, image_ops, color_spaces, text_ops) = match recording {
         Some(recording) => (
             recording.content,
             recording.ops,
             recording.image_ops,
             recording.image_color_spaces,
+            recording.text_ops,
         ),
         None => (
             pdf_text::InterpretResult::default(),
+            Vec::new(),
             Vec::new(),
             Vec::new(),
             Vec::new(),
@@ -274,6 +277,7 @@ pub fn page_get_displaylist_with_annots(page: &Page, annots: bool) -> Result<Dis
         text,
         text_resources,
         replay_images,
+        replay_text: text_ops,
         cropbox,
         rotation,
     })

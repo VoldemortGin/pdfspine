@@ -6,6 +6,45 @@ use pdf_text::ImageResolver;
 pub use pdf_text::{PathItem, RenderOp};
 
 impl DisplayList {
+    /// Builds a semantic append segment from exact selected recording identities.
+    /// Selection is operation-level; target clipping is a separate layout step.
+    #[must_use]
+    pub fn replay_textpage(
+        &self,
+        selected: &[usize],
+        flags: u32,
+        matrix: Matrix,
+        target: crate::geom::Rect,
+    ) -> Option<pdf_text::TextPage> {
+        let selected: std::collections::HashSet<_> = selected.iter().copied().collect();
+        let glyphs: Vec<_> = self
+            .replay_text
+            .iter()
+            .filter(|(op, _)| selected.contains(op))
+            .flat_map(|(_, range)| self.text.glyphs[range.clone()].iter().cloned())
+            .collect();
+        let images: Vec<_> = self
+            .text
+            .images
+            .iter()
+            .zip(&self.replay_images)
+            .filter(|(_, op)| op.is_some_and(|op| selected.contains(&op)))
+            .map(|(image, _)| image.clone())
+            .collect();
+        if glyphs.is_empty() && images.is_empty() {
+            return None;
+        }
+        Some(pdf_text::textpage_from_glyphs_transformed(
+            &glyphs,
+            &images,
+            self.cropbox,
+            self.rotation,
+            matrix,
+            target,
+            flags,
+        ))
+    }
+
     /// Recorded geometry has its content CTM applied; this adds page and caller transforms once.
     #[must_use]
     pub fn replay_matrix(&self, matrix: Matrix) -> Matrix {

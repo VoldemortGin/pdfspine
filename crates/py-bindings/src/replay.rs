@@ -294,6 +294,18 @@ fn path_payload<'py>(py: Python<'py>, items: &[PathItem]) -> PyResult<Bound<'py,
     PyTuple::new(py, out)
 }
 
+/// Reuses the native selection path without constructing Python objects or reading payloads.
+pub(crate) fn selected_operations(
+    record: Arc<ApiDisplayList>,
+    matrix: Option<MatrixTuple>,
+    area: Option<RectTuple>,
+) -> PyResult<Vec<usize>> {
+    Ok(prepare(record, matrix, area)?
+        .into_iter()
+        .filter_map(|event| event.index)
+        .collect())
+}
+
 pub(crate) fn prepare(
     record: Arc<ApiDisplayList>,
     matrix: Option<MatrixTuple>,

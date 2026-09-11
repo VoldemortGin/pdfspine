@@ -65,3 +65,33 @@ fn e2e_002_contents_array_resources() {
     assert_eq!(glyph_text(&res), "Foo");
     assert_origin(&res.glyphs[0], 100.0, 500.0, 1e-9);
 }
+
+#[test]
+fn recorded_ranges_preserve_each_show_operation_and_invisible_text() {
+    let (doc, page) = PageDoc::new()
+        .font("F1", font_w500())
+        .content(b"q 1 2 3 4 re f BT /F1 12 Tf 40 700 Td (AB) Tj 3 Tr (AB) Tj 7 Tr (CD) Tj ET Q")
+        .open();
+    let recording = pdf_text::ContentInterpreter::new(&doc).run_page_recorded(&page);
+    assert_eq!(recording.text_ops.len(), 3);
+    let mut expected_start = 0;
+    for (index, range) in &recording.text_ops {
+        assert_eq!(range.start, expected_start);
+        assert_eq!(range.len(), 2);
+        expected_start = range.end;
+        let pdf_text::RenderOp::Text(run) = &recording.ops[*index] else {
+            panic!("range must identify exactly its Text operation");
+        };
+        let semantic = &recording.content.glyphs[range.clone()];
+        assert!(semantic
+            .iter()
+            .zip(&run.glyphs)
+            .all(|(a, b)| a.unicode == b.unicode
+                && a.origin == b.origin
+                && a.render_mode == b.render_mode));
+        assert!(semantic.iter().all(|glyph| glyph.font_name == "Helvetica"));
+        assert!(run.glyphs.iter().all(|glyph| glyph.font_name == "F1"));
+    }
+    assert_eq!(expected_start, recording.content.glyphs.len());
+    assert_eq!(glyph_text(&recording.content), "ABABCD");
+}

@@ -12,6 +12,8 @@ A device may be reused after failure. Recursive/concurrent reuse and closing whi
 running raise RuntimeError. Otherwise close is idempotent and prevents later runs.
 No destructor calls user code. Parameter/geometry validation precedes begin;
 resource decoding is lazy and may raise separately when an accessor is used.
+Page.run rejects an already closed source document before recording or begin;
+a previously captured DisplayList remains replayable after source closure.
 
 Events own the frozen recording. Payload mappings and nested tuples/bytes are
 read-only; retained events remain usable after source edits/close. No document,
@@ -62,3 +64,40 @@ clippy, Rust/Python formatting, Ruff and the 11 configured mypy stub files pass.
 Both run catalog entries stay deferred; the guard explicitly checks callable
 callback routes and rejected native targets during this temporary transition.
 A final complete gate is reserved for the three-slice combined implementation.
+
+## TextPage target adapter (slice 2)
+
+`ReplayDevice.for_textpage(target, flags=0)` retains a public `TextPage` and
+appends each successful run to that same object. Its original rect and existing
+blocks are preserved; only the new segment is laid out. Flags must be an integer
+fitting u32 and apply to new segments, not earlier content. Recorded targets keep
+their creation flags; ordinary Page targets retain their existing legacy image
+visibility when promoted, as with `Page.extend_textpage`. Image resources remain
+owned and distinct across documents; dynamic subset-name presentation continues
+to use the recorded raw font metadata.
+
+The adapter uses the callback selector's exact operation identities. Area is
+still conservative whole-operation selection: unknown text bounds may retain
+text far outside the query. After selection, the existing target rectangle clips
+transformed glyph origins independently. A partial area intersection never clips
+a selected text run to the area. Source content CTM, CropBox/Rotate and caller
+matrix are each applied once. Invisible `Tr3` and clipping `Tr7` runs retain their
+recorded text semantics; hidden optional content contributes none. A semantic
+image without a recorded operation cannot be selected by this replay path.
+
+The target's frozen core model is replaced only after complete successful staging.
+An unreadable old visible image fails promotion without partial append. A target
+changed by another append during staging causes RuntimeError instead of lost
+updates. Empty operation selection leaves the original core untouched. Closing
+and concurrent reuse follow the callback device rules. The typed adapter invokes
+no user callbacks; each run returns None. Both run catalog entries still remain
+deferred pending the RGB/RGBA target adapter, and no native device ABI parity is
+claimed.
+
+Validation: a recording-only emit-time operation/range contract covers repeated
+identical show operations and Tr3/Tr7 while retaining semantic font normalization.
+Focused public tests compare complete RAWDICT results against B for Form/AP
+recursion, hidden-content rollback, all four page rotations with CropBox and
+caller shear, image flag combinations and source closure. Additional cases cover
+area versus target clipping, dynamic subset names, duplicate append/search/block
+numbering, failed promotion and a deterministic concurrent-commit interleaving.

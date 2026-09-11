@@ -228,6 +228,8 @@ pub struct ContentInterpreter<'a> {
     /// Present only for an owned text/display-list snapshot.
     image_ops: Option<Vec<Option<usize>>>,
     image_color_spaces: Vec<Option<Object>>,
+    /// Global operation index and semantic glyph range, only for owned recordings.
+    text_ops: Option<Vec<(usize, std::ops::Range<usize>)>>,
     /// The hidden-OCG oracle snapshotted at construction (optional content).
     oc: OcVisibility,
     /// The number of enclosing hidden marked-content sections; while non-zero
@@ -247,6 +249,7 @@ impl<'a> ContentInterpreter<'a> {
             out: InterpretResult::default(),
             render_ops: None,
             image_ops: None,
+            text_ops: None,
             image_color_spaces: Vec::new(),
             oc: OcVisibility::read(doc),
             hidden_depth: 0,
@@ -264,6 +267,7 @@ impl<'a> ContentInterpreter<'a> {
             out: InterpretResult::default(),
             render_ops: Some(Vec::new()),
             image_ops: None,
+            text_ops: None,
             image_color_spaces: Vec::new(),
             oc: OcVisibility::read(doc),
             hidden_depth: 0,
@@ -313,6 +317,7 @@ impl<'a> ContentInterpreter<'a> {
     ) -> crate::renderops::PageRecording {
         self.render_ops = Some(Vec::new());
         self.image_ops = Some(Vec::new());
+        self.text_ops = Some(Vec::new());
         self.run_recorded_content(page);
         if annots {
             self.record_annotation_appearances(page);
@@ -324,6 +329,7 @@ impl<'a> ContentInterpreter<'a> {
             content: self.out,
             ops: self.render_ops.unwrap_or_default(),
             image_ops: self.image_ops.unwrap_or_default(),
+            text_ops: self.text_ops.unwrap_or_default(),
             image_color_spaces: self.image_color_spaces,
         }
     }
@@ -1117,6 +1123,12 @@ impl<'a> ContentInterpreter<'a> {
             let font_dict = cached.dict.clone();
             let glyphs: Vec<PositionedGlyph> = self.out.glyphs[start..].to_vec();
             if !glyphs.is_empty() {
+                if let (Some(index), Some(ranges)) = (
+                    self.render_ops.as_ref().map(Vec::len),
+                    self.text_ops.as_mut(),
+                ) {
+                    ranges.push((index, start..self.out.glyphs.len()));
+                }
                 self.emit(RenderOp::Text(TextRun {
                     glyphs,
                     gids,

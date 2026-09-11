@@ -159,6 +159,8 @@ pub struct PageRecording {
     /// One entry per semantic image: its operation index, when bytes were readable.
     /// Record identity disambiguates resource names reused inside different forms.
     pub image_ops: Vec<Option<usize>>,
+    /// Exact global semantic glyph ranges for each recorded text operation.
+    pub text_ops: Vec<(usize, std::ops::Range<usize>)>,
     /// Named image colorspaces resolved in each placement's resource context.
     pub image_color_spaces: Vec<Option<Object>>,
 }

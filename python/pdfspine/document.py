@@ -2329,6 +2329,8 @@ class Page:
 
     def run(self, dw, m) -> None:
         """Replay into pdfspine.ReplayDevice (not a native MuPDF device)."""
+        if self._parent is not None and self._parent.is_closed:
+            raise ValueError("source document is closed")
         return self.get_displaylist().run(dw, m, None)
 
     def get_displaylist(self, annots: bool = True) -> "DisplayList":

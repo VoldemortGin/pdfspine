@@ -340,6 +340,20 @@ struct PyTextPage {
 }
 
 impl PyTextPage {
+    fn promote_for_append(
+        &self,
+    ) -> pdf_api::Result<(pdf_api::TextPage, pdf_api::ExtendedTextResources)> {
+        let mut tp = self.tp.clone();
+        let resources = match &self.source {
+            TextPageSource::Page(page) => pdf_api::ExtendedTextResources::from_page(page, &mut tp)?,
+            TextPageSource::Recorded { resources, flags } => {
+                pdf_api::ExtendedTextResources::from_recorded(&mut tp, resources.clone(), *flags)
+            }
+            TextPageSource::Extended(resources) => (**resources).clone(),
+        };
+        Ok((tp, resources))
+    }
+
     fn extract_output(&self, py: Python<'_>, opt: &str) -> PyResult<Py<PyAny>> {
         self.extract_output_sorted(py, opt, false)
     }
@@ -2132,20 +2146,7 @@ impl PyPage {
         }
         let (tp, resources) = py
             .detach(|| -> pdf_api::Result<_> {
-                let mut tp = target.tp.clone();
-                let mut resources = match &target.source {
-                    TextPageSource::Page(page) => {
-                        pdf_api::ExtendedTextResources::from_page(page, &mut tp)?
-                    }
-                    TextPageSource::Recorded { resources, flags } => {
-                        pdf_api::ExtendedTextResources::from_recorded(
-                            &mut tp,
-                            resources.clone(),
-                            *flags,
-                        )
-                    }
-                    TextPageSource::Extended(resources) => (**resources).clone(),
-                };
+                let (mut tp, mut resources) = target.promote_for_append()?;
                 let recorded = pdf_api::page_get_displaylist_with_annots(&self.page, true)?;
                 let new = recorded.get_textpage_transformed(
                     flags,
@@ -5292,6 +5293,43 @@ struct PyDisplayList {
 
 #[pymethods]
 impl PyDisplayList {
+    fn _replay_textpage(
+        &self,
+        py: Python<'_>,
+        target: &PyTextPage,
+        flags: u32,
+        matrix: Option<(f64, f64, f64, f64, f64, f64)>,
+        area: Option<(f64, f64, f64, f64)>,
+    ) -> PyResult<Option<PyTextPage>> {
+        py.detach(|| {
+            let selected = replay::selected_operations(self.inner.clone(), matrix, area)?;
+            let matrix = matrix.map_or(Matrix::IDENTITY, |(a, b, c, d, e, f)| {
+                Matrix::new(a, b, c, d, e, f)
+            });
+            let Some(new) = self.inner.replay_textpage(
+                &selected,
+                flags,
+                matrix,
+                Rect::new(0.0, 0.0, target.tp.width, target.tp.height),
+            ) else {
+                return Ok(None);
+            };
+            let (mut tp, mut resources) = target.promote_for_append().map_err(map_err)?;
+            let transforms = self.inner.text_image_transforms(matrix);
+            resources.append(
+                &mut tp,
+                new,
+                self.inner.text_resources(),
+                flags,
+                &transforms,
+            );
+            Ok(Some(PyTextPage {
+                tp,
+                source: TextPageSource::Extended(Arc::new(resources)),
+            }))
+        })
+    }
+
     /// pdfspine callback extension; native device handles are intentionally unsupported.
     fn run(
         &self,
