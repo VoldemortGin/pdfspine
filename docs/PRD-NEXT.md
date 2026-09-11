@@ -29,8 +29,9 @@
   ONNX vision layout/table backend (PP-DocLayoutV3 default + SLANet-plus),
   reading-order stage 3 + D4 (geometric XY-cut block order), `remove_rotation`
   widget/annot rects, `get_text(clip=)`, and the `pdf-typeset` FontIndependent
-  line-height rule. **`CHANGELOG.md` `[Unreleased]` now records the reading-order
-  band fix** below; that fix is not part of the published 0.8.0 release.
+  line-height rule. **`CHANGELOG.md` `[Unreleased]` records the subsequent reading-order,
+  Adobe RGB rendering and OCG Intent fixes, plus the developer/consumer guides**.
+  These changes are not part of the published 0.8.0 release.
 - **Gate.** `./ci.sh` runs `scripts/quality_gate.py`, phases in order
   `rust → extension → python → drift → artifacts`. The `extension` phase
   fingerprints `crates/**`, `Cargo.toml`, `Cargo.lock`, `pyproject.toml` and
@@ -308,22 +309,15 @@
     `.venv/bin/python scripts/check_docs_coverage.py` stays 316/316.
   - *Size:* **S**.
 
-- [ ] **12. Write pdfspine's own `CLAUDE.md`.**
-  - *Goal:* add a repo-root `CLAUDE.md` — pdfspine currently has none.
-  - *Why / evidence:* `git -C … ls-files | grep -i claude` is empty; pdfspine is
-    the largest repo (339 commits) yet the only family member with no CLAUDE.md
-    (`docs/spine-family.md` §5.4, G7). ragspine and pdfspine-studio already route
-    to the family doc from their CLAUDE.md (`ragspine/CLAUDE.md:3`,
-    `pdfspine-studio/CLAUDE.md:21`), so pdfspine is the remaining gap.
-  - *Where:* a new `CLAUDE.md` at the repo root — repo structure (the 13 crates +
-    `python/`), the gate commands (`./ci.sh`, the pre-push hook, ruff **0.14.14**,
-    `.venv` / `.venv-oracle`, `target/` symlink, `TMPDIR` on the external SSD),
-    and a family-routing block pointing at `docs/spine-family.md` and the root
-    CLAUDE.md — consistent with `docs/spine-family.md` §7.
-  - *Acceptance:* `CLAUDE.md` exists and its gate/environment section matches this
-    §0 and its routing block matches `docs/spine-family.md` §7; the family doc's
-    G7 pdfspine gap (`docs/spine-family.md` §6.15 item 7) closes.
-  - *Size:* **S**.
+- [x] **12. Repository `CLAUDE.md` — done (2026-09-10).**
+  The root guide maps all 13 workspace crates, Python/conformance directories,
+  gate phases, extension freshness, Rust/Python/Ruff environment, external
+  build paths and family routing. All 16 local links and the manifest/toolchain
+  facts were checked; `./ci.sh --help` works. Family-root `CLAUDE.md` is absent
+  and is explicitly conditional, not assumed. The file introduces no new
+  approval requirement or replacement for user/session instructions.
+  This closes pdfspine's missing-file gap; family §6.15 item 7 / G7 status still
+  needs the normal canonical-source synchronization in a family-scoped task.
 
 - [x] **13. Family-level upstream decisions — done (2026-09-10).**
   `docs/RELEASE-PYPI.md` §F.3 supports `pdf-api`, `pdf-typeset` and `pdf-fonts`
