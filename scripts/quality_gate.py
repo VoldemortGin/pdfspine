@@ -233,6 +233,7 @@ def smoke_install(artifact: Path, environment: Path) -> None:
     run([str(python), "-m", "pip", "install", "--upgrade", "pip"])
     run([str(python), "-m", "pip", "install", str(artifact)])
     run([str(python), "scripts/html_export_smoke.py"])
+    run([str(python), "scripts/replay_smoke.py"])
 
 
 def one_artifact(directory: Path, pattern: str) -> Path:

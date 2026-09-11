@@ -17,6 +17,7 @@ pub mod image_table;
 pub mod markdown;
 pub mod ocr;
 pub mod recorded_text;
+pub mod replay;
 pub mod svg;
 pub mod tables;
 pub mod text;
