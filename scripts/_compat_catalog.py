@@ -774,9 +774,9 @@ add(
 add(
     "Page.run",
     "Page",
-    DEFERRED,
+    IMPLEMENTED,
     "M6",
-    "device-callback replay deferred; get_pixmap covers the raster path",
+    "pdfspine ReplayDevice callback, owned TextPage append and RGB(A) target replay; not native FzDevice2 ABI",
 )
 add_many("Page", IMPLEMENTED, "M1", ["bound"])
 # Vector / image / font inventory
@@ -1364,12 +1364,12 @@ add_many(
 )
 add_many(
     "DisplayList",
-    DEFERRED,
+    IMPLEMENTED,
     "M6",
     [
         "run",
     ],
-    "Device-callback replay deferred",
+    "pdfspine ReplayDevice callback, owned TextPage append and RGB(A) target replay; conservative device-space area selection; not native FzDevice2 ABI",
 )
 
 # ---------------------------------------------------------------------------

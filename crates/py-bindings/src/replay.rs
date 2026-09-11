@@ -2,6 +2,52 @@
 use super::*;
 use pdf_api::replay::{PathItem, RenderOp};
 
+/// One shared-target replay lease; Drop never touches Python.
+pub(crate) struct PixmapLease(Arc<AtomicBool>);
+impl PixmapLease {
+    pub(crate) fn claim(active: Arc<AtomicBool>) -> Result<Self, &'static str> {
+        active
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .map_err(|_| "target Pixmap is already running")?;
+        Ok(Self(active))
+    }
+}
+impl Drop for PixmapLease {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::Release);
+    }
+}
+
+pub(crate) enum PixmapCommitError<E> {
+    Stage(E),
+    Changed,
+}
+
+/// Shared atomic commit boundary; an error or concurrent mutation never swaps pixels.
+pub(crate) fn commit_pixmap<E>(
+    target: &mut PyPixmap,
+    original: &ApiPixmap,
+    origin: (i64, i64),
+    dpi: (i32, i32),
+    result: Result<ApiPixmap, E>,
+) -> Result<(), PixmapCommitError<E>> {
+    let result = result.map_err(PixmapCommitError::Stage)?;
+    if !Arc::ptr_eq(&target.pix.samples, &original.samples)
+        || target.origin != origin
+        || target.dpi != dpi
+        || target.pix.width != original.width
+        || target.pix.height != original.height
+        || target.pix.n != original.n
+        || target.pix.stride != original.stride
+        || target.pix.alpha != original.alpha
+        || target.pix.colorspace != original.colorspace
+    {
+        return Err(PixmapCommitError::Changed);
+    }
+    target.pix = result;
+    Ok(())
+}
+
 type MatrixTuple = (f64, f64, f64, f64, f64, f64);
 type RectTuple = (f64, f64, f64, f64);
 fn mt(m: Matrix) -> MatrixTuple {
@@ -464,5 +510,36 @@ mod tests {
             even_odd: false,
         };
         assert!(!valid_op(&op, Matrix::new(2.0, 0.0, 0.0, 1.0, 0.0, 0.0)));
+    }
+    #[test]
+    fn same_pixmap_lease_rejects_second_device_and_releases_after_error() {
+        let active = Arc::new(AtomicBool::new(false));
+        let first = PixmapLease::claim(active.clone()).unwrap();
+        assert!(PixmapLease::claim(active.clone()).is_err());
+        drop(first);
+        let result: Result<(), ()> = {
+            let _lease = PixmapLease::claim(active.clone()).unwrap();
+            Err(())
+        };
+        assert!(result.is_err());
+        assert!(PixmapLease::claim(active).is_ok());
+    }
+    #[test]
+    fn stage_error_and_external_mutation_do_not_swap_samples_or_keep_lease() {
+        let mut target = PyPixmap::new(ApiPixmap::new(1, 1, Colorspace::Rgb, false, vec![1, 2, 3]));
+        let original = target.pix.clone();
+        let lease = PixmapLease::claim(target.replay_lease.clone()).unwrap();
+        let error: Result<ApiPixmap, ()> = Err(());
+        assert!(commit_pixmap(&mut target, &original, (0, 0), (96, 96), error).is_err());
+        assert!(Arc::ptr_eq(&target.pix.samples, &original.samples));
+        drop(lease);
+        let _lease = PixmapLease::claim(target.replay_lease.clone()).unwrap();
+        target.pix.set_pixel(0, 0, &[4, 5, 6]).unwrap();
+        let rendered = ApiPixmap::new(1, 1, Colorspace::Rgb, false, vec![255, 0, 0]);
+        assert!(
+            commit_pixmap::<()>(&mut target, &original, (0, 0), (96, 96), Ok(rendered)).is_err()
+        );
+        assert_eq!(target.pix.samples(), [4, 5, 6]);
+        assert_eq!(original.samples(), [1, 2, 3]);
     }
 }

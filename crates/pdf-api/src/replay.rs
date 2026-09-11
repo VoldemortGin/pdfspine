@@ -6,6 +6,22 @@ use pdf_text::ImageResolver;
 pub use pdf_text::{PathItem, RenderOp};
 
 impl DisplayList {
+    /// Stages selected paints onto an existing RGB(A) target in final device coordinates.
+    ///
+    /// # Errors
+    /// Renderer errors propagate without mutating the caller's target.
+    pub fn replay_pixmap(
+        &self,
+        target: &crate::Pixmap,
+        matrix: Matrix,
+        origin: (i64, i64),
+        selected: &[usize],
+    ) -> Result<crate::Pixmap> {
+        let base =
+            self.replay_matrix(matrix) * Matrix::translate(-(origin.0 as f64), -(origin.1 as f64));
+        Ok(self.inner.replay_into(&self.doc, target, base, selected)?)
+    }
+
     /// Builds a semantic append segment from exact selected recording identities.
     /// Selection is operation-level; target clipping is a separate layout step.
     #[must_use]

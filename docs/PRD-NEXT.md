@@ -234,7 +234,7 @@
     SSIM (one was already measured slower and rejected).
   - *Size:* **L**.
 
-- [ ] **4. Deferred APIs — 7 of the original 9 landed; 2 remain.**
+- [x] **4. Deferred APIs — all 9 original items landed.**
   - *Landed:* `DisplayList.get_textpage(flags=3)` returns a usable public
     `TextPage` wrapper from owned semantic/font/image resources; source edits
     and closure do not invalidate text extraction. Paired recording avoids a
@@ -340,12 +340,26 @@
     Final integrated five-phase gate passes **1971 Rust / 1386 Python tests**,
     with 66 existing Python skips; extension fingerprint `53da3cbce469`, drift
     and wheel/sdist installation smoke pass. Eight final Page/DL buffer probes
-    remain identical; no additional GT scoring. The two run APIs stay deferred.
-  - *Remaining order:* device callbacks `Page.run` / `DisplayList.run` remain deferred.
+    remain identical; no additional GT scoring. At that snapshot milestone, the two run APIs remained deferred.
+  - *Run completion:* `Page.run` / `DisplayList.run` now replay through immutable
+    events and `ReplayDevice(callback)`, `for_textpage` or `for_pixmap`. This is
+    an explicit pdfspine extension, not native FzDevice2 handle compatibility.
+    Callback exceptions stop immediately; typed targets stage an atomic append or
+    RGB/RGBA draw. Area conservatively selects whole operations, not a hard clip;
+    unknown bounds are retained, while empty/inverted areas select no paint.
+    Frozen resources survive source edits/close. Existing straight-alpha bytes
+    are preserved wherever premultiplied pixels remain unchanged. See
+    `docs/replay-callback-contract.md` and the three public replay test modules.
+    Final candidate: 177 related Rust tests and 174 combined Python tests pass
+    (4 empty-parameter deferred-guard skips); 35 available documents × RGB/RGBA at 150 DPI give
+    70 byte-identical outputs against ordinary DisplayList rendering. The eight
+    missing historical render assets remain outside this coverage.
+    Catalog parity is **703/769 = 91.4%, deferred = 0**, out-of-scope = 66.
+    DL accumulation and native device handles are not supported.
   - *Evidence:* `python/tests/test_displaylist_textpage.py` covers flags, invisible
     text, Form resources, source edit/close, CropBox/Rotate, annotations and live
     PyMuPDF 1.28.2 comparisons; Rust tests cover lazy decoding and snapshot bounds.
-    Catalog parity is 701/769 = 91.2%, deferred = 2. No callback framework is added.
+    Earlier text-snapshot evidence (before subsequent API additions):
     Full five-phase gate passes (1255 Python tests, 66 existing skips). The same
     35 available render inputs retain identical dimensions/full pixel hashes in
     direct Page rendering and `annots=0` DisplayList replay; eight historical

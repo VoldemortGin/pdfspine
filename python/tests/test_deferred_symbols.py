@@ -73,11 +73,6 @@ def doc_and_page():
 @pytest.mark.parametrize("member", _PAGE_DEFERRED)
 def test_page_deferred_symbol_raises_unsupported(member, doc_and_page) -> None:
     _doc, page = doc_and_page
-    if member == "run":
-        assert callable(page.run)
-        with pytest.raises(TypeError, match="ReplayDevice"):
-            page.run(object(), None)
-        return
     with pytest.raises(PdfUnsupportedError) as exc:
         getattr(page, member)
     msg = str(exc.value)
@@ -181,11 +176,6 @@ def _core_alias_instance(group: str):
 def test_core_alias_deferred_symbol_raises_unsupported(sym) -> None:
     group, _, member = sym.partition(".")
     obj = _core_alias_instance(group)
-    if sym == "DisplayList.run":
-        assert callable(obj.run)
-        with pytest.raises(TypeError, match="ReplayDevice"):
-            obj.run(object(), None, None)
-        return
     with pytest.raises(PdfUnsupportedError) as exc:
         getattr(obj, member)
     msg = str(exc.value)
@@ -210,8 +200,5 @@ def test_core_alias_deferred_set_matches_rust() -> None:
         )
         obj = _core_alias_instance(group)
         for member in members:
-            if group == "DisplayList" and member == "run":
-                assert callable(obj.run)  # callback extension; typed adapters pending
-                continue
             with pytest.raises(PdfUnsupportedError):
                 getattr(obj, member)

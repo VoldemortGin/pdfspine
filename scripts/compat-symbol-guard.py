@@ -196,9 +196,7 @@ def check_deferred_runtime(dispositions: dict[str, str]) -> tuple[list[str], str
     importable in this interpreter (CI compat worktree has no built wheel), the
     check is skipped (no error) and that is reported.
 
-    The two run methods have an explicit callback-only transition below; their
-    catalog state remains deferred until typed adapters are complete. Otherwise
-    only the ``Page`` / ``Document`` deferred symbols — the ones routed through a
+    Only the ``Page`` / ``Document`` deferred symbols — the ones routed through a
     Python ``__getattr__`` — are asserted here (bare instance access must raise
     ``PdfUnsupportedError``, never ``AttributeError``). Other deferred owners are
     out of this check's reach: ``Annot`` / ``Font`` symbols exist as descriptors
@@ -215,7 +213,7 @@ def check_deferred_runtime(dispositions: dict[str, str]) -> tuple[list[str], str
     deferred = _deferred_from_compat(dispositions)
     doc = pdfspine.open()
     page = doc.new_page()
-    targets = {"Page": page, "Document": doc, "DisplayList": page.get_displaylist()}
+    targets = {"Page": page, "Document": doc}
     errors: list[str] = []
     checked = 0
     for sym in sorted(deferred):
@@ -224,34 +222,6 @@ def check_deferred_runtime(dispositions: dict[str, str]) -> tuple[list[str], str
         if obj is None or not member:
             continue  # non-Page/Document owner — out of this check's reach
         checked += 1
-        # Temporary callback-extension transition; remove after typed adapters land.
-        # Catalog remains deferred, since callback availability is not full parity.
-        if sym in {"Page.run", "DisplayList.run"}:
-            try:
-                assert callable(obj.run)
-                if group == "Page":
-                    obj.run(object(), None)
-                else:
-                    obj.run(object(), None, None)
-            except TypeError as exc:
-                if "ReplayDevice" not in str(exc):
-                    errors.append(f"{sym}: wrong native-device rejection: {exc}")
-            except Exception as exc:  # noqa: BLE001
-                errors.append(f"{sym}: callback extension unavailable: {exc}")
-            else:
-                errors.append(f"{sym}: accepted unsupported native target")
-            try:
-                events = []
-                device = pdfspine.ReplayDevice(lambda event: events.append(event.kind))
-                if group == "Page":
-                    obj.run(device, None)
-                else:
-                    obj.run(device, None, None)
-                if events != ["begin", "end"]:
-                    errors.append(f"{sym}: invalid empty callback lifecycle {events}")
-            except Exception as exc:  # noqa: BLE001
-                errors.append(f"{sym}: callback extension failed: {exc}")
-            continue
         try:
             getattr(obj, member)
         except PdfUnsupportedError:
@@ -265,10 +235,7 @@ def check_deferred_runtime(dispositions: dict[str, str]) -> tuple[list[str], str
         else:
             errors.append(f"{sym}: did not raise (want PdfUnsupportedError)")
     doc.close()
-    return (
-        errors,
-        f"runtime deferred check: {checked} deferred symbol(s) verified (run callback transition included)",
-    )
+    return errors, f"runtime deferred check: {checked} Page/Document symbol(s) verified"
 
 
 def main(argv: list[str]) -> int:

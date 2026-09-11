@@ -15,7 +15,7 @@ mod replay;
 
 use std::ffi::{c_int, c_void, CString};
 use std::ptr;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use pdf_api::geom::{IRect, Matrix, Point, Quad, Rect};
@@ -145,7 +145,7 @@ fn map_err(e: ApiError) -> PyErr {
 /// instead of a bare `AttributeError`. `test_core_alias_deferred_set_matches_rust`
 /// guards this list against drift from `_compat_deferred.DEFERRED`.
 const PIXMAP_DEFERRED: &[&str] = &[];
-const DISPLAYLIST_DEFERRED: &[&str] = &["run"];
+const DISPLAYLIST_DEFERRED: &[&str] = &[];
 const TOOLS_DEFERRED: &[&str] = &[];
 
 /// Raises `PdfUnsupportedError` when `name` is a deferred member of `group`, else
@@ -4802,6 +4802,7 @@ struct PyPixmap {
     /// itself rides on the `Arc` strong count, which the boxed clone bumps).
     /// Atomic so the `#[pyclass]` stays `Sync` (PyO3 0.29 requirement).
     exports: AtomicUsize,
+    replay_lease: Arc<AtomicBool>,
     /// The pixmap origin `(x, y)` (PyMuPDF `Pixmap.x` / `.y`). Pure metadata that
     /// does not affect the samples; mirrors PyMuPDF's `set_origin`.
     origin: (i64, i64),
@@ -4815,6 +4816,7 @@ impl PyPixmap {
         PyPixmap {
             pix,
             exports: AtomicUsize::new(0),
+            replay_lease: Arc::new(AtomicBool::new(false)),
             origin: (0, 0),
             dpi: (96, 96),
         }
@@ -4823,6 +4825,41 @@ impl PyPixmap {
 
 #[pymethods]
 impl PyPixmap {
+    /// Stages raster work without holding a target borrow and commits once.
+    fn _replay_pixmap(
+        slf: Bound<'_, Self>,
+        py: Python<'_>,
+        record: &PyDisplayList,
+        matrix: Option<(f64, f64, f64, f64, f64, f64)>,
+        area: Option<(f64, f64, f64, f64)>,
+    ) -> PyResult<()> {
+        let (original, origin, dpi, _lease) = {
+            let target = slf.try_borrow()?;
+            let lease = replay::PixmapLease::claim(target.replay_lease.clone())
+                .map_err(PyRuntimeError::new_err)?;
+            (target.pix.clone(), target.origin, target.dpi, lease)
+        };
+        let inner = record.inner.clone();
+        let result = py.detach(|| {
+            let selected = replay::selected_operations(inner.clone(), matrix, area)?;
+            let matrix = matrix.map_or(Matrix::IDENTITY, |(a, b, c, d, e, f)| {
+                Matrix::new(a, b, c, d, e, f)
+            });
+            inner
+                .replay_pixmap(&original, matrix, origin, &selected)
+                .map_err(map_err)
+        });
+        let mut target = slf.try_borrow_mut()?;
+        replay::commit_pixmap(&mut target, &original, origin, dpi, result).map_err(|error| {
+            match error {
+                replay::PixmapCommitError::Stage(error) => error,
+                replay::PixmapCommitError::Changed => {
+                    PyRuntimeError::new_err("target Pixmap changed during replay")
+                }
+            }
+        })
+    }
+
     /// A deferred baseline member (e.g. `warp`) raises `PdfUnsupportedError`
     /// instead of leaking a bare `AttributeError` (PRD §7 / §9.5).
     fn __getattr__(&self, name: &str) -> PyResult<Py<PyAny>> {

@@ -929,7 +929,7 @@ class Pixmap:
 
 @final
 class DisplayList:
-    # Callback extension available; typed targets remain pending.
+    # pdfspine ReplayDevice extension; native device ABI is not supported.
     def run(self, dw: Any, m: Any, area: Any) -> None: ...
     def get_textpage(self, flags: int = ...) -> _PublicTextPage: ...
     @property

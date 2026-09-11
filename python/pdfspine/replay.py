@@ -26,6 +26,7 @@ class ReplayDevice:
             raise TypeError("callback must be callable")
         self._callback = callback
         self._target: TextPage | None = None
+        self._pixmap: _core.Pixmap | None = None
         self._flags = 0
         self._lock = Lock()
         self._running = False
@@ -48,6 +49,21 @@ class ReplayDevice:
         device = cls(lambda _event: None)
         device._target = target
         device._flags = flags
+        return device
+
+    @classmethod
+    def for_pixmap(cls, target: _core.Pixmap) -> ReplayDevice:
+        """Paint onto existing straight RGB(A) samples with atomic copy-on-write.
+
+        Area selects operations, not a new pixel clip. Target origin positions the
+        raster in final device coordinates; DPI and existing exports are preserved.
+        """
+        if not isinstance(target, _core.Pixmap):
+            raise TypeError("target must be a Pixmap")
+        if target.colorspace != "DeviceRGB":
+            raise ValueError("replay target must be RGB or RGBA")
+        device = cls(lambda _event: None)
+        device._pixmap = target
         return device
 
     def close(self) -> None:
@@ -73,7 +89,9 @@ def _run(record: Any, device: object, matrix: Any, area: Any) -> None:
             raise ValueError("matrix must contain six coefficients")
         if a is not None and len(a) != 4:
             raise ValueError("area must contain four coordinates")
-        if device._target is not None:
+        if device._pixmap is not None:
+            cast(Any, device._pixmap)._replay_pixmap(record, m, a)
+        elif device._target is not None:
             # The public stub deliberately omits the internal frozen core slot.
             target = cast(Any, device._target)
             original = target._tp

@@ -89,6 +89,47 @@ impl Canvas {
         })
     }
 
+    /// Initializes a staged RGB(A) canvas from straight public samples.
+    ///
+    /// # Errors
+    /// Invalid storage/colorspaces or excessive geometry fail before allocation.
+    pub(crate) fn from_rgb_pixmap(source: &Pixmap, base: Matrix) -> Result<Self> {
+        if source.colorspace != Colorspace::Rgb || source.n != 3 + u8::from(source.alpha) {
+            return Err(Error::Unsupported("replay target must be RGB or RGBA"));
+        }
+        let stride = (source.width as usize)
+            .checked_mul(source.n as usize)
+            .ok_or(Error::LimitExceeded("replay target stride overflow"))?;
+        let len = stride
+            .checked_mul(source.height as usize)
+            .ok_or(Error::LimitExceeded("replay target storage overflow"))?;
+        if source.stride != stride || source.samples().len() != len {
+            return Err(Error::InvalidArgument(
+                "invalid replay target sample storage",
+            ));
+        }
+        if u64::from(source.width) * u64::from(source.height) > crate::render::MAX_RENDER_PIXELS {
+            return Err(Error::LimitExceeded("replay target too large"));
+        }
+        let mut canvas = Self::blank(
+            source.width,
+            source.height,
+            base,
+            Colorspace::Rgb,
+            source.alpha,
+        )?;
+        for (src, dst) in source
+            .samples()
+            .chunks_exact(source.n as usize)
+            .zip(canvas.pixmap.data_mut().chunks_exact_mut(4))
+        {
+            let alpha = if source.alpha { src[3] } else { 255 };
+            let c = tiny_skia::ColorU8::from_rgba(src[0], src[1], src[2], alpha).premultiply();
+            dst.copy_from_slice(&[c.red(), c.green(), c.blue(), c.alpha()]);
+        }
+        Ok(canvas)
+    }
+
     /// The canvas width in device pixels.
     #[must_use]
     pub fn width(&self) -> u32 {
@@ -217,6 +258,12 @@ impl Canvas {
     /// [`Error::Image`] if the output [`Pixmap`] cannot be constructed (it never
     /// is for a valid canvas — the sample buffer is sized exactly).
     pub fn into_pixmap(self) -> Result<Pixmap> {
+        self.into_pixmap_preserving(None)
+    }
+
+    /// Preserves original straight bytes when painting caused no observable
+    /// premultiplied-pixel change, including hidden RGB at alpha zero.
+    pub(crate) fn into_pixmap_preserving(self, original: Option<&Pixmap>) -> Result<Pixmap> {
         let width = self.pixmap.width();
         let height = self.pixmap.height();
         let cs = self.out_colorspace;
@@ -249,7 +296,18 @@ impl Canvas {
 
         match cs {
             Colorspace::Rgb => {
-                for (px, out) in pixels.iter().zip(samples.chunks_exact_mut(n)) {
+                for (index, (px, out)) in pixels.iter().zip(samples.chunks_exact_mut(n)).enumerate()
+                {
+                    if let Some(source) = original {
+                        let src = &source.samples()[index * n..(index + 1) * n];
+                        let a = if source.alpha { src[3] } else { 255 };
+                        let initial =
+                            tiny_skia::ColorU8::from_rgba(src[0], src[1], src[2], a).premultiply();
+                        if initial == *px {
+                            out.copy_from_slice(src);
+                            continue;
+                        }
+                    }
                     let (r, g, b, a) = straight(*px);
                     out[0] = r;
                     out[1] = g;
@@ -372,5 +430,59 @@ mod tests {
         assert_eq!(pm.n, 1);
         // round(0.299*255) = 76.
         assert_eq!(pm.samples[0], 76);
+    }
+    #[test]
+    fn replay_preserves_all_channel_alpha_pairs_without_roundtrip_damage() {
+        let bytes: Vec<u8> = (0..=255u8)
+            .flat_map(|alpha| (0..=255u8).flat_map(move |v| [v, 255 - v, v / 2, alpha]))
+            .collect();
+        let target = Pixmap::new(256, 256, Colorspace::Rgb, true, bytes.clone());
+        let canvas = Canvas::from_rgb_pixmap(&target, Matrix::IDENTITY).unwrap();
+        let restored = canvas.into_pixmap_preserving(Some(&target)).unwrap();
+        assert_eq!(restored.samples(), bytes);
+    }
+
+    #[test]
+    fn replay_changed_pixel_uses_existing_canvas_conversion() {
+        let target = Pixmap::new(1, 1, Colorspace::Rgb, true, vec![31, 77, 99, 64]);
+        let mut ordinary = Canvas::from_rgb_pixmap(&target, Matrix::IDENTITY).unwrap();
+        let mut preserved = Canvas::from_rgb_pixmap(&target, Matrix::IDENTITY).unwrap();
+        let color = tiny_skia::Color::from_rgba8(255, 10, 20, 128);
+        ordinary.pixmap_mut().fill(color);
+        preserved.pixmap_mut().fill(color);
+        assert_eq!(
+            ordinary.into_pixmap().unwrap().samples(),
+            preserved
+                .into_pixmap_preserving(Some(&target))
+                .unwrap()
+                .samples()
+        );
+    }
+
+    #[test]
+    fn replay_staging_error_leaves_source_samples_and_arc_untouched() {
+        let target = Pixmap::new(1, 1, Colorspace::Rgb, true, vec![31, 77, 99, 64]);
+        let original = target.samples.clone();
+        let result: Result<Pixmap> = (|| {
+            let mut canvas = Canvas::from_rgb_pixmap(&target, Matrix::IDENTITY)?;
+            canvas
+                .pixmap_mut()
+                .fill(tiny_skia::Color::from_rgba8(255, 0, 0, 255));
+            // Private fault injection after a real staged write; no production switch.
+            Err(Error::InvalidArgument("injected post-paint failure"))
+        })();
+        assert!(result.is_err());
+        assert!(Arc::ptr_eq(&target.samples, &original));
+        assert_eq!(target.samples(), [31, 77, 99, 64]);
+    }
+
+    #[test]
+    fn replay_rejects_malformed_storage_before_allocation() {
+        let mut target = Pixmap::new(2, 2, Colorspace::Rgb, false, vec![0; 12]);
+        target.stride = usize::MAX;
+        assert!(Canvas::from_rgb_pixmap(&target, Matrix::IDENTITY).is_err());
+        target.width = u32::MAX;
+        target.height = u32::MAX;
+        assert!(Canvas::from_rgb_pixmap(&target, Matrix::IDENTITY).is_err());
     }
 }
