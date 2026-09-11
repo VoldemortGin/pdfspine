@@ -934,6 +934,29 @@ pub fn dict_blocks<'a>(page: &Page, tp: &'a TextPage, flags: u32) -> Vec<DictBlo
 /// pay nothing. Extracted results are cached per xref so a repeated image is
 /// decoded only once, while each placement still gets its own copy of the bytes
 /// (fitz inlines the payload at every image block).
+/// Materializes only images already visible in an existing Page-backed model.
+pub(crate) fn snapshot_textpage_images(
+    page: &Page,
+    tp: &TextPage,
+) -> crate::Result<HashMap<String, ResolvedImage>> {
+    let resolver = PageImageResolver::new(page);
+    let mut images = HashMap::new();
+    for block in &tp.blocks {
+        if let Some(image) = &block.image {
+            let name = image.name.as_deref().ok_or_else(|| {
+                crate::Error::Decode("cannot promote an unresolved inline target image".into())
+            })?;
+            if !images.contains_key(name) {
+                let decoded = resolver.resolve(Some(name)).ok_or_else(|| {
+                    crate::Error::Decode(format!("cannot promote target image {name}"))
+                })?;
+                images.insert(name.to_string(), decoded);
+            }
+        }
+    }
+    Ok(images)
+}
+
 struct PageImageResolver<'a> {
     page: &'a Page,
     /// 资源名 → xref，懒建。

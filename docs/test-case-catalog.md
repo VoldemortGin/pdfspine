@@ -3183,3 +3183,12 @@ real PyMuPDF in `.venv-oracle` (or `PDFSPINE_ORACLE_PYTHON`).
 Rust unit tests in `pdf-edit::merge::snapshot_tests` cover cycles, recursion limits,
 metadata exclusion and independent roots. `pdf-api::recorded_text::tests` proves
 capture and flags=3 do not decode images; extraction with images resolves lazily.
+
+
+### `Page.extend_textpage` — `EXTEND-TEXT-*`
+
+- **File:** `python/tests/test_extend_textpage.py` (25 cases).
+- **Status:** implemented; local PyMuPDF 1.28.2 behavior and affine numeric probes.
+- **Coverage:** identity/rect/order, duplicates and numbering, per-segment flags,
+  cross-document images and closure, transformed origin clipping, image CTM and
+  text metrics, combined Page.get_text reuse, atomic invalid-input/resource errors.
