@@ -109,12 +109,12 @@ def _rels(pairs: list[tuple[str, str, str]]) -> str:
     return f'{XML_DECL}<Relationships xmlns="{NS_REL}">{rows}</Relationships>'
 
 
-def build_docx(path: Path, *, shading: bool = False, tracking: bool = False, border: bool = False) -> None:
+def build_docx(path: Path, *, shading: bool = False, tracking: bool = False, border: bool = False, condensed: bool = False) -> None:
     """One Letter page, 1-in margins, Liberation Serif — mirrors typeset-lo-doc."""
 
     def para(text: str, *, size_half_pt: int, bold: bool, after_20th: int) -> str:
         b = "<w:b/>" if bold else ""
-        extra_spacing = '<w:spacing w:val="20"/>' if tracking else ""
+        extra_spacing = '<w:spacing w:val="-20"/>' if condensed else ('<w:spacing w:val="20"/>' if tracking else "")
         rpr = (
             f'<w:rPr><w:rFonts w:ascii="Liberation Serif" w:hAnsi="Liberation Serif"/>'
             f'{b}{extra_spacing}<w:sz w:val="{size_half_pt}"/></w:rPr>'
@@ -463,6 +463,8 @@ def main(argv: list[str] | None = None) -> int:
     build_docx(shaded_docx, shading=True)
     tracked_docx = cache / "sample-tracking.docx"
     build_docx(tracked_docx, tracking=True)
+    condensed_docx = cache / "sample-condensed.docx"
+    build_docx(condensed_docx, condensed=True)
     border_docx = cache / "sample-border.docx"
     build_docx(border_docx, border=True)
     script_docx = cache / "sample-script-doc.docx"
@@ -478,6 +480,7 @@ def main(argv: list[str] | None = None) -> int:
             ("pptx", pptx, ROOT / "fixtures" / "typeset" / "typeset-lo-slide.pdf"),
             ("docx-shading", shaded_docx, ROOT / "fixtures" / "typeset" / "typeset-lo-shading.pdf"),
             ("docx-tracking", tracked_docx, ROOT / "fixtures" / "typeset" / "typeset-lo-tracking.pdf"),
+            ("docx-condensed", condensed_docx, ROOT / "fixtures" / "typeset" / "typeset-lo-condensed.pdf"),
             ("docx-border", border_docx, ROOT / "fixtures" / "typeset" / "typeset-lo-border.pdf"),
             ("docx-script", script_docx, ROOT / "fixtures" / "typeset" / "typeset-lo-script-doc.pdf"),
             ("pptx-script", script_pptx, ROOT / "fixtures" / "typeset" / "typeset-lo-script-slide.pdf"),

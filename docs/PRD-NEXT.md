@@ -415,8 +415,18 @@
     **0.8766 → 0.9849**; old seven PDFs unchanged. Caller-resolved geometry only;
     no automatic OOXML policy or consumer migration. See
     `docs/typeset-script-placement.md`.
-  - [ ] **Remaining:** non-solid/between paragraph borders and pattern shading, condensed negative
-    character spacing, automatic script policy/consumer mappings, and verified Word `lineGap` placement.
+  - [x] **Caller-resolved signed character spacing** (unreleased).
+    The same `CharacterSpacing` field gains a finite `resolved_signed` constructor;
+    `new` keeps rejecting negatives. Four `try_*` layout/measure methods diagnose
+    unsupported font-dependent advances before returned ops; legacy methods
+    report typed warnings and reset affected paragraphs' negative gaps once,
+    preserving caller input and ordinary valid text. Signed wrapping/decorators
+    cover advance-cell extents, not outline ink bounds. New LO sample
+    **0.8903 → 0.9868**; nine prior PDFs byte-identical. See
+    `docs/typeset-signed-spacing.md`. No LO saturation/Word policy is inferred.
+  - [ ] **Remaining:** non-solid/between paragraph borders and pattern shading,
+    automatic signed-spacing/script policy and consumer mappings, and verified
+    Word `lineGap` placement.
   - *Increment validation:* LibreOffice 26.8.0.3 at 100 dpi, same renderer:
     existing DOCX/PPTX **0.9822 / 0.9780**, unchanged. These are the current
     comparison baseline, not the historical TS-12 **0.9815 / 0.9777** results.
