@@ -364,6 +364,7 @@ fn snapshot_shares_source_but_freezes_overlay_and_metadata() {
         doc.source().bytes().as_ptr(),
         frozen.source().bytes().as_ptr()
     );
+    assert!(std::ptr::eq(doc.xref(), frozen.xref()));
     assert_eq!(frozen.cached_object_count(), 0);
     assert!(frozen.redaction_applied());
     doc.set_layer_view(Default::default());

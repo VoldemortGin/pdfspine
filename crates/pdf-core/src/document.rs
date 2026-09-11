@@ -47,7 +47,7 @@ pub struct Version {
 #[derive(Debug)]
 pub struct DocumentStore {
     source: Source,
-    xref: XrefTable,
+    xref: Arc<XrefTable>,
     trailer: Dict,
     version: Version,
     header_offset: usize,
@@ -99,7 +99,7 @@ impl DocumentStore {
     /// The overlay, trailer overrides, layer view and authentication state are
     /// held under simultaneous read guards. The result represents one store
     /// instant, not a transaction across a multi-step authoring operation.
-    /// Xref and overlay maps are copied; object payloads and source bytes are shared.
+    /// The overlay map is copied; xref, object payloads and source bytes are shared.
     ///
     /// # Errors
     /// Returns a typed error if a semantic-state lock is poisoned.
@@ -361,7 +361,7 @@ impl DocumentStore {
 
         let mut store = DocumentStore {
             source,
-            xref,
+            xref: Arc::new(xref),
             trailer,
             version,
             header_offset,
