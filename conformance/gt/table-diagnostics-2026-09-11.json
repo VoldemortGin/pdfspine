@@ -182,6 +182,180 @@
           "sha256": "7c11bebbb47894f9879c696ec69fb938a1d9a7ebe74c7fd53ae108c2adf36a73"
         }
       ]
+    },
+    "tableformer_raw_structure": {
+      "commit": "35e5f53568d9e174b00df8fdbc8d47e24ebd986e",
+      "native_sha256": "fe8ba4d7c88df62c88e4defbd2b73d33e7748369e3156351010d91a2b5eaf5d6",
+      "source_files": [
+        {
+          "path": "conformance/gt/cell_alignment.py",
+          "sha256": "d89457665d0da2d063cfffef33e0f7107c9bdf1efe8726601ae9cb4c1281c85e"
+        },
+        {
+          "path": "conformance/gt/grits.py",
+          "sha256": "ba27c02949cac4b3fb30793a4dbadefef059ab5e9040b35de3e1012c5eafb933"
+        },
+        {
+          "path": "conformance/gt/score.py",
+          "sha256": "ddaa42d14523406080ed5c35acd1458a2c798b8d7d2be95a1cec1129beed317e"
+        },
+        {
+          "path": "conformance/gt/tableformer_adapter.py",
+          "sha256": "6840c492b3455496733da098561dffb0151ce754f35924ddfd80e0d972d1c96d"
+        },
+        {
+          "path": "conformance/gt/tables_diff.py",
+          "sha256": "52c4402e5b0a2cbcbc9884ad97673d7d880551c93921036df32b1f6b5ad2f591"
+        },
+        {
+          "path": "python/pdfspine/__init__.py",
+          "sha256": "86adfdc0b7a8bf060ee43c0abc18f5092d17dde824ded0876db76d292f39aa69"
+        },
+        {
+          "path": "python/pdfspine/__init__.pyi",
+          "sha256": "cb74f4afde3f823988bc172c186c957486ff0ed8de337c09fb9953b381e43d0c"
+        },
+        {
+          "path": "python/pdfspine/__main__.py",
+          "sha256": "8553bde1b9582b9df8b314b8f952dcc9faeb005c2f33a7a401b2ff06867f29e7"
+        },
+        {
+          "path": "python/pdfspine/_compat_deferred.py",
+          "sha256": "08e93d597283debb43ef3f42ff00660cfaea619b83a80e923d54aae117f0fdb0"
+        },
+        {
+          "path": "python/pdfspine/_core.abi3.so",
+          "sha256": "fe8ba4d7c88df62c88e4defbd2b73d33e7748369e3156351010d91a2b5eaf5d6"
+        },
+        {
+          "path": "python/pdfspine/_core.pyi",
+          "sha256": "527a9f3c54c15cc260a94bdf890135249ac2f5dc232bbb73cd704e230f39cebd"
+        },
+        {
+          "path": "python/pdfspine/_layout.py",
+          "sha256": "1cfb9127e3b515824996e00fa4efef87f08becd26132b5b8f5cbb09bd7497a35"
+        },
+        {
+          "path": "python/pdfspine/_llms/docs/api.md",
+          "sha256": "7465dea3e75f0397f064f1136b170ec3836edec547758377509190d48ba13e48"
+        },
+        {
+          "path": "python/pdfspine/_llms/docs/gotchas.md",
+          "sha256": "7917fa90f618a77c6f48a39c9c1863d11d325e9c394ff8ff9a2516edaedd3de1"
+        },
+        {
+          "path": "python/pdfspine/_llms/docs/overview.md",
+          "sha256": "04e4296752100eb19b3ecc4cbd7177ca7a6e8c71b0296d71ff008cc7881716c7"
+        },
+        {
+          "path": "python/pdfspine/_llms/docs/recipes.md",
+          "sha256": "98f16bdeaa03debaa82376fba22501ea57addd030a158b7dcf6c0304ce37c31a"
+        },
+        {
+          "path": "python/pdfspine/_llms/docs/replay.md",
+          "sha256": "ec0705229fb3a544ddce8d888cd712d5ac5472e90aaebaaa26cefc063704a656"
+        },
+        {
+          "path": "python/pdfspine/_llms/llms.txt",
+          "sha256": "4025bad71a145b19eaa66bb2d192006d6aaadb6ffceb68610f21de930a89041d"
+        },
+        {
+          "path": "python/pdfspine/_markdown.py",
+          "sha256": "3a76f7ee1a76872a247d681220f0db1306e44542416cf721353a2a34e6204eec"
+        },
+        {
+          "path": "python/pdfspine/_onnx.py",
+          "sha256": "57f5dfd78924ea24f2bdfe3b5094c4994f357f71d98e60204cfe120da869dab0"
+        },
+        {
+          "path": "python/pdfspine/_onnx.pyi",
+          "sha256": "3691e2e9a1a705404e81a74074f79416fd6df0f2a0d61b7ea412028fbc484810"
+        },
+        {
+          "path": "python/pdfspine/_tatr.py",
+          "sha256": "260972d77a67eae6a9f8d996d6d717db9f2b41b844d6fb7284b68656b9f96982"
+        },
+        {
+          "path": "python/pdfspine/_tatr_postprocess.py",
+          "sha256": "a4d886c9b438900501e19b4d4c4c7f28ad4367d4224cc97239c7c1ffe7e241f7"
+        },
+        {
+          "path": "python/pdfspine/cli.py",
+          "sha256": "99666bc2c467c900b7cb0d5242d499a20a5ff7c366df6c4c606614e5aa09e036"
+        },
+        {
+          "path": "python/pdfspine/cli.pyi",
+          "sha256": "f3de3e9c060a0fc1873ed8620bef09b4ea540efe14c07fe0c34377c96fc7ea14"
+        },
+        {
+          "path": "python/pdfspine/constants.py",
+          "sha256": "b1f756d28edd14a64788667072e27a4b69e718030ecb7a48b7652806a3983fa7"
+        },
+        {
+          "path": "python/pdfspine/constants.pyi",
+          "sha256": "e944bf0ff34166107cffb5c5cd5ebde91b02247620efa33ff172427d2ab441ed"
+        },
+        {
+          "path": "python/pdfspine/document.py",
+          "sha256": "dd7d486233fe8b75d517a9a49051edc0c41f892125601af7d1704b0c9319790a"
+        },
+        {
+          "path": "python/pdfspine/document.pyi",
+          "sha256": "07ea1f0df9fe30abc478115b07b4712460c93ad27e097a15ffe989a4e79ced91"
+        },
+        {
+          "path": "python/pdfspine/fitz.py",
+          "sha256": "6b71356e89662dc01ea0e462b565068e71fe2034a4ffa550192bd4a3b893437a"
+        },
+        {
+          "path": "python/pdfspine/fitz.pyi",
+          "sha256": "8540014c0f8cad067ef29383580cf322923726bb3cbd08eb390940b349f24838"
+        },
+        {
+          "path": "python/pdfspine/geometry.py",
+          "sha256": "2040a0d9fd9d1cf832075c7658d25e2915e67e8f4fd11ab5a286fd61665b77be"
+        },
+        {
+          "path": "python/pdfspine/geometry.pyi",
+          "sha256": "030314785aa17e3b5473d2d97dfd236b382e7c921fc5fdf4f121c1958e9cb639"
+        },
+        {
+          "path": "python/pdfspine/helpers.py",
+          "sha256": "d1182da0274e6b736ebe887d3c571d0c1507a3325f2aa190c4a1f4495497d222"
+        },
+        {
+          "path": "python/pdfspine/helpers.pyi",
+          "sha256": "8308f7dbcf6f1cd0a5cc572b3e9a3295326843bfc508829eead6a41ef7b1c743"
+        },
+        {
+          "path": "python/pdfspine/models.py",
+          "sha256": "6f093d7755feb02e936001d630fdc402eddbe2f40c888beb8b90ce8f05202669"
+        },
+        {
+          "path": "python/pdfspine/models.pyi",
+          "sha256": "f9a8c9a986b7d1286239516cf86254976e41e4de7e764f83c28b84f9b4a9bbd3"
+        },
+        {
+          "path": "python/pdfspine/py.typed",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "path": "python/pdfspine/pymupdf.py",
+          "sha256": "f375c31d8c182f3c00020d43f27471f70683ee3bc4337ddf12a6da42d1cdc236"
+        },
+        {
+          "path": "python/pdfspine/pymupdf.pyi",
+          "sha256": "0a23795e0ea44f963be422bb3c607328f55e98deb400883cfe72f0ebd8aef8ab"
+        },
+        {
+          "path": "python/pdfspine/replay.py",
+          "sha256": "5ee0b812d389dc69972bbb5b17da7187865b942d9a864762d16a27e5399cbec3"
+        }
+      ],
+      "frozen_source_index": {
+        "index": "pdfspine-tableformer-diagnostics-35e5f53/frozen-source.json",
+        "sha256": "c2fb659b11d187bf335d90895db9e50bceec13feb2caab9d2eee6d6f004942b2"
+      }
     }
   },
   "input": {
@@ -827,6 +1001,142 @@
           "sha256": "d57a942af6a2f57d6a4a0372573c696a2379bf5857c45e2ac69993f3b334514b"
         }
       ]
+    },
+    {
+      "track": "tableformer-fast-raw-structure",
+      "source": "tableformer_raw_structure",
+      "raw_index": "pdfspine-tableformer-diagnostics-35e5f53/tableformer-fast-raw-structure/diagnostic.json",
+      "raw_sha256": "ca3df2037ba8a82e22adfbbecf4bfeeaa982bdb6208867da9c039b10e6574330",
+      "execution_status": "success",
+      "status": "incomplete",
+      "comparable": false,
+      "requested_pages": 40,
+      "requested_tables": 60,
+      "evaluated_tables": 60,
+      "elapsed_seconds_observed": 21.637103874993045,
+      "configuration": {
+        "strategy": "vision",
+        "backend": "tableformer",
+        "mode": "gold-crop-tsr",
+        "options": {
+          "variant": "fast",
+          "model_dir": "${TABLEFORMER_MODEL_ROOT}/fast",
+          "dpi": 144,
+          "device": "cpu",
+          "num_threads": 2,
+          "ocr_if_no_text": false,
+          "local_files_only": true
+        }
+      },
+      "runtime": {
+        "python": "3.12.11 (main, Jun  3 2025, 15:41:47) [Clang 17.0.0 (clang-1700.0.13.3)]",
+        "platform": "macOS-26.5.1-arm64-arm-64bit",
+        "packages": {
+          "docling-ibm-models": "4.0.2",
+          "torch": "2.13.0",
+          "torchvision": "0.28.0",
+          "opencv-python-headless": "4.13.0.92",
+          "numpy": "2.5.1",
+          "Pillow": "12.3.0",
+          "transformers": "5.14.1",
+          "safetensors": "0.8.0"
+        },
+        "recognition_options": {
+          "do_matching": false,
+          "sort_row_col_indexes": false,
+          "correct_overlapping_cells": false
+        },
+        "loaded_model_roles": [
+          "table"
+        ],
+        "executed_model_roles": [
+          "table"
+        ],
+        "word_assignment": "onnx-native-overlap-center-nearest-v1",
+        "runtime_source_sha256": "79bf93b305c5107eaaae32cdff898756faa3f15877b3371f50c52115984bce80"
+      },
+      "model_files": [
+        {
+          "role": "table",
+          "sha256": "3119563aab5a7c96fda4d621119b63fd8806272b86c30936d15507616422f718",
+          "bytes": 145453276,
+          "filename": "tableformer_fast.safetensors"
+        },
+        {
+          "role": "table-config",
+          "sha256": "dca6762508dddfae6d57d6cb4ef822c6000119dff0f3b6489db7413118c2622a",
+          "bytes": 7060,
+          "filename": "tm_config.json"
+        }
+      ]
+    },
+    {
+      "track": "tableformer-accurate-raw-structure",
+      "source": "tableformer_raw_structure",
+      "raw_index": "pdfspine-tableformer-diagnostics-35e5f53/tableformer-accurate-raw-structure/diagnostic.json",
+      "raw_sha256": "add8be7906f0fcb6c61c30421872985a6fb27e0753176ffdf021565ab08c0dc6",
+      "execution_status": "success",
+      "status": "incomplete",
+      "comparable": false,
+      "requested_pages": 40,
+      "requested_tables": 60,
+      "evaluated_tables": 60,
+      "elapsed_seconds_observed": 34.91866012499668,
+      "configuration": {
+        "strategy": "vision",
+        "backend": "tableformer",
+        "mode": "gold-crop-tsr",
+        "options": {
+          "variant": "accurate",
+          "model_dir": "${TABLEFORMER_MODEL_ROOT}/accurate",
+          "dpi": 144,
+          "device": "cpu",
+          "num_threads": 2,
+          "ocr_if_no_text": false,
+          "local_files_only": true
+        }
+      },
+      "runtime": {
+        "python": "3.12.11 (main, Jun  3 2025, 15:41:47) [Clang 17.0.0 (clang-1700.0.13.3)]",
+        "platform": "macOS-26.5.1-arm64-arm-64bit",
+        "packages": {
+          "docling-ibm-models": "4.0.2",
+          "torch": "2.13.0",
+          "torchvision": "0.28.0",
+          "opencv-python-headless": "4.13.0.92",
+          "numpy": "2.5.1",
+          "Pillow": "12.3.0",
+          "transformers": "5.14.1",
+          "safetensors": "0.8.0"
+        },
+        "recognition_options": {
+          "do_matching": false,
+          "sort_row_col_indexes": false,
+          "correct_overlapping_cells": false
+        },
+        "loaded_model_roles": [
+          "table"
+        ],
+        "executed_model_roles": [
+          "table"
+        ],
+        "word_assignment": "onnx-native-overlap-center-nearest-v1",
+        "runtime_source_sha256": "79bf93b305c5107eaaae32cdff898756faa3f15877b3371f50c52115984bce80"
+      },
+      "model_files": [
+        {
+          "role": "table",
+          "sha256": "2a7d6c924b3cd12fb99a09280ca9c33a89c5d60b93253617d2e088c1a40374d9",
+          "bytes": 212758388,
+          "filename": "tableformer_accurate.safetensors"
+        },
+        {
+          "role": "table-config",
+          "sha256": "984e122ceb8ccf84d84c9d2882f6f2302a44b4f1e577babd6289892c36f3cffd",
+          "bytes": 7060,
+          "filename": "tm_config.json"
+        }
+      ]
     }
   ],
   "partitions": [
@@ -1449,11 +1759,160 @@
       "track_error": null,
       "track_elapsed_seconds_observed_not_comparable": 6.657951082976069,
       "source_commit": "38cdcba028ba1289ea47f5c47d90e6a7e925261b"
+    },
+    {
+      "track": "tableformer-fast-raw-structure",
+      "partition": "development",
+      "requested_pages": 10,
+      "evaluated_pages": 10,
+      "requested_tables": 15,
+      "evaluated_tables": 15,
+      "execution_status": "success",
+      "overall_status": "incomplete",
+      "comparable": false,
+      "official_aggregate": null,
+      "diagnostic_only": {
+        "grits_top_mean": 0.8963475435527288,
+        "grits_con_mean": 0.8706735362867952,
+        "cell_alignment": {
+          "metric": "cell_span_f1_v1",
+          "invalid_predictions": 0,
+          "span": {
+            "tp": 791,
+            "fp": 243,
+            "fn": 77,
+            "precision": 0.7649903288201161,
+            "recall": 0.9112903225806451,
+            "f1": 0.8317560462670873
+          },
+          "content": {
+            "tp": 437,
+            "fp": 597,
+            "fn": 431,
+            "precision": 0.42263056092843326,
+            "recall": 0.5034562211981567,
+            "f1": 0.45951629863301785
+          }
+        }
+      },
+      "source_commit": "35e5f53568d9e174b00df8fdbc8d47e24ebd986e"
+    },
+    {
+      "track": "tableformer-fast-raw-structure",
+      "partition": "evaluation",
+      "requested_pages": 30,
+      "evaluated_pages": 30,
+      "requested_tables": 45,
+      "evaluated_tables": 45,
+      "execution_status": "success",
+      "overall_status": "incomplete",
+      "comparable": false,
+      "official_aggregate": null,
+      "diagnostic_only": {
+        "grits_top_mean": 0.9302094557140473,
+        "grits_con_mean": 0.8932130849556318,
+        "cell_alignment": {
+          "metric": "cell_span_f1_v1",
+          "invalid_predictions": 0,
+          "span": {
+            "tp": 2094,
+            "fp": 328,
+            "fn": 101,
+            "precision": 0.8645747316267548,
+            "recall": 0.9539863325740319,
+            "f1": 0.9070825211176088
+          },
+          "content": {
+            "tp": 1467,
+            "fp": 955,
+            "fn": 728,
+            "precision": 0.6056977704376548,
+            "recall": 0.6683371298405467,
+            "f1": 0.6354775828460039
+          }
+        }
+      },
+      "source_commit": "35e5f53568d9e174b00df8fdbc8d47e24ebd986e"
+    },
+    {
+      "track": "tableformer-accurate-raw-structure",
+      "partition": "development",
+      "requested_pages": 10,
+      "evaluated_pages": 10,
+      "requested_tables": 15,
+      "evaluated_tables": 15,
+      "execution_status": "success",
+      "overall_status": "incomplete",
+      "comparable": false,
+      "official_aggregate": null,
+      "diagnostic_only": {
+        "grits_top_mean": 0.8421536504749806,
+        "grits_con_mean": 0.8223128006162893,
+        "cell_alignment": {
+          "metric": "cell_span_f1_v1",
+          "invalid_predictions": 1,
+          "span": {
+            "tp": 758,
+            "fp": 255,
+            "fn": 110,
+            "precision": 0.7482724580454096,
+            "recall": 0.8732718894009217,
+            "f1": 0.8059542796384902
+          },
+          "content": {
+            "tp": 520,
+            "fp": 493,
+            "fn": 348,
+            "precision": 0.5133267522211253,
+            "recall": 0.5990783410138248,
+            "f1": 0.5528973950026581
+          }
+        }
+      },
+      "source_commit": "35e5f53568d9e174b00df8fdbc8d47e24ebd986e"
+    },
+    {
+      "track": "tableformer-accurate-raw-structure",
+      "partition": "evaluation",
+      "requested_pages": 30,
+      "evaluated_pages": 30,
+      "requested_tables": 45,
+      "evaluated_tables": 45,
+      "execution_status": "success",
+      "overall_status": "incomplete",
+      "comparable": false,
+      "official_aggregate": null,
+      "diagnostic_only": {
+        "grits_top_mean": 0.9255187069547492,
+        "grits_con_mean": 0.8909605519021169,
+        "cell_alignment": {
+          "metric": "cell_span_f1_v1",
+          "invalid_predictions": 0,
+          "span": {
+            "tp": 2101,
+            "fp": 330,
+            "fn": 94,
+            "precision": 0.8642533936651584,
+            "recall": 0.9571753986332574,
+            "f1": 0.9083441418071768
+          },
+          "content": {
+            "tp": 1471,
+            "fp": 960,
+            "fn": 724,
+            "precision": 0.6051007815713698,
+            "recall": 0.6701594533029612,
+            "f1": 0.6359706009511457
+          }
+        }
+      },
+      "source_commit": "35e5f53568d9e174b00df8fdbc8d47e24ebd986e"
     }
   ],
   "raw_archive_roots": [
     "pdfspine-table-diagnostics-ec7b199",
-    "pdfspine-table-diagnostics-38cdcba"
+    "pdfspine-table-diagnostics-38cdcba",
+    "pdfspine-tableformer-diagnostics-35e5f53"
   ],
   "qa_index": "financial-eval-ai-visual-qa/review-notes.json",
   "qa_sha256": "42046a2e9d4eff31db8f835f482966031a26193f94903c6a7c6af092e81513c0",
@@ -1461,5 +1920,84 @@
     "wheel_sha256": "3a3814c041251d6a77fdf513fb282056538ee826d2f1178a0df3c549d3fff6ba",
     "matched_non_distinfo_payload_files": 316,
     "runtime": "1.29.0"
+  },
+  "tableformer_appendix": {
+    "contract": "explicit raw-structure, not official matched/compressed output",
+    "input_files_verified_identical_to_prior": 203,
+    "frozen_files_verified": 244,
+    "all_60_table_native_token_hashes_and_crop_bounds_match_prior_tatr_per_variant": true,
+    "invalid_predictions": [
+      {
+        "track": "tableformer-accurate-raw-structure",
+        "document_id": "AMP_2015_page_94",
+        "table_id": "AMP_2015_page_94_2",
+        "raw_cells": 77,
+        "reasons": [
+          "invalid-cell-geometry"
+        ],
+        "cell_alignment": {
+          "metric": "cell_span_f1_v1",
+          "invalid_prediction": true,
+          "prediction_error": [
+            "invalid-cell-geometry"
+          ],
+          "gold_cells": 63,
+          "predicted_cells": 77,
+          "span": {
+            "tp": 0,
+            "fp": 77,
+            "fn": 63,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          },
+          "content": {
+            "tp": 0,
+            "fp": 77,
+            "fn": 63,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          }
+        },
+        "grits_top": 0.0,
+        "grits_con": 0.0
+      }
+    ],
+    "invalid_geometry_evidence": {
+      "index": "pdfspine-tableformer-diagnostics-35e5f53/invalid-geometry-detail.json",
+      "sha256": "cd7654714ce2083a9dc294a90bc1ac9288810fab162bd32e63c7449632fa71ac"
+    },
+    "independent_review": [
+      {
+        "index": "tableformer-independent-review/provenance.json",
+        "sha256": "c4e7cd20857ae6eb96dcba8a1e09eab3367c0feee3cd58c41323cd392141c981"
+      },
+      {
+        "index": "tableformer-independent-review/results.json",
+        "sha256": "8fbccf0299211fdf3e948aae210d518b3d751a49298521e6c16ca5e38f245fb6"
+      },
+      {
+        "index": "tableformer-independent-review/invalid-geometry.json",
+        "sha256": "9360882d9451ebb4632dfef1ad86c8c84ef2fac8967a66cfbe68266d028ddf79"
+      }
+    ],
+    "dependency_lock": {
+      "index": "pdfspine-tableformer-runtime/requirements.lock",
+      "sha256": "84ba357acf74e1ffe510520a2e6ef722d9f8c8255d9473ce6a60d141745f8119"
+    },
+    "installed_environment": {
+      "index": "pdfspine-tableformer-runtime/installed.json",
+      "sha256": "1de8a9ec0e6d9f44eaac4a56b9f74cb82ed7b5fbf88b1b948b2674aec45f64ba"
+    },
+    "commands": {
+      "index": "pdfspine-tableformer-diagnostics-35e5f53/commands.json",
+      "sha256": "88ddfc13a1833f82ac489c40bacba48ed2fbff63fbad2a2bdaac34939a70d095"
+    },
+    "report": {
+      "index": "pdfspine-tableformer-diagnostics-35e5f53/REPORT.md",
+      "sha256": "bee33f4beca05fa60abe595241e62f2f963789c5a9add85eccf688d12b4c351f"
+    },
+    "model_snapshot": "docling-project/docling-models@fc0f2d45e2218ea24bce5045f58a389aed16dc23"
   }
 }

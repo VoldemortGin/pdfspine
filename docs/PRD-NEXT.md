@@ -509,7 +509,14 @@
     skips, independent review and lint/docs checks. The HF symlink-directory
     load failure was preserved and fixed with a red/green regression. The
     isolated 38-package hash lock and two readiness records are external evidence;
-    no 40-page TableFormer result or human/ADR acceptance is claimed here.
+    no human/ADR acceptance is claimed here. Both fixed raw-structure variants
+    subsequently completed the same 40 pages / 60 tables: **eight diagnostic
+    tracks now archived**, with TableFormer source 35e5f53 and its later native
+    binary explicitly separated from the prior six sources. Independent checks
+    confirm all 60 native-word hashes/crop bounds agree with prior TATR per
+    variant. Accurate has one upstream inverted-cell-geometry quality failure
+    (77 raw / 63 gold, TP0/FP77/FN63); no pipeline failures or input removals.
+    Official aggregates remain null, comparable=false, review unreviewed.
   - *Complete diagnostic collection (2026-09-11):* all six native lines/text,
     TATR and ONNX page-e2e / goldcrop tracks processed **40 pages / 60 tables**,
     split into 10 development / 30 evaluation pages. See
