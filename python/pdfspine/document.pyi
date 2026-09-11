@@ -376,6 +376,15 @@ class Shape:
         **_ignored: Any,
     ) -> None: ...
     def commit(self, overlay: bool = ...) -> None: ...
+    def insert_font(
+        self,
+        fontname: str = ...,
+        fontfile: str | os.PathLike[str] | None = ...,
+        fontbuffer: bytes | bytearray | memoryview | None = ...,
+        set_simple: bool = ...,
+        wmode: int = ...,
+        encoding: int = ...,
+    ) -> int: ...
     def insert_text(
         self,
         point: _Point,

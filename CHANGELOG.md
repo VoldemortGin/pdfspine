@@ -19,6 +19,16 @@ feature-complete, but the public API and on-disk formats may still change.
   See `conformance/BENCH.md` for statistics and background-load limitations.
   Larger rendering hotspots remain open.
 
+### Page font registration
+
+- `Page.insert_font` registers Core14 or a complete standalone glyf TrueType
+  font without adding page content. Existing exact resource names are reused
+  before source validation; inherited/shared resources remain isolated.
+- `insert_text` and `insert_textbox` reuse registered encodings and PDF widths,
+  including after save/reopen. Distinct Unicode characters sharing a glyph retain
+  distinct CIDs and ToUnicode mappings. New CFF/CFF2/collection fonts and nondefault
+  simple/vertical/encoding modes raise `PdfUnsupportedError` before mutation.
+
 ### Pixmap warping
 
 - Added `Pixmap.warp` with bilinear quad mapping, correct pixel-center sampling,

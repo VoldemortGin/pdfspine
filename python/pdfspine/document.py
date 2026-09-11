@@ -2902,6 +2902,40 @@ class Page:
         """Sets the ``/TrimBox`` (PyMuPDF ``page.set_trimbox``)."""
         self._page.set_trimbox(_rt(rect))
 
+    def insert_font(
+        self,
+        fontname="helv",
+        fontfile=None,
+        fontbuffer=None,
+        set_simple=False,
+        wmode=0,
+        encoding=0,
+    ) -> int:
+        """Register a named Core14 or standalone TrueType font, returning its xref.
+
+        Registration preserves existing exact names and writes no page content.
+        New embedded fonts use horizontal Identity-H with full cmap coverage;
+        CFF/collections and nondefault simple/wmode/encoding are unsupported.
+        """
+        if not isinstance(fontname, str):
+            raise TypeError("fontname must be a string")
+        name = fontname.removeprefix("/")
+        if not name or any(
+            ch.isspace() or ord(ch) < 32 or ch in "()<>[]{}/%#" for ch in name
+        ):
+            raise ValueError("bad fontname")
+        if self._parent is not None and self._parent.is_closed:
+            raise ValueError("document closed")
+        existing = self._page.existing_font(name)
+        if existing is not None:
+            return existing
+        import os
+
+        source = os.fspath(fontfile) if fontfile is not None else None
+        return self._page.insert_font(
+            name, source, fontbuffer, bool(set_simple), int(wmode), int(encoding)
+        )
+
     # --- content insertion (PRD §8.8) ---
     def insert_text(
         self,

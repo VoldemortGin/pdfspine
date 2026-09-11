@@ -160,6 +160,24 @@ impl CMap {
         None
     }
 
+    /// Materializes defined Unicode mappings up to a bounded source code.
+    /// Later entries override earlier ranges, as in [`Self::to_unicode`].
+    #[must_use]
+    pub fn unicode_mappings(&self, max_code: u32) -> std::collections::BTreeMap<u32, SmolStr> {
+        let mut mappings = std::collections::BTreeMap::new();
+        for entry in &self.bf_entries {
+            for code in entry.lo..=entry.hi.min(max_code) {
+                let text = if entry.lo == entry.hi {
+                    entry.dst.clone()
+                } else {
+                    increment_last(&entry.dst, code - entry.lo)
+                };
+                mappings.insert(code, text);
+            }
+        }
+        mappings
+    }
+
     /// The number of distinct code lengths that appear in the codespace. Used by
     /// callers to decide whether iteration is fixed- or variable-width.
     #[must_use]

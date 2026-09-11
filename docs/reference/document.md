@@ -28,3 +28,21 @@ of the PyMuPDF-compatible surface.
 ::: pdfspine.LinkAnnotation
 
 ::: pdfspine.FilledRectangle
+
+## Registering a page font
+
+`Page.insert_font(fontname="helv", fontfile=None, fontbuffer=None)` returns a
+positive font xref without adding page contents. An existing exact resource name
+wins before source validation. New registrations support Core14 and standalone
+glyf TrueType fonts; file input takes precedence over buffer input. TrueType
+programs are embedded in full, so output can be larger than subset embedding.
+
+Registered names work with `insert_text` and `insert_textbox`, including after
+save/reopen: encoding and widths come from the stored font resource. Unicode
+aliases sharing one glyph remain distinct in extraction. A missing character
+raises `PdfUnsupportedError` before writing rather than silently substituting it.
+This does not add shaping or change the existing textbox wrapping algorithm.
+
+New CFF/CFF2 fonts, font collections and nondefault `set_simple`, `wmode` or
+`encoding` values are unsupported and fail before PDF mutation. These parameters
+remain in the signature for compatibility; this is not full font-mode parity.
