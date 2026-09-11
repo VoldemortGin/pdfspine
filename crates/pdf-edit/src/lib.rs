@@ -31,6 +31,7 @@ pub mod page_content;
 pub mod page_ops;
 pub mod pagelabel;
 pub mod redact;
+pub mod registered_font;
 pub mod scrub;
 mod subset;
 pub mod text;

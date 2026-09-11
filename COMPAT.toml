@@ -29,10 +29,10 @@
 baseline = "1.24.x"
 baseline_detail = "PyMuPDF 1.24.14 / MuPDF 1.24.11"
 total = 769
-implemented = 699
-deferred = 4
+implemented = 700
+deferred = 3
 out_of_scope = 66
-coverage_pct = 90.9
+coverage_pct = 91.0
 
 # ── Matrix ──
 [[symbol]]
@@ -2404,12 +2404,6 @@ milestone = "M4"
 note = "renders one or more TextWriter objects (direct draw / show_pdf_page compose)"
 
 [[symbol]]
-name = "Page.insert_font"
-group = "Page"
-disposition = "deferred"
-milestone = "M4"
-
-[[symbol]]
 name = "Page.replace_image"
 group = "Page"
 disposition = "implemented"
@@ -2420,6 +2414,13 @@ name = "Page.delete_image"
 group = "Page"
 disposition = "implemented"
 milestone = "M4"
+
+[[symbol]]
+name = "Page.insert_font"
+group = "Page"
+disposition = "implemented"
+milestone = "M4"
+note = "Core14 and full standalone glyf TrueType registration; horizontal defaults; registered text/textbox reuse"
 
 [[symbol]]
 name = "Page.insert_htmlbox"

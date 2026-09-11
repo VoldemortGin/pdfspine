@@ -478,6 +478,16 @@ class Page:
     def set_artbox(self, rect: _Tuple4) -> None: ...
     def set_bleedbox(self, rect: _Tuple4) -> None: ...
     def set_trimbox(self, rect: _Tuple4) -> None: ...
+    def existing_font(self, fontname: str) -> int | None: ...
+    def insert_font(
+        self,
+        fontname: str,
+        fontfile: str | None = ...,
+        fontbuffer: bytes | None = ...,
+        set_simple: bool = ...,
+        wmode: int = ...,
+        encoding: int = ...,
+    ) -> int: ...
     def insert_text(
         self,
         point: tuple[float, float],
