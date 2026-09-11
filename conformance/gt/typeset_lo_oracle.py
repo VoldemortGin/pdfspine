@@ -109,7 +109,7 @@ def _rels(pairs: list[tuple[str, str, str]]) -> str:
     return f'{XML_DECL}<Relationships xmlns="{NS_REL}">{rows}</Relationships>'
 
 
-def build_docx(path: Path, *, shading: bool = False, tracking: bool = False) -> None:
+def build_docx(path: Path, *, shading: bool = False, tracking: bool = False, border: bool = False) -> None:
     """One Letter page, 1-in margins, Liberation Serif — mirrors typeset-lo-doc."""
 
     def para(text: str, *, size_half_pt: int, bold: bool, after_20th: int) -> str:
@@ -120,8 +120,9 @@ def build_docx(path: Path, *, shading: bool = False, tracking: bool = False) -> 
             f'{b}{extra_spacing}<w:sz w:val="{size_half_pt}"/></w:rPr>'
         )
         background = '<w:shd w:val="clear" w:color="auto" w:fill="F4B183"/>' if shading else ""
+        edges = ('<w:pBdr>' + ''.join(f'<w:{edge} w:val="single" w:sz="8" w:space="0" w:color="CC3300"/>' for edge in ('top','left','bottom','right')) + '</w:pBdr>') if border else ''
         return (
-            f'<w:p><w:pPr>{background}<w:spacing w:before="0" w:after="{after_20th}" '
+            f'<w:p><w:pPr>{edges}{background}<w:spacing w:before="0" w:after="{after_20th}" '
             f'w:line="240" w:lineRule="auto"/></w:pPr>'
             f"<w:r>{rpr}<w:t xml:space=\"preserve\">{text}</w:t></w:r></w:p>"
         )
@@ -414,6 +415,8 @@ def main(argv: list[str] | None = None) -> int:
     build_docx(shaded_docx, shading=True)
     tracked_docx = cache / "sample-tracking.docx"
     build_docx(tracked_docx, tracking=True)
+    border_docx = cache / "sample-border.docx"
+    build_docx(border_docx, border=True)
     print(f"authored {docx} + {pptx}")
 
     pairs = []
@@ -423,6 +426,7 @@ def main(argv: list[str] | None = None) -> int:
             ("pptx", pptx, ROOT / "fixtures" / "typeset" / "typeset-lo-slide.pdf"),
             ("docx-shading", shaded_docx, ROOT / "fixtures" / "typeset" / "typeset-lo-shading.pdf"),
             ("docx-tracking", tracked_docx, ROOT / "fixtures" / "typeset" / "typeset-lo-tracking.pdf"),
+            ("docx-border", border_docx, ROOT / "fixtures" / "typeset" / "typeset-lo-border.pdf"),
         ]:
             if not fixture.exists():
                 print(f"ERROR: missing committed fixture {fixture} — run "
