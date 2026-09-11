@@ -390,6 +390,12 @@ def checked_file(directory, reference, expected):
 
 def verify(output, corpus_root=None, acceptance=False, *, selected_only=False):
     manifest = read(output / "manifest.json")
+    if (
+        manifest.get("schema") != "pdfspine.financial-eval-drafts.v1"
+        or manifest.get("review_status") != "unreviewed"
+        or manifest.get("dataset_id") != DATASET
+    ):
+        raise ValueError("v1 draft schema/identity/review state mismatch")
     linked = {}
     for key in ("selection", "review_ledger"):
         ref = manifest[key]
@@ -414,12 +420,8 @@ def verify(output, corpus_root=None, acceptance=False, *, selected_only=False):
         or selection["algorithm"] != "annotation-deficit-issuer-disjoint-v1"
     ):
         raise ValueError("selection contract mismatch")
-    if (
-        manifest["review_status"] != "unreviewed"
-        or manifest["dataset_id"] != DATASET
-        or ledger["dataset_id"] != DATASET
-    ):
-        raise ValueError("v1 draft identity/review state mismatch")
+    if ledger["dataset_id"] != DATASET:
+        raise ValueError("v1 ledger identity mismatch")
     asset_rows = manifest["entries"] if selected_only else pool
     for row in asset_rows:
         for kind, folder, suffix in (

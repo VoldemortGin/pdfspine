@@ -78,6 +78,21 @@ class DraftTests(unittest.TestCase):
         self.assertIn('data-projected-row-header="true"', markup)
         self.assertNotIn("<thead", markup)
 
+    def test_unknown_or_missing_schema_rejected_before_assets(self):
+        for schema in ("unknown.schema.v1", None):
+            with (
+                self.subTest(schema=schema),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                root = Path(directory)
+                manifest = {"dataset_id": MODULE.DATASET, "review_status": "unreviewed"}
+                if schema is not None:
+                    manifest["schema"] = schema
+                (root / "manifest.json").write_text(json.dumps(manifest))
+                for selected_only in (False, True):
+                    with self.assertRaisesRegex(ValueError, "schema"):
+                        MODULE.verify(root, selected_only=selected_only)
+
     def test_existing_output_review_is_never_reset(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
