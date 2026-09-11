@@ -906,9 +906,14 @@ def _structure_to_cells(
     tokens: Sequence[str],
     boxes: Sequence[Sequence[float]],
     scores: Sequence[float] | None = None,
+    *,
+    _strict: bool = False,
 ) -> list[dict[str, Any]]:
     """Turn the HTML structure tokens into grid cells with row/column spans."""
 
+    from ._tatr import _STRICT_MAX_GRID_SLOTS
+
+    max_row = max_column = 0
     cells: list[dict[str, Any]] = []
     occupied: set[tuple[int, int]] = set()
     row = -1
@@ -926,6 +931,7 @@ def _structure_to_cells(
             row += 1
             column = 0
         elif token in _TD_TOKENS:
+            invalid_span = False
             colspan = rowspan = 1
             score = (
                 float(scores[index])
@@ -936,6 +942,15 @@ def _structure_to_cells(
                 cursor = index + 1
                 while cursor < len(tokens) and tokens[cursor] != ">":
                     attribute = tokens[cursor]
+                    if _strict and any(
+                        attribute.startswith(f" {name}=")
+                        for name in ("colspan", "rowspan")
+                    ):
+                        digits = attribute.partition('="')[2].removesuffix('"')
+                        if not digits.isdecimal() or not 1 <= int(digits) <= 10000:
+                            invalid_span = True
+                            cursor += 1
+                            continue
                     value = _span_value(attribute, "colspan")
                     if value is not None:
                         colspan = value
@@ -943,11 +958,27 @@ def _structure_to_cells(
                     if value is not None:
                         rowspan = value
                     cursor += 1
+                if _strict and cursor >= len(tokens):
+                    invalid_span = True
                 index = cursor
             if row < 0:
                 row = 0
             while (row, column) in occupied:
                 column += 1
+            max_row, max_column = (
+                max(max_row, row + rowspan),
+                max(max_column, column + colspan),
+            )
+            if _strict and (
+                max_row * max_column > _STRICT_MAX_GRID_SLOTS
+                or invalid_span
+                or rowspan * colspan > _STRICT_MAX_GRID_SLOTS
+                or len(occupied) + rowspan * colspan > _STRICT_MAX_GRID_SLOTS
+            ):
+                # Preserve one invalid final candidate without allocating its
+                # untrusted occupied grid. The public permissive path is unchanged.
+                invalid_span = True
+                rowspan = colspan = 1
             rows = list(range(row, row + rowspan))
             columns = list(range(column, column + colspan))
             occupied.update((r, c) for r in rows for c in columns)
@@ -955,8 +986,8 @@ def _structure_to_cells(
             box_index += 1
             cells.append(
                 {
-                    "row_nums": rows,
-                    "column_nums": columns,
+                    "row_nums": [] if _strict and invalid_span else rows,
+                    "column_nums": [] if _strict and invalid_span else columns,
                     "bbox": bbox,
                     "header": in_header,
                     "score": score,
@@ -965,6 +996,8 @@ def _structure_to_cells(
             )
             column += colspan
         index += 1
+    if _strict:
+        return cells
     return [
         cell for cell in cells if cell["bbox"] is not None and _area(cell["bbox"]) > 0
     ]
@@ -1107,6 +1140,54 @@ class _OnnxTableRecord(_TatrTableRecord):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.source = "onnx"
+
+
+def _recognize_gold_crop(
+    page: Any,
+    bbox: Any,
+    *,
+    options: Mapping[str, object] | None = None,
+    padding: int = 0,
+    _runtime: Any = None,
+) -> Any:
+    """Table-model-only recognition, with lossless final-cell diagnostics."""
+    from ._tatr import (
+        _CropRecognition,
+        _final_cells,
+        _gold_crop,
+        _gold_options,
+        _tsr_call,
+    )
+
+    config = OnnxOptions.from_mapping(_gold_options(options))
+    rendered, crop, crop_metadata = _gold_crop(page, bbox, config, padding)
+    runtime = _runtime if _runtime is not None else _get_runtime(config)
+    metadata = dict(getattr(runtime, "metadata", {}))
+    metadata.update(crop_metadata)
+    metadata["executed_model_roles"] = ["table"]
+    tokens, boxes, scores = _tsr_call(
+        "recognition", runtime.recognize_table, crop.image, config
+    )
+    score = sum(scores) / len(scores) if scores else 0.0
+    metadata["structure_confidence"] = float(score)
+    if score < config.table_min_score:
+        return _CropRecognition([], metadata, "empty")
+    cells = _tsr_call(
+        "postprocess", _structure_to_cells, tokens, boxes, scores, _strict=True
+    )
+    raw, reasons = _tsr_call("postprocess", _final_cells, cells)
+    if reasons:
+        metadata["raw_structure_tokens"] = list(tokens)
+    if not reasons:
+        _tsr_call("word-assignment", _assign_words, raw, crop.tokens)
+        for cell in raw:
+            cell["bbox"] = list(_crop_box_to_page(cell["bbox"], crop, rendered))
+    return _CropRecognition(
+        raw,
+        metadata,
+        "invalid" if reasons else "valid" if raw else "empty",
+        tuple(reasons),
+    )
 
 
 def _table_from_region(

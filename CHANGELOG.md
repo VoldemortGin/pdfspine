@@ -13,6 +13,13 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ### Table evaluation infrastructure
 
+- Added detector-free gold-crop TSR evaluation for TATR and ONNX with native
+  words, OCR disabled, explicit crop coordinates and actual model-role provenance.
+  Strict final-cell diagnostics preserve invalid predictions for quality scoring;
+  assembler failures remain execution errors. Public extraction defaults are
+  unchanged. Single development-page offline readiness is verified, without a
+  benchmark score, model choice or human-gold acceptance claim.
+
 - Added explicit evaluator backend/options, runtime/model provenance and versioned
   worker validation, plus strict cell span/content F1. Missing inputs and draft
   review status prevent official scores; invalid predicted topology is counted

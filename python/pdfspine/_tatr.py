@@ -14,12 +14,15 @@ from copy import deepcopy
 from dataclasses import dataclass, field, fields
 from html import escape
 import math
+import hashlib
+import json
+from numbers import Integral, Real
 import os
 import platform
 from pathlib import Path
 import sys
 import threading
-from typing import Any, Mapping
+from typing import Any, Mapping, cast
 
 from . import _tatr_postprocess as _postprocess
 from ._core import PdfUnsupportedError
@@ -161,6 +164,207 @@ class _TableCrop:
     bbox: tuple[float, float, float, float]
     rotated: bool
     unrotated_size: tuple[int, int]
+
+
+# Keep these evaluator safety budgets aligned with conformance/gt/cell_alignment.py.
+_STRICT_MAX_GRID_SLOTS = 1_000_000
+_STRICT_MAX_CELLS = 10_000
+
+
+@dataclass
+class _CropRecognition:
+    """Private lossless final-cell result; never a detector prediction."""
+
+    cells: list[dict[str, Any]]
+    metadata: dict[str, Any]
+    quality: str = "valid"
+    reasons: tuple[str, ...] = ()
+
+
+class _TsrPipelineError(RuntimeError):
+    """Evaluation-only failure with its stage and chained original exception."""
+
+    def __init__(self, phase: str, cause: Exception) -> None:
+        self.phase = phase
+        super().__init__(f"{phase}: {type(cause).__name__}: {cause}")
+
+
+def _tsr_call(phase: str, function: Any, *args: Any, **kwargs: Any) -> Any:
+    try:
+        return function(*args, **kwargs)
+    except Exception as exc:
+        raise _TsrPipelineError(phase, exc) from exc
+
+
+def _final_cells(cells: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[str]]:
+    """Normalize numeric scalar representations, never repair span topology."""
+    converted = []
+    reasons = []
+    max_row = max_column = 0
+    if len(cells) > _STRICT_MAX_CELLS:
+        reasons.append("cell-count-limit")
+    rectangles: list[tuple[int, int, int, int]] = []
+    for cell in cells:
+        value: dict[str, Any] = {"cell_text": str(cell.get("cell_text") or "")}
+        valid = True
+        for axis in ("row_nums", "column_nums"):
+            raw = cell.get(axis, [])
+            nums = []
+            if not isinstance(raw, (list, tuple)):
+                raw = []
+            for n in raw:
+                if (
+                    not isinstance(n, bool)
+                    and isinstance(n, (Integral, Real))
+                    and math.isfinite(n)
+                    and float(n).is_integer()
+                ):
+                    nums.append(int(cast(Any, n)))
+                else:
+                    nums.append(None)
+            value[axis] = nums
+            if not nums or any(n is None or n < 0 for n in nums):
+                valid = False
+            elif len(set(nums)) != len(nums) or max(nums) - min(nums) + 1 != len(nums):
+                valid = False
+        if not valid:
+            reasons.append("invalid-span")
+        else:
+            rows, cols = value["row_nums"], value["column_nums"]
+            rect = (min(rows), min(cols), max(rows), max(cols))
+            max_row, max_column = (
+                max(max_row, rect[2] + 1),
+                max(max_column, rect[3] + 1),
+            )
+            if max_row * max_column > _STRICT_MAX_GRID_SLOTS:
+                reasons.append("grid-slot-limit")
+            if any(
+                rect[0] <= r[2]
+                and r[0] <= rect[2]
+                and rect[1] <= r[3]
+                and r[1] <= rect[3]
+                for r in rectangles
+            ):
+                reasons.append("overlapping-cells")
+            rectangles.append(rect)
+        raw_box = cell.get("bbox")
+        if raw_box is not None:
+            box: list[Any] = [
+                float(v)
+                if not isinstance(v, bool) and isinstance(v, Real) and math.isfinite(v)
+                else None
+                for v in raw_box
+            ]
+            value["bbox"] = box
+            if len(box) != 4 or any(v is None for v in box) or _area(box) <= 0:
+                reasons.append("invalid-cell-geometry")
+        else:
+            value["bbox"] = None
+            reasons.append("missing-cell-geometry")
+        converted.append(value)
+    return converted, reasons
+
+
+def _gold_crop(
+    page: Any, box: Any, config: Any, padding: int
+) -> tuple[_RenderedPage, _TableCrop, dict[str, Any]]:
+    """Crop display-point coordinates once, using explicit integer pixel bounds."""
+    if type(padding) is not int or not 0 <= padding <= 20:
+        raise ValueError("gold crop padding must be an integer in [0, 20] pixels")
+    if len(box) != 4 or any(
+        isinstance(v, bool) or not isinstance(v, Real) or not math.isfinite(v)
+        for v in box
+    ):
+        raise ValueError("gold crop must contain four finite coordinates")
+    bbox = _box4(box)
+    rendered = _render_page(page, config)
+    bounds = rendered.page_bbox
+    if (
+        _area(bbox) <= 0
+        or bbox[0] < bounds[0]
+        or bbox[1] < bounds[1]
+        or bbox[2] > bounds[2]
+        or bbox[3] > bounds[3]
+    ):
+        raise ValueError("gold crop must lie inside the visible display page")
+    pixels = _page_box_to_image(bbox, rendered)
+    width, height = rendered.image.size
+    actual = (
+        max(0, math.floor(pixels[0] - padding)),
+        max(0, math.floor(pixels[1] - padding)),
+        min(width, math.ceil(pixels[2] + padding)),
+        min(height, math.ceil(pixels[3] + padding)),
+    )
+    # Integer bbox makes Pillow's origin identical to the token origin. The old
+    # floating-point crop wrapper and its detector rotation behavior are untouched.
+    crop = _region_crop(rendered, actual, 0, minimum_area=0.0)
+    if crop is None:
+        raise ValueError("gold crop has no usable pixels")
+    payload = json.dumps(
+        crop.tokens,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    )
+    metadata = {
+        "mode": "gold-crop-tsr",
+        "word_policy": "native-only",
+        "text_source": rendered.text_source,
+        "crop_coordinate_space": "page-display",
+        "requested_crop_bbox": list(bbox),
+        "requested_pixel_bbox": list(pixels),
+        "actual_pixel_bbox": list(actual),
+        "recognition_crop_bbox": list(_image_box_to_page(actual, rendered)),
+        "crop_padding": padding,
+        "page_rotation": rendered.rotation,
+        "native_tokens": crop.tokens,
+        "native_tokens_sha256": hashlib.sha256(payload.encode()).hexdigest(),
+        "token_overlap_threshold": 0.5,
+        "crop_size": list(crop.image.size),
+    }
+    return rendered, crop, metadata
+
+
+def _gold_options(options: Mapping[str, object] | None) -> dict[str, object]:
+    values = dict(options or {})
+    if values.get("ocr_if_no_text", False) is not False:
+        raise ValueError("gold-crop TSR requires OCR disabled")
+    values["ocr_if_no_text"] = False
+    return values
+
+
+def _recognize_gold_crop(
+    page: Any,
+    bbox: Any,
+    *,
+    options: Mapping[str, object] | None = None,
+    padding: int = 0,
+    _runtime: Any = None,
+) -> _CropRecognition:
+    """Evaluate one supplied region without running detection or crop guidance."""
+    config = TatrOptions.from_mapping(_gold_options(options))
+    rendered, crop, crop_metadata = _gold_crop(page, bbox, config, padding)
+    runtime = _runtime if _runtime is not None else _get_runtime(config)
+    metadata = dict(getattr(runtime, "metadata", {}))
+    metadata.update(crop_metadata)
+    metadata["executed_model_roles"] = ["structure"]
+    objects = _tsr_call(
+        "recognition", runtime.recognize, crop.image, config.structure_threshold
+    )
+    results: list[_CropRecognition] = []
+    _tsr_call(
+        "postprocess",
+        _table_from_structure,
+        objects,
+        crop,
+        rendered,
+        0.0,
+        metadata,
+        config.structure_threshold,
+        _strict_results=results,
+    )
+    return results[0] if results else _CropRecognition([], metadata, "empty")
 
 
 def _model_sources(options: TatrOptions) -> tuple[str, str]:
@@ -682,15 +886,27 @@ def _make_crop(
     detection: Mapping[str, Any],
     padding: int,
 ) -> _TableCrop | None:
+    return _region_crop(
+        rendered, detection["bbox"], padding, detection.get("label") == "table rotated"
+    )
+
+
+def _region_crop(
+    rendered: _RenderedPage,
+    raw: Any,
+    padding: int,
+    rotated: bool = False,
+    *,
+    minimum_area: float = 1.0,
+) -> _TableCrop | None:
     image_width, image_height = rendered.image.size
-    raw = detection["bbox"]
     bbox = (
         max(0.0, float(raw[0]) - padding),
         max(0.0, float(raw[1]) - padding),
         min(float(image_width), float(raw[2]) + padding),
         min(float(image_height), float(raw[3]) + padding),
     )
-    if _area(bbox) <= 1.0:
+    if _area(bbox) <= minimum_area:
         return None
     image = rendered.image.crop(bbox)
     tokens: list[dict[str, Any]] = []
@@ -706,7 +922,6 @@ def _make_crop(
             tb[3] - bbox[1],
         ]
         tokens.append(copied)
-    rotated = detection.get("label") == "table rotated"
     unrotated_size = image.size
     if rotated:
         image = image.rotate(270, expand=True)
@@ -1151,6 +1366,8 @@ def _table_from_structure(
     detection_score: float,
     runtime_metadata: Mapping[str, Any],
     structure_threshold: float = 0.5,
+    *,
+    _strict_results: list[_CropRecognition] | None = None,
 ) -> _TatrTableRecord | None:
     table_objects = [obj for obj in objects if obj.get("label") == "table"]
     if not table_objects:
@@ -1198,12 +1415,38 @@ def _table_from_structure(
             table_record["bbox"],
         )
     except (ArithmeticError, IndexError, KeyError, TypeError, ValueError):
+        if _strict_results is not None:
+            raise
         return None
     if not cells:
         return None
     page_cells: list[dict[str, Any]] = []
     grid_rows = list(grid_structures.get("rows", []))
     grid_columns = list(grid_structures.get("columns", []))
+    if _strict_results is not None:
+        raw, reasons = _final_cells(cells)
+        for cell in raw:
+            if not reasons and (
+                max(cell["row_nums"]) >= len(grid_rows)
+                or max(cell["column_nums"]) >= len(grid_columns)
+            ):
+                reasons.append("span-outside-grid")
+        if not reasons:
+            for cell in raw:
+                cell["bbox"] = list(
+                    _crop_box_to_page(
+                        _grid_cell_bbox(cell, grid_rows, grid_columns), crop, rendered
+                    )
+                )
+        metadata = dict(runtime_metadata)
+        metadata["structure_confidence"] = float(table.get("score", 0.0))
+        metadata["token_confidence"] = float(token_confidence)
+        _strict_results.append(
+            _CropRecognition(
+                raw, metadata, "invalid" if reasons else "valid", tuple(reasons)
+            )
+        )
+        return None
     for cell in cells:
         converted = dict(cell)
         converted["row_nums"] = sorted(int(v) for v in cell["row_nums"])
