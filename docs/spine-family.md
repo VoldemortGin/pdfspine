@@ -505,6 +505,7 @@ L0 底座     corespine (deps=[])        ocrspine (crate, 零依赖)
 - 规模：S。
 
 **4. rag-spine-web 文档站更新（关联 G9）**
+- **本地文档部分完成（2026-09-10，main `680f5c8`，未推送/部署）**：pdfspine 首页与安装/迁移页已对齐真实发布 0.8.0（rev `f1f6ab4`、Python ≥3.12、694/769=90.2%），补 PDF→Markdown、layout 文本、ONNX 版面/表格、OCG 图层与 Markdown links/toc，四语言 rag 入口采用已发布 0.13.0 参考基线。公开例子在发布 0.8.0 wheel 验证；ONNX 仅验证缺 runtime 错误、未下载模型或新增精度承诺。完整 `bash ci.sh` 通过；历史 benchmark 分数未改，本轮未发布 main API/排版不混入0.8。部署流未改、Cloudflare 未部署，**本条及 G9 不整体关闭**。以下为执行前目标/证据。
 - 目标：把 pdfspine 0.8.0 新能力与落后的版本号补上文档站并部署。
 - 证据：站点实质停更 2026-07-20（§2；2026-09-10 仅家族文档同步提交）；`apps/web/content/docs/index.mdx:68` 仍写 ragspine `0.11.0`（实际 0.13.0，虽已加注"source-tree version"）；`apps/` 仅 `web`/`corespine`/`spineagent`/`pdfspine` 四站，无 ocrspine/spinestudio/pdfspine-studio 站（§5.10）；pdfspine 0.8.0 新增 OCG 图层面、ONNX 版面/表格后端、PDF→Markdown `to_markdown()`、`get_text("layout")` 等（`pdfspine/CHANGELOG.md [0.8.0]`）未上站。
 - 涉及：rag-spine-web（`apps/pdfspine/content/docs/…`、`apps/web/content/docs/index.mdx`、`.github/workflows/deploy.yml`）。
@@ -521,6 +522,7 @@ L0 底座     corespine (deps=[])        ocrspine (crate, 零依赖)
 - 规模：S。
 
 **6. spinestudio 发布链路（关联 G4）**
+- **部分完成（2026-09-10，main `b557e5c`，仅本地合并未推送）**：本轮沿用当前源码自部署形态（ADR 0013），新增 no-sources sdist→wheel、仓外全新 Python 3.12 环境与固定发布引擎组合（corespine 0.5.1 / rag-spine 0.13.0 / spineagent 0.3.1）验收；23 项既有核心测试通过，包来源和 embed.js 资产核验。完整开发门后端 230 passed / 1 可选 office 模块 skip、SDK 20 passed、前端检查和生产构建通过；开发门仍用 sibling editable，与候选发布包环境明确分开。新 CI 只检查候选，不上传/发布。产品版本与依赖下限不变；Ruff 显式保留既有规则。后端 wheel 不含 Next.js UI；实际 PyPI 分发尚未定案、未执行，未声称所有允许旧依赖版本或部署矩阵已验证。**G4 与本条不整体关闭**；后续可调整分发渠道。证据见 spinestudio `docs/source-package-validation.md`。以下为执行前目标/证据。
 - 目标：决定 spinestudio 是否发布 PyPI；若发布，补 release workflow 并抬消费者下限。
 - 证据：`spinestudio/.github/workflows/` 只有 `ci.yml`、无 `release.yml`（§5.8）；有 git tag `v0.2.0`/`v0.3.0`/`v0.3.1` 但无发布 CI，大概率未上 PyPI（当前工作树亦无 `dist/`）；消费者下限远旧于开发环境（`rag-spine>=0.10.0` vs 0.13.0、`spineagent>=0.2.0` vs 0.3.1、`corespine>=0.4.0` vs 0.5.1，§5.8）。
 - 涉及：spinestudio（`.github/workflows/`、`backend/pyproject.toml`）。
