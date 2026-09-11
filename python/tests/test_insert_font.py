@@ -244,9 +244,14 @@ def test_registered_simple_font_uses_explicit_pdf_widths_in_textbox():
     page = doc.new_page()
     font = doc.get_new_xref()
     widths = " ".join(["900"] * 35)  # character codes 32 through 66.
-    doc.update_object(font, f"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding /FirstChar 32 /LastChar 66 /Widths [{widths}] >>")
+    doc.update_object(
+        font,
+        f"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding /FirstChar 32 /LastChar 66 /Widths [{widths}] >>",
+    )
     doc.xref_set_key(page.xref, "Resources", f"<< /Font << /Wide {font} 0 R >> >>")
     assert page.insert_font(fontname="Wide") == font
     # Actual width is 90pt for AB-space-AB; Helvetica AFM would fit in 70pt.
-    page.insert_textbox(pdfspine.Rect(40, 40, 110, 150), "AB AB", fontname="Wide", fontsize=20)
+    page.insert_textbox(
+        pdfspine.Rect(40, 40, 110, 150), "AB AB", fontname="Wide", fontsize=20
+    )
     assert page.get_text().splitlines() == ["AB", "AB"]
