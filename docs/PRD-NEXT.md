@@ -305,10 +305,19 @@
   - *Why / where:*
     - the `AI → Al` homoglyph in the Latin OCR benchmark
       (`docs/BENCHMARKS.md` §6);
-    - the 5 pre-existing `cargo fmt --check` violations in the ocrspine crates
-      (**cross-repo — record, do not fix here**; see Working rules);
-    - a CI check that warns **30 days before** the cargo-vet trust entries
-      expire (**2027-09-05**; `supply-chain/`).
+    - ocrspine's earlier reported formatting violations were not reproduced by
+      its scoped 2026-09-10 `cargo fmt --all --check` (passes). Its dependency
+      and model-version documentation was updated separately in `a47ab8d`;
+      no OCR source or consumer revision was changed here;
+    - **coverage-window advisory implemented (2026-09-10):**
+      `scripts/check_vet_trust_windows.py` reads actual `trusted` records and
+      `.github/workflows/vet-trust-reminder.yml` runs daily/manual, with focused
+      tests on path-filtered PRs. It warns **30 days before** the exclusive
+      publication-coverage end and continues advising afterward. The current
+      51 records end **2027-09-05**. Reaching that date does not invalidate
+      already covered locked dependencies; reminders exit successfully and
+      never renew trust or change criteria. Invalid input remains an operational
+      error. The OCR homoglyph item remains open.
   - *Acceptance:* the homoglyph resolved or documented as an accepted miss; a
     scheduled CI job that warns ahead of the vet-trust expiry.
   - *Size:* **S**.

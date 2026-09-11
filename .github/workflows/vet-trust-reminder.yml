@@ -1,0 +1,32 @@
+name: cargo-vet coverage-window advisory
+
+on:
+  schedule:
+    - cron: "17 8 * * *"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "supply-chain/audits.toml"
+      - "scripts/check_vet_trust_windows.py"
+      - "python/tests/test_vet_trust_windows.py"
+      - ".github/workflows/vet-trust-reminder.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  reminder:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install focused test dependency
+        if: github.event_name == 'pull_request'
+        run: python -m pip install pytest
+      - name: Test advisory date boundaries and output escaping
+        if: github.event_name == 'pull_request'
+        run: python -m pytest --noconftest python/tests/test_vet_trust_windows.py -q
+      - name: Report approaching or ended publication coverage windows
+        run: python scripts/check_vet_trust_windows.py
