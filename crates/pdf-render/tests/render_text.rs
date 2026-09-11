@@ -255,6 +255,7 @@ mod synth {
 
 fn a_glyph() -> PositionedGlyph {
     PositionedGlyph {
+        raw_font_name: None,
         unicode: "A".into(),
         code: u32::from('A'),
         origin: Point::new(0.0, 10.0),

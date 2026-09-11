@@ -15,6 +15,7 @@
 //! - [`interpret_content`] — run an explicit `(content, resources, ctm)` triple
 //!   (the form-recursion / testing entry point).
 
+pub mod font_display;
 pub mod interp;
 pub mod layout;
 pub mod model;

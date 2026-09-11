@@ -12,6 +12,7 @@ fn letter() -> Rect {
 fn glyph(c: &str, ox: f64, oy: f64, size: f64) -> PositionedGlyph {
     let w = 0.5 * size;
     PositionedGlyph {
+        raw_font_name: None,
         unicode: SmolStr::new(c),
         code: c.chars().next().map_or(0, |ch| ch as u32),
         origin: Point::new(ox, oy),

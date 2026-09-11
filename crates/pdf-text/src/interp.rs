@@ -76,6 +76,7 @@ fn normalize_vmetrics(ascent: f64, descent: f64) -> Option<(f64, f64)> {
 
 /// Per-font cached data: the mapper plus glyph-cell vertical metrics.
 struct CachedFont {
+    raw_font_name: Option<std::sync::Arc<SmolStr>>,
     mapper: FontMapper,
     /// Ascent in 1000-unit glyph space (top of the glyph cell).
     ascent: f64,
@@ -1218,7 +1219,10 @@ impl<'a> ContentInterpreter<'a> {
         let mapper = FontMapper::from_dict(font_dict, self.doc);
         let (ascent, descent) = self.font_vmetrics(font_dict);
         let wmode = mapper.wmode();
+        let raw_font_name =
+            crate::layout::subset_base_font_name(self.doc, font_dict).map(std::sync::Arc::new);
         Some(CachedFont {
+            raw_font_name,
             mapper,
             ascent,
             descent,
@@ -1882,6 +1886,7 @@ fn emit_glyph_into(
                 trms.push(trm);
             }
             out.push(PositionedGlyph {
+                raw_font_name: cached.raw_font_name.clone(),
                 unicode,
                 code,
                 origin: sanitize_point(origin),
@@ -1925,6 +1930,7 @@ fn emit_glyph_into(
             trms.push(trm);
         }
         out.push(PositionedGlyph {
+            raw_font_name: cached.raw_font_name.clone(),
             unicode,
             code,
             origin: sanitize_point(origin),

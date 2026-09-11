@@ -34,6 +34,7 @@ pub use pdf_core::page::Page;
 pub use pdf_core::repair::ParseMode;
 pub use pdf_core::{OnRepaired, SaveOptions, XrefStyle};
 pub use pdf_edit::set_annot_stem;
+pub use pdf_text::font_display;
 pub use pdf_text::search as search_textpage;
 pub use recorded_text::RecordedTextResources;
 
