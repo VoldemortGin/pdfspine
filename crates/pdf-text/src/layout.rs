@@ -2305,6 +2305,9 @@ fn emit_column_cut(
     out: &mut Vec<Vec<usize>>,
 ) {
     if spanning.is_empty() {
+        if emit_label_value_rows(lines, left, right, out) {
+            return;
+        }
         cut_column_subtree(lines, left, width, height, out);
         cut_column_subtree(lines, right, width, height, out);
         return;
@@ -2317,8 +2320,10 @@ fn emit_column_cut(
         // `bands.len() + 1` rows: the last row has no band after it.
         let mut bands = bands.into_iter();
         for (left_row, right_row) in left_rows.iter().zip(&right_rows) {
-            cut_column_subtree(lines, left_row, width, height, out);
-            cut_column_subtree(lines, right_row, width, height, out);
+            if !emit_label_value_rows(lines, left_row, right_row, out) {
+                cut_column_subtree(lines, left_row, width, height, out);
+                cut_column_subtree(lines, right_row, width, height, out);
+            }
             if let Some(band) = bands.next() {
                 out.push(band);
             }
@@ -2345,6 +2350,116 @@ fn emit_column_cut(
         cut_column_subtree(lines, right, width, height, out);
         out.extend(below);
     }
+}
+
+/// Repeated textual field placeholders aligned with multiline labels establish
+/// form rows. Keep each cell intact and emit label then value in geometric row
+/// order, independently of which column was painted first. Regions without two
+/// such placeholders retain ordinary column order; density alone is ambiguous.
+fn emit_label_value_rows(
+    lines: &[Line],
+    left: &[usize],
+    right: &[usize],
+    out: &mut Vec<Vec<usize>>,
+) -> bool {
+    if right.len() < 2 || left.len() < 2 {
+        return false;
+    }
+    if left
+        .iter()
+        .chain(right)
+        .any(|&i| lines[i].wmode != 0 || lines[i].dir.0 < 0.999 || lines[i].dir.1.abs() > 0.01)
+    {
+        return false;
+    }
+    let typ_h = typical_line_height_idx(lines, left);
+    let min_gap = (typ_h * 0.5).max(1.0);
+    let value_cells = split_y_bands(lines, right, min_gap);
+    // Repeated bracketed instructions are structural evidence of blank form
+    // fields. Geometry alone cannot distinguish sparse values from short prose
+    // paragraphs; never reinterpret ordinary two-column prose on density alone.
+    let placeholders = value_cells
+        .iter()
+        .filter(|cell| {
+            let text: String = cell
+                .iter()
+                .flat_map(|&i| lines[i].spans.iter().flat_map(|span| span.text.chars()))
+                .collect();
+            let text = text.trim();
+            text.strip_prefix('[')
+                .and_then(|rest| rest.split_once(']'))
+                .is_some_and(|(instruction, _)| instruction.chars().any(char::is_alphabetic))
+        })
+        .count();
+    if placeholders < 2 {
+        return false;
+    }
+    let baseline = |i: usize| paragraph_line_metrics(&lines[i]).baseline_origin.y;
+    let tolerance = typ_h * 0.25;
+    if value_cells.windows(2).any(|pair| {
+        let start = |cell: &[usize]| {
+            cell.iter()
+                .map(|&i| baseline(i))
+                .min_by(f64::total_cmp)
+                .unwrap_or(0.0)
+        };
+        start(&pair[1]) - start(&pair[0]) < typ_h * 1.8
+    }) {
+        return false;
+    }
+    if !value_cells.iter().all(|cell| {
+        let start = cell
+            .iter()
+            .map(|&i| baseline(i))
+            .min_by(f64::total_cmp)
+            .unwrap_or(0.0);
+        left.iter()
+            .any(|&i| (baseline(i) - start).abs() <= tolerance)
+    }) {
+        return false;
+    }
+    let mut label_cells = Vec::new();
+    for label in split_y_bands(lines, left, min_gap) {
+        let mut current = Vec::new();
+        let mut last_value = None;
+        for i in label {
+            let starts_value = value_cells.iter().position(|cell| {
+                let start = cell
+                    .iter()
+                    .map(|&j| baseline(j))
+                    .min_by(f64::total_cmp)
+                    .unwrap_or(0.0);
+                (baseline(i) - start).abs() <= tolerance
+            });
+            if starts_value.is_some() && last_value.is_some() && starts_value != last_value {
+                label_cells.push(std::mem::take(&mut current));
+            }
+            last_value = starts_value.or(last_value);
+            current.push(i);
+        }
+        if !current.is_empty() {
+            label_cells.push(current);
+        }
+    }
+    let mut values = value_cells.into_iter().peekable();
+    for label in label_cells {
+        let bottom = label
+            .iter()
+            .map(|&i| baseline(i))
+            .max_by(f64::total_cmp)
+            .unwrap_or(0.0);
+        out.push(label);
+        while values
+            .peek()
+            .is_some_and(|cell| cell.iter().any(|&i| baseline(i) <= bottom + tolerance))
+        {
+            if let Some(cell) = values.next() {
+                out.push(cell);
+            }
+        }
+    }
+    out.extend(values);
+    true
 }
 
 /// Splits the column lines of a column cut into the rows delimited by the

@@ -466,3 +466,151 @@ fn layout_e2e_010_sparse_form_values_keep_their_row_band() {
     );
     assert_eq!(lines.len(), 19);
 }
+
+/// Sparse values align with multiline labels, even when the value column is
+/// painted first. Each label/value cell must finish before the next row.
+#[test]
+fn layout_e2e_011_label_value_cells_follow_rows_not_paint_order() {
+    let mut content = String::from("BT /F1 10 Tf ");
+    for row in 0..4 {
+        let y = 700 - row * 80;
+        content.push_str(&format!(
+            "1 0 0 1 330 {y} Tm ([VALUE {row} short answer]) Tj "
+        ));
+    }
+    for row in 0..4 {
+        let y = 700 - row * 80;
+        content.push_str(&format!(
+            "1 0 0 1 40 {y} Tm (LABEL {row} with a long description) Tj "
+        ));
+        for offset in [12, 24, 36] {
+            let yy = y - offset;
+            content.push_str(&format!(
+                "1 0 0 1 40 {yy} Tm (continuation of the label explanation) Tj "
+            ));
+        }
+    }
+    content.push_str("ET");
+    let lines = line_texts(&helvetica_page(content.as_bytes()));
+    for row in 0..4 {
+        let label = lines
+            .iter()
+            .position(|s| s.starts_with(&format!("LABEL {row}")))
+            .unwrap();
+        let value = lines
+            .iter()
+            .position(|s| s == &format!("[VALUE {row} short answer]"))
+            .unwrap();
+        assert_eq!(value, label + 4, "cell text interleaved: {lines:?}");
+        if row < 3 {
+            let next = lines
+                .iter()
+                .position(|s| s.starts_with(&format!("LABEL {}", row + 1)))
+                .unwrap();
+            assert!(value < next, "value detached from label: {lines:?}");
+        }
+    }
+    assert_eq!(lines.len(), 20);
+}
+
+/// The same sparse geometry without field placeholders can be ordinary prose.
+#[test]
+fn layout_e2e_012_sparse_prose_columns_remain_column_major() {
+    for prefix in ["", "[1] ", "[] "] {
+        let mut content = String::from("BT /F1 10 Tf ");
+        for row in 0..4 {
+            let y = 700 - row * 80;
+            content.push_str(&format!(
+                "1 0 0 1 330 {y} Tm ({prefix}RIGHT {row} short paragraph) Tj "
+            ));
+        }
+        for row in 0..4 {
+            let y = 700 - row * 80;
+            content.push_str(&format!(
+                "1 0 0 1 40 {y} Tm (LEFT {row} body paragraph begins here) Tj "
+            ));
+            for offset in [12, 24, 36] {
+                let yy = y - offset;
+                content.push_str(&format!(
+                    "1 0 0 1 40 {yy} Tm (continuation of the prose paragraph) Tj "
+                ));
+            }
+        }
+        content.push_str("ET");
+        let lines = line_texts(&helvetica_page(content.as_bytes()));
+        let left = lines.iter().position(|s| s.starts_with("LEFT 3")).unwrap();
+        let right = lines
+            .iter()
+            .position(|s| s.starts_with(&format!("{prefix}RIGHT 0")))
+            .unwrap();
+        assert!(
+            left + 3 < right,
+            "ordinary prose treated as a form: {lines:?}"
+        );
+        assert_eq!(lines.len(), 20);
+    }
+}
+
+/// Repeated aligned value starts split tightly adjacent multiline labels into
+/// separate cells even though the label column has no paragraph-sized gap.
+#[test]
+fn layout_e2e_013_adjacent_labels_use_the_value_row_boundaries() {
+    let mut content = String::from("BT /F1 10 Tf ");
+    for row in 0..4 {
+        let y = 700 - row * 24;
+        content.push_str(&format!(
+            "1 0 0 1 330 {y} Tm ([VALUE {row} field instructions]) Tj "
+        ));
+    }
+    for row in 0..4 {
+        let y = 700 - row * 24;
+        let yy = y - 12;
+        content.push_str(&format!("1 0 0 1 40 {y} Tm (LABEL {row} with multiline description) Tj 1 0 0 1 40 {yy} Tm (continued label explanation) Tj "));
+    }
+    content.push_str("ET");
+    let lines = line_texts(&helvetica_page(content.as_bytes()));
+    for row in 0..4 {
+        assert!(
+            lines[row * 3].starts_with(&format!("LABEL {row}")),
+            "{lines:?}"
+        );
+        assert_eq!(lines[row * 3 + 1], "continued label explanation");
+        assert_eq!(
+            lines[row * 3 + 2],
+            format!("[VALUE {row} field instructions]")
+        );
+    }
+    assert_eq!(lines.len(), 12);
+}
+
+/// Multiline values stay intact; an empty value and a plain Yes/No answer are
+/// retained in their own rows once repeated placeholders establish the form.
+#[test]
+fn layout_e2e_014_multiline_and_empty_values_keep_cell_order() {
+    let mut content = String::from("BT /F1 10 Tf ");
+    for row in [0, 3] {
+        let y = 700 - row * 70;
+        let yy = y - 12;
+        content.push_str(&format!("1 0 0 1 330 {y} Tm ([VALUE {row} detailed instructions) Tj 1 0 0 1 330 {yy} Tm (continued value instructions]) Tj "));
+    }
+    content.push_str("1 0 0 1 330 560 Tm (Yes/No) Tj ");
+    for row in 0..4 {
+        let y = 700 - row * 70;
+        let yy = y - 12;
+        content.push_str(&format!("1 0 0 1 40 {y} Tm (LABEL {row} with a long description) Tj 1 0 0 1 40 {yy} Tm (continued label explanation) Tj "));
+    }
+    content.push_str("ET");
+    let lines = line_texts(&helvetica_page(content.as_bytes()));
+    let mut expected = Vec::new();
+    for row in 0..4 {
+        expected.push(format!("LABEL {row} with a long description"));
+        expected.push("continued label explanation".to_string());
+        if row == 0 || row == 3 {
+            expected.push(format!("[VALUE {row} detailed instructions"));
+            expected.push("continued value instructions]".to_string());
+        } else if row == 2 {
+            expected.push("Yes/No".to_string());
+        }
+    }
+    assert_eq!(lines, expected);
+}

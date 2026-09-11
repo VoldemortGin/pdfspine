@@ -796,3 +796,110 @@ ruff、mypy、drift guards 均通过，最终 wheel 和 sdist 安装后 smoke �
 再次刷新输入 stamp（`band-v2-test-stamp.log`）；core `.so` SHA-256 与启动最终评分时
 **逐字节相同**（`band-v2-scoring-core.json` / `band-v2-final-build.json`），
 因此全文评分、最终源码及最终安装产物无版本歧义。
+
+## 2026-09-10 SECCI label/value 行序（§0 #1.2，保守增量）
+
+基线 `3faa62d`，即前一项 band guard 的最终 tag `bandguard-v2-final`；本轮最终 tag
+`secci-final`。不以历史 V4 代替当前基线。证据仍存放在 `/Volumes/ExternalSSD/tmp/ro34/`。
+
+### 真实根因与判据
+
+目标 `32008L0048_EL` p21–26、BG p22/p24 的右栏是标签对应的字段说明或答案。
+它们有重复的起始 baseline 对齐，但右值可能多行，也可能是空值、Yes/No、有效期。
+EL p22 的真实 texttrace 显示左栏整体先画、右栏整体后画，因此把全页放回单 region
+再按 `seq` 排序仍不能修复；反过来全局按物理行排序会破坏普通正文两栏。
+
+`emit_column_cut` 现在在合法双栏的各个 spanning-row 内，尝试局部
+`emit_label_value_rows`：
+
+- 仅处理左向右水平文字；标题/通栏区的既有切分与 region 顺序不变。
+- 右侧值 cell 按纵向空隙分组，每个起点须在 0.25 典型行高内匹配左侧 baseline；
+  相邻起点至少相隔 1.8 行高，避免把普通连续正文行当字段。
+- **至少两个 cell 以含文字的方括号字段说明开头**，只检查开头首对 `[...]` 内部。
+  `"[1] ordinary prose"` 与 `"[] Agree"` 不构成说明；不匹配具体语言、姓名或 SECCI 字样。
+  单靠“右栏短、稀疏、重复对齐”无法与正文短段落区分，因此不采用无括号的宽泛启发式。
+- 用重复右值起点补充分割连续的左标签段，匹配与发射共用这些 cell 边界。
+  发射完整左 cell → 完整右 cell → 下一行，未配值的可见左段仍保留。
+  cell 内依旧使用既有 `seq`；没有恢复 stage 4，也没有把多行值逐物理行交织。
+
+第一几何原型被负例否决：它把左四个长段、右四个同起点短段的普通正文当成表单。
+纯密度上限又误拒 EL p23/p26 的多行值。最终使用字段说明作为结构证据，保留几何验证，
+两类问题均有测试约束。
+
+### 回归测试与已知边界
+
+新增 4 个自构 PDF 端到端测试：
+
+- `layout_e2e_011`：先画所有右值，仍须完整多行 label → value → 下一 label。
+- `layout_e2e_012`：相同稀疏几何的普通正文、数字引用、空 checkbox 均保持整列序。
+- `layout_e2e_013`：连续两行标签之间没有段落空隙，右值起点仍能建立正确 cell 边界。
+- `layout_e2e_014`：多行值、可见空值行和同一已证实表单中的 Yes/No 保持 cell 行序。
+
+独立代码审查及 DE p22/p23、EL p22/p26 的实页抽样通过：DE p22 的 Name、完整地址值
+各随其对应标签，先于后续商业登记标签；跨行字段说明保持完整，字词未增删。
+
+这是 **§0 净提升验收下的保守增量，不是 SECCI 全部问题已解决**：
+
+- EL p22 上半个切区只有一个字段说明，仍保留原列序。
+- EL p26 地址标签与之后的空值电话等连续行仍属于同一左 cell，地址值尚未紧跟单独地址标签。
+- 无括号字段、无几何边界的紧接空值、任意 cell 内反向绘制行序均不在本轮推断范围。
+  后续若细化空值 row 边界，须保留本轮及 #1.1 的正文/字段负例。
+
+### 最终全文与字词验证
+
+`secci-eurlex-baseline.json` 冻结当前基线 40 篇 **3365 页全部页面**的块结构和输入 SHA-256；
+`secci_compare_full.py` 核对相同输入后输出 `secci-eurlex-final.json` 与
+`secci-eurlex-final-compare.json`。全部25个变化页的字符和词多重集相等：
+17页纯块置换、8页仅拆分原左标签块以对应独立值 cell，没有文本增删。
+其余3340页完全相同，含 #1.1 已修的 `32013R0575_DE/EL/PL p0`。
+
+变化均局限 `32008L0048` 附件表单，页码零基：
+
+| 语言 | 变化页 |
+|---|---|
+| EL | 21, 22, 23, 24, 25, 26 |
+| BG | 20, 21, 22, 23, 24, 25, 26 |
+| PL | 20, 21, 22, 23, 24, 25, 26 |
+| DE | 21, 22, 23, 25, 26 |
+
+历史300文档 digest 每篇最多前20页，完全看不到本轮这些变化，不能代替全文验收。
+历史 manifest 中 typeset-lo-slide.pdf 的 SHA mismatch 继续排除，fixture/manifest 未修改。
+
+### 最终评分（`secci-final`）
+
+| 指标 | `bandguard-v2-final` | 本轮最终 |
+|---|---:|---:|
+| PMC 干净7篇 order | 0.9600 | 0.9600 |
+| PMC212689 order | 0.7456 | 0.7456 |
+| EUR-Lex40篇 lev | 0.9377 | 0.9392 |
+| EUR-Lex40篇 order | 0.9779 | 0.9794 |
+| born6篇全文 | 基线 | 逐字节相同 |
+| FR misplaced / detected header pages | 24/2493 | 24/2493 |
+| FR fragmented pages | 247 | 247 |
+
+EUR-Lex40/40篇评分、0跳过，4篇提升、36篇所有指标不变、0篇下降：
+
+| `32008L0048` 语言 | order 前 → 后 | lev 前 → 后 |
+|---|---|---|
+| EL | 0.9600 → 0.9760 | 0.9495 → 0.9653 |
+| BG | 0.9599 → 0.9756 | 0.9469 → 0.9624 |
+| PL | 0.9569 → 0.9755 | 0.9458 → 0.9642 |
+| DE | 0.9653 → 0.9761 | 0.9541 → 0.9648 |
+
+PMC、born和FR的结果与当前基线逐项相同，全部原硬门槛通过；#1.1三语改善完整保留。
+`gt-{pmc,born,eurlex}-secci-final.json` 是从最终extension实际生成的评分结果；
+`gt-eurlex-secci-final.log` 保留40篇逐项进度。
+可用 `summarize.py bandguard-v2-final secci-final` 重汇总这些结果。
+
+### 门禁与产物一致性
+
+五阶段门禁全部通过：`secci-gate-rust.log` 和 `secci-gate-rest.log` 均以
+`QUALITY GATE PASSED` 结束。Rust 1907 passed / 1 ignored（172 个 test-result 段，含 doc tests），
+Python 1227 passed / 66 skipped；fmt、clippy `-D warnings`、cargo-deny、ruff、mypy、
+drift guards，以及最终 wheel/sdist 的隔离安装 smoke 均通过。
+
+最终核心源码完成后通过 gate extension phase 重建，再启动唯一 `secci-final` 的
+PMC / born / EUR-Lex GT、FR 和 digest。`secci-final-build.json` 保存基线 commit、
+源码/测试 SHA-256、extension 输入 stamp 和 core `.so` SHA-256；评分期间未修改核心。
+`secci-born-final.json` 与 `band-born-v2-final.json` 的6篇全文逐字节相同，
+`fr-header-secci-final.json` 与上一基线完整 JSON 相同。

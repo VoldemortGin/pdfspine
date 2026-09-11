@@ -13,6 +13,12 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ### Fixed
 
+- **SECCI label/value reading order.** Repeated aligned field placeholders now
+  keep each complete label beside its value instead of reading the entire left
+  column before all values. Multiline cells, adjacent labels, and plain answers
+  inside an established form retain row order regardless of column paint order.
+  Detection is conservative: ordinary sparse prose retains column order;
+  numeric citations and empty checkboxes do not trigger form detection.
 - **Reading order below full-width titles.** A shared paragraph gap no longer
   splits a continuous two-column body into stacked bands when the title blocks
   the initial column cut. Compatible adjacent body bands retain whole-column
