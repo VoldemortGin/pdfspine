@@ -13,6 +13,19 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ### Fixed
 
+- **OCG Intent visibility.** Layers with mismatched intent are hidden when the
+  active configuration supplies a non-empty Intent, including name/array and
+  All-wildcard handling. Explicit empty OCG intent remains distinct from its
+  default View intent; reported layer-panel state is unchanged.
+- **Adobe RGB JPEG rendering.** Three-component Adobe APP14 images now decode
+  as RGB instead of being skipped after a premature CMYK classification. This
+  restores the scanned strips in govdocs1-00074; native CMYK and explicit
+  `/Decode` handling retain their existing behavior.
+- **Fragmented running headers.** Isolated top-of-page text split at tiny false
+  column gutters now recovers a complete structured header line after body
+  ordering. Original glyph provenance, independent page numbers, real narrow
+  columns, and all body/footnote ordering are preserved. Federal Register header
+  fragmentation falls from 247 to 82 pages in the evaluation corpus.
 - **SECCI label/value reading order.** Repeated aligned field placeholders now
   keep each complete label beside its value instead of reading the entire left
   column before all values. Multiline cells, adjacent labels, and plain answers
@@ -25,6 +38,11 @@ feature-complete, but the public API and on-disk formats may still change.
   order; headings, spanning captions, and changes in column structure retain
   their section boundaries. Fixes the recital interleave on the Greek, German,
   and Polish `32013R0575` cover pages, with no text added or removed.
+
+### Documentation
+
+- Define the v0.8.0 pinned git baseline and upgrade policy for Rust consumers
+  of `pdf-api`, `pdf-typeset` and `pdf-fonts`, retaining `publish = false`.
 
 ## [0.8.0] — 2026-09-10
 

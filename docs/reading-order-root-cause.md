@@ -903,3 +903,104 @@ PMC / born / EUR-Lex GT、FR 和 digest。`secci-final-build.json` 保存基线 
 源码/测试 SHA-256、extension 输入 stamp 和 core `.so` SHA-256；评分期间未修改核心。
 `secci-born-final.json` 与 `band-born-v2-final.json` 的6篇全文逐字节相同，
 `fr-header-secci-final.json` 与上一基线完整 JSON 相同。
+
+## 2026-09-10 — FR 孤立刊头的结构化合并
+
+本轮从 `b0414f7`（SECCI 增量完成）继续 PRD §0 #1.3。真实样本为
+`FR-2026-01-07.pdf` 零基 p62 / p67 / p88；刊名、斜线、卷期日期 baseline
+均为 42pt、正文约 10pt，相邻实际间隙仅 1.622 / 1.620pt。页码另有 11pt
+字号，不能用它代表整条刊头。最终三页均恢复完整刊名行，页码独立。
+
+### 根因与最终边界
+
+glyph / cluster / gutter / baseline trace 证明这些文字起初属于同一 baseline
+cluster，首次错切在 `split_on_gutter`：原始 `Tf 1` 配合矩阵放大，候选谷
+检测仍允许约 2pt 的细谷，0.8 倍谷宽的切割门槛使普通 1.62pt 词缝也被切。
+
+直接将全页候选谷阈值改成设备字号被否决：12 页发生词切分变化，包括
+01-07 p105 的 `co12nsistent` 和 01-14 p130 两条正文交织。通用同 baseline
+小间隙保护也被否决：govdocs1-00039 p0 的 Institute 两行 cell 被邻列
+AlphaMed 插断。进一步仅在顶部提前合并，仍因 header 形状反馈到 XY-cut，
+在 15 页间接改变正文/页脚分组；01-14 p172 的 Temporary → Protected Status、
+01-08 p142 的 deadlines → in administrative proceedings、01-12 p184 的
+publication of the → proposed rule 等原本连续的句子被脚注/元数据插断。
+这些都是被否决的诊断版本，不能当作最终成果或仅凭字词多重集接受。
+
+最终保留所有原始 split lines 完成 region / XY-cut。glyph 阶段只规划可合并
+刊头的来源集合和由原 glyph 经 `build_line` 重建的完整结构化 Line；待原始
+分区结束，才替换相应 header 片段，不再改变正文分区输入。
+
+资格保守限定为页面最顶端、严格同 baseline 的水平 run，用实际设备 bbox
+确认所有其他 glyph 在其下方至少半个最大设备字号，不能把旋转文本的
+cluster 代表值当顶部。刊头须连续桥接至少一个正文宽度候选谷，远端页码
+跨越大空白不算；谷宽使用该 run 的中位设备字号，隔离留白仍取最大字号。
+只取消实际间隙和候选谷宽均小于 0.4 倍设备字号的伪切割，baseline 差仍须
+不超过 `1e-6` 设备点。两个不同 baseline 的重复窄间隙或贴谷右沿的重复
+cell 起点保留旧切割，保护真实细栏和不等长表格；统计每谷一次、两行即停。
+不修改 independent-run gap、baseline 聚类容差或既有上标重接。
+
+替换按原 line seq 唯一消费；参与块若含非候选顶部 run 的正文 line 则跳过。
+同顶部块中的独立页码保留为残余块。还必须比较实际匹配行与新 Line 的全部
+非 synthetic `(Char.seq, char)` 多重集，防止规划之后的 fragment reattach
+吸入其他来源、仅保留最小 seq 却在替换时丢字。缺失、重复或来源变化均拒绝
+替换；只有正常空间推断产生的 synthetic spaces 可以重新生成。
+
+### 回归与最终实页结果（`frheader-verified`）
+
+新增 `layout_e2e_015–021`：等价 Tf10/Tm1、Tf1/Tm10、Tf100/Tm0.1，较大
+独立页码，真实 4pt / 10pt 细栏，两行/八行重复栏证据，紧接多行表格 cell，
+混合 baseline / 上标，三栏正文和脚注元数据的 bbox/全文/顺序合同，以及
+reattach 后来源改变的防丢字。更新后的 015 对 `b0414f7` 源码再次验证 red；
+018、019、021 也有对应错误实现的 red/green。020 是固定正文合同测试，
+不单独复现旧 root 反馈；真实 15 页全页比较承担该回归验收。
+
+FR 12 篇共 2551 页中 678 页仅顶部结构分组改变，全部字词多重集保持。
+**所有 y0 > 60pt 的正文/页脚块，其 bbox、全文和相对顺序与 SECCI 基线逐项
+相同**（不比较因 header 块数改变而重编号的 block number）。此前出问题的
+实际跨栏续句也单独核对恢复。2493 个检测到刊头的页面：碎片 **247 → 82**，
+misplaced **24 → 22**；保留 82 页未满足安全合并条件的碎片，不声称通解。
+因一些原含页码的块拆成独立页码+完整刊名，mean band blocks 为 1.57，
+不能只用平均块数判断完整刊头是否改善。
+
+EUR-Lex 全 40 篇 / 3365 页同输入 SHA 的块结果全部相同，#1.1 三语言 p0
+及 #1.2 SECCI 改善完整保留。历史 300 文档 digest（每篇最多前 20 页）也与
+`secci-final` 相同：299 个有效输入 / 1886 页、0 变化；历史
+`typeset-lo-slide.pdf` SHA mismatch 继续排除，未更改 fixture/manifest。
+
+PMC 7 篇从最终 extension **真实重新评分**，所有指标与 SECCI 基线相同：
+order 0.9600，PMC212689 order 0.7456。EUR-Lex / born 没有重复运行全套 GT：
+实际调用 `run_gt.extract_pdfspine` 的 subprocess worker，以默认 text flags
+提取全部页面并按 `\n` 拼接，40 + 6 篇评分输入逐字节相同，因此沿用已验证
+的 `secci-final` 分数（EUR-Lex lev 0.9392 / order 0.9794；born 6 篇全文相同）。
+EUR-Lex 旧评分文本由冻结 blocks 经未改的 `to_text` / `to_blocks` 共同
+`block_text` 规则还原；born 使用冻结全文。评分代码与 serializer 均与
+`b0414f7` 逐字节一致。GT manifest 为未跟踪生成资产，没有虚构历史 hash：
+记录当前 SHA、两文件早于原评分的 9 月 5 日 mtime/ctime，并逐篇核对基线
+GT 长度；未改 GT。`gt-reuse-frheader-verified.json` 明确注明不是新 GT 评分。
+
+### 产物与复现证据
+
+最终 extension 的输入 fingerprint、源码/测试及 core SHA 保存在
+`frheader-verified-build.json`。本轮核心完成后的唯一有效标签是
+`frheader-verified`；前述 `frscale-*`、`frlocal-*`、`frtop-*` 均为诊断版本。
+最终 FR 全文抽取、比较及 JSON 写入耗时 7.968 秒，期间有并行验证；没有
+严格旧版性能基线，不据此宣称性能提升。
+
+全部证据位于 `/Volumes/ExternalSSD/tmp/ro34/`：
+
+- `fr-full-secci-baseline.json` / `fr-full-frheader-verified.json`、
+  `frheader-verified-body-equality.json`、`fr-header-frheader-verified.json`；
+- `secci-eurlex-final.json` / `frheader-verified-eurlex.json`、
+  `frheader-verified-eurlex-compare.json`（0 变化）；
+- `gt-pmc-frheader-verified.json`（新评分）、`gt-reuse-frheader-verified.json`、
+  `frheader-verified-score-input-records.json`（46 篇实际 worker 输入 hash）；
+- `frheader-verified-gt-provenance-final.log` 为修正未跟踪 manifest 核验后完整
+  成功的报告，早期同名近似日志中的 git-show / record-id 错误不算通过；
+- `compare-frheader-verified.json`、`digest-frheader-verified`；
+- `frheader-verified-gate-rust.log` / `frheader-verified-gate-rest.log`。
+
+最终五阶段门禁全部通过：Rust 1914 passed / 1 ignored（172 个 test-result
+段，含 doc tests），Python 1227 passed / 66 skipped；fmt、clippy
+`-D warnings`、cargo-deny、ruff、mypy、drift guards，以及 wheel/sdist 隔离
+安装 smoke 均通过。门禁复用与评分相同的 extension 输入 fingerprint
+`618cccafdd0eb40f208b7a14000fb41b792a59cb15ac122af62a2bad69fa57ae`。

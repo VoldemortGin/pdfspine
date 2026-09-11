@@ -13,7 +13,8 @@
 
 - **Repository:** `/Users/linhan/startup/spine/pdfspine`, branch `main`.
   The reading-order follow-up below started at **`93298af`** (the 2026-09-10
-  backlog update); the SECCI increment started at **`3faa62d`**. Use the log
+  backlog update); SECCI started at **`3faa62d`**, and the conservative FR
+  header increment at **`b0414f7`**. Use the log
   for the current post-fix HEAD; clean up only the completed item's branch /
   worktree, preserving other active tasks. Inspect with
   `git -C /Users/linhan/startup/spine/pdfspine log --oneline --first-parent -6`
@@ -100,13 +101,14 @@
   **The next open backlog item is #1.**
 
 - [ ] **1. Reading-order follow-ups** (from the 2026-09-09 stage-3 attribution;
-  sub-items 1 and 2 completed below).
+  sub-items 1–3 completed within their conservative scopes below).
   - *Goal:* close the four residual reading-order gaps left after stage 3 + D4.
   - *Why / evidence:* `docs/reading-order-root-cause.md` "后续该修" + the variant
     table. The hard bars are met at HEAD (PMC 7 order 0.9600 vs fitz 0.9605;
-    EUR-Lex 40 lev 0.9392 / order 0.9794; FR misplaced 24/2493 vs fitz 64/2517;
-    FR fragmented 247 pages vs fitz 0). Sub-items 1 and 2 are complete within
-    the conservative scopes below; two follow-ups remain open.
+    EUR-Lex 40 lev 0.9392 / order 0.9794; FR misplaced 22/2493 vs fitz 64/2517;
+    FR fragmented 82 pages vs fitz 0). Sub-items 1–3 are complete within
+    the conservative scopes below; sub-item 4 remains open, with form/header
+    edge cases explicitly retained for future refinements.
   - *Where:* `crates/pdf-text/src/layout.rs` — `find_column_cut`, `cut_lines`,
     `emit_column_cut` / `SPANNING_BANDS_PARTITION_ROWS`, `group_blocks_columned`,
     `detect_page_gutters` / `split_on_gutter`.
@@ -142,10 +144,23 @@
        residuals without guessing empty rows that have no geometric boundary.
        Final full-document corpus and gate evidence is in the
        **SECCI label/value** section of `docs/reading-order-root-cause.md`.
-       Sub-item **3** is next.
-    3. **D4 header de-fragmentation, remaining 247 pages** toward fitz's 0
-       (`independent_run_gap` etc.); D4 only did the gutter-coverage split
-       (530 → 247).
+    3. **D4 isolated header de-fragmentation — done (2026-09-10, conservative).**
+       Recover complete same-baseline running-header lines from original glyphs
+       after the original line geometry has finished region / XY-cut ordering.
+       Only an isolated top horizontal run bridging a body gutter qualifies;
+       repeated narrow columns / table starts retain their boundaries. Complete
+       painted-character provenance must match before consuming each fragment.
+       This fixes the full header on FR-2026-01-07 p62/p67/p88 and reduces
+       fragmented pages **247 → 82**, with misplaced **24 → 22**. The remaining
+       82 fragmented pages stay unchanged when safe identification fails.
+       All 2551 FR pages retain identical bbox/text/relative order for blocks
+       with y0 > 60pt; previously exposed cross-column sentence interruptions
+       are restored. EUR-Lex 40/3365 pages and the 300-document prefix digest
+       are unchanged. Actual GT worker inputs for EUR-Lex/born are byte-identical
+       to `secci-final`, so their validated scores are reused rather than claimed
+       as a new full GT run; PMC is freshly rescored and unchanged. Full evidence
+       and gate results are in the **FR 孤立刊头** section of the root-cause report.
+       Sub-item **4** is next.
     4. **PMC order 0.9605 / PMC212689 0.749 targets** still unmet — the PLoS
        3-column, mid-page spanning-caption float-vs-rows semantics that stage 3
        did not touch.
@@ -160,16 +175,17 @@
     tests; re-score with `/Volumes/ExternalSSD/tmp/ro34/summarize.py <tagA> <tagB>`.
   - *Size:* **L**.
 
-- [ ] **2. govdocs1-00074 near-blank render.**
-  - *Goal:* fix the near-blank raster for this document.
-  - *Why / evidence:* it renders near-blank at fitz SSIM **0.2654** (pre-existing
-    and untouched — noted in the render-performance record, History). Corpus in
-    `fixtures/corpus`.
-  - *Where:* `crates/pdf-render/` — root cause not yet diagnosed (the previous
-    agent was cut off while reading).
-  - *Acceptance:* SSIM against `.venv-oracle` fitz rises out of the near-blank
-    band with no regression elsewhere (the P1-3 render gate stays green).
-  - *Size:* **M**.
+- [x] **2. govdocs1-00074 near-blank render — done (2026-09-10).**
+  `pdf-image` now chooses JPEG output from the SOF component count. The header
+  probe had temporarily classified three-component Adobe APP14 RGB as CMYK,
+  causing decode failure and silently skipped image strips. Real p0 SSIM rises
+  **0.2654 → 0.9960**. Of the historical 43 render samples, **35** remain on
+  disk; the other **34 available outputs are byte-identical**, with no regression.
+  Eight historical PDFs are missing and official recovery requests fail TLS;
+  this is not a complete 43-document rerun. P1-3's three committed references
+  pass (>0.9997). Clean-room codec/render regressions and 273 targeted Rust
+  tests passed. Root cause, exact coverage and evidence paths are recorded in
+  `conformance/gt/RENDER-REPORT.md` (2026-09-10 update).
 
 - [ ] **3. Render, remaining cost.**
   - *Goal:* shave the last render hot spots, after item 2.
@@ -232,15 +248,17 @@
     scheduled CI job that warns ahead of the vet-trust expiry.
   - *Size:* **S**.
 
-- [ ] **8. OCG `/Intent`-mismatch hiding.**
-  - *Goal:* hide an OCG whose `/Intent` does not meet the configuration's, and
-    only when the configuration carries a non-empty `/Intent` (MuPDF behaviour).
-  - *Why / evidence:* the last remaining OCG gap after `feat/ocg-gaps` (History,
-    2026-09-08).
-  - *Where:* `crates/pdf-core/src/ocg.rs` (`OcVisibility::read`).
-  - *Acceptance:* `PYOCG-*` / `OCG-VIS-*` oracle tests against real PyMuPDF; the
-    `docs/pymupdf-compat-findings.md` decision table updated.
-  - *Size:* **S**.
+- [x] **8. OCG `/Intent`-mismatch hiding — done (2026-09-10).**
+  `OcVisibility::read` applies a dedicated visibility parser when the active
+  configuration has a non-empty Intent. OCG absent Intent defaults to View;
+  explicit `[]` matches nothing, even configuration All. Name/array intersection
+  and All wildcards match real PyMuPDF 1.28.2 on **64 combinations**. Mismatch
+  wins over panel ON and AS promotion; reporting APIs retain configuration
+  state, and alternate configurations do not inherit default Intent.
+  Core/interpreter regressions cover indirect values, OCMD, text, image and
+  vector rendering operations. All 860 isolated core/text tests and clippy
+  passed. The behavior decision table is updated; original oracle fixtures and
+  compiled-Rust comparison are in `/Volumes/ExternalSSD/tmp/ocg-intent/`.
 
 - [ ] **9. Table-structure backend benchmark + ONNX validation (P3-6, proposed).**
   - *Goal:* validate the landed ONNX backend and finish the multi-backend seam.
@@ -307,31 +325,17 @@
     G7 pdfspine gap (`docs/spine-family.md` §6.15 item 7) closes.
   - *Size:* **S**.
 
-- [ ] **13. Family-level items (pointer — pdfspine-side decisions only).**
-  - *Goal:* keep the cross-repo backlog out of this file, but record the pieces
-    of it that pdfspine itself must decide.
-  - *Why / evidence:* the cross-repo work (pdfspine-studio's `=0.4.1` path dep,
-    the docspine/pptspine git-rev bump to v0.8.0, the examples e2e re-run, the
-    doc-site update, ocrspine hygiene, the spinestudio release) is registered in
-    `docs/spine-family.md` §6.15 and is handled by each repo under the family
-    "跨仓不写入" rule (`docs/spine-family.md` §7) — do not duplicate it here.
-  - *pdfspine-side actions (these do belong in this repo):*
-    - **Give pdfspine-studio a stable `pdf-api` to depend on.** It pins
-      `pdf-api = { path = "../pdfspine/crates/pdf-api", version = "=0.4.1" }`
-      (`pdfspine-studio/Cargo.toml:38`) while all 13 crates are `publish = false`.
-      Decide whether to publish `pdf-api` (crates.io or a tagged git dep) or
-      expose a stable `pdf-api` version, and document the supported version so the
-      sibling can move off `=0.4.1` (family §6.15 item 1).
-    - **Pick the `pdf-typeset` / `pdf-fonts` git-dep target for downstreams.**
-      docspine/pptspine pin 2026-07 revs (`509a932e` / `93214453` / `5f1640cb`);
-      publish a v0.8.0-aligned rev or a **git tag** they can track so their bump
-      (family §6.15 item 2) has a stable target, and record it in
-      `docs/RELEASE-PYPI.md`.
-  - *Acceptance:* the pdfspine-side release/version decisions for `pdf-api` and
-    `pdf-typeset` / `pdf-fonts` are recorded (in `docs/RELEASE-PYPI.md` or an
-    ADR); cross-repo execution stays tracked in `docs/spine-family.md` §6.15, not
-    duplicated here.
-  - *Size:* **S** (decision + doc; the downstream bumps are family-side).
+- [x] **13. Family-level upstream decisions — done (2026-09-10).**
+  `docs/RELEASE-PYPI.md` §F.3 supports `pdf-api`, `pdf-typeset` and `pdf-fonts`
+  as public git dependencies at the same complete **v0.8.0** release rev:
+  `f1f6ab4208876b0ba867edd76cc4e5da7ad8add2`. All crates remain
+  `publish = false`; Rust 1.96 and existing feature selections are documented.
+  The baseline is reproducible, not a promise of forward-compatible 0.x APIs;
+  it excludes the subsequent unreleased fixes. First-time Cargo resolution
+  requires the relevant network sources or a prepared cache. TOML examples,
+  versions and features were checked against the actual tagged manifests.
+  Consumer edits, fixture isolation and export/build gates remain family
+  §6.15 items 1–2; this completes only pdfspine's upstream decision.
 
 ### Working rules for the next agent
 

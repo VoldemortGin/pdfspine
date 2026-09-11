@@ -21,7 +21,7 @@ mod common;
 
 use common::*;
 use pdf_core::ocg::set_layer_ui_config;
-use pdf_core::{Dict, DocumentStore, Limits, Name, Object, PdfString, StringKind};
+use pdf_core::{Dict, DocumentStore, Limits, Name, ObjRef, Object, PdfString, StringKind};
 use pdf_text::{interpret_page, interpret_page_render, RenderOp};
 
 /// The two-section text stream used by the TEXT / RENDER tests: `AAAA` under
@@ -170,6 +170,68 @@ fn render_text(ops: &[RenderOp]) -> String {
             _ => None,
         })
         .collect()
+}
+
+/// OCG-INTERP-INTENT: a mismatch suppresses marked text, vector paint and an
+/// image XObject's /OC in both extraction and the ordered renderer stream.
+#[test]
+fn ocg_interp_intent_hides_text_paints_and_images() {
+    let image = raw_stream(
+        [
+            ("Type", name_obj("XObject")),
+            ("Subtype", name_obj("Image")),
+            ("Width", Object::Integer(1)),
+            ("Height", Object::Integer(1)),
+            ("ColorSpace", name_obj("DeviceRGB")),
+            ("BitsPerComponent", Object::Integer(8)),
+            ("OC", rref(7, 0)),
+        ],
+        &[255, 0, 0],
+    );
+    let content = b"/OC /MC0 BDC BT /F1 12 Tf (GATED) Tj ET 10 10 20 20 re f EMC \
+                    /IM1 Do BT /F1 12 Tf (FREE) Tj ET";
+    let (doc, page) = build_page(content, &[("MC0", 7)], &[("IM1", 10)], vec![(10, image)]);
+    let config = Object::Dictionary(dict([
+        ("OCGs", Object::Array(vec![rref(7, 0)])),
+        (
+            "D",
+            Object::Dictionary(dict([("Intent", name_obj("View"))])),
+        ),
+    ]));
+    doc.update_object(ObjRef::new(6, 0), config).unwrap();
+    for (intent, text, count) in [("Design", "FREE", 0), ("View", "GATEDFREE", 1)] {
+        doc.update_object(
+            ObjRef::new(7, 0),
+            Object::Dictionary(dict([
+                ("Type", name_obj("OCG")),
+                ("Name", pstr("A")),
+                ("Intent", name_obj(intent)),
+            ])),
+        )
+        .unwrap();
+        let extracted = interpret_page(&doc, &page);
+        let glyphs: String = extracted
+            .glyphs
+            .iter()
+            .map(|g| g.unicode.as_str())
+            .collect();
+        assert_eq!(glyphs, text);
+        assert_eq!(extracted.images.len(), count);
+        let ops = interpret_page_render(&doc, &page);
+        assert_eq!(render_text(&ops), text);
+        assert_eq!(
+            ops.iter()
+                .filter(|op| matches!(op, RenderOp::Image(_)))
+                .count(),
+            count
+        );
+        assert_eq!(
+            ops.iter()
+                .filter(|op| matches!(op, RenderOp::Fill { .. }))
+                .count(),
+            count
+        );
+    }
 }
 
 // === OCG-INTERP-TEXT ======================================================
