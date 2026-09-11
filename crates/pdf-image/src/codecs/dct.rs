@@ -10,8 +10,8 @@
 //! - **3 components** ⇒ `zune-jpeg` converts YCbCr → RGB by default; output is
 //!   RGB ([`ColorSpaceHint::Rgb`]).
 //! - **4 components** ⇒ requested as native CMYK (no RGB conversion). The input
-//!   may be true CMYK or Adobe **YCCK** (APP14 transform = 2); `zune-jpeg`
-//!   converts YCCK → CMYK for us, so the output is always 4-channel CMYK.
+//!   may be true CMYK or Adobe **YCCK** (APP14 transform = 2). The current
+//!   `zune-jpeg` lacks YCCK → CMYK conversion, which yields a typed decode error.
 //!
 //! ## Adobe APP14 inversion & the PDF `/Decode` array
 //!
@@ -44,8 +44,10 @@ const CODEC: &str = "DCTDecode";
 /// inline). Any malformed/truncated/unsupported JPEG yields a typed
 /// [`Error::Decode`] — never a panic (the §8.4.1 degradation contract).
 pub fn decode(doc: &DocumentStore, data: &[u8], params: &Dict) -> Result<DecodedImage> {
-    // 1) Read the JPEG header to learn the *input* colorspace, so we can request
-    //    a faithful output colorspace (keep native CMYK; let YCbCr→RGB happen).
+    // 1) Read the JPEG header and choose output from the actual SOF component
+    //    count. zune's header-only colorspace can still report CMYK for Adobe
+    //    APP14 transform=0 RGB; it corrects that to RGB only during decode.
+    //    Requesting CMYK from that temporary value makes valid RGB JPEGs fail.
     let mut probe = JpegDecoder::new(ZCursor::new(data));
     probe
         .decode_headers()
@@ -57,7 +59,11 @@ pub fn decode(doc: &DocumentStore, data: &[u8], params: &Dict) -> Result<Decoded
         .dimensions()
         .ok_or_else(|| Error::decode(CODEC, "unknown JPEG dimensions"))?;
 
-    let out_cs = output_colorspace(input_cs);
+    let components = probe
+        .info()
+        .ok_or_else(|| Error::decode(CODEC, "unknown JPEG component count"))?
+        .components;
+    let out_cs = output_colorspace(components)?;
     let width = u32::try_from(dims_w).map_err(|_| Error::decode(CODEC, "JPEG width overflow"))?;
     let height = u32::try_from(dims_h).map_err(|_| Error::decode(CODEC, "JPEG height overflow"))?;
     guard_dimensions(width, height, CODEC)?;
@@ -106,14 +112,15 @@ pub fn decode(doc: &DocumentStore, data: &[u8], params: &Dict) -> Result<Decoded
     ))
 }
 
-/// Chooses the `zune-jpeg` output colorspace given the JPEG's input colorspace:
-/// keep CMYK native (and convert YCCK→CMYK), pass through gray, convert all
+/// Chooses the `zune-jpeg` output colorspace from the SOF component count:
+/// keep CMYK native, pass through gray, convert all
 /// 3-component variants to RGB.
-fn output_colorspace(input: ColorSpace) -> ColorSpace {
-    match input.num_components() {
-        1 => ColorSpace::Luma,
-        4 => ColorSpace::CMYK, // YCCK→CMYK, CMYK passthrough
-        _ => ColorSpace::RGB,  // YCbCr/RGB → RGB
+fn output_colorspace(components: u8) -> Result<ColorSpace> {
+    match components {
+        1 => Ok(ColorSpace::Luma),
+        3 => Ok(ColorSpace::RGB),  // YCbCr/RGB → RGB
+        4 => Ok(ColorSpace::CMYK), // Preserve native four-channel output.
+        _ => Err(Error::decode(CODEC, "unsupported JPEG component count")),
     }
 }
 

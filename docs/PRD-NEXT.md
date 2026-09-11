@@ -175,16 +175,17 @@
     tests; re-score with `/Volumes/ExternalSSD/tmp/ro34/summarize.py <tagA> <tagB>`.
   - *Size:* **L**.
 
-- [ ] **2. govdocs1-00074 near-blank render.**
-  - *Goal:* fix the near-blank raster for this document.
-  - *Why / evidence:* it renders near-blank at fitz SSIM **0.2654** (pre-existing
-    and untouched — noted in the render-performance record, History). Corpus in
-    `fixtures/corpus`.
-  - *Where:* `crates/pdf-render/` — root cause not yet diagnosed (the previous
-    agent was cut off while reading).
-  - *Acceptance:* SSIM against `.venv-oracle` fitz rises out of the near-blank
-    band with no regression elsewhere (the P1-3 render gate stays green).
-  - *Size:* **M**.
+- [x] **2. govdocs1-00074 near-blank render — done (2026-09-10).**
+  `pdf-image` now chooses JPEG output from the SOF component count. The header
+  probe had temporarily classified three-component Adobe APP14 RGB as CMYK,
+  causing decode failure and silently skipped image strips. Real p0 SSIM rises
+  **0.2654 → 0.9960**. Of the historical 43 render samples, **35** remain on
+  disk; the other **34 available outputs are byte-identical**, with no regression.
+  Eight historical PDFs are missing and official recovery requests fail TLS;
+  this is not a complete 43-document rerun. P1-3's three committed references
+  pass (>0.9997). Clean-room codec/render regressions and 273 targeted Rust
+  tests passed. Root cause, exact coverage and evidence paths are recorded in
+  `conformance/gt/RENDER-REPORT.md` (2026-09-10 update).
 
 - [ ] **3. Render, remaining cost.**
   - *Goal:* shave the last render hot spots, after item 2.
