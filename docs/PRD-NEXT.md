@@ -488,6 +488,15 @@
   compiled-Rust comparison are in `/Volumes/ExternalSSD/tmp/ocg-intent/`.
 
 - [ ] **9. Table-structure backend benchmark + ONNX validation (P3-6, proposed).**
+  - *Cropped source proof (2026-09-11):* FinTabNet goldcrop now binds the original
+    `pdf_full_page_bbox` to each request, accepts only zero-origin visible extents
+    agreeing within 0.001 point on unrotated pages, and uses identity coordinates.
+    This fixes the first diagnostic run's ADP cropped-page refusal without
+    changing gold, detectors or thresholds. Five cropped source geometries and
+    before-model rejection cases are tested; real ADP keeps 286 native words,
+    integer crop [36,127,1188,1481], detector zero / recognizer one. The original
+    two 14/60 failed runs remain evidence; new goldcrop collection is separate.
+    Source drafts remain unreviewed and all official scores remain null.
   - *Unreleased infrastructure (2026-09-11):* deterministic financial drafts now
     contain **40 pages / 60 tables** (10 development, 30 evaluation pages),
     annotation-derived HTML/cells and hash-bound review ledgers under

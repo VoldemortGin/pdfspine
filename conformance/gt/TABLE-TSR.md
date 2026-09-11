@@ -20,8 +20,16 @@ FinTabNet.c's generator first converts original annotation coordinates into
 PyMuPDF page space (`adjust_bbox_coordinates`) and derives `pdf_table_bbox` from
 those boxes (`complete_table_grid`). See the
 [upstream generator](https://github.com/microsoft/table-transformer/blob/main/scripts/process_fintabnet.py).
-The evaluator's `fintabnet-page` request accepts only unrotated full source pages;
-it does not guess transformations for other source conventions. ADBE's source
+The evaluator's `fintabnet-page` request accepts unrotated source pages. For
+cropped pages it requires the original annotation `pdf_full_page_bbox`, carried
+unchanged as identity-bound `source_page_bbox`: finite zero-origin positive
+extent, matching visible CropBox dimensions within 0.001 point, with the crop
+inside that extent. Only recognized FinTabNet source tracks supply this proof.
+The source coordinates already use visible page space, so mapping is identity;
+no CropBox origin is added or subtracted. Missing proof on cropped pages,
+rotation, malformed or mismatched extents remain explicit errors before model
+startup. General explicit `page-display` callers retain their prior contract.
+Historical unrotated full-page requests without proof remain supported. ADBE's source
 bbox `[52,420.0411,560.9641,676.8805]` was checked against the actual PDF image and
 188 contained native words. Its source crop needs no second PDF bottom-left flip.
 General private callers explicitly supply `page-display`: zero-origin visible
@@ -109,3 +117,16 @@ source/binary hashes, exact options and model fingerprints;
 records the 186-table budget inspection. `table-tsr-adbe-source-box.png` and its
 JSON document the actual source-coordinate check. These are separate from the
 unreviewed financial dataset and from any future benchmark acceptance report.
+
+## Cropped FinTabNet source proof
+
+The first frozen 40-page diagnostics stopped both goldcrop tracks at ADP after
+14/60 results. ADP has MediaBox 612×1008, a visible CropBox 612×918, and original
+`pdf_full_page_bbox=[0,0,612,918]`. Its raw source table bounds align with the
+actual table and 286 native words; adding or subtracting the raw CropBox offset
+misaligns the table. The guard now checks this extent proof instead of requiring
+CropBox=MediaBox. The other cropped source pages PXD, EXR, PRU and BSX have the
+same validated convention; all 40 selected pages are unrotated. This is source
+coordinate validation, not human verification of table text or spans. Original
+failed reports and all input hashes remain intact. No production backend,
+threshold, text selection, source annotation or ledger is changed.

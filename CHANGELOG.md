@@ -11,6 +11,14 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
+### FinTabNet cropped-page evaluation
+
+- Goldcrop evaluation validates original source-page extent proof before model
+  startup, allowing matching unrotated cropped pages without translating their
+  already-relative annotation coordinates. Missing or inconsistent proof still
+  fails explicitly. Production backends, source annotations and review status
+  are unchanged; diagnostic reports remain separate from human acceptance.
+
 ### Table evaluation infrastructure
 
 - Added detector-free gold-crop TSR evaluation for TATR and ONNX with native

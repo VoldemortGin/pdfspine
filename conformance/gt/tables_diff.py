@@ -294,7 +294,7 @@ def _vision_runtime_metadata(strategy, backend=None, vision_options=None, *, mod
 
 
 def _crop_request(value):
-    if not isinstance(value, dict) or set(value) - {"table_id", "bbox", "coordinate_space", "padding"}:
+    if not isinstance(value, dict) or set(value) - {"table_id", "bbox", "coordinate_space", "padding", "source_page_bbox"}:
         raise ValueError("gold crop request must be a known-field object")
     if not isinstance(value.get("table_id"), str) or not value["table_id"]:
         raise ValueError("gold crop requires a nonempty table ID")
@@ -306,7 +306,36 @@ def _crop_request(value):
     padding = value.get("padding", 0)
     if type(padding) is not int or not 0 <= padding <= 20:
         raise ValueError("gold crop padding must be integer pixels in [0,20]")
-    return {**value, "bbox": list(bbox), "padding": padding}
+    result = {**value, "bbox": list(bbox), "padding": padding}
+    if "source_page_bbox" in value:
+        extent = value["source_page_bbox"]
+        if value["coordinate_space"] != "fintabnet-page":
+            raise ValueError("source page extent requires explicit FinTabNet coordinates")
+        if (not isinstance(extent, (list, tuple)) or len(extent) != 4
+                or any(type(v) not in (float, int) or not math.isfinite(v) for v in extent)
+                or extent[:2] not in ([0, 0], (0, 0)) or extent[2] <= 0 or extent[3] <= 0):
+            raise ValueError("FinTabNet source page extent must be finite, positive and zero-origin")
+        if bbox[0] < 0 or bbox[1] < 0 or bbox[2] > extent[2] or bbox[3] > extent[3]:
+            raise ValueError("gold crop lies outside its source page extent")
+        result["source_page_bbox"] = list(extent)
+    return result
+
+
+def _validate_fintabnet_crop(page, request):
+    """Prove the source page.rect convention; never translate by CropBox origin."""
+    if page.rotation != 0:
+        raise ValueError("FinTabNet source crop requires unrotated page coordinates")
+    crop = tuple(page.cropbox)
+    extent = request.get("source_page_bbox")
+    if extent is None:
+        if crop != tuple(page.mediabox):
+            raise ValueError("cropped FinTabNet page requires source_page_bbox proof")
+        return  # Existing unrotated full-page requests retain their contract.
+    visible = (crop[2] - crop[0], crop[3] - crop[1])
+    if any(not math.isfinite(v) or v <= 0 for v in visible) or any(
+        abs(actual - declared) > 1e-3 for actual, declared in zip(visible, extent[2:])
+    ):
+        raise ValueError("FinTabNet source page extent does not match visible page dimensions")
 
 
 def _validate_response(value, request_id=None, expected_config=None, expected_crop=None):
@@ -360,11 +389,7 @@ def _worker_pdfspine(
         if mode == "gold-crop-tsr":
             request = _crop_request(crop_request)
             if request["coordinate_space"] == "fintabnet-page":
-                # The corpus generator emits PyMuPDF top-left page coordinates.
-                # Only the verified source-page convention is accepted implicitly.
-                # Rotated/cropped general callers must supply page-display explicitly.
-                if page.rotation != 0 or tuple(page.cropbox) != tuple(page.mediabox):
-                    raise ValueError("FinTabNet source crop requires unrotated full page; supply explicit page-display coordinates otherwise")
+                _validate_fintabnet_crop(page, request)
             from pdfspine import _onnx, _tatr
             implementation = _onnx if config["backend"] == "onnx" else _tatr
             options_type = implementation.OnnxOptions if config["backend"] == "onnx" else implementation.TatrOptions
@@ -1436,7 +1461,12 @@ def _run_gold_crops(manifest_path, python, timeout, report_path, json_path, stra
                 gold, bbox = _gold_cells_from_annotation(table)
                 if topology_error(gold):
                     raise ValueError(f"invalid gold topology: {topology_error(gold)}")
-                request = _crop_request({"table_id": table_id, "bbox": bbox, "coordinate_space": "fintabnet-page", "padding": 0})
+                crop_input = {"table_id": table_id, "bbox": bbox, "coordinate_space": "fintabnet-page", "padding": 0}
+                if "pdf_full_page_bbox" in table:
+                    if page.get("manifest_track") not in {"historical-source-annotations", "financial-drafts"}:
+                        raise ValueError("source page proof requires a recognized FinTabNet annotation track")
+                    crop_input["source_page_bbox"] = table["pdf_full_page_bbox"]
+                request = _crop_request(crop_input)
                 prepared.append((page, gold, request))
             except (ValueError, TypeError, KeyError, OverflowError) as exc:
                 issues.append({"document_id": page["document_id"], "table_index": index, "issues": [f"input-validation: {type(exc).__name__}: {exc}"]})
