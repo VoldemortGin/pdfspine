@@ -130,6 +130,7 @@ fn scale_block(block: &Block, s: f64) -> Block {
                 .map(|r| {
                     let mut r = r.clone();
                     r.style.size *= s;
+                    r.style.script_placement = r.style.script_placement.map(|p| p.shrunk(s));
                     r.style.character_spacing = r.style.character_spacing.shrunk(s);
                     r
                 })

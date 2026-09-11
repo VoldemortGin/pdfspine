@@ -169,6 +169,8 @@ impl PageProvider for FixedPages {
 pub(crate) struct Frag {
     pub(crate) face: FaceId,
     pub(crate) size: f64,
+    pub(crate) nominal_size: f64,
+    pub(crate) baseline_shift: f64,
     pub(crate) color: Rgb,
     pub(crate) underline: bool,
     pub(crate) strike: bool,
@@ -232,6 +234,8 @@ fn push_frag(frags: &mut Vec<Frag>, frag: Frag) {
                 && !last.stretched
                 && !frag.stretched
                 && last.face == frag.face
+                && (last.nominal_size - frag.nominal_size).abs() < EPS
+                && last.baseline_shift == frag.baseline_shift
                 && (last.size - frag.size).abs() < EPS
                 && last.color == frag.color
                 && last.underline == frag.underline
@@ -246,6 +250,52 @@ fn push_frag(frags: &mut Vec<Frag>, frag: Frag) {
         }
     }
     frags.push(frag);
+}
+
+/// Resolve only the new optional style. The legacy None/identity path retains
+/// its original validation and arithmetic. Metric headroom also rejects scripts
+/// whose derived envelope cannot form finite line dimensions.
+fn run_geometry(ts: &mut Typesetter, run: &Run) -> Option<(f64, f64)> {
+    let style = &run.style;
+    if !(style.size.is_finite() && style.size > 0.0) {
+        return None;
+    }
+    let Some(script) = style.script_placement else {
+        return Some((style.size, 0.0));
+    };
+    if script.glyph_scale() == 1.0 && script.baseline_shift() == 0.0 {
+        return Some((style.size, 0.0));
+    }
+    let size = style.size * script.glyph_scale();
+    let shift = script.baseline_shift();
+    if !(size.is_finite() && size > 0.0) {
+        return None;
+    }
+    let base = ts.base_face(style);
+    let mut advance_bound = 0.0;
+    for ch in run.text.chars().chain(std::iter::once(' ')) {
+        let face = ts.char_face(&base, ch);
+        let m = ts.faces().metrics(face);
+        let envelope = m.line_height(style.size).max(1.2 * style.size)
+            + m.line_height(size).max(1.2 * size)
+            + shift.abs();
+        advance_bound +=
+            ts.faces().advance(face, ch, size).abs() + style.character_spacing.points();
+        if !(envelope * 2.0).is_finite() || !advance_bound.is_finite() {
+            return None;
+        }
+    }
+    Some((size, shift))
+}
+
+fn reference_metrics(ts: &mut Typesetter, runs: &[Run]) -> Option<(FaceId, f64)> {
+    for run in runs {
+        if run_geometry(ts, run).is_some() {
+            let base = ts.base_face(&run.style);
+            return Some((ts.face_id(&base), run.style.size));
+        }
+    }
+    None
 }
 
 /// Converts styled runs into wrap tokens: per-char font fallback, `\n` hard
@@ -263,18 +313,17 @@ pub(crate) fn tokens(ts: &mut Typesetter, runs: &[Run]) -> Vec<Tok> {
     let mut cluster_spacing = 0.0;
     for (run_index, run) in runs.iter().enumerate() {
         let style = &run.style;
-        let size = style.size;
-        if !(size.is_finite() && size > 0.0) {
-            continue; // degrade: an unusable size renders nothing
-        }
+        let Some((size, baseline_shift)) = run_geometry(ts, run) else {
+            continue;
+        };
+        let nominal_size = style.size;
         let base = ts.base_face(style);
         let link: Option<Rc<str>> = style.link.as_deref().map(Rc::from);
         let next_run_char = has_tracking
             .then(|| {
                 runs[run_index + 1..]
                     .iter()
-                    .filter(|run| run.style.size.is_finite() && run.style.size > 0.0)
-                    .find_map(|run| run.text.chars().next())
+                    .find_map(|run| run_geometry(ts, run).and_then(|_| run.text.chars().next()))
             })
             .flatten();
         let mut chars = run.text.chars().peekable();
@@ -304,6 +353,8 @@ pub(crate) fn tokens(ts: &mut Typesetter, runs: &[Run]) -> Vec<Tok> {
                     frag: Frag {
                         face,
                         size,
+                        nominal_size,
+                        baseline_shift,
                         color: style.color,
                         underline: style.underline,
                         strike: style.strike,
@@ -331,6 +382,8 @@ pub(crate) fn tokens(ts: &mut Typesetter, runs: &[Run]) -> Vec<Tok> {
                     frag: Frag {
                         face,
                         size,
+                        nominal_size,
+                        baseline_shift,
                         color: style.color,
                         underline: style.underline,
                         strike: style.strike,
@@ -351,6 +404,8 @@ pub(crate) fn tokens(ts: &mut Typesetter, runs: &[Run]) -> Vec<Tok> {
             let frag = Frag {
                 face,
                 size,
+                nominal_size,
+                baseline_shift,
                 color: style.color,
                 underline: style.underline,
                 strike: style.strike,
@@ -919,7 +974,7 @@ impl BorderGroup<'_> {
                     .map(|line| {
                         paragraph_line_height(
                             p.spacing,
-                            line_metrics(ctx.ts.faces(), line, reference, rule).2,
+                            line_metrics(ctx.ts.faces(), line, reference, rule).natural,
                         )
                     })
                     .collect::<Vec<_>>()
@@ -944,13 +999,7 @@ impl BorderGroup<'_> {
                     w_rest,
                     ctx.ts.tab_interval(),
                 );
-                let reference = runs
-                    .iter()
-                    .find(|r| r.style.size.is_finite() && r.style.size > 0.0)
-                    .map(|r| {
-                        let face = ctx.ts.base_face(&r.style);
-                        (ctx.ts.face_id(&face), r.style.size)
-                    });
+                let reference = reference_metrics(ctx.ts, runs);
                 if lines.is_empty() {
                     let empty = LineOut {
                         frags: Vec::new(),
@@ -959,7 +1008,7 @@ impl BorderGroup<'_> {
                     };
                     vec![paragraph_line_height(
                         p.spacing,
-                        line_metrics(ctx.ts.faces(), &empty, reference, rule).2,
+                        line_metrics(ctx.ts.faces(), &empty, reference, rule).natural,
                     )]
                 } else {
                     lines
@@ -967,7 +1016,7 @@ impl BorderGroup<'_> {
                         .map(|line| {
                             paragraph_line_height(
                                 p.spacing,
-                                line_metrics(ctx.ts.faces(), line, reference, rule).2,
+                                line_metrics(ctx.ts.faces(), line, reference, rule).natural,
                             )
                         })
                         .collect()
@@ -1171,13 +1220,7 @@ fn layout_paragraph(
 
     // Reference metrics for empty lines (empty paragraph / blank `\n\n` line):
     // the first usable run style (the paragraph-mark style by convention).
-    let ref_frag: Option<(FaceId, f64)> = runs
-        .iter()
-        .find(|r| r.style.size.is_finite() && r.style.size > 0.0)
-        .map(|r| {
-            let base = ctx.ts.base_face(&r.style);
-            (ctx.ts.face_id(&base), r.style.size)
-        });
+    let ref_frag = reference_metrics(ctx.ts, runs);
     if lines.is_empty() {
         if ref_frag.is_none() {
             // No runs at all: nothing to size a line box from.
@@ -1205,12 +1248,12 @@ fn layout_paragraph(
     let mut backgrounds: Vec<(usize, usize, Op)> = Vec::new();
     let mut border_fragment: Option<usize> = None;
     for (i, line) in lines.iter().enumerate() {
-        let (asc, desc, natural) = line_metrics(ctx.ts.faces(), line, ref_frag, rule);
-        let lh = paragraph_line_height(props.spacing, natural);
+        let metrics = line_metrics(ctx.ts.faces(), line, ref_frag, rule);
+        let lh = paragraph_line_height(props.spacing, metrics.natural);
         if let Some(sink) = ctx.measure.as_mut() {
             sink.push(LineMetrics {
-                ascent: asc,
-                descent: desc,
+                ascent: metrics.ascent,
+                descent: metrics.descent,
                 height: lh,
             });
         }
@@ -1287,7 +1330,13 @@ fn layout_paragraph(
                 )),
             }
         }
-        let baseline = ctx.y + lh - desc;
+        let descent = if matches!(props.spacing, LineSpacing::Exact(h) if h.is_finite() && h > 0.0)
+        {
+            metrics.nominal_descent
+        } else {
+            metrics.descent
+        };
+        let baseline = ctx.y + lh - descent;
         let line_left = if i == 0 { first_left } else { left };
         let align_w = right - line_left;
         let offset = match props.align {
@@ -1357,7 +1406,7 @@ const FONT_INDEPENDENT_LINE: f64 = 1.2;
 /// [`LineHeightRule::FontIndependent`] the three values come from the largest
 /// font size on the line (an empty line uses `ref_frag`'s size) times the
 /// font-independent 1.0 / 0.2 / 1.2 em factors, ignoring the face metrics.
-fn line_metrics(
+fn nominal_line_metrics(
     faces: &FaceRegistry,
     line: &LineOut,
     ref_frag: Option<(FaceId, f64)>,
@@ -1367,7 +1416,10 @@ fn line_metrics(
         let s = if line.frags.is_empty() {
             ref_frag.map_or(0.0, |(_, size)| size)
         } else {
-            line.frags.iter().map(|f| f.size).fold(0.0f64, f64::max)
+            line.frags
+                .iter()
+                .map(|f| f.nominal_size)
+                .fold(0.0f64, f64::max)
         };
         return (
             s * FONT_INDEPENDENT_ASCENT,
@@ -1380,9 +1432,9 @@ fn line_metrics(
     let mut natural = 0.0f64;
     for frag in &line.frags {
         let m = faces.metrics(frag.face);
-        asc = asc.max(m.ascent * frag.size);
-        desc = desc.max(m.descent * frag.size);
-        natural = natural.max(m.line_height(frag.size));
+        asc = asc.max(m.ascent * frag.nominal_size);
+        desc = desc.max(m.descent * frag.nominal_size);
+        natural = natural.max(m.line_height(frag.nominal_size));
     }
     if line.frags.is_empty() {
         if let Some((face, size)) = ref_frag {
@@ -1393,6 +1445,50 @@ fn line_metrics(
         }
     }
     (asc, desc, natural)
+}
+
+/// Nominal strut plus only the envelope excess of resolved script glyphs.
+/// The separate nominal descent preserves the baseline under Exact spacing.
+struct ResolvedLineMetrics {
+    ascent: f64,
+    descent: f64,
+    natural: f64,
+    nominal_descent: f64,
+}
+fn line_metrics(
+    faces: &FaceRegistry,
+    line: &LineOut,
+    reference: Option<(FaceId, f64)>,
+    rule: LineHeightRule,
+) -> ResolvedLineMetrics {
+    let (asc, desc, natural) = nominal_line_metrics(faces, line, reference, rule);
+    let mut metrics = ResolvedLineMetrics {
+        ascent: asc,
+        descent: desc,
+        natural,
+        nominal_descent: desc,
+    };
+    for frag in &line.frags {
+        if frag.size == frag.nominal_size && frag.baseline_shift == 0.0 {
+            continue;
+        }
+        let (up, down) = if rule == LineHeightRule::FontIndependent {
+            (
+                FONT_INDEPENDENT_ASCENT * frag.size,
+                FONT_INDEPENDENT_DESCENT * frag.size,
+            )
+        } else {
+            let m = faces.metrics(frag.face);
+            (m.ascent * frag.size, m.descent * frag.size)
+        };
+        metrics.ascent = metrics.ascent.max(up + frag.baseline_shift);
+        metrics.descent = metrics.descent.max(down - frag.baseline_shift);
+    }
+    // Leave None/identity arithmetic byte-for-byte unchanged.
+    if metrics.ascent != asc || metrics.descent != desc {
+        metrics.natural += (metrics.ascent - asc) + (metrics.descent - desc);
+    }
+    metrics
 }
 
 /// Draws a consumer-computed list label right-aligned against the paragraph's
@@ -1413,6 +1509,7 @@ fn draw_list_label(ctx: &mut Ctx, label: &ListLabel, runs: &[Run], first_left: f
     style.strike = false;
     style.highlight = None;
     style.character_spacing = crate::model::CharacterSpacing::default();
+    style.script_placement = None;
     if let Some(family) = &label.font {
         style.family.clone_from(family);
     }
@@ -1456,6 +1553,7 @@ fn emit_line(ctx: &mut Ctx, line: &LineOut, x0: f64, baseline: f64) {
     // Pass 1 — highlights behind the text.
     let mut x = x0;
     for frag in &line.frags {
+        let baseline = baseline - frag.baseline_shift;
         if let Some(hl) = frag.highlight {
             if frag.width > EPS {
                 let m = *ctx.ts.faces().metrics(frag.face);
@@ -1473,17 +1571,29 @@ fn emit_line(ctx: &mut Ctx, line: &LineOut, x0: f64, baseline: f64) {
 
     // Pass 2 — text, merged across compatible fragments.
     let mut x = x0;
-    let mut cur: Option<(f64, FaceId, f64, Rgb, String)> = None;
+    let mut cur: Option<(f64, FaceId, f64, Rgb, String, f64)> = None;
     for frag in &line.frags {
         if !frag.text.is_empty() {
-            let compatible = cur.as_ref().is_some_and(|(_, face, size, color, _)| {
-                *face == frag.face && (*size - frag.size).abs() < EPS && *color == frag.color
-            });
+            let compatible = cur
+                .as_ref()
+                .is_some_and(|(_, face, size, color, _, shift)| {
+                    *shift == frag.baseline_shift
+                        && *face == frag.face
+                        && (*size - frag.size).abs() < EPS
+                        && *color == frag.color
+                });
             if !compatible {
                 flush_text(ctx, &mut cur, baseline);
-                cur = Some((x, frag.face, frag.size, frag.color, String::new()));
+                cur = Some((
+                    x,
+                    frag.face,
+                    frag.size,
+                    frag.color,
+                    String::new(),
+                    frag.baseline_shift,
+                ));
             }
-            if let Some((_, _, _, _, text)) = &mut cur {
+            if let Some((_, _, _, _, text, _)) = &mut cur {
                 text.push_str(&frag.text);
             }
             if frag.stretched {
@@ -1502,6 +1612,7 @@ fn emit_line(ctx: &mut Ctx, line: &LineOut, x0: f64, baseline: f64) {
     // Pass 3 — decorations over the text.
     let mut x = x0;
     for frag in &line.frags {
+        let baseline = baseline - frag.baseline_shift;
         if frag.width > EPS && (frag.underline || frag.strike) {
             let m = *ctx.ts.faces().metrics(frag.face);
             if frag.underline {
@@ -1537,6 +1648,7 @@ fn emit_line(ctx: &mut Ctx, line: &LineOut, x0: f64, baseline: f64) {
     let mut x = x0;
     let mut span: Option<LinkSpan> = None;
     for frag in &line.frags {
+        let baseline = baseline - frag.baseline_shift;
         match &frag.link {
             Some(uri) => {
                 let m = ctx.ts.faces().metrics(frag.face);
@@ -1594,15 +1706,19 @@ fn flush_link(ctx: &mut Ctx, span: &mut Option<LinkSpan>) {
 }
 
 /// Flushes the pending merged text op.
-fn flush_text(ctx: &mut Ctx, cur: &mut Option<(f64, FaceId, f64, Rgb, String)>, baseline: f64) {
-    if let Some((x, face, size, color, text)) = cur.take() {
+fn flush_text(
+    ctx: &mut Ctx,
+    cur: &mut Option<(f64, FaceId, f64, Rgb, String, f64)>,
+    baseline: f64,
+) {
+    if let Some((x, face, size, color, text, shift)) = cur.take() {
         if !text.is_empty() {
             ctx.op(Op::Text {
                 face,
                 size,
                 color,
                 x,
-                baseline,
+                baseline: baseline - shift,
                 text,
             });
         }

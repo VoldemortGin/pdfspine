@@ -73,8 +73,8 @@ pub use fontres::{FontResolver, Platform, ResolvedFace, Substitutions};
 pub use model::{
     Align, Block, BorderEdge, CellBorders, CharacterSpacing, CharacterSpacingError, ColumnWidth,
     ImageSpec, LineHeightRule, LineSpacing, ListLabel, ParaProps, ParagraphBorder,
-    ParagraphBorderError, ParagraphBorders, Run, RunStyle, TableCell, TableRow, TableSpec,
-    TextBoxSpec, VAnchor,
+    ParagraphBorderError, ParagraphBorders, ResolvedScriptPlacement, Run, RunStyle,
+    ScriptPlacementError, TableCell, TableRow, TableSpec, TextBoxSpec, VAnchor,
 };
 pub use ops::{FaceId, Fill, LineCap, LineJoin, Op, PageOps, PathSeg, Stroke};
 pub use warn::ExportWarning;

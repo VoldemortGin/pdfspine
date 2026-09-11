@@ -531,6 +531,60 @@ fn lo_slide_fixture() -> Vec<u8> {
     result.pdf
 }
 
+// Resolved script placement mirrors the local-only DOCX/PPTX script pair.
+fn lo_script_fixture(slide: bool) -> Vec<u8> {
+    let mut engine = engine();
+    if slide {
+        engine.set_line_height_rule(LineHeightRule::FontIndependent);
+    }
+    let family = if slide { "Liberation Sans" } else { SERIF };
+    let script = |text: &str, shift: f64| {
+        let mut style = RunStyle::new(family, 24.0);
+        style.script_placement = Some(
+            pdf_typeset::ResolvedScriptPlacement::new(13.9 / 24.0, shift)
+                .expect("resolved oracle geometry"),
+        );
+        Run::new(text, style)
+    };
+    let blocks: Vec<_> = (0..6)
+        .map(|_| {
+            let mut p = ParaProps::new();
+            p.space_after = 8.0;
+            Block::Paragraph(
+                p,
+                vec![
+                    Run::new("Water H", RunStyle::new(family, 24.0)),
+                    script("2", if slide { -6.0 } else { -2.6 }),
+                    Run::new("O and x", RunStyle::new(family, 24.0)),
+                    script("2", if slide { 7.2 } else { 9.0 }),
+                    Run::new(".", RunStyle::new(family, 24.0)),
+                ],
+            )
+        })
+        .collect();
+    let pages = if slide {
+        vec![PageOps {
+            width: 720.0,
+            height: 540.0,
+            ops: engine.layout_text_box(&TextBoxSpec::new(
+                Rect {
+                    x0: 72.0,
+                    y0: 72.0,
+                    x1: 648.0,
+                    y1: 468.0,
+                },
+                blocks,
+            )),
+        }]
+    } else {
+        engine.layout_flow(
+            &blocks,
+            &mut FixedPages::new(PageGeom::new(612.0, 792.0, 72.0)),
+        )
+    };
+    engine.emit(&pages).expect("emit script fixture").pdf
+}
+
 fn main() {
     // Resolve fixtures/typeset relative to this crate so the example works
     // from any cwd (CI runs it from the repo root).
@@ -552,6 +606,8 @@ fn main() {
             lo_doc_fixture(true, CharacterSpacing::default(), false),
         ),
         ("typeset-lo-slide.pdf", lo_slide_fixture()),
+        ("typeset-lo-script-doc.pdf", lo_script_fixture(false)),
+        ("typeset-lo-script-slide.pdf", lo_script_fixture(true)),
         (
             "typeset-lo-border.pdf",
             lo_doc_fixture(false, CharacterSpacing::default(), true),

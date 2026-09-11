@@ -285,6 +285,54 @@ def build_pptx(path: Path) -> None:
     ])
 
 
+def build_script_sample(path: Path, *, slide: bool) -> None:
+    """Authored script sample; engine uses explicitly measured resolved values."""
+    import xml.etree.ElementTree as ET
+
+    (build_pptx if slide else build_docx)(path)
+    with zipfile.ZipFile(path) as zf:
+        members = {name: zf.read(name).decode() for name in zf.namelist()}
+    pieces = [("Water H", ""), ("2", "subscript"), ("O and x", ""),
+              ("2", "superscript"), (".", "")]
+    if slide:
+        root = ET.fromstring(members["ppt/slides/slide1.xml"])
+        tree = root.find(f".//{{{NS_P}}}spTree")
+        assert tree is not None
+        for shape in list(tree):
+            if shape.tag == f"{{{NS_P}}}sp":
+                tree.remove(shape)
+        runs = "".join(
+            f'<a:r><a:rPr sz="2400" baseline="{(-25000 if sc == "subscript" else 30000) if sc else 0}">'
+            f'<a:latin typeface="Liberation Sans"/></a:rPr><a:t>{text}</a:t></a:r>'
+            for text, sc in pieces
+        )
+        para = ('<a:p><a:pPr><a:lnSpc><a:spcPct val="100000"/></a:lnSpc>'
+                '<a:spcAft><a:spcPts val="800"/></a:spcAft></a:pPr>' + runs + '</a:p>')
+        shape = (f'<p:sp xmlns:p="{NS_P}" xmlns:a="{NS_A}"><p:nvSpPr>'
+                 '<p:cNvPr id="2" name="Scripts"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr>'
+                 '<p:spPr><a:xfrm><a:off x="914400" y="914400"/>'
+                 '<a:ext cx="7315200" cy="5029200"/></a:xfrm><a:prstGeom prst="rect">'
+                 '<a:avLst/></a:prstGeom><a:noFill/></p:spPr><p:txBody>'
+                 '<a:bodyPr wrap="square" lIns="0" tIns="0" rIns="0" bIns="0" anchor="t"/>'
+                 '<a:lstStyle/>' + para * 6 + '</p:txBody></p:sp>')
+        tree.append(ET.fromstring(shape))
+        members["ppt/slides/slide1.xml"] = ET.tostring(root, encoding="unicode")
+    else:
+        runs = "".join(
+            '<w:r><w:rPr><w:rFonts w:ascii="Liberation Serif" w:hAnsi="Liberation Serif"/>'
+            '<w:sz w:val="48"/>' + (f'<w:vertAlign w:val="{sc}"/>' if sc else '')
+            + f'</w:rPr><w:t xml:space="preserve">{text}</w:t></w:r>'
+            for text, sc in pieces
+        )
+        para = ('<w:p><w:pPr><w:spacing w:before="0" w:after="160" w:line="240" '
+                'w:lineRule="auto"/></w:pPr>' + runs + '</w:p>')
+        members["word/document.xml"] = (f'<w:document xmlns:w="{NS_W}"><w:body>'
+            + para * 6 + '<w:sectPr><w:pgSz w:w="12240" w:h="15840"/>'
+            '<w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/>'
+            '</w:sectPr></w:body></w:document>')
+    _zip_write(path, list(members.items()))
+
+
 # ---------------------------------------------------------------------------
 # LibreOffice conversion
 # ---------------------------------------------------------------------------
@@ -417,6 +465,10 @@ def main(argv: list[str] | None = None) -> int:
     build_docx(tracked_docx, tracking=True)
     border_docx = cache / "sample-border.docx"
     build_docx(border_docx, border=True)
+    script_docx = cache / "sample-script-doc.docx"
+    script_pptx = cache / "sample-script-slide.pptx"
+    build_script_sample(script_docx, slide=False)
+    build_script_sample(script_pptx, slide=True)
     print(f"authored {docx} + {pptx}")
 
     pairs = []
@@ -427,6 +479,8 @@ def main(argv: list[str] | None = None) -> int:
             ("docx-shading", shaded_docx, ROOT / "fixtures" / "typeset" / "typeset-lo-shading.pdf"),
             ("docx-tracking", tracked_docx, ROOT / "fixtures" / "typeset" / "typeset-lo-tracking.pdf"),
             ("docx-border", border_docx, ROOT / "fixtures" / "typeset" / "typeset-lo-border.pdf"),
+            ("docx-script", script_docx, ROOT / "fixtures" / "typeset" / "typeset-lo-script-doc.pdf"),
+            ("pptx-script", script_pptx, ROOT / "fixtures" / "typeset" / "typeset-lo-script-slide.pdf"),
         ]:
             if not fixture.exists():
                 print(f"ERROR: missing committed fixture {fixture} — run "
