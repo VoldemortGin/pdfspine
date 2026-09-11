@@ -962,3 +962,154 @@ fn layout_e2e_021_header_repair_keeps_reattached_source_glyphs() {
         "reattached glyph lost: {text}"
     );
 }
+
+fn wide_image_caption_fixture(
+    footer_font: &str,
+    identifier: &str,
+    extra: &str,
+    paint_image: bool,
+) -> pdf_text::TextPage {
+    use common::{name_obj, raw_stream};
+    use pdf_core::Object;
+    let mut fixture = PageDoc::new()
+        .font("F1", winansi_type1("Times-Roman", 32, &[500; 95]))
+        .font("F2", winansi_type1("Helvetica-Bold", 32, &[500; 95]))
+        .font("F3", winansi_type1("Helvetica", 32, &[500; 95]));
+    let image = fixture.add(raw_stream(
+        [
+            ("Type", name_obj("XObject")),
+            ("Subtype", name_obj("Image")),
+            ("Width", Object::Integer(1)),
+            ("Height", Object::Integer(1)),
+            ("BitsPerComponent", Object::Integer(8)),
+            ("ColorSpace", name_obj("DeviceRGB")),
+        ],
+        &[0, 0, 0],
+    ));
+    let mut content = String::new();
+    if paint_image {
+        content.push_str("q 330 0 0 240 40 100 cm /Im0 Do Q ");
+    }
+    content.push_str("BT /F1 9 Tf ");
+    for x in [40, 215, 390] {
+        for row in 0..24 {
+            let y = 730 - row * 12;
+            content.push_str(&format!(
+                "1 0 0 1 {x} {y} Tm (BODY{x} ROW{row:02} ABCDEFGHIJKLMNOP) Tj "
+            ));
+        }
+    }
+    for row in 0..34 {
+        let y = 430 - row * 11;
+        content.push_str(&format!(
+            "1 0 0 1 390 {y} Tm (CONTINUATION ROW{row:02} ABCDEFGHIJ) Tj "
+        ));
+    }
+    content.push_str(&format!("/F1 7 Tf 1 0 0 1 40 88 Tm ({identifier}) Tj "));
+    content.push_str("/F2 8 Tf 1 0 0 1 40 73 Tm (Figure 2. ) Tj /F3 8 Tf (Illustration title) Tj ");
+    content.push_str("/F1 8.5 Tf 1 0 0 1 40 64 Tm (Caption describing the wide illustration and its subject matter) Tj ");
+    content.push_str("1 0 0 1 40 55 Tm (continued caption with a source attribution) Tj ");
+    content.push_str(extra);
+    content.push_str(&format!("/{footer_font} 8.5 Tf 1 0 0 1 40 30 Tm (JOURNAL FOOTER) Tj 1 0 0 1 450 30 Tm (VOLUME PAGE) Tj ET"));
+    let (doc, _) = fixture
+        .xobject_ref("Im0", image)
+        .content(content.as_bytes())
+        .open();
+    let page = page_handle(doc);
+    build_textpage(page.document(), &page, &Limits::unbounded_decode())
+}
+
+/// A wide illustration and its caption interrupt two columns, while a third
+/// column continues beside them. Caption blocks must not split that prose.
+#[test]
+fn layout_e2e_022_wide_image_caption_follows_body() {
+    for footer_font in ["F1", "F3"] {
+        let tp = wide_image_caption_fixture(footer_font, "Reference: 123.45/678", "", true);
+        let text = line_texts(&tp).join("\n");
+        assert!(
+            text.find("CONTINUATION ROW33").unwrap() < text.find("Figure 2.").unwrap(),
+            "{text}"
+        );
+        assert!(
+            text.find("JOURNAL FOOTER").unwrap() < text.find("Figure 2.").unwrap(),
+            "{text}"
+        );
+        for marker in [
+            "Reference: 123.45/678",
+            "Figure 2.",
+            "continued caption",
+            "JOURNAL FOOTER",
+        ] {
+            assert_eq!(text.matches(marker).count(), 1, "{text}");
+        }
+    }
+}
+
+/// An oversized initial spanning three rows must not bridge their baselines.
+#[test]
+fn layout_e2e_023_drop_initial_preserves_three_body_rows() {
+    for (initial, first, expected) in [
+        ("C", "orn is a crop", "Corn is a crop"),
+        ("A", " separate word", "A separate word"),
+    ] {
+        let content = format!(
+            "BT /F1 42 Tf 1 0 0 1 54 602 Tm ({initial}) Tj /F1 9 Tf \
+            1 0 0 1 75 624 Tm ({first}) Tj \
+            1 0 0 1 75 613 Tm (domesticated long ago) Tj \
+            1 0 0 1 75 602 Tm (earliest agriculture) Tj \
+            1 0 0 1 54 591 Tm (when people learned) Tj ET"
+        );
+        let (doc, _) = PageDoc::new()
+            .font("F1", winansi_type1("Times-Roman", 32, &[500; 95]))
+            .content(content.as_bytes())
+            .open();
+        let page = page_handle(doc);
+        let tp = build_textpage(page.document(), &page, &Limits::unbounded_decode());
+        let lines = line_texts(&tp);
+        assert_eq!(
+            lines,
+            [
+                expected,
+                "domesticated long ago",
+                "earliest agriculture",
+                "when people learned"
+            ]
+        );
+    }
+}
+
+/// Two large heading letters must remain together even beside aligned prose.
+#[test]
+fn layout_e2e_024_large_heading_is_not_a_dropped_initial() {
+    let content = b"BT /F1 42 Tf 1 0 0 1 54 602 Tm (AB) Tj /F1 9 Tf         1 0 0 1 96 624 Tm (first prose row) Tj         1 0 0 1 96 613 Tm (second prose row) Tj         1 0 0 1 96 602 Tm (third prose row) Tj ET";
+    let (doc, _) = PageDoc::new()
+        .font("F1", winansi_type1("Times-Roman", 32, &[500; 95]))
+        .content(content)
+        .open();
+    let page = page_handle(doc);
+    let tp = build_textpage(page.document(), &page, &Limits::unbounded_decode());
+    assert!(tp
+        .blocks
+        .iter()
+        .flat_map(|b| &b.lines)
+        .flat_map(|l| &l.spans)
+        .any(|span| span.text == "AB" && span.size == 42.0));
+}
+
+/// An ambiguous adjacent paragraph is not permission to move only the first
+/// part of a caption. The image must leave the original text layout intact.
+#[test]
+fn layout_e2e_025_ambiguous_caption_boundary_keeps_existing_order() {
+    let extra = "1 0 0 1 40 40 Tm (An independent paragraph or a second caption paragraph) Tj ";
+    let without = wide_image_caption_fixture("F3", "A normal source note", extra, false);
+    let with = wide_image_caption_fixture("F3", "A normal source note", extra, true);
+    assert_eq!(line_texts(&with), line_texts(&without));
+    let text_blocks = |page: &pdf_text::TextPage| {
+        page.blocks
+            .iter()
+            .filter(|block| !block.lines.is_empty())
+            .map(|block| (block.bbox, block.lines.clone()))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(text_blocks(&with), text_blocks(&without));
+}
