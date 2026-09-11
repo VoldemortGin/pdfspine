@@ -1,0 +1,1465 @@
+{
+  "schema": "pdfspine.unreviewed-table-diagnostics.v1",
+  "official_aggregate": null,
+  "comparable": false,
+  "review_status": "unreviewed",
+  "source": {
+    "page_e2e_commit": "ec7b199d9ba9704f5077b80e1c0c1ca88e0dfe5f",
+    "goldcrop_commit": "38cdcba028ba1289ea47f5c47d90e6a7e925261b",
+    "only_changed_runtime_payload": "conformance/gt/tables_diff.py",
+    "package_and_core_files": [
+      {
+        "path": "python/pdfspine/__init__.py",
+        "sha256": "86adfdc0b7a8bf060ee43c0abc18f5092d17dde824ded0876db76d292f39aa69"
+      },
+      {
+        "path": "python/pdfspine/__init__.pyi",
+        "sha256": "cb74f4afde3f823988bc172c186c957486ff0ed8de337c09fb9953b381e43d0c"
+      },
+      {
+        "path": "python/pdfspine/__main__.py",
+        "sha256": "8553bde1b9582b9df8b314b8f952dcc9faeb005c2f33a7a401b2ff06867f29e7"
+      },
+      {
+        "path": "python/pdfspine/_compat_deferred.py",
+        "sha256": "08e93d597283debb43ef3f42ff00660cfaea619b83a80e923d54aae117f0fdb0"
+      },
+      {
+        "path": "python/pdfspine/_core.abi3.so",
+        "sha256": "4f2b3fd6fe6dae8eb4f3eae63d2c804e45c14143118bde99ce9041b08028a331"
+      },
+      {
+        "path": "python/pdfspine/_core.pyi",
+        "sha256": "527a9f3c54c15cc260a94bdf890135249ac2f5dc232bbb73cd704e230f39cebd"
+      },
+      {
+        "path": "python/pdfspine/_layout.py",
+        "sha256": "1cfb9127e3b515824996e00fa4efef87f08becd26132b5b8f5cbb09bd7497a35"
+      },
+      {
+        "path": "python/pdfspine/_llms/docs/api.md",
+        "sha256": "7465dea3e75f0397f064f1136b170ec3836edec547758377509190d48ba13e48"
+      },
+      {
+        "path": "python/pdfspine/_llms/docs/gotchas.md",
+        "sha256": "7917fa90f618a77c6f48a39c9c1863d11d325e9c394ff8ff9a2516edaedd3de1"
+      },
+      {
+        "path": "python/pdfspine/_llms/docs/overview.md",
+        "sha256": "04e4296752100eb19b3ecc4cbd7177ca7a6e8c71b0296d71ff008cc7881716c7"
+      },
+      {
+        "path": "python/pdfspine/_llms/docs/recipes.md",
+        "sha256": "98f16bdeaa03debaa82376fba22501ea57addd030a158b7dcf6c0304ce37c31a"
+      },
+      {
+        "path": "python/pdfspine/_llms/docs/replay.md",
+        "sha256": "ec0705229fb3a544ddce8d888cd712d5ac5472e90aaebaaa26cefc063704a656"
+      },
+      {
+        "path": "python/pdfspine/_llms/llms.txt",
+        "sha256": "4025bad71a145b19eaa66bb2d192006d6aaadb6ffceb68610f21de930a89041d"
+      },
+      {
+        "path": "python/pdfspine/_markdown.py",
+        "sha256": "3a76f7ee1a76872a247d681220f0db1306e44542416cf721353a2a34e6204eec"
+      },
+      {
+        "path": "python/pdfspine/_onnx.py",
+        "sha256": "57f5dfd78924ea24f2bdfe3b5094c4994f357f71d98e60204cfe120da869dab0"
+      },
+      {
+        "path": "python/pdfspine/_onnx.pyi",
+        "sha256": "3691e2e9a1a705404e81a74074f79416fd6df0f2a0d61b7ea412028fbc484810"
+      },
+      {
+        "path": "python/pdfspine/_tatr.py",
+        "sha256": "260972d77a67eae6a9f8d996d6d717db9f2b41b844d6fb7284b68656b9f96982"
+      },
+      {
+        "path": "python/pdfspine/_tatr_postprocess.py",
+        "sha256": "a4d886c9b438900501e19b4d4c4c7f28ad4367d4224cc97239c7c1ffe7e241f7"
+      },
+      {
+        "path": "python/pdfspine/cli.py",
+        "sha256": "99666bc2c467c900b7cb0d5242d499a20a5ff7c366df6c4c606614e5aa09e036"
+      },
+      {
+        "path": "python/pdfspine/cli.pyi",
+        "sha256": "f3de3e9c060a0fc1873ed8620bef09b4ea540efe14c07fe0c34377c96fc7ea14"
+      },
+      {
+        "path": "python/pdfspine/constants.py",
+        "sha256": "b1f756d28edd14a64788667072e27a4b69e718030ecb7a48b7652806a3983fa7"
+      },
+      {
+        "path": "python/pdfspine/constants.pyi",
+        "sha256": "e944bf0ff34166107cffb5c5cd5ebde91b02247620efa33ff172427d2ab441ed"
+      },
+      {
+        "path": "python/pdfspine/document.py",
+        "sha256": "dd7d486233fe8b75d517a9a49051edc0c41f892125601af7d1704b0c9319790a"
+      },
+      {
+        "path": "python/pdfspine/document.pyi",
+        "sha256": "07ea1f0df9fe30abc478115b07b4712460c93ad27e097a15ffe989a4e79ced91"
+      },
+      {
+        "path": "python/pdfspine/fitz.py",
+        "sha256": "6b71356e89662dc01ea0e462b565068e71fe2034a4ffa550192bd4a3b893437a"
+      },
+      {
+        "path": "python/pdfspine/fitz.pyi",
+        "sha256": "8540014c0f8cad067ef29383580cf322923726bb3cbd08eb390940b349f24838"
+      },
+      {
+        "path": "python/pdfspine/geometry.py",
+        "sha256": "2040a0d9fd9d1cf832075c7658d25e2915e67e8f4fd11ab5a286fd61665b77be"
+      },
+      {
+        "path": "python/pdfspine/geometry.pyi",
+        "sha256": "030314785aa17e3b5473d2d97dfd236b382e7c921fc5fdf4f121c1958e9cb639"
+      },
+      {
+        "path": "python/pdfspine/helpers.py",
+        "sha256": "d1182da0274e6b736ebe887d3c571d0c1507a3325f2aa190c4a1f4495497d222"
+      },
+      {
+        "path": "python/pdfspine/helpers.pyi",
+        "sha256": "8308f7dbcf6f1cd0a5cc572b3e9a3295326843bfc508829eead6a41ef7b1c743"
+      },
+      {
+        "path": "python/pdfspine/models.py",
+        "sha256": "6f093d7755feb02e936001d630fdc402eddbe2f40c888beb8b90ce8f05202669"
+      },
+      {
+        "path": "python/pdfspine/models.pyi",
+        "sha256": "f9a8c9a986b7d1286239516cf86254976e41e4de7e764f83c28b84f9b4a9bbd3"
+      },
+      {
+        "path": "python/pdfspine/py.typed",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "python/pdfspine/pymupdf.py",
+        "sha256": "f375c31d8c182f3c00020d43f27471f70683ee3bc4337ddf12a6da42d1cdc236"
+      },
+      {
+        "path": "python/pdfspine/pymupdf.pyi",
+        "sha256": "0a23795e0ea44f963be422bb3c607328f55e98deb400883cfe72f0ebd8aef8ab"
+      },
+      {
+        "path": "python/pdfspine/replay.py",
+        "sha256": "5ee0b812d389dc69972bbb5b17da7187865b942d9a864762d16a27e5399cbec3"
+      }
+    ],
+    "evaluator_files": {
+      "page_e2e": [
+        {
+          "path": "conformance/gt/cell_alignment.py",
+          "sha256": "d89457665d0da2d063cfffef33e0f7107c9bdf1efe8726601ae9cb4c1281c85e"
+        },
+        {
+          "path": "conformance/gt/grits.py",
+          "sha256": "ba27c02949cac4b3fb30793a4dbadefef059ab5e9040b35de3e1012c5eafb933"
+        },
+        {
+          "path": "conformance/gt/tables_diff.py",
+          "sha256": "b319856d9a138b03a0779fd45533bdfb14b6e21438cbd86500a73c6b93c56034"
+        }
+      ],
+      "goldcrop": [
+        {
+          "path": "conformance/gt/cell_alignment.py",
+          "sha256": "d89457665d0da2d063cfffef33e0f7107c9bdf1efe8726601ae9cb4c1281c85e"
+        },
+        {
+          "path": "conformance/gt/grits.py",
+          "sha256": "ba27c02949cac4b3fb30793a4dbadefef059ab5e9040b35de3e1012c5eafb933"
+        },
+        {
+          "path": "conformance/gt/tables_diff.py",
+          "sha256": "7c11bebbb47894f9879c696ec69fb938a1d9a7ebe74c7fd53ae108c2adf36a73"
+        }
+      ]
+    }
+  },
+  "input": {
+    "manifest": "financial-eval/v1/manifest.json",
+    "manifest_sha256": "acd64fd5406191d208ec24a807b4c5cdde24c71ec149a1d525e03653397d78f7",
+    "selection_sha256": "042c9f26ae236411272dbf8aac2c05bfa1bb48fd8dcb80f3dceb02c16e3f2250",
+    "review_ledger_sha256": "0208f9fb18af1ac401985fcca3d6103735523f058fe7bd1f16727d4c6f9faed0",
+    "entries": [
+      {
+        "document_id": "ADBE_2011_page_118",
+        "partition": "development",
+        "pdf": "../../corpus-fintabnet/pdfs/ADBE_2011_page_118.pdf",
+        "pdf_sha256": "d9ba031f438fb1b165f8641d75b221ba8324416acae209a310380e2b96f66825",
+        "annotation": "../../corpus-fintabnet/annotations/ADBE_2011_page_118_tables.json",
+        "annotation_sha256": "e068449c01e076195dd2d73bc111427659a4564711c833195f73eac61ea21435"
+      },
+      {
+        "document_id": "ADI_2010_page_51",
+        "partition": "development",
+        "pdf": "../../corpus-fintabnet/pdfs/ADI_2010_page_51.pdf",
+        "pdf_sha256": "f8eb748aa964c80db9dac31ccaeb6c1d96a45c53239b2d4580b0fd3e02b08302",
+        "annotation": "../../corpus-fintabnet/annotations/ADI_2010_page_51_tables.json",
+        "annotation_sha256": "7890211307debe334bb4da4facfa72a1f01877bd87af62855aae267a0308db52"
+      },
+      {
+        "document_id": "AMP_2015_page_94",
+        "partition": "development",
+        "pdf": "../../corpus-fintabnet/pdfs/AMP_2015_page_94.pdf",
+        "pdf_sha256": "fa6870b10fe5842edf83e2aa7f0247be611b202e5c7c7ff0a6bb5174cb21efb1",
+        "annotation": "../../corpus-fintabnet/annotations/AMP_2015_page_94_tables.json",
+        "annotation_sha256": "86f53fa3ed9d41cbbc91eaf82dc703fabc44ee207e9f2140b08c36e7e0a67cf2"
+      },
+      {
+        "document_id": "UNP_2012_page_64",
+        "partition": "development",
+        "pdf": "../../corpus-fintabnet/pdfs/UNP_2012_page_64.pdf",
+        "pdf_sha256": "f612c16bb65405507f87b20ee9e23099576b3f78ebf54b675ad215665aa0bdd2",
+        "annotation": "../../corpus-fintabnet/annotations/UNP_2012_page_64_tables.json",
+        "annotation_sha256": "e126b477a64488dcd0c2555d945cc9605bd46899f9d04caf96efaa58e7af46a2"
+      },
+      {
+        "document_id": "DISCA_2011_page_51",
+        "partition": "development",
+        "pdf": "../../corpus-fintabnet/pdfs/DISCA_2011_page_51.pdf",
+        "pdf_sha256": "46b827d1db37262d66f6aefb1cff8e0ad1a2cc5cf2feaf605ff0778782c5001a",
+        "annotation": "../../corpus-fintabnet/annotations/DISCA_2011_page_51_tables.json",
+        "annotation_sha256": "719e2a2274c3354c51c7a13c716f649e127f070f17abfdc5b18dc233260e4f52"
+      },
+      {
+        "document_id": "TTWO_2009_page_91",
+        "partition": "development",
+        "pdf": "../../corpus-fintabnet/pdfs/TTWO_2009_page_91.pdf",
+        "pdf_sha256": "fa0d9e30887ce54fe1d1f9451d74202e34c74a96713cce2723bd6bfc768dae39",
+        "annotation": "../../corpus-fintabnet/annotations/TTWO_2009_page_91_tables.json",
+        "annotation_sha256": "4cb504998a532cae6a755b83586baa2737b02d9a9414191dbb497800a61fe990"
+      },
+      {
+        "document_id": "STX_2006_page_88",
+        "partition": "development",
+        "pdf": "../../corpus-fintabnet/pdfs/STX_2006_page_88.pdf",
+        "pdf_sha256": "82f5f8eb46e7f08e5f0ddc5c8c0a3be8f1c424cb893d696dfefa4ceec93ae71a",
+        "annotation": "../../corpus-fintabnet/annotations/STX_2006_page_88_tables.json",
+        "annotation_sha256": "7c349071469c4d7cb321d2f98f66f83c4d64ae16ddf169e71e1c7c3801177d98"
+      },
+      {
+        "document_id": "BDX_2009_page_79",
+        "partition": "development",
+        "pdf": "../../corpus-fintabnet/pdfs/BDX_2009_page_79.pdf",
+        "pdf_sha256": "7527769ee03d2a7e179512edfedb9350bf326de312db0cb1a3d3ea2d31bd6cea",
+        "annotation": "../../corpus-fintabnet/annotations/BDX_2009_page_79_tables.json",
+        "annotation_sha256": "e68fdef18ef083c7eb42c2f4d9f0f14f407f084631501b760b2baf03b6ad2544"
+      },
+      {
+        "document_id": "MO_2017_page_72",
+        "partition": "development",
+        "pdf": "../../corpus-fintabnet/pdfs/MO_2017_page_72.pdf",
+        "pdf_sha256": "1e5ab9d727145cdc7b73391f7ce4b5f3ab5cf7b1b0456f444af0004c6bb7152b",
+        "annotation": "../../corpus-fintabnet/annotations/MO_2017_page_72_tables.json",
+        "annotation_sha256": "2eb3bed47b6dc267126b389fa7af40f032729675f3e5621326db2fab97224dbc"
+      },
+      {
+        "document_id": "ADP_2008_page_35",
+        "partition": "development",
+        "pdf": "../../corpus-fintabnet/pdfs/ADP_2008_page_35.pdf",
+        "pdf_sha256": "1787cd872bd33e9a75e56d1e715a838bf73cf9ccba63d62ce73f5671ac0bea16",
+        "annotation": "../../corpus-fintabnet/annotations/ADP_2008_page_35_tables.json",
+        "annotation_sha256": "8b73332effb9bc60762091fceba0f8f1e4dd59619bb0ede048dce6a2df64765c"
+      },
+      {
+        "document_id": "CF_2015_page_32",
+        "partition": "evaluation",
+        "pdf": "../../corpus-fintabnet/pdfs/CF_2015_page_32.pdf",
+        "pdf_sha256": "418e6383a12e436998b3bef37dfc2b30a2fab9e9f3bdbd5ceca219004f802c38",
+        "annotation": "../../corpus-fintabnet/annotations/CF_2015_page_32_tables.json",
+        "annotation_sha256": "b74dff988caf0991029565886220028c9f6c71a259b6e1db76f7fe1d791c7762"
+      },
+      {
+        "document_id": "V_2009_page_105",
+        "partition": "evaluation",
+        "pdf": "../../corpus-fintabnet/pdfs/V_2009_page_105.pdf",
+        "pdf_sha256": "65ab3f2875733da1d704c92778747baaebd6d716e47f8e800ff99c62d39f5e00",
+        "annotation": "../../corpus-fintabnet/annotations/V_2009_page_105_tables.json",
+        "annotation_sha256": "6ed78ae3c6d11154403ac5f7272424f50c54760818548f483f67063f0f3a8b53"
+      },
+      {
+        "document_id": "SNPS_2011_page_77",
+        "partition": "evaluation",
+        "pdf": "../../corpus-fintabnet/pdfs/SNPS_2011_page_77.pdf",
+        "pdf_sha256": "cdd11efc5ddad210934e45291dcb0829e639e57fde69264e43a7b75a5d72c353",
+        "annotation": "../../corpus-fintabnet/annotations/SNPS_2011_page_77_tables.json",
+        "annotation_sha256": "0cb19b965610300f4d66b8f61cdad71c80426db8780bf02b9bd8e570028d4d07"
+      },
+      {
+        "document_id": "PNC_2015_page_192",
+        "partition": "evaluation",
+        "pdf": "../../corpus-fintabnet/pdfs/PNC_2015_page_192.pdf",
+        "pdf_sha256": "bba1033bebc27ff8f81669b03c507a04bef36f1379ab4f246d452c45b40b7db0",
+        "annotation": "../../corpus-fintabnet/annotations/PNC_2015_page_192_tables.json",
+        "annotation_sha256": "89b94d4b91049d5ad5e3c5bbd4a173b2f495330e8b88bcf8460886c55492e92e"
+      },
+      {
+        "document_id": "XEL_2013_page_98",
+        "partition": "evaluation",
+        "pdf": "../../corpus-fintabnet/pdfs/XEL_2013_page_98.pdf",
+        "pdf_sha256": "6221bae77e57e874f1797a7dea99b8391661a839cdf888923e0f1f94edfb00e4",
+        "annotation": "../../corpus-fintabnet/annotations/XEL_2013_page_98_tables.json",
+        "annotation_sha256": "eb1b672ea9140012817d9b65ff4477fbec784dbbbc67001243988d230f41472f"
+      },
+      {
+        "document_id": "IRM_2016_page_107",
+        "partition": "evaluation",
+        "pdf": "../../corpus-fintabnet/pdfs/IRM_2016_page_107.pdf",
+        "pdf_sha256": "cf1f4321dbddf9077d64135dfe3f1f66845cafb37a53ab33622b5c9870dbcf17",
+        "annotation": "../../corpus-fintabnet/annotations/IRM_2016_page_107_tables.json",
+        "annotation_sha256": "543b045b9106105b5b3773538ec0361d63af19ec00ed10f263c230b535689216"
+      },
+      {
+        "document_id": "MKTX_2018_page_134",
+        "partition": "evaluation",
+        "pdf": "../../corpus-fintabnet/pdfs/MKTX_2018_page_134.pdf",
+        "pdf_sha256": "b59430d4ab1e378af2055108d1b2cf9c42f6a86fcdab5e0ce470e797acc4e956",
+        "annotation": "../../corpus-fintabnet/annotations/MKTX_2018_page_134_tables.json",
+        "annotation_sha256": "4d10d0449a4f5a37ee991ab1c92c613453e51ba56fc468bfe125d5461e174ec1"
+      },
+      {
+        "document_id": "JKHY_2017_page_25",
+        "partition": "evaluation",
+        "pdf": "../../corpus-fintabnet/pdfs/JKHY_2017_page_25.pdf",
+        "pdf_sha256": "c0fc8e0aa48a39b1704537a47f0572ff15ac2394c6297ac45940b6fbc1fde15e",
+        "annotation": "../../corpus-fintabnet/annotations/JKHY_2017_page_25_tables.json",
+        "annotation_sha256": "024e2d58e88a4e39d4038bd17a0bc1de314292ac998fafd2239ab3b22ec420e0"
+      },
+      {
+        "document_id": "ZBH_2003_page_69",
+        "partition": "evaluation",
+        "pdf": "../../corpus-fintabnet/pdfs/ZBH_2003_page_69.pdf",
+        "pdf_sha256": "ed330668154b7bf0857e122b521716e7790ac50cc384d8ac3e88ced3292a2f9d",
+        "annotation": "../../corpus-fintabnet/annotations/ZBH_2003_page_69_tables.json",
+        "annotation_sha256": "b7f9c8c5ce03b012b8375ea23313b9ce38364cf1a76501ec42e117e515e899ed"
+      },
+      {
+        "document_id": "PXD_2005_page_109",
+        "partition": "evaluation",
+        "pdf": "../../corpus-fintabnet/pdfs/PXD_2005_page_109.pdf",
+        "pdf_sha256": "76c891a64a0bb3b17eab25e26d447923b6b247caae17f6a2fd0a69ad755dde9e",
+        "annotation": "../../corpus-fintabnet/annotations/PXD_2005_page_109_tables.json",
+        "annotation_sha256": "6ea6dd6867772c328fbd8e355ce172066462e3b569d091e4096f32efb012e56b"
+      },
+      {
+        "document_id": "NTRS_2017_page_94",
+        "partition": "evaluation",
+        "pdf": "../../corpus-fintabnet/pdfs/NTRS_2017_page_94.pdf",
+        "pdf_sha256": "79ab872ad659ee2aa025d53da735bcc3916f3d235f3fc17b1edc51023e73aeae",
+        "annotation": "../../corpus-fintabnet/annotations/NTRS_2017_page_94_tables.json",
+        "annotation_sha256": "2789c994fd8075381456c1c13971a2ea35047b3b849c510d192b51371934c64f"
+      },
+      {
+        "document_id": "UHS_2015_page_133",
+        "partition": "evaluation",
+        "pdf": "../../corpus-fintabnet/pdfs/UHS_2015_page_133.pdf",
+        "pdf_sha256": "79e29c5eb7de1b3ef6326bde17fa1e777396b38eaa71547bcafab6740d68d8b2",
+        "annotation": "../../corpus-fintabnet/annotations/UHS_2015_page_133_tables.json",
+        "annotation_sha256": "30d9eda738f83b4851f11e14c8611be9e1f595a4742d0c1eb52e8cc52cc517cd"
+      },
+      {
+        "document_id": "EXR_2018_page_28",
+        "partition": "evaluation",
+        "pdf": "../../corpus-fintabnet/pdfs/EXR_2018_page_28.pdf",
+        "pdf_sha256": "929215c85f003915e8ff678475bb1b83b79fc27c38ea01443dfa1b0e46cbfabd",
+        "annotation": "../../corpus-fintabnet/annotations/EXR_2018_page_28_tables.json",
+        "annotation_sha256": "367dca2633dbf871e731130cca47416d3c4a6649dd219eaff25e89c21ab0e711"
+      },
+      {
+        "document_id": "AEE_2007_page_125",
+        "partition": "evaluation",
+        "pdf": "../../corpus-fintabnet/pdfs/AEE_2007_page_125.pdf",
+        "pdf_sha256": "debae176682b8e2037f5367ad5693cb125533a750af74d9488cacc8a24f249d8",
+        "annotation": "../../corpus-fintabnet/annotations/AEE_2007_page_125_tables.json",
+        "annotation_sha256": "ed58d872ecec188aea1e8164b724a4c763f9ce9360bdab1643e50b62e3dc9005"
+      },
+      {
+        "document_id": "PRU_2005_page_83",
+        "partition": "evaluation",
+        "pdf": "../../corpus-fintabnet/pdfs/PRU_2005_page_83.pdf",
+        "pdf_sha256": "028750735b0e7585ec51228b962005354f79e151bef73cd2de674711ab9166e9",
+        "annotation": "../../corpus-fintabnet/annotations/PRU_2005_page_83_tables.json",
+        "annotation_sha256": "5118c47a4be6386a63d3d19075eaa2d7dd04b5034bd854c196e696d1967dbf55"
+      },
+      {
+        "document_id": "ETR_2013_page_29",
+        "partition": "evaluation",
+        "pdf": "../../corpus-fintabnet/pdfs/ETR_2013_page_29.pdf",
+        "pdf_sha256": "9356cf1a30ede7e14c312ce25cee3268e3d33d87a519b79b974d4982cc925375",
+        "annotation": "../../corpus-fintabnet/annotations/ETR_2013_page_29_tables.json",
+        "annotation_sha256": "e613cd923122f7655447a2f7bff14fabf4876398733ec98f35ce7a0fa3845cff"
+      },
+      {
+        "document_id": "FRT_2010_page_42",
+        "partition": "evaluation",
+        "pdf": "../../corpus-fintabnet/pdfs/FRT_2010_page_42.pdf",
+        "pdf_sha256": "dd67bdd40d75301bf089f6e54f6f15d28525a45f22eee2f9c43d7fc7e5ba3178",
+        "annotation": "../../corpus-fintabnet/annotations/FRT_2010_page_42_tables.json",
+        "annotation_sha256": "67334a3bc0928c63b5875959daeb58b5be091606bd0c8dc07a9b12b929788404"
+      },
+      {
+        "document_id": "AIZ_2005_page_142",
+        "partition": "evaluation",
+        "pdf": "../../corpus-fintabnet/pdfs/AIZ_2005_page_142.pdf",
+        "pdf_sha256": "fc8368349a4aa1b2677379eb08aea7c9a4f9d9b566d0530c9ccf11171d8fa9fb",
+        "annotation": "../../corpus-fintabnet/annotations/AIZ_2005_page_142_tables.json",
+        "annotation_sha256": "73c3ae2413588a73dfaaa52c9c07e73ed8bc723814cd6aec2c8389cf8cb7f04f"
+      },
+      {
+        "document_id": "AWK_2013_page_131",
+        "partition": "evaluation",
+        "pdf": "../../corpus-fintabnet/pdfs/AWK_2013_page_131.pdf",
+        "pdf_sha256": "d3ea28963ebcce225ac8f77c197fc4cd315ce81d3bb744d278e413dd3bc35bd4",
+        "annotation": "../../corpus-fintabnet/annotations/AWK_2013_page_131_tables.json",
+        "annotation_sha256": "b25424e3a78972bb4bcd25c102580afd2dca8e711c82f87f39988abfdf903b88"
+      },
+      {
+        "document_id": "LKQ_2009_page_69",
+        "partition": "evaluation",
+        "pdf": "../../corpus-fintabnet/pdfs/LKQ_2009_page_69.pdf",
+        "pdf_sha256": "db0aa241950386b00dc3e4e8b1bab030ab66c90acd5998c57d05cb82aa8fb7ef",
+        "annotation": "../../corpus-fintabnet/annotations/LKQ_2009_page_69_tables.json",
+        "annotation_sha256": "264a55f72b5971db88118d95aacb5996e8d8478302259fd30b46eb34f6343ffa"
+      },
+      {
+        "document_id": "EL_2010_page_140",
+        "partition": "evaluation",
+        "pdf": "../../corpus-fintabnet/pdfs/EL_2010_page_140.pdf",
+        "pdf_sha256": "887bf6076f2ddfe23c30a820bf4386f70607ef6f8b7772a6cf5ce7f11598e88d",
+        "annotation": "../../corpus-fintabnet/annotations/EL_2010_page_140_tables.json",
+        "annotation_sha256": "e65b7eea58b6f5d070ae219a0dd08d44e9bd1b72220210103c20b70a134085ac"
+      },
+      {
+        "document_id": "AES_2016_page_188",
+        "partition": "evaluation",
+        "pdf": "../../corpus-fintabnet/pdfs/AES_2016_page_188.pdf",
+        "pdf_sha256": "940267a439115062c13173c24fa97eff105e3ee7a9eadc729692679c3547fb58",
+        "annotation": "../../corpus-fintabnet/annotations/AES_2016_page_188_tables.json",
+        "annotation_sha256": "e219084587d20fe154b33a6b4f3d8089215f0c0785af3d25d6ee71f7bccb0147"
+      },
+      {
+        "document_id": "HBAN_2015_page_71",
+        "partition": "evaluation",
+        "pdf": "../../corpus-fintabnet/pdfs/HBAN_2015_page_71.pdf",
+        "pdf_sha256": "710f62ff89a4745b9b712119331b6fd396c78ceeb3709f3fae5ee9462ed2fbcd",
+        "annotation": "../../corpus-fintabnet/annotations/HBAN_2015_page_71_tables.json",
+        "annotation_sha256": "8d0ee49d540261aa94bd375350885eeeac0fa8453ffe4b5880ae7f6579286a33"
+      },
+      {
+        "document_id": "BSX_2007_page_128",
+        "partition": "evaluation",
+        "pdf": "../../corpus-fintabnet/pdfs/BSX_2007_page_128.pdf",
+        "pdf_sha256": "50bf349dc0151d19c871fec168e87fa3097e3d415a569e740d0ec30f9354f98c",
+        "annotation": "../../corpus-fintabnet/annotations/BSX_2007_page_128_tables.json",
+        "annotation_sha256": "6880304f9b6e942850d8de1b45db0740accb135963f88e17a9a802a0da48ea30"
+      },
+      {
+        "document_id": "GM_2010_page_167",
+        "partition": "evaluation",
+        "pdf": "../../corpus-fintabnet/pdfs/GM_2010_page_167.pdf",
+        "pdf_sha256": "a9ce63121d2a2cde7ccee45bf096ebd80b0405958b85f8e71424e5d8acd2c9d8",
+        "annotation": "../../corpus-fintabnet/annotations/GM_2010_page_167_tables.json",
+        "annotation_sha256": "e2e89e4a83897603d0672f6c57d1d4aef7aed1bc87c6d7660b65f4a3bc27ae67"
+      },
+      {
+        "document_id": "KO_2006_page_68",
+        "partition": "evaluation",
+        "pdf": "../../corpus-fintabnet/pdfs/KO_2006_page_68.pdf",
+        "pdf_sha256": "825216b5e1bae2f597780d3526219a91ff8644bf2b5a2a61ac38a5c55d44b495",
+        "annotation": "../../corpus-fintabnet/annotations/KO_2006_page_68_tables.json",
+        "annotation_sha256": "6d78a6f18b32af60546570fd0de13ec461b32f478f81d80a10d8eef9c449f08d"
+      },
+      {
+        "document_id": "PEP_2015_page_89",
+        "partition": "evaluation",
+        "pdf": "../../corpus-fintabnet/pdfs/PEP_2015_page_89.pdf",
+        "pdf_sha256": "f87d1b34a79f1b8805aa34636ba0ed4414c323b47bd1d7f71c766e9d953620c1",
+        "annotation": "../../corpus-fintabnet/annotations/PEP_2015_page_89_tables.json",
+        "annotation_sha256": "a9d270377cb1e231f0de1b09745b2a7ba5f5a4bfbed07ebb889faa0b05858bc4"
+      },
+      {
+        "document_id": "HSY_2007_page_29",
+        "partition": "evaluation",
+        "pdf": "../../corpus-fintabnet/pdfs/HSY_2007_page_29.pdf",
+        "pdf_sha256": "4c26aaedf8edab0e2292f76619990bdfd93c3d708469db05381b3d3fcdb42865",
+        "annotation": "../../corpus-fintabnet/annotations/HSY_2007_page_29_tables.json",
+        "annotation_sha256": "72093ff2b04cba4511772966c19525d37699bb69159ce4ff267491ee7611decc"
+      },
+      {
+        "document_id": "AIG_2012_page_271",
+        "partition": "evaluation",
+        "pdf": "../../corpus-fintabnet/pdfs/AIG_2012_page_271.pdf",
+        "pdf_sha256": "78ffa3362160c8fbb7d91dd434fbbbca301235bac5e9a59e0f0e2b549d441294",
+        "annotation": "../../corpus-fintabnet/annotations/AIG_2012_page_271_tables.json",
+        "annotation_sha256": "d53f9bce7e32594044ce259a485bc88e2f761f9abe19552929b9dd241bf4d864"
+      },
+      {
+        "document_id": "MMM_2007_page_24",
+        "partition": "evaluation",
+        "pdf": "../../corpus-fintabnet/pdfs/MMM_2007_page_24.pdf",
+        "pdf_sha256": "3b9e58b79a9f5182025254126c6de577a0860a937ef7f3b5ff093b00e6a63f46",
+        "annotation": "../../corpus-fintabnet/annotations/MMM_2007_page_24_tables.json",
+        "annotation_sha256": "210468dd9f770ffc15c004e084caf6da592297b079b6a2966b56c5d2d959c299"
+      }
+    ]
+  },
+  "tracks": [
+    {
+      "track": "native-lines-page-e2e",
+      "source": "page_e2e",
+      "raw_index": "pdfspine-table-diagnostics-ec7b199/native-lines-page-e2e/diagnostic.json",
+      "raw_sha256": "928b649f6af5be106e37c8551162d79571a092e101deefc83d9d10f4f063927a",
+      "execution_status": "success",
+      "status": "incomplete",
+      "comparable": false,
+      "requested_pages": 40,
+      "requested_tables": 60,
+      "evaluated_tables": 60,
+      "elapsed_seconds_observed": 9.088892583007691,
+      "configuration": {
+        "strategy": "lines",
+        "backend": "native",
+        "options": {}
+      },
+      "runtime": {
+        "python": "3.12.11 (main, Jun  3 2025, 15:41:47) [Clang 17.0.0 (clang-1700.0.13.3)]",
+        "platform": "macOS-26.5.1-arm64-arm-64bit"
+      },
+      "model_files": []
+    },
+    {
+      "track": "native-text-page-e2e",
+      "source": "page_e2e",
+      "raw_index": "pdfspine-table-diagnostics-ec7b199/native-text-page-e2e/diagnostic.json",
+      "raw_sha256": "2f936574fe668eb8c44fbfee70fdd422c9bcde3821aeba21705dfe9c2ba43074",
+      "execution_status": "success",
+      "status": "incomplete",
+      "comparable": false,
+      "requested_pages": 40,
+      "requested_tables": 60,
+      "evaluated_tables": 60,
+      "elapsed_seconds_observed": 9.748404291982297,
+      "configuration": {
+        "strategy": "text",
+        "backend": "native",
+        "options": {}
+      },
+      "runtime": {
+        "python": "3.12.11 (main, Jun  3 2025, 15:41:47) [Clang 17.0.0 (clang-1700.0.13.3)]",
+        "platform": "macOS-26.5.1-arm64-arm-64bit"
+      },
+      "model_files": []
+    },
+    {
+      "track": "tatr-vision-page-e2e",
+      "source": "page_e2e",
+      "raw_index": "pdfspine-table-diagnostics-ec7b199/tatr-vision-page-e2e/diagnostic.json",
+      "raw_sha256": "1560e711da11ffabb16b9ea662416a8469fb23c1d538f59c38070b58f10ff609",
+      "execution_status": "success",
+      "status": "incomplete",
+      "comparable": false,
+      "requested_pages": 40,
+      "requested_tables": 60,
+      "evaluated_tables": 60,
+      "elapsed_seconds_observed": 27.606318874983117,
+      "configuration": {
+        "strategy": "vision",
+        "backend": "tatr",
+        "options": {
+          "device": "cpu",
+          "local_files_only": true,
+          "ocr_if_no_text": false,
+          "detection_model": "${TATR_DETECTION_SNAPSHOT}",
+          "structure_model": "${TATR_STRUCTURE_SNAPSHOT}"
+        }
+      },
+      "runtime": {
+        "python": "3.12.11 (main, Jun  3 2025, 15:41:47) [Clang 17.0.0 (clang-1700.0.13.3)]",
+        "platform": "macOS-26.5.1-arm64-arm-64bit",
+        "packages": {
+          "torch": "2.13.0",
+          "transformers": "5.14.1",
+          "numpy": "2.5.1",
+          "Pillow": "12.3.0"
+        },
+        "device": "cpu",
+        "word_policy": "native-only"
+      },
+      "model_files": [
+        {
+          "role": "detection",
+          "filename": "config.json",
+          "bytes": 76520,
+          "sha256": "83dbf6b4dc22fddea8446fee99235a70ccd39f205034a8d75648128410d8a5f3"
+        },
+        {
+          "role": "detection",
+          "filename": "model.safetensors",
+          "bytes": 115320404,
+          "sha256": "a18fe4e08c6ae07c61828490776957224b8786cae850dbbe01ac8942657cadac"
+        },
+        {
+          "role": "structure",
+          "filename": "config.json",
+          "bytes": 76761,
+          "sha256": "17a8a6edfb9e394263fa6ba9b82176ebccdfcc5d6cd29121ec91572c7d6be22c"
+        },
+        {
+          "role": "structure",
+          "filename": "model.safetensors",
+          "bytes": 115437156,
+          "sha256": "9df416575a3a36ebd0129342d4f597f14d6e5170268f3d52d28584ab4466a501"
+        }
+      ]
+    },
+    {
+      "track": "onnx-vision-page-e2e",
+      "source": "page_e2e",
+      "raw_index": "pdfspine-table-diagnostics-ec7b199/onnx-vision-page-e2e/diagnostic.json",
+      "raw_sha256": "7e8de4b5b509f97f10edae3c17d5f4793f7565460e2aa7dd4600b714448afaca",
+      "execution_status": "success",
+      "status": "incomplete",
+      "comparable": false,
+      "requested_pages": 40,
+      "requested_tables": 60,
+      "evaluated_tables": 60,
+      "elapsed_seconds_observed": 13.647584624995943,
+      "configuration": {
+        "strategy": "vision",
+        "backend": "onnx",
+        "options": {
+          "dpi": 144,
+          "layout_model": "${MODEL_ROOT}/pp_doc_layoutv3.onnx",
+          "table_model": "${MODEL_ROOT}/slanet-plus.onnx",
+          "providers": [
+            "CPUExecutionProvider"
+          ],
+          "layout_variant": "pp_doclayoutv3",
+          "layout_size": 800,
+          "layout_threshold": 0.5,
+          "layout_nms_iou": 0.6,
+          "table_size": 488,
+          "table_min_score": 0.0,
+          "channel_order": "bgr",
+          "crop_padding": 10,
+          "ocr_if_no_text": false,
+          "ocr_engine": "paddle",
+          "ocr_language": "eng"
+        }
+      },
+      "runtime": {
+        "python": "3.12.11 (main, Jun  3 2025, 15:41:47) [Clang 17.0.0 (clang-1700.0.13.3)]",
+        "platform": "macOS-26.5.1-arm64-arm-64bit",
+        "packages": {
+          "onnxruntime": "1.29.0",
+          "numpy": "2.5.1",
+          "Pillow": "12.3.0"
+        },
+        "providers": [
+          "CPUExecutionProvider"
+        ],
+        "session_providers": {
+          "layout": [
+            "CPUExecutionProvider"
+          ],
+          "table": [
+            "CPUExecutionProvider"
+          ]
+        },
+        "word_policy": "native-only"
+      },
+      "model_files": [
+        {
+          "role": "layout",
+          "filename": "pp_doc_layoutv3.onnx",
+          "bytes": 130502330,
+          "sha256": "250dbad1dfb9e4983fab75e1bf5085cd56ec3f41d5c7d0f8623ec74856e7aa67"
+        },
+        {
+          "role": "table",
+          "filename": "slanet-plus.onnx",
+          "bytes": 7758305,
+          "sha256": "d57a942af6a2f57d6a4a0372573c696a2379bf5857c45e2ac69993f3b334514b"
+        }
+      ]
+    },
+    {
+      "track": "tatr-vision-gold-crop-tsr",
+      "source": "goldcrop",
+      "raw_index": "pdfspine-table-diagnostics-38cdcba/tatr-vision-gold-crop-tsr/diagnostic.json",
+      "raw_sha256": "7eb55cf5c2992510ef79eb0634d69df282b520bc584c2371ec0862d53ee43923",
+      "execution_status": "success",
+      "status": "incomplete",
+      "comparable": false,
+      "requested_pages": 40,
+      "requested_tables": 60,
+      "evaluated_tables": 60,
+      "elapsed_seconds_observed": 20.114809708000394,
+      "configuration": {
+        "strategy": "vision",
+        "backend": "tatr",
+        "options": {
+          "device": "cpu",
+          "local_files_only": true,
+          "ocr_if_no_text": false,
+          "detection_model": "${TATR_DETECTION_SNAPSHOT}",
+          "structure_model": "${TATR_STRUCTURE_SNAPSHOT}"
+        },
+        "mode": "gold-crop-tsr",
+        "word_source": "pdfspine-native"
+      },
+      "runtime": {
+        "python": "3.12.11 (main, Jun  3 2025, 15:41:47) [Clang 17.0.0 (clang-1700.0.13.3)]",
+        "platform": "macOS-26.5.1-arm64-arm-64bit",
+        "packages": {
+          "torch": "2.13.0",
+          "transformers": "5.14.1",
+          "numpy": "2.5.1",
+          "Pillow": "12.3.0"
+        },
+        "device": "cpu",
+        "loaded_model_roles": [
+          "detection",
+          "structure"
+        ],
+        "executed_model_roles": [
+          "structure"
+        ],
+        "word_policy": "native-only"
+      },
+      "model_files": [
+        {
+          "role": "detection",
+          "filename": "config.json",
+          "bytes": 76520,
+          "sha256": "83dbf6b4dc22fddea8446fee99235a70ccd39f205034a8d75648128410d8a5f3"
+        },
+        {
+          "role": "detection",
+          "filename": "model.safetensors",
+          "bytes": 115320404,
+          "sha256": "a18fe4e08c6ae07c61828490776957224b8786cae850dbbe01ac8942657cadac"
+        },
+        {
+          "role": "structure",
+          "filename": "config.json",
+          "bytes": 76761,
+          "sha256": "17a8a6edfb9e394263fa6ba9b82176ebccdfcc5d6cd29121ec91572c7d6be22c"
+        },
+        {
+          "role": "structure",
+          "filename": "model.safetensors",
+          "bytes": 115437156,
+          "sha256": "9df416575a3a36ebd0129342d4f597f14d6e5170268f3d52d28584ab4466a501"
+        }
+      ]
+    },
+    {
+      "track": "onnx-vision-gold-crop-tsr",
+      "source": "goldcrop",
+      "raw_index": "pdfspine-table-diagnostics-38cdcba/onnx-vision-gold-crop-tsr/diagnostic.json",
+      "raw_sha256": "21a0bcdc9545aeb5728b4e675f2c5b6a5d1802ac1c752d0491fec44c308b2e2c",
+      "execution_status": "success",
+      "status": "incomplete",
+      "comparable": false,
+      "requested_pages": 40,
+      "requested_tables": 60,
+      "evaluated_tables": 60,
+      "elapsed_seconds_observed": 6.657951082976069,
+      "configuration": {
+        "strategy": "vision",
+        "backend": "onnx",
+        "options": {
+          "dpi": 144,
+          "layout_model": "${MODEL_ROOT}/pp_doc_layoutv3.onnx",
+          "table_model": "${MODEL_ROOT}/slanet-plus.onnx",
+          "providers": [
+            "CPUExecutionProvider"
+          ],
+          "layout_variant": "pp_doclayoutv3",
+          "layout_size": 800,
+          "layout_threshold": 0.5,
+          "layout_nms_iou": 0.6,
+          "table_size": 488,
+          "table_min_score": 0.0,
+          "channel_order": "bgr",
+          "crop_padding": 10,
+          "ocr_if_no_text": false,
+          "ocr_engine": "paddle",
+          "ocr_language": "eng"
+        },
+        "mode": "gold-crop-tsr",
+        "word_source": "pdfspine-native"
+      },
+      "runtime": {
+        "python": "3.12.11 (main, Jun  3 2025, 15:41:47) [Clang 17.0.0 (clang-1700.0.13.3)]",
+        "platform": "macOS-26.5.1-arm64-arm-64bit",
+        "packages": {
+          "onnxruntime": "1.29.0",
+          "numpy": "2.5.1",
+          "Pillow": "12.3.0"
+        },
+        "providers": [
+          "CPUExecutionProvider"
+        ],
+        "loaded_model_roles": [
+          "table"
+        ],
+        "executed_model_roles": [
+          "table"
+        ],
+        "word_policy": "native-only"
+      },
+      "model_files": [
+        {
+          "role": "table",
+          "filename": "slanet-plus.onnx",
+          "bytes": 7758305,
+          "sha256": "d57a942af6a2f57d6a4a0372573c696a2379bf5857c45e2ac69993f3b334514b"
+        }
+      ]
+    }
+  ],
+  "partitions": [
+    {
+      "track": "native-lines-page-e2e",
+      "partition": "development",
+      "requested_pages": 10,
+      "requested_tables": 15,
+      "evaluated_pages": 10,
+      "evaluated_tables": 15,
+      "overall_status": "incomplete",
+      "execution_status": "success",
+      "official_aggregate": null,
+      "comparable": false,
+      "diagnostic_only": {
+        "n_gold": 15,
+        "n_pred": 33,
+        "n_matched": 5,
+        "n_detection_matched": 5,
+        "detection_precision": 0.15151515151515152,
+        "detection_recall": 0.3333333333333333,
+        "detection_f1": 0.20833333333333331,
+        "cell_alignment": {
+          "metric": "cell_span_f1_v1",
+          "invalid_predictions": 0,
+          "span": {
+            "tp": 210,
+            "fp": 814,
+            "fn": 658,
+            "precision": 0.205078125,
+            "recall": 0.24193548387096775,
+            "f1": 0.2219873150105708
+          },
+          "content": {
+            "tp": 39,
+            "fp": 985,
+            "fn": 829,
+            "precision": 0.0380859375,
+            "recall": 0.044930875576036866,
+            "f1": 0.0412262156448203
+          }
+        },
+        "end_to_end": {
+          "n_tables": 15,
+          "grits_top_mean": 0.15431657650110678,
+          "grits_top_median": 0.0,
+          "grits_con_mean": 0.16270034585270018,
+          "grits_con_median": 0.0
+        },
+        "matched_only": {
+          "n_tables": 5,
+          "grits_top_mean": 0.4629497295033203,
+          "grits_top_median": 0.4736111111111111,
+          "grits_con_mean": 0.4881010375581005,
+          "grits_con_median": 0.5381937602627258
+        }
+      },
+      "track_error": null,
+      "track_elapsed_seconds_observed_not_comparable": 9.088892583007691,
+      "source_commit": "ec7b199d9ba9704f5077b80e1c0c1ca88e0dfe5f"
+    },
+    {
+      "track": "native-lines-page-e2e",
+      "partition": "evaluation",
+      "requested_pages": 30,
+      "requested_tables": 45,
+      "evaluated_pages": 30,
+      "evaluated_tables": 45,
+      "overall_status": "incomplete",
+      "execution_status": "success",
+      "official_aggregate": null,
+      "comparable": false,
+      "diagnostic_only": {
+        "n_gold": 45,
+        "n_pred": 7,
+        "n_matched": 5,
+        "n_detection_matched": 5,
+        "detection_precision": 0.7142857142857143,
+        "detection_recall": 0.1111111111111111,
+        "detection_f1": 0.19230769230769232,
+        "cell_alignment": {
+          "metric": "cell_span_f1_v1",
+          "invalid_predictions": 0,
+          "span": {
+            "tp": 195,
+            "fp": 687,
+            "fn": 2000,
+            "precision": 0.22108843537414966,
+            "recall": 0.0888382687927107,
+            "f1": 0.12674683132921677
+          },
+          "content": {
+            "tp": 29,
+            "fp": 853,
+            "fn": 2166,
+            "precision": 0.032879818594104306,
+            "recall": 0.013211845102505695,
+            "f1": 0.018849528761780955
+          }
+        },
+        "end_to_end": {
+          "n_tables": 45,
+          "grits_top_mean": 0.05171540976006456,
+          "grits_top_median": 0.0,
+          "grits_con_mean": 0.05474040532753414,
+          "grits_con_median": 0.0
+        },
+        "matched_only": {
+          "n_tables": 5,
+          "grits_top_mean": 0.465438687840581,
+          "grits_top_median": 0.42267807199157315,
+          "grits_con_mean": 0.49266364794780726,
+          "grits_con_median": 0.48224931781285624
+        }
+      },
+      "track_error": null,
+      "track_elapsed_seconds_observed_not_comparable": 9.088892583007691,
+      "source_commit": "ec7b199d9ba9704f5077b80e1c0c1ca88e0dfe5f"
+    },
+    {
+      "track": "native-text-page-e2e",
+      "partition": "development",
+      "requested_pages": 10,
+      "requested_tables": 15,
+      "evaluated_pages": 10,
+      "evaluated_tables": 15,
+      "overall_status": "incomplete",
+      "execution_status": "success",
+      "official_aggregate": null,
+      "comparable": false,
+      "diagnostic_only": {
+        "n_gold": 15,
+        "n_pred": 10,
+        "n_matched": 3,
+        "n_detection_matched": 3,
+        "detection_precision": 0.3,
+        "detection_recall": 0.2,
+        "detection_f1": 0.24,
+        "cell_alignment": {
+          "metric": "cell_span_f1_v1",
+          "invalid_predictions": 0,
+          "span": {
+            "tp": 141,
+            "fp": 1214,
+            "fn": 727,
+            "precision": 0.10405904059040591,
+            "recall": 0.16244239631336405,
+            "f1": 0.12685560053981107
+          },
+          "content": {
+            "tp": 3,
+            "fp": 1352,
+            "fn": 865,
+            "precision": 0.002214022140221402,
+            "recall": 0.0034562211981566822,
+            "f1": 0.002699055330634278
+          }
+        },
+        "end_to_end": {
+          "n_tables": 15,
+          "grits_top_mean": 0.060851751736813765,
+          "grits_top_median": 0.0,
+          "grits_con_mean": 0.05738746917311716,
+          "grits_con_median": 0.0
+        },
+        "matched_only": {
+          "n_tables": 3,
+          "grits_top_mean": 0.3042587586840688,
+          "grits_top_median": 0.25194444444444447,
+          "grits_con_mean": 0.2869373458655858,
+          "grits_con_median": 0.25804440411413326
+        }
+      },
+      "track_error": null,
+      "track_elapsed_seconds_observed_not_comparable": 9.748404291982297,
+      "source_commit": "ec7b199d9ba9704f5077b80e1c0c1ca88e0dfe5f"
+    },
+    {
+      "track": "native-text-page-e2e",
+      "partition": "evaluation",
+      "requested_pages": 30,
+      "requested_tables": 45,
+      "evaluated_pages": 30,
+      "evaluated_tables": 45,
+      "overall_status": "incomplete",
+      "execution_status": "success",
+      "official_aggregate": null,
+      "comparable": false,
+      "diagnostic_only": {
+        "n_gold": 45,
+        "n_pred": 29,
+        "n_matched": 7,
+        "n_detection_matched": 7,
+        "detection_precision": 0.2413793103448276,
+        "detection_recall": 0.15555555555555556,
+        "detection_f1": 0.18918918918918917,
+        "cell_alignment": {
+          "metric": "cell_span_f1_v1",
+          "invalid_predictions": 0,
+          "span": {
+            "tp": 378,
+            "fp": 3324,
+            "fn": 1817,
+            "precision": 0.10210696920583469,
+            "recall": 0.17220956719817768,
+            "f1": 0.12820078005765645
+          },
+          "content": {
+            "tp": 0,
+            "fp": 3702,
+            "fn": 2195,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          }
+        },
+        "end_to_end": {
+          "n_tables": 45,
+          "grits_top_mean": 0.05430017992866969,
+          "grits_top_median": 0.0,
+          "grits_con_mean": 0.04558266246659946,
+          "grits_con_median": 0.0
+        },
+        "matched_only": {
+          "n_tables": 7,
+          "grits_top_mean": 0.3490725852557337,
+          "grits_top_median": 0.4138747884940778,
+          "grits_con_mean": 0.29303140157099655,
+          "grits_con_median": 0.33311838920469333
+        }
+      },
+      "track_error": null,
+      "track_elapsed_seconds_observed_not_comparable": 9.748404291982297,
+      "source_commit": "ec7b199d9ba9704f5077b80e1c0c1ca88e0dfe5f"
+    },
+    {
+      "track": "tatr-vision-page-e2e",
+      "partition": "development",
+      "requested_pages": 10,
+      "requested_tables": 15,
+      "evaluated_pages": 10,
+      "evaluated_tables": 15,
+      "overall_status": "incomplete",
+      "execution_status": "success",
+      "official_aggregate": null,
+      "comparable": false,
+      "diagnostic_only": {
+        "n_gold": 15,
+        "n_pred": 13,
+        "n_matched": 8,
+        "n_detection_matched": 8,
+        "detection_precision": 0.6153846153846154,
+        "detection_recall": 0.5333333333333333,
+        "detection_f1": 0.5714285714285715,
+        "cell_alignment": {
+          "metric": "cell_span_f1_v1",
+          "invalid_predictions": 0,
+          "span": {
+            "tp": 470,
+            "fp": 331,
+            "fn": 398,
+            "precision": 0.5867665418227216,
+            "recall": 0.5414746543778802,
+            "f1": 0.5632115038945477
+          },
+          "content": {
+            "tp": 108,
+            "fp": 693,
+            "fn": 760,
+            "precision": 0.1348314606741573,
+            "recall": 0.12442396313364056,
+            "f1": 0.12941881366087477
+          }
+        },
+        "end_to_end": {
+          "n_tables": 15,
+          "grits_top_mean": 0.4841247409082345,
+          "grits_top_median": 0.7546187874056732,
+          "grits_con_mean": 0.4614846056571477,
+          "grits_con_median": 0.6605310366479806
+        },
+        "matched_only": {
+          "n_tables": 8,
+          "grits_top_mean": 0.9077338892029396,
+          "grits_top_median": 0.905411877394636,
+          "grits_con_mean": 0.8652836356071519,
+          "grits_con_median": 0.886310328749439
+        }
+      },
+      "track_error": null,
+      "track_elapsed_seconds_observed_not_comparable": 27.606318874983117,
+      "source_commit": "ec7b199d9ba9704f5077b80e1c0c1ca88e0dfe5f"
+    },
+    {
+      "track": "tatr-vision-page-e2e",
+      "partition": "evaluation",
+      "requested_pages": 30,
+      "requested_tables": 45,
+      "evaluated_pages": 30,
+      "evaluated_tables": 45,
+      "overall_status": "incomplete",
+      "execution_status": "success",
+      "official_aggregate": null,
+      "comparable": false,
+      "diagnostic_only": {
+        "n_gold": 45,
+        "n_pred": 43,
+        "n_matched": 24,
+        "n_detection_matched": 21,
+        "detection_precision": 0.4883720930232558,
+        "detection_recall": 0.4666666666666667,
+        "detection_f1": 0.47727272727272724,
+        "cell_alignment": {
+          "metric": "cell_span_f1_v1",
+          "invalid_predictions": 0,
+          "span": {
+            "tp": 1155,
+            "fp": 1623,
+            "fn": 1040,
+            "precision": 0.41576673866090713,
+            "recall": 0.5261958997722096,
+            "f1": 0.46450834506334204
+          },
+          "content": {
+            "tp": 514,
+            "fp": 2264,
+            "fn": 1681,
+            "precision": 0.18502519798416125,
+            "recall": 0.23416856492027335,
+            "f1": 0.2067162678463704
+          }
+        },
+        "end_to_end": {
+          "n_tables": 45,
+          "grits_top_mean": 0.48199488037547733,
+          "grits_top_median": 0.7999999999999999,
+          "grits_con_mean": 0.43091690206265326,
+          "grits_con_median": 0.44254558428373586
+        },
+        "matched_only": {
+          "n_tables": 24,
+          "grits_top_mean": 0.9037404007040201,
+          "grits_top_median": 0.9491582491582491,
+          "grits_con_mean": 0.8079691913674748,
+          "grits_con_median": 0.9025588782918623
+        }
+      },
+      "track_error": null,
+      "track_elapsed_seconds_observed_not_comparable": 27.606318874983117,
+      "source_commit": "ec7b199d9ba9704f5077b80e1c0c1ca88e0dfe5f"
+    },
+    {
+      "track": "onnx-vision-page-e2e",
+      "partition": "development",
+      "requested_pages": 10,
+      "requested_tables": 15,
+      "evaluated_pages": 10,
+      "evaluated_tables": 15,
+      "overall_status": "incomplete",
+      "execution_status": "success",
+      "official_aggregate": null,
+      "comparable": false,
+      "diagnostic_only": {
+        "n_gold": 15,
+        "n_pred": 22,
+        "n_matched": 15,
+        "n_detection_matched": 15,
+        "detection_precision": 0.6818181818181818,
+        "detection_recall": 1.0,
+        "detection_f1": 0.8108108108108109,
+        "cell_alignment": {
+          "metric": "cell_span_f1_v1",
+          "invalid_predictions": 0,
+          "span": {
+            "tp": 778,
+            "fp": 662,
+            "fn": 90,
+            "precision": 0.5402777777777777,
+            "recall": 0.8963133640552995,
+            "f1": 0.6741767764298093
+          },
+          "content": {
+            "tp": 240,
+            "fp": 1200,
+            "fn": 628,
+            "precision": 0.16666666666666666,
+            "recall": 0.2764976958525346,
+            "f1": 0.20797227036395147
+          }
+        },
+        "end_to_end": {
+          "n_tables": 15,
+          "grits_top_mean": 0.8464970704229756,
+          "grits_top_median": 0.875,
+          "grits_con_mean": 0.7628446860102429,
+          "grits_con_median": 0.7515703189577795
+        },
+        "matched_only": {
+          "n_tables": 15,
+          "grits_top_mean": 0.8464970704229756,
+          "grits_top_median": 0.875,
+          "grits_con_mean": 0.7628446860102429,
+          "grits_con_median": 0.7515703189577795
+        }
+      },
+      "track_error": null,
+      "track_elapsed_seconds_observed_not_comparable": 13.647584624995943,
+      "source_commit": "ec7b199d9ba9704f5077b80e1c0c1ca88e0dfe5f"
+    },
+    {
+      "track": "onnx-vision-page-e2e",
+      "partition": "evaluation",
+      "requested_pages": 30,
+      "requested_tables": 45,
+      "evaluated_pages": 30,
+      "evaluated_tables": 45,
+      "overall_status": "incomplete",
+      "execution_status": "success",
+      "official_aggregate": null,
+      "comparable": false,
+      "diagnostic_only": {
+        "n_gold": 45,
+        "n_pred": 54,
+        "n_matched": 42,
+        "n_detection_matched": 42,
+        "detection_precision": 0.7777777777777778,
+        "detection_recall": 0.9333333333333333,
+        "detection_f1": 0.8484848484848485,
+        "cell_alignment": {
+          "metric": "cell_span_f1_v1",
+          "invalid_predictions": 0,
+          "span": {
+            "tp": 1916,
+            "fp": 993,
+            "fn": 279,
+            "precision": 0.6586455826744586,
+            "recall": 0.8728929384965831,
+            "f1": 0.7507836990595611
+          },
+          "content": {
+            "tp": 799,
+            "fp": 2110,
+            "fn": 1396,
+            "precision": 0.27466483327603985,
+            "recall": 0.3640091116173121,
+            "f1": 0.31308777429467083
+          }
+        },
+        "end_to_end": {
+          "n_tables": 45,
+          "grits_top_mean": 0.8282685117923367,
+          "grits_top_median": 0.8888888888888888,
+          "grits_con_mean": 0.7438084785086281,
+          "grits_con_median": 0.8180790283882821
+        },
+        "matched_only": {
+          "n_tables": 42,
+          "grits_top_mean": 0.8874305483489322,
+          "grits_top_median": 0.9069264069264069,
+          "grits_con_mean": 0.7969376555449588,
+          "grits_con_median": 0.8258264247072012
+        }
+      },
+      "track_error": null,
+      "track_elapsed_seconds_observed_not_comparable": 13.647584624995943,
+      "source_commit": "ec7b199d9ba9704f5077b80e1c0c1ca88e0dfe5f"
+    },
+    {
+      "track": "tatr-vision-gold-crop-tsr",
+      "partition": "development",
+      "requested_pages": 10,
+      "requested_tables": 15,
+      "evaluated_pages": 10,
+      "evaluated_tables": 15,
+      "overall_status": "incomplete",
+      "execution_status": "success",
+      "official_aggregate": null,
+      "comparable": false,
+      "diagnostic_only": {
+        "grits_top_mean": 0.9450498757846427,
+        "grits_con_mean": 0.9106506852350933,
+        "cell_alignment": {
+          "metric": "cell_span_f1_v1",
+          "invalid_predictions": 0,
+          "span": {
+            "tp": 803,
+            "fp": 111,
+            "fn": 65,
+            "precision": 0.8785557986870897,
+            "recall": 0.9251152073732719,
+            "f1": 0.9012345679012346
+          },
+          "content": {
+            "tp": 514,
+            "fp": 400,
+            "fn": 354,
+            "precision": 0.562363238512035,
+            "recall": 0.5921658986175116,
+            "f1": 0.5768799102132436
+          }
+        }
+      },
+      "track_error": null,
+      "track_elapsed_seconds_observed_not_comparable": 20.114809708000394,
+      "source_commit": "38cdcba028ba1289ea47f5c47d90e6a7e925261b"
+    },
+    {
+      "track": "tatr-vision-gold-crop-tsr",
+      "partition": "evaluation",
+      "requested_pages": 30,
+      "requested_tables": 45,
+      "evaluated_pages": 30,
+      "evaluated_tables": 45,
+      "overall_status": "incomplete",
+      "execution_status": "success",
+      "official_aggregate": null,
+      "comparable": false,
+      "diagnostic_only": {
+        "grits_top_mean": 0.9212613135320633,
+        "grits_con_mean": 0.8693993178556574,
+        "cell_alignment": {
+          "metric": "cell_span_f1_v1",
+          "invalid_predictions": 1,
+          "span": {
+            "tp": 1942,
+            "fp": 310,
+            "fn": 253,
+            "precision": 0.8623445825932504,
+            "recall": 0.8847380410022779,
+            "f1": 0.8733977962671464
+          },
+          "content": {
+            "tp": 1224,
+            "fp": 1028,
+            "fn": 971,
+            "precision": 0.5435168738898757,
+            "recall": 0.5576309794988611,
+            "f1": 0.5504834720035979
+          }
+        }
+      },
+      "track_error": null,
+      "track_elapsed_seconds_observed_not_comparable": 20.114809708000394,
+      "source_commit": "38cdcba028ba1289ea47f5c47d90e6a7e925261b"
+    },
+    {
+      "track": "onnx-vision-gold-crop-tsr",
+      "partition": "development",
+      "requested_pages": 10,
+      "requested_tables": 15,
+      "evaluated_pages": 10,
+      "evaluated_tables": 15,
+      "overall_status": "incomplete",
+      "execution_status": "success",
+      "official_aggregate": null,
+      "comparable": false,
+      "diagnostic_only": {
+        "grits_top_mean": 0.8344741446653032,
+        "grits_con_mean": 0.6918893718373853,
+        "cell_alignment": {
+          "metric": "cell_span_f1_v1",
+          "invalid_predictions": 0,
+          "span": {
+            "tp": 756,
+            "fp": 353,
+            "fn": 112,
+            "precision": 0.6816952209197475,
+            "recall": 0.8709677419354839,
+            "f1": 0.7647951441578149
+          },
+          "content": {
+            "tp": 252,
+            "fp": 857,
+            "fn": 616,
+            "precision": 0.2272317403065825,
+            "recall": 0.2903225806451613,
+            "f1": 0.2549317147192716
+          }
+        }
+      },
+      "track_error": null,
+      "track_elapsed_seconds_observed_not_comparable": 6.657951082976069,
+      "source_commit": "38cdcba028ba1289ea47f5c47d90e6a7e925261b"
+    },
+    {
+      "track": "onnx-vision-gold-crop-tsr",
+      "partition": "evaluation",
+      "requested_pages": 30,
+      "requested_tables": 45,
+      "evaluated_pages": 30,
+      "evaluated_tables": 45,
+      "overall_status": "incomplete",
+      "execution_status": "success",
+      "official_aggregate": null,
+      "comparable": false,
+      "diagnostic_only": {
+        "grits_top_mean": 0.8808297882387776,
+        "grits_con_mean": 0.7762439975680725,
+        "cell_alignment": {
+          "metric": "cell_span_f1_v1",
+          "invalid_predictions": 0,
+          "span": {
+            "tp": 2036,
+            "fp": 857,
+            "fn": 159,
+            "precision": 0.7037677151745593,
+            "recall": 0.9275626423690205,
+            "f1": 0.800314465408805
+          },
+          "content": {
+            "tp": 857,
+            "fp": 2036,
+            "fn": 1338,
+            "precision": 0.29623228482544073,
+            "recall": 0.3904328018223235,
+            "f1": 0.33687106918238996
+          }
+        }
+      },
+      "track_error": null,
+      "track_elapsed_seconds_observed_not_comparable": 6.657951082976069,
+      "source_commit": "38cdcba028ba1289ea47f5c47d90e6a7e925261b"
+    }
+  ],
+  "raw_archive_roots": [
+    "pdfspine-table-diagnostics-ec7b199",
+    "pdfspine-table-diagnostics-38cdcba"
+  ],
+  "qa_index": "financial-eval-ai-visual-qa/review-notes.json",
+  "qa_sha256": "42046a2e9d4eff31db8f835f482966031a26193f94903c6a7c6af092e81513c0",
+  "onnx_wheel": {
+    "wheel_sha256": "3a3814c041251d6a77fdf513fb282056538ee826d2f1178a0df3c549d3fff6ba",
+    "matched_non_distinfo_payload_files": 316,
+    "runtime": "1.29.0"
+  }
+}
