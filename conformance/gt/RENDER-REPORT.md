@@ -1,5 +1,40 @@
 # pdfspine vs fitz — Rendering Differential
 
+## 2026-09-10 update: Adobe RGB strips restored
+
+`govdocs1-00074.pdf` p0 (under `conformance/gt/corpus-robustness/`) contains
+eight three-component Adobe APP14 transform=0 JPEG strips. zune-jpeg 0.5.15's
+header probe temporarily reports CMYK; its full decoder corrects this to RGB.
+The old output selection requested CMYK too early, failed decoding, and the
+renderer skipped every strip. `pdf-image` now selects output by SOF component
+count, preserving native four-channel output and `/Decode` handling.
+
+At 150 dpi, target SSIM improves **0.2654 → 0.995987**; mean RGB sample value
+falls from 255 (all white) to 170.3947, versus fitz's 170.3323. The same-input
+comparison covers **35 of the 43 historical documents**: the other 34 outputs
+are byte-identical, zero regressions, mean SSIM **0.951249 → 0.972123** on these
+35. This is not the same denominator as the historical report below.
+
+Missing inputs are `fixtures/corpus/govinfo-{cdoc110-50,hjres1,hr1,hr2}.pdf`
+and `fixtures/corpus/irs-{f1099msc,f4868,fw4,p501}.pdf`. Original official URLs
+in `conformance/fetch_corpus.py` were tried; urllib failed with SSL EOF and
+curl also failed TLS. No substitute documents were used.
+
+P1-3's three committed references pass at SSIM **0.999784 / 0.999745 /
+0.999735** (threshold 0.97). Codec/full-page tests use an authored JPEG, not a
+copied corpus asset. The existing YCCK→CMYK unsupported conversion remains a
+typed error; module documentation and a regression test now state it correctly.
+
+Evidence is outside git in `/Volumes/ExternalSSD/tmp/gov74-diagnosis/`:
+`summary.json`, `corpus43-results.json` (35 records), `reference-results.json`,
+`tests.log`, `clippy-all-features.log`, `fetch.log`, and `validation.log`.
+An isolated Rust renderer was compared with the baseline Python extension and
+real PyMuPDF, using this repository's grayscale/SSIM functions. The targeted
+`pdf-image`/`pdf-render` suite passed 273 tests; final integrated gate evidence
+is tracked in `docs/PRD-NEXT.md` §0.
+
+## Historical 2026-09-05 report
+
 _Generated 2026-09-05T21:30:12-0700 · DPI 150 · 1 page(s)/doc · oracle_available=True · 58s_
 
 **Method:** raw RGB sample buffers -> downsampled grayscale -> windowed SSIM + MAE (pure Python; no PNG decode)

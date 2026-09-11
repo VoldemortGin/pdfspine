@@ -52,6 +52,17 @@
 //! reflects the configuration ON/OFF state alone, untouched by `/Usage`
 //! (PyMuPDF parity).
 //!
+//! # Intent matching
+//!
+//! A non-empty `/Intent` on the active configuration additionally hides OCGs
+//! whose intent does not match. Names and arrays use any common name, with
+//! `/All` a wildcard on either side. An OCG's absent intent defaults to
+//! `/View`; its explicit `[]` matches nothing, even configuration `/All`.
+//! An absent or empty configuration intent disables this filter (MuPDF
+//! parity). Mismatch wins over usage promotion and panel overrides, but never
+//! changes the ON/OFF state reported by the layer APIs. Alternate configs do
+//! not inherit `/D`'s intent.
+//!
 //! ## Deliberate divergences from MuPDF / PyMuPDF
 //!
 //! pdfspine follows ISO 32000-1 where MuPDF does not:
@@ -423,6 +434,9 @@ impl OcVisibility {
         let hidden = ocg_object_numbers(doc, &ocp)
             .into_iter()
             .filter(|&num| {
+                if !cfg.intent.is_empty() && !ocg_matches_intent(doc, num, &cfg.intent) {
+                    return true;
+                }
                 let vs = view_state(doc, num);
                 if vs == Some(false) {
                     // MuPDF: `/ViewState /OFF` always hides, even over a
@@ -693,6 +707,39 @@ fn read_intent(d: &Dict) -> Vec<String> {
     }
 }
 
+/// Visibility has different defaults from reporting: preserve explicit empty
+/// arrays here, while `read_intent` retains the reporting API's View fallback.
+fn visibility_intents(doc: &DocumentStore, d: &Dict) -> Option<Vec<Name>> {
+    let value = doc.resolve_dict_key(d, &Name::new("Intent")).ok()??;
+    match value.as_ref() {
+        Object::Name(name) => Some(vec![name.clone()]),
+        Object::Array(items) => Some(
+            items
+                .iter()
+                .filter_map(|item| match item {
+                    Object::Name(name) => Some(name.clone()),
+                    Object::Reference(r) => doc.resolve(*r).ok()?.as_name().cloned(),
+                    _ => None,
+                })
+                .collect(),
+        ),
+        _ => None,
+    }
+}
+
+fn ocg_matches_intent(doc: &DocumentStore, num: u32, config: &[Name]) -> bool {
+    let group = doc
+        .get_object(num, 0)
+        .ok()
+        .and_then(|obj| visibility_intents(doc, obj.as_dict()?))
+        .unwrap_or_else(|| vec![Name::new("View")]);
+    group.iter().any(|g| {
+        config
+            .iter()
+            .any(|c| c == g || c.as_bytes() == b"All" || g.as_bytes() == b"All")
+    })
+}
+
 /// Flattens `/D /Order` into depth-tagged UI rows. An `/Order` array entry is
 /// either an OCG reference (a checkbox row) or a nested array whose optional
 /// leading string is a non-toggling label for the entries that follow.
@@ -760,6 +807,8 @@ pub(crate) struct OcConfig {
     /// /View` and `/View` in `/Category` (ISO 32000-1 §8.11.4.4). Read from
     /// this configuration only — never inherited from `/D`.
     as_view: HashSet<u32>,
+    /// Active configuration's intent filter; absent/empty means no filter.
+    intent: Vec<Name>,
     /// Per-OCG overrides from the store's [`LayerView`] (win over the arrays).
     overrides: BTreeMap<u32, bool>,
 }
@@ -807,6 +856,7 @@ impl OcConfig {
             order: read_order(doc, d),
             rbgroups: read_rbgroups(doc, d),
             as_view: read_as_view(doc, d),
+            intent: visibility_intents(doc, d).unwrap_or_default(),
             overrides: BTreeMap::new(),
         }
     }

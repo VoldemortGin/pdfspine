@@ -1192,6 +1192,131 @@ fn hidden7(bytes: &[u8]) -> bool {
     OcVisibility::read(&open(bytes)).is_ocg_hidden(7)
 }
 
+fn ocg_with_intent(intent: Option<Object>) -> Object {
+    let mut ocg = dict([("Type", name_obj("OCG")), ("Name", pdf_str("I"))]);
+    if let Some(intent) = intent {
+        ocg.insert(Name::new("Intent"), intent);
+    }
+    Object::Dictionary(ocg)
+}
+
+/// OCG-VIS-INTENT-MATRIX: captured from real PyMuPDF 1.28.2, 2026-09-10.
+/// Rows = config; columns = OCG: absent, [], View, Design, All, [View Design],
+/// [All], Other. This deliberately distinguishes absent from explicit [].
+#[test]
+fn ocg_vis_intent_matrix() {
+    let intents = [
+        None,
+        Some(Object::Array(vec![])),
+        Some(name_obj("View")),
+        Some(name_obj("Design")),
+        Some(name_obj("All")),
+        Some(Object::Array(vec![name_obj("View"), name_obj("Design")])),
+        Some(Object::Array(vec![name_obj("All")])),
+        Some(name_obj("Other")),
+    ];
+    let visible = [
+        [true, true, true, true, true, true, true, true],
+        [true, true, true, true, true, true, true, true],
+        [true, false, true, false, true, true, true, false],
+        [false, false, false, true, true, true, true, false],
+        [true, false, true, true, true, true, true, true],
+        [true, false, true, true, true, true, true, false],
+        [true, false, true, true, true, true, true, true],
+        [false, false, false, false, true, false, true, true],
+    ];
+    for (c, config) in intents.iter().enumerate() {
+        for (g, group) in intents.iter().enumerate() {
+            let mut d = vec![on7()];
+            if let Some(intent) = config {
+                d.push(("Intent", intent.clone()));
+            }
+            let doc = open(&usage_doc(ocg_with_intent(group.clone()), d, None, vec![]));
+            let visibility = OcVisibility::read(&doc);
+            assert_eq!(!visibility.is_ocg_hidden(7), visible[c][g], "{c}/{g}");
+            assert_eq!(!visibility.is_hidden(&doc, &rref(30, 0)), visible[c][g]);
+            assert!(
+                get_ocgs(&doc)[&7].on,
+                "Intent must not rewrite reported state"
+            );
+            assert!(layer_ui_configs(&doc)[0].on);
+        }
+    }
+}
+
+/// OCG-VIS-INTENT-STATE: matching does not override OFF, and mismatching
+/// remains hidden even under layer-panel ON or the deliberate /AS promotion.
+#[test]
+fn ocg_vis_intent_state_precedence() {
+    let mut ocg = ocg_with_intent(Some(name_obj("Design")));
+    if let Object::Dictionary(d) = &mut ocg {
+        d.insert(Name::new("Usage"), view_usage("ON"));
+    }
+    let doc = open(&usage_doc(
+        ocg,
+        vec![off7(), as_view7(), ("Intent", name_obj("View"))],
+        None,
+        vec![],
+    ));
+    assert!(OcVisibility::read(&doc).is_ocg_hidden(7));
+    set_layer_ui_config(&doc, 0, 0).unwrap();
+    assert!(layer_ui_configs(&doc)[0].on);
+    assert!(OcVisibility::read(&doc).is_ocg_hidden(7));
+
+    let bytes = usage_doc(
+        ocg_with_intent(Some(name_obj("View"))),
+        vec![off7(), ("Intent", name_obj("View"))],
+        None,
+        vec![],
+    );
+    assert!(hidden7(&bytes));
+}
+
+/// OCG-VIS-INTENT-CONFIG: only the active config's Intent applies; it is not
+/// inherited from /D when an alternate config omits it (PyMuPDF 1.28.2).
+#[test]
+fn ocg_vis_intent_active_config() {
+    let doc = open(&usage_doc(
+        ocg_with_intent(Some(name_obj("Design"))),
+        vec![on7(), ("Intent", name_obj("View"))],
+        Some(vec![
+            Object::Dictionary(dict([("Name", pdf_str("no intent")), on7()])),
+            Object::Dictionary(dict([
+                ("Name", pdf_str("matching")),
+                on7(),
+                ("Intent", name_obj("Design")),
+            ])),
+        ]),
+        vec![],
+    ));
+    assert!(OcVisibility::read(&doc).is_ocg_hidden(7));
+    for n in [0, 1] {
+        select_layer_config(&doc, Some(n)).unwrap();
+        assert!(!OcVisibility::read(&doc).is_ocg_hidden(7));
+    }
+    select_layer_config(&doc, None).unwrap();
+    assert!(OcVisibility::read(&doc).is_ocg_hidden(7));
+}
+
+/// OCG-VIS-INTENT-INDIRECT: resolve Intent values and names inside arrays.
+#[test]
+fn ocg_vis_intent_indirect() {
+    let extra = vec![
+        (20, Object::Array(vec![rref(21, 0)])),
+        (21, name_obj("View")),
+        (22, name_obj("Design")),
+    ];
+    for (intent, hidden) in [(rref(20, 0), false), (rref(22, 0), true)] {
+        let bytes = usage_doc(
+            ocg_with_intent(Some(intent)),
+            vec![on7(), ("Intent", rref(20, 0))],
+            None,
+            extra.clone(),
+        );
+        assert_eq!(hidden7(&bytes), hidden);
+    }
+}
+
 /// OCG-VIS-USAGE-NONE: an ON OCG without `/Usage` (or with an empty one) is
 /// visible — the usage rules add nothing.
 #[test]
