@@ -86,10 +86,77 @@ impl CharacterSpacing {
     }
 }
 
+/// Caller-resolved script glyph scaling and baseline placement.
+///
+/// This is not an OOXML automatic superscript/subscript policy. The run size
+/// remains its nominal line strut; glyphs use `size * glyph_scale`. Positive
+/// baseline shifts raise glyphs, in PDF points. Tracking is independently sized.
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct ResolvedScriptPlacement {
+    glyph_scale: f64,
+    baseline_shift: f64,
+}
+
+/// An invalid resolved script placement.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum ScriptPlacementError {
+    /// Scale must be finite, positive and no greater than one.
+    Scale,
+    /// Baseline shift must be finite.
+    Shift,
+}
+impl std::fmt::Display for ScriptPlacementError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Scale => "script glyph scale must be finite and in (0, 1]",
+            Self::Shift => "script baseline shift must be finite",
+        })
+    }
+}
+impl std::error::Error for ScriptPlacementError {}
+
+impl ResolvedScriptPlacement {
+    /// Construct resolved placement. Positive `baseline_shift` raises glyphs.
+    ///
+    /// # Errors
+    /// Rejects nonfinite dimensions, nonpositive scale and scale above one.
+    pub fn new(glyph_scale: f64, baseline_shift: f64) -> Result<Self, ScriptPlacementError> {
+        if !glyph_scale.is_finite() || glyph_scale <= 0.0 || glyph_scale > 1.0 {
+            return Err(ScriptPlacementError::Scale);
+        }
+        if !baseline_shift.is_finite() {
+            return Err(ScriptPlacementError::Shift);
+        }
+        Ok(Self {
+            glyph_scale,
+            baseline_shift,
+        })
+    }
+    /// Multiplier for glyph size; the nominal run size remains unchanged.
+    #[must_use]
+    pub fn glyph_scale(self) -> f64 {
+        self.glyph_scale
+    }
+    /// Baseline shift in points, positive upward.
+    #[must_use]
+    pub fn baseline_shift(self) -> f64 {
+        self.baseline_shift
+    }
+    pub(crate) fn shrunk(self, scale: f64) -> Self {
+        Self {
+            baseline_shift: self.baseline_shift * scale,
+            ..self
+        }
+    }
+}
+
 /// Per-run character formatting (docx `rPr` / pptx `rPr` subset).
 #[non_exhaustive]
 #[derive(Clone, Debug, PartialEq)]
 pub struct RunStyle {
+    /// Optional resolved script placement; None preserves ordinary layout.
+    /// Unusable derived glyph dimensions drop only the affected scripted run.
+    pub script_placement: Option<ResolvedScriptPlacement>,
     /// Additional character advance; zero preserves the original layout.
     /// Combining marks retain their base-relative position, with spacing after
     /// the combining sequence. This does not introduce a shaping engine.
@@ -123,6 +190,7 @@ impl RunStyle {
     #[must_use]
     pub fn new(family: impl Into<String>, size: f64) -> Self {
         RunStyle {
+            script_placement: None,
             character_spacing: CharacterSpacing::default(),
             family: family.into(),
             size,

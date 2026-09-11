@@ -386,8 +386,16 @@
     byte-for-byte. New LO fixture **0.9527 → 0.9836**; previous DOCX/PPTX/shading/
     tracking scores unchanged. `between` and non-solid styles remain unsupported.
     See `docs/typeset-paragraph-borders.md`; consumer mappings/pins are unchanged.
+  - [x] **Resolved script run placement** (unreleased isolated candidate).
+    Optional validated glyph scale and upward-positive point baseline shift keep
+    nominal line struts separate from effective glyph geometry. Exact preserves
+    normal baselines; shared measurement covers boxes/cells/border page reserves.
+    None/identity preserve old bytes. LO DOCX **0.9498 → 0.9637**, PPTX
+    **0.8766 → 0.9849**; old seven PDFs unchanged. Caller-resolved geometry only;
+    no automatic OOXML policy or consumer migration. See
+    `docs/typeset-script-placement.md`.
   - [ ] **Remaining:** non-solid/between paragraph borders and pattern shading, condensed negative
-    character spacing, superscript/subscript, and verified Word `lineGap` placement.
+    character spacing, automatic script policy/consumer mappings, and verified Word `lineGap` placement.
   - *Increment validation:* LibreOffice 26.8.0.3 at 100 dpi, same renderer:
     existing DOCX/PPTX **0.9822 / 0.9780**, unchanged. These are the current
     comparison baseline, not the historical TS-12 **0.9815 / 0.9777** results.
