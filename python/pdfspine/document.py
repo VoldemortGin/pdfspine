@@ -1903,6 +1903,28 @@ class Page:
         """Builds a reusable :class:`TextPage` (PyMuPDF ``page.get_textpage``)."""
         return TextPage(self._page.get_textpage(flags, _as_clip(clip)))
 
+    def extend_textpage(self, tpage: TextPage, flags: int = 0, matrix=None) -> None:
+        """Append this page to an existing text page, preserving its identity and rect.
+
+        New content is transformed and clipped to the target; errors leave the
+        target unchanged. Matrix values must be finite. Existing ordinary Page
+        targets retain their legacy image visibility; recorded targets retain
+        their creation flags. Each new segment uses its own ``flags``.
+        """
+        if not isinstance(tpage, TextPage):
+            raise TypeError("tpage must be a TextPage")
+        if self._parent is not None and self._parent.is_closed:
+            raise ValueError("source document is closed")
+        if matrix is None:
+            matrix = Matrix(1, 0, 0, 1, 0, 0)
+        elif not isinstance(matrix, Matrix):
+            raise TypeError("matrix must be a Matrix or None")
+        values = tuple(matrix)
+        if not all(math.isfinite(value) for value in values):
+            raise ValueError("matrix coefficients must be finite")
+        replacement = self._page.extend_textpage(tpage._tp, flags, values)
+        tpage._tp = replacement
+
     def get_textpage_ocr(
         self,
         flags: int = 3,

@@ -117,6 +117,24 @@ cleared_by   = "validation-harness (crates/pdf-typeset/examples/make_typeset_fix
 cleared_date = "2026-09-05"
 notes        = "LibreOffice-oracle pair of typeset_lo_oracle.py's sample.pptx; embeds OFL Liberation subsets"
 
+[[fixture]]
+path         = "typeset/typeset-lo-shading.pdf"
+source       = "self-generated"
+license      = "CC0-1.0"
+sha256       = "bfa33bcb01d9ada9495bcf4dfee79dee66c8a82a3257d838299a4f744bea5682"
+cleared_by   = "validation-harness (crates/pdf-typeset/examples/make_typeset_fixtures.rs)"
+cleared_date = "2026-09-10"
+notes        = "Engine-generated solid paragraph shading fixture paired with separately authored OOXML for LibreOffice comparison; embeds OFL Liberation subsets"
+
+[[fixture]]
+path         = "typeset/typeset-lo-tracking.pdf"
+source       = "self-generated"
+license      = "CC0-1.0"
+sha256       = "a094ffbdb9189c32965cffadfec56aa74ea2422f309f23cfbbd0196488305dfb"
+cleared_by   = "validation-harness (crates/pdf-typeset/examples/make_typeset_fixtures.rs)"
+cleared_date = "2026-09-10"
+notes        = "Engine-generated nonnegative character spacing fixture paired with separately authored OOXML for LibreOffice comparison; embeds OFL Liberation subsets"
+
 # <<< typeset conformance fixtures <<<
 
 # >>> validation-harness corpus (auto-generated) >>>

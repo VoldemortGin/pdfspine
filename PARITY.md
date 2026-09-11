@@ -34,15 +34,15 @@
 
 > **Current snapshot.** Numbers below are recomputed from the
 > live `COMPAT.toml` per-symbol dispositions. `COMPAT.toml [meta]` is always the authoritative live figure;
-> the current remaining-work list (the 8 deferred symbols, grouped + prioritized) lives in
+> the current remaining-work list (the 6 deferred symbols, grouped + prioritized) lives in
 > [`docs/PRD-NEXT.md`](docs/PRD-NEXT.md) §3.B.
 
-**Overall: 695 / 769 implemented (90.4% coverage).**
+**Overall: 697 / 769 implemented (90.6% coverage).**
 
 | Disposition | Count | Share |
 |---|---:|---:|
-| **implemented** | **695** | **90.4%** |
-| deferred (planned, later milestone / post-v1) | 8 | 1.0% |
+| **implemented** | **697** | **90.6%** |
+| deferred (planned, later milestone / post-v1) | 6 | 0.8% |
 | out-of-scope (raises `PdfUnsupportedError`) | 66 | 8.6% |
 | **Total catalogued symbols** | **769** | 100% |
 
@@ -60,7 +60,7 @@
 | `IRect` | 25 | 25 | 0 | 0 | 100% |
 | `Quad` | 17 | 17 | 0 | 0 | 100% |
 | `Document` | 150 | 136 | 0 | 14 | 91% |
-| `Page` | 117 | 112 | 3 | 2 | 96% |
+| `Page` | 117 | 113 | 2 | 2 | 97% |
 | `TextPage` | 17 | 17 | 0 | 0 | 100% |
 | `Pixmap` | 43 | 42 | 1 | 0 | 98% |
 | `Annot` | 51 | 46 | 1 | 4 | 90% |
@@ -77,9 +77,9 @@
 | `Colorspace` | 6 | 6 | 0 | 0 | 100% |
 | `constants` | 43 | 41 | 0 | 2 | 95% |
 | Module-level functions | 32 | 29 | 0 | 3 | 91% |
-| `Tools` / `TOOLS` | 22 | 13 | 2 | 7 | 59% |
+| `Tools` / `TOOLS` | 22 | 14 | 1 | 7 | 64% |
 | `exceptions` | 10 | 10 | 0 | 0 | 100% |
-| **Total** | **769** | **695** | **8** | **66** | **90.4%** |
+| **Total** | **769** | **697** | **6** | **66** | **90.6%** |
 
 ### Per-milestone breakdown
 
@@ -87,7 +87,7 @@
 > per-symbol `milestone` field, so it cannot be recomputed mechanically. Use the **per-class table
 > above** (recomputed from the live `COMPAT.toml`) + `docs/PRD-NEXT.md` §3.B for current status. By
 > milestone, all of M0–M8's headline paths are landed (geometry, parsing, text, edit/save, annot/forms,
-> image-docs/Pixmap, rendering near-parity, SVG/tables/OCG, OCR-via-Tesseract); the 8 deferred are the
+> image-docs/Pixmap, rendering near-parity, SVG/tables/OCG, OCR-via-Tesseract); the 6 deferred are the
 > long tails and the 66 out-of-scope are the HTML/CSS story engine + render-era knobs.
 
 ---
@@ -129,7 +129,7 @@ per-symbol truth (every name, disposition, milestone, note) is in [`COMPAT.toml`
   (`set_mediabox`/`set_cropbox`/`artbox`/`bleedbox`/`trimbox` + setters), rotation read + `set_rotation` +
   the rotation matrices, `get_contents`/`set_contents`/`read_contents`, page labels (`get_label`),
   `language`/`set_language`, `is_wrapped`, `write_text`, `remove_rotation`, `refresh`. Gaps: `insert_font`,
-  device-replay (`run`/`extend_textpage`).
+  device-callback replay (`run`).
 - [x] **`Document` (136/150)** — open/lifecycle, save family (`save`/`ez_save`/`save_incremental`/`write`/
   `tobytes`/`convert_to_pdf`/`subset`), page ops (`new_page`/`insert_pdf`/`delete_page`/`select`/`fullcopy_page`/`reload_page`/
   `page_xref`/`page_cropbox`), metadata + XMP read/write, TOC get/set + node edits
@@ -171,8 +171,8 @@ per-symbol truth (every name, disposition, milestone, note) is in [`COMPAT.toml`
   fallback), so `buffer` returns the program bytes and `glyph_bbox` the real per-glyph outline box.
   A metrics-only Core-14 handle (built from a name) still raises for those two; `css_for_pymupdf_font`
   is out-of-scope.
-- [x] **`Tools` / `TOOLS` (13/22)** — diagnostics/tuning singleton headline paths landed (incl.
-  `image_profile`); `set_annot_stem`/`set_subset_fontnames` deferred,
+- [x] **`Tools` / `TOOLS` (14/22)** — diagnostics/tuning singleton headline paths landed (incl.
+  `image_profile` and `set_annot_stem`); `set_subset_fontnames` deferred,
   7 out-of-scope (render-era knobs, raw `mupdf.*` access).
 
 ### Out-of-scope (raises `PdfUnsupportedError`)
@@ -183,11 +183,11 @@ per-symbol truth (every name, disposition, milestone, note) is in [`COMPAT.toml`
 
 ## Remaining work
 
-The authoritative, prioritised list of the **8 deferred** symbols (grouped, with quick-wins flagged)
+The authoritative, prioritised list of the **6 deferred** symbols (grouped, with quick-wins flagged)
 now lives in **[`docs/PRD-NEXT.md`](docs/PRD-NEXT.md) §3.B** — kept there to avoid two divergent lists.
 In brief the deferred set is:
-**Page (3)** `insert_font` + device-replay (`run`/`extend_textpage`); **DisplayList (1)** `run`
-(device-callback replay); **Tools (2)** `set_annot_stem`/`set_subset_fontnames`;
+**Page (2)** `insert_font` + device-callback replay (`run`); **DisplayList (1)** `run`
+(device-callback replay); **Tools (1)** `set_subset_fontnames`;
 **Annot (1)** `get_textbox`; **Pixmap (1)** `warp`.
 
 The **66 out-of-scope** symbols (raise `PdfUnsupportedError`) are dominated by `Story` / `Xml` /

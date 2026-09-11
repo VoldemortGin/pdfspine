@@ -313,6 +313,12 @@ pub trait ImageResolver {
     /// Resolves the image referenced under XObject resource `name`, or `None`
     /// when it can't be resolved (inline / missing).
     fn resolve(&self, name: Option<&str>) -> Option<ResolvedImage>;
+
+    /// Optional recorded unit-image-to-device placement. Ordinary page
+    /// resolvers retain their existing axis-aligned bbox-derived metadata.
+    fn placement_transform(&self, _name: Option<&str>) -> Option<pdf_core::geom::Matrix> {
+        None
+    }
 }
 
 // === plain text (PRD §8.6) ================================================
@@ -990,7 +996,11 @@ fn image_block(block: &Block, resolver: Option<&dyn ImageResolver>) -> DictImage
         yres,
         bpc,
         // Placement matrix maps the unit square to the block bbox (device space).
-        transform: (b.x1 - b.x0, 0.0, 0.0, b.y1 - b.y0, b.x0, b.y0),
+        transform: resolver
+            .and_then(|r| r.placement_transform(name))
+            .map_or((b.x1 - b.x0, 0.0, 0.0, b.y1 - b.y0, b.x0, b.y0), |m| {
+                (m.a, m.b, m.c, m.d, m.e, m.f)
+            }),
         size,
         image,
     }

@@ -152,6 +152,45 @@ impl DisplayList {
         )
     }
 
+    /// Builds an appended text segment in an existing target's device space.
+    #[must_use]
+    pub fn get_textpage_transformed(
+        &self,
+        flags: u32,
+        matrix: pdf_core::geom::Matrix,
+        target: pdf_core::geom::Rect,
+    ) -> pdf_text::TextPage {
+        pdf_text::textpage_from_glyphs_transformed(
+            &self.text.glyphs,
+            &self.text.images,
+            self.cropbox,
+            self.rotation,
+            matrix,
+            target,
+            flags,
+        )
+    }
+
+    /// Exact image placement matrices for a newly transformed append segment.
+    #[must_use]
+    pub fn text_image_transforms(
+        &self,
+        matrix: pdf_core::geom::Matrix,
+    ) -> std::collections::HashMap<String, pdf_core::geom::Matrix> {
+        let p = pdf_text::page_transform(self.cropbox, self.rotation) * matrix;
+        let flip = pdf_core::geom::Matrix::new(1.0, 0.0, 0.0, -1.0, 0.0, 1.0);
+        self.text
+            .images
+            .iter()
+            .filter_map(|image| {
+                image
+                    .name
+                    .as_ref()
+                    .map(|name| (name.to_string(), flip * image.ctm * p))
+            })
+            .collect()
+    }
+
     /// Owned image payloads remain valid after edits or source closure.
     #[must_use]
     pub fn text_resources(&self) -> Arc<crate::RecordedTextResources> {

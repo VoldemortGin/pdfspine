@@ -250,3 +250,26 @@ PyMuPDF 接口，设置图标仍用 `Annot.set_name()`。
 配置读锁不跨越文档访问。此保证限定这些创建路径，不是任意 xref 编辑的事务承诺。
 回归见 `python/tests/test_tools_annot_stem.py` 与 `pdf-edit` 注释模块并发测试。
 `Tools.set_subset_fontnames` 仍未实现。
+
+## TextPage 原子追加与矩阵边界（2026-09-10）
+
+`Page.extend_textpage(tpage, flags=0, matrix=None)` 返回 None，保持目标对象身份和
+原矩形。已有 block 不重新排序；重复调用保留重复文字，WORDS/DICT 编号连续，search
+保留重复命中。每个新 segment 的 flags 独立，旧图片不因后一次 flags=0 被删除。
+跨文档同名图片使用独立资源 identity，来源关闭后仍能提取。
+
+- 新 glyph 先经过源页面变换与调用方矩阵，再按目标矩形裁剪 origin；字形 bbox
+  可以越过目标边缘。文字 origin/size/dir 与图片完整 transform（旋转/剪切/缩放）
+  已对照本机 PyMuPDF 1.28.2；未声称两个引擎原字体 bbox 相等。
+- pdfspine 要求 Matrix 或 None、有限系数；不支持的类型/非有限系数抛
+  TypeError/ValueError，目标不变。有限奇异矩阵不单凭行列式拒绝。
+  本机 oracle 对字符串/短 list 静默用 identity，对 NaN/Inf Matrix 接受但不追加，
+  此处刻意采用明确校验而不复制上述隐式回退。
+- 普通 Page.get_textpage 的旧创建 flags 在图片可见性上并未完整保留。本次首次追加
+  固化其原本可见图片，而非悄悄删除它们；DL.get_textpage 目标沿用准确 flags。
+  这项旧 Page 差异仍待独立修复。若旧目标图片无法解码，提升为独立资源时明确失败，
+  不重新解析布局或无声丢图。已关闭目标的底层资源若仍可读，可正常提升；关闭的
+  新来源 Page 明确报错。
+
+可执行回归：`python/tests/test_extend_textpage.py`。只覆盖本追加接口，不加入
+DeviceWrapper / Page.run / DisplayList.run 回调框架。

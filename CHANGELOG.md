@@ -11,6 +11,17 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
+### Annotation IDs
+
+- `TOOLS.set_annot_stem(stem=None)` now queries or sets the shared prefix used
+  by new annotation/widget IDs, with per-page smallest-gap numbering and valid
+  Unicode PDF strings. Existing IDs remain unchanged. Strings are truncated to
+  50 Unicode characters; non-string values other than `None` are rejected.
+- Corrected `Annot.info`: `id` reads `/NM`, while `name` reads the icon `/Name`.
+  The legacy `set_info(name=...)` extension still writes the ID; `load_annot(id)`
+  uses that ID. Popup appends and widget registration now share the creation lock
+  so concurrent creation does not lose page annotations or AcroForm fields.
+
 ### Changed
 
 - **Render cost cleanup.** Glyph caches retain rasterized masks without copying
@@ -72,6 +83,12 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ### Added
 
+- `Page.extend_textpage(tpage, flags=0, matrix=None)` atomically appends text and
+  optional images to an existing `TextPage`, preserving its identity, bounds and
+  prior content order. New content uses the supplied affine transform and target
+  clipping; each segment retains its flags and owned image resources. Invalid
+  matrix inputs fail without modifying the target.
+
 - **Solid paragraph shading.** `pdf-typeset` supports optional solid backgrounds
   in flowing paragraphs, text boxes and table cells. Matching adjacent backgrounds
   cover intervening spacing within a page; text positions and pagination stay
@@ -86,7 +103,7 @@ feature-complete, but the public API and on-disk formats may still change.
 - `DisplayList.get_textpage(flags=3)` returns a public `TextPage` backed by
   recorded text, resolved font names and independently owned image resources.
   Text extraction survives source edits/closure and respects creation flags;
-  encoded image payloads decode lazily. API parity is 695/769 (90.4%); eight
+  encoded image payloads decode lazily. API parity is 696/769 (90.5%); seven
   deferred symbols remain.
 
 - **ONNX vision backend for `find_tables` (opt-in, torch-free).**

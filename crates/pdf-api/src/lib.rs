@@ -9,6 +9,8 @@
 //! types are re-exported from [`pdf_core::geom`].
 
 pub mod error;
+pub mod extended_text;
+pub use extended_text::ExtendedTextResources;
 pub mod image;
 #[cfg(feature = "paddle-ocr")]
 pub mod image_table;

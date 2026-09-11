@@ -134,6 +134,10 @@ impl RecordedTextResources {
         Arc::new(resources)
     }
 
+    pub(crate) fn has_mask(&self, name: &str) -> bool {
+        self.masks.get(name).copied().unwrap_or(false)
+    }
+
     /// Serializes the snapshot using the flags captured by its TextPage.
     #[must_use]
     pub fn output(&self, tp: &TextPage, opt: &str, flags: u32) -> TextOutput {
