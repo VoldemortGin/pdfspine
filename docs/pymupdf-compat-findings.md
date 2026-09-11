@@ -181,7 +181,14 @@ get_text('blocks', sort=True)       5/5       5/5
   `layer_ui_configs()` / `ocg_state()` 只反映配置 ON/OFF（`OCG-VIS-USAGE-VIEWSTATE-OFF`、
   `OCG-VIS-USAGE-PRINT-EXPORT`、`OCG-VIS-USAGE-REPORT`；判定表其余各行已用真 PyMuPDF 1.27.2 逐行核对，
   `oc=` 写入侧由 `PYOCG-046` / `PYOCG-047` 双向 oracle 覆盖）。
-- 尚未覆盖的缺口：`/Intent` 不匹配时的隐藏（MuPDF 仅在配置带非空 `/Intent` 时隐藏）。
+- `/Intent` 筛选已与真实 PyMuPDF **1.28.2** 的 64 组合矩阵核对（2026-09-10）：
+  仅活动配置的非空 `/Intent` 启用筛选；配置缺省或 `[]` 不筛选，也不从 `/D` 继承到
+  缺省 Intent 的备用配置。OCG 缺省 Intent 按 `/View`，显式 `[]` 则不匹配任何配置，
+  包括 `/All`。单名称或数组中任一同名匹配即可，任一侧的 `/All` 可通配另一侧的名称。
+  不匹配隐藏优先于面板 ON 与 `/AS` 显示提升；匹配本身不把 OFF 层变 ON。
+  `get_ocgs()` / `layer_ui_configs()` / `ocg_state()` 继续只报告配置／面板状态。
+  覆盖：`OCG-VIS-INTENT-MATRIX`、`OCG-VIS-INTENT-STATE`、`OCG-VIS-INTENT-CONFIG`、
+  `OCG-VIS-INTENT-INDIRECT`、`OCG-INTERP-INTENT`（文字、图像与渲染绘制指令）。
 
 ## 验证方式
 
