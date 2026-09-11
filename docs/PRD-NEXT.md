@@ -325,31 +325,17 @@
     G7 pdfspine gap (`docs/spine-family.md` §6.15 item 7) closes.
   - *Size:* **S**.
 
-- [ ] **13. Family-level items (pointer — pdfspine-side decisions only).**
-  - *Goal:* keep the cross-repo backlog out of this file, but record the pieces
-    of it that pdfspine itself must decide.
-  - *Why / evidence:* the cross-repo work (pdfspine-studio's `=0.4.1` path dep,
-    the docspine/pptspine git-rev bump to v0.8.0, the examples e2e re-run, the
-    doc-site update, ocrspine hygiene, the spinestudio release) is registered in
-    `docs/spine-family.md` §6.15 and is handled by each repo under the family
-    "跨仓不写入" rule (`docs/spine-family.md` §7) — do not duplicate it here.
-  - *pdfspine-side actions (these do belong in this repo):*
-    - **Give pdfspine-studio a stable `pdf-api` to depend on.** It pins
-      `pdf-api = { path = "../pdfspine/crates/pdf-api", version = "=0.4.1" }`
-      (`pdfspine-studio/Cargo.toml:38`) while all 13 crates are `publish = false`.
-      Decide whether to publish `pdf-api` (crates.io or a tagged git dep) or
-      expose a stable `pdf-api` version, and document the supported version so the
-      sibling can move off `=0.4.1` (family §6.15 item 1).
-    - **Pick the `pdf-typeset` / `pdf-fonts` git-dep target for downstreams.**
-      docspine/pptspine pin 2026-07 revs (`509a932e` / `93214453` / `5f1640cb`);
-      publish a v0.8.0-aligned rev or a **git tag** they can track so their bump
-      (family §6.15 item 2) has a stable target, and record it in
-      `docs/RELEASE-PYPI.md`.
-  - *Acceptance:* the pdfspine-side release/version decisions for `pdf-api` and
-    `pdf-typeset` / `pdf-fonts` are recorded (in `docs/RELEASE-PYPI.md` or an
-    ADR); cross-repo execution stays tracked in `docs/spine-family.md` §6.15, not
-    duplicated here.
-  - *Size:* **S** (decision + doc; the downstream bumps are family-side).
+- [x] **13. Family-level upstream decisions — done (2026-09-10).**
+  `docs/RELEASE-PYPI.md` §F.3 supports `pdf-api`, `pdf-typeset` and `pdf-fonts`
+  as public git dependencies at the same complete **v0.8.0** release rev:
+  `f1f6ab4208876b0ba867edd76cc4e5da7ad8add2`. All crates remain
+  `publish = false`; Rust 1.96 and existing feature selections are documented.
+  The baseline is reproducible, not a promise of forward-compatible 0.x APIs;
+  it excludes the subsequent unreleased fixes. First-time Cargo resolution
+  requires the relevant network sources or a prepared cache. TOML examples,
+  versions and features were checked against the actual tagged manifests.
+  Consumer edits, fixture isolation and export/build gates remain family
+  §6.15 items 1–2; this completes only pdfspine's upstream decision.
 
 ### Working rules for the next agent
 

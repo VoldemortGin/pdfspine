@@ -220,12 +220,66 @@ pdf-ocr/pdf-render/pdf-text + py-bindings + pdf-testdata) — this prevents the
 internal `pdf-*` crates from ever being accidentally published under fragmented
 names, keeping the brand a single unified `pdfspine`.
 
-This is NOT a release blocker — it is a deliberate non-action. If, in the future,
-Rust developers want to depend on the engine directly, publishing to crates.io
+This is NOT a release blocker — it is a deliberate non-action. Rust consumers
+can use the supported git dependencies in §F.3. Publishing to crates.io
 would mean: name a public-facing crate `pdfspine` (a thin re-export of `pdf-api`,
 NEVER `pdf-spine`), flip the whole dependency tree's `publish` back on, add
 version-deps, and `cargo publish` each — a deliberate future effort, not part of
 the v1 go-live. For v1: ignore crates.io beyond holding the reserved name.
+
+### F.3 Rust consumers — supported pinned git baseline
+
+**Decision (2026-09-10):** support `pdf-api`, `pdf-typeset`, and `pdf-fonts`
+through the public repository at a fixed release commit. Keep all workspace
+crates `publish = false`; this does not require a crates.io release.
+
+The initial supported baseline is **`v0.8.0`**, whose annotated tag resolves to
+**`f1f6ab4208876b0ba867edd76cc4e5da7ad8add2`**. All three crates at this
+commit have workspace version **0.8.0** and require **Rust 1.96**. This is the
+published release snapshot; it does **not** include the reading-order,
+Adobe RGB rendering, or OCG Intent fixes developed after that release.
+
+Declare the dependencies needed by the consumer in its workspace manifest:
+
+```toml
+[workspace.dependencies]
+pdf-api = { git = "https://github.com/VoldemortGin/pdfspine", rev = "f1f6ab4208876b0ba867edd76cc4e5da7ad8add2", default-features = false }
+pdf-typeset = { git = "https://github.com/VoldemortGin/pdfspine", rev = "f1f6ab4208876b0ba867edd76cc4e5da7ad8add2" }
+pdf-fonts = { git = "https://github.com/VoldemortGin/pdfspine", rev = "f1f6ab4208876b0ba867edd76cc4e5da7ad8add2" }
+```
+
+Member crates inherit the entries with `workspace = true`, including test-only
+`pdf-fonts` dependencies. A consumer that needs several pdfspine crates must
+use the **same repository URL and full commit rev for all of them**, and commit
+its updated `Cargo.lock`. Do not track a branch or depend on a sibling working
+tree by `path`; Cargo resolves pdfspine's internal workspace paths inside its
+own git checkout.
+
+The `pdf-api` example preserves pdfspine-studio's existing
+`default-features = false` choice. At this baseline, `pdf-api` enables
+`encryption` by default; `paddle-ocr` is an explicit opt-in. Consumers should
+preserve their existing feature selection during migration and enable a new
+feature only when they intend to add that capability. Python wheels' feature
+selection does not determine the feature selection of a Rust consumer.
+
+Here, **stable baseline** means an identified, reproducible source snapshot,
+not a promise of forward-compatible Rust APIs throughout the 0.x series.
+Upgrade the rev deliberately, update the lockfile, and run the consumer's
+build, tests, and export/render conformance gates. Consumers that need an
+unreleased fix must move to a subsequent documented release baseline once it
+is available; do not move the `v0.8.0` tag or silently replace this rev with
+current `main`.
+
+The git form removes the requirement for a sibling checkout. Initial Cargo
+resolution still needs access to the git sources and registry dependencies,
+or a prepared cache. In particular, `pdf-api` reaches `pdf-ocr`, whose manifest
+also declares the optional `ocrspine` git dependency. Do not assume a fresh
+build is offline merely because `paddle-ocr` is disabled.
+
+This section supplies pdfspine's upstream decision for the consumer migrations
+tracked in `docs/spine-family.md` §6.15 items 1–2. Those repositories perform
+their own dependency edits, fixture isolation, and validation; documenting this
+baseline does not mean their migrations have passed.
 
 ---
 
