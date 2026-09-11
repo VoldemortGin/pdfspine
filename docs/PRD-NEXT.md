@@ -234,7 +234,7 @@
     SSIM (one was already measured slower and rejected).
   - *Size:* **L**.
 
-- [ ] **4. Deferred APIs — 7 of the original 9 landed; 2 remain.**
+- [x] **4. Deferred APIs — all 9 original items landed.**
   - *Landed:* `DisplayList.get_textpage(flags=3)` returns a usable public
     `TextPage` wrapper from owned semantic/font/image resources; source edits
     and closure do not invalidate text extraction. Paired recording avoids a
@@ -340,12 +340,33 @@
     Final integrated five-phase gate passes **1971 Rust / 1386 Python tests**,
     with 66 existing Python skips; extension fingerprint `53da3cbce469`, drift
     and wheel/sdist installation smoke pass. Eight final Page/DL buffer probes
-    remain identical; no additional GT scoring. The two run APIs stay deferred.
-  - *Remaining order:* device callbacks `Page.run` / `DisplayList.run` remain deferred.
+    remain identical; no additional GT scoring. At that snapshot milestone, the two run APIs remained deferred.
+  - *Run completion:* `Page.run` / `DisplayList.run` now replay through immutable
+    events and `ReplayDevice(callback)`, `for_textpage` or `for_pixmap`. This is
+    an explicit pdfspine extension, not native FzDevice2 handle compatibility.
+    Callback exceptions stop immediately; typed targets stage an atomic append or
+    RGB/RGBA draw. Area conservatively selects whole operations, not a hard clip;
+    unknown bounds are retained, while empty/inverted areas select no paint.
+    Frozen resources survive source edits/close. Existing straight-alpha bytes
+    are preserved wherever premultiplied pixels remain unchanged. See
+    `docs/replay-callback-contract.md` and the three public replay test modules.
+    Final candidate: 177 related Rust tests and 174 combined Python tests pass
+    (4 empty-parameter deferred-guard skips); 35 available documents × RGB/RGBA at 150 DPI give
+    70 byte-identical outputs against ordinary DisplayList rendering. The eight
+    missing historical render assets remain outside this coverage.
+    Final integration gate: **1996 Rust / 1441 Python tests**, 68 Python skips
+    (including empty deferred-parameter guards), matching extension fingerprint
+    `b96b546f1127`, drift and both wheel/sdist installation checks pass. The first
+    Python run exposed one stale deferred assertion; after replacing it with a
+    real callback regression, Python/drift/artifacts passed while the unchanged
+    Rust/extension evidence was retained. Both installed artifacts exercise all
+    three targets and include the replay module, stub and contract documentation.
+    Catalog parity is **703/769 = 91.4%, deferred = 0**, out-of-scope = 66.
+    DL accumulation and native device handles are not supported.
   - *Evidence:* `python/tests/test_displaylist_textpage.py` covers flags, invisible
     text, Form resources, source edit/close, CropBox/Rotate, annotations and live
     PyMuPDF 1.28.2 comparisons; Rust tests cover lazy decoding and snapshot bounds.
-    Catalog parity is 701/769 = 91.2%, deferred = 2. No callback framework is added.
+    Earlier text-snapshot evidence (before subsequent API additions):
     Full five-phase gate passes (1255 Python tests, 66 existing skips). The same
     35 available render inputs retain identical dimensions/full pixel hashes in
     direct Page rendering and `annots=0` DisplayList replay; eight historical
@@ -386,7 +407,7 @@
     byte-for-byte. New LO fixture **0.9527 → 0.9836**; previous DOCX/PPTX/shading/
     tracking scores unchanged. `between` and non-solid styles remain unsupported.
     See `docs/typeset-paragraph-borders.md`; consumer mappings/pins are unchanged.
-  - [x] **Resolved script run placement** (unreleased isolated candidate).
+  - [x] **Resolved script run placement** (unreleased).
     Optional validated glyph scale and upward-positive point baseline shift keep
     nominal line struts separate from effective glyph geometry. Exact preserves
     normal baselines; shared measurement covers boxes/cells/border page reserves.

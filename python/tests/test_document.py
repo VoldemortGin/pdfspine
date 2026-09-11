@@ -138,17 +138,17 @@ def test_pydoc_003_metadata_keys(two_page_path):
     assert md["encryption"] == ""
 
 
-def test_pydoc_004_unimplemented_raises(two_page_path):
-    # PYDOC-004: a known-but-unimplemented method raises PdfUnsupportedError.
-    # `get_pixmap` is implemented in M6d (it renders the page) and `insert_file`
-    # is now implemented (M5, image/PDF inputs), so the unimplemented example
-    # here is `Page.run` (still deferred).
+def test_pydoc_004_replay_and_unknown_attribute(two_page_path):
+    # Page.run is implemented; invalid devices and unknown names stay explicit.
     doc = pdfspine.open(two_page_path)
     page = doc[0]
     pix = page.get_pixmap()
     assert pix.width > 0 and pix.height > 0
-    with pytest.raises(pdfspine.PdfUnsupportedError):
+    with pytest.raises(TypeError, match="ReplayDevice"):
         page.run(None, None)
+    events = []
+    assert page.run(pdfspine.ReplayDevice(events.append), None) is None
+    assert [event.kind for event in events] == ["begin", "end"]
     # get_toc is now implemented (M3d): a doc with no /Outlines returns [].
     assert doc.get_toc() == []
     # An attribute that does not exist at all is still AttributeError.

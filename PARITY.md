@@ -34,15 +34,15 @@
 
 > **Current snapshot.** Numbers below are recomputed from the
 > live `COMPAT.toml` per-symbol dispositions. `COMPAT.toml [meta]` is always the authoritative live figure;
-> the current remaining-work list (the 2 deferred symbols, grouped + prioritized) lives in
+> the current development backlog lives in
 > [`docs/PRD-NEXT.md`](docs/PRD-NEXT.md) §3.B.
 
-**Overall: 701 / 769 implemented (91.2% coverage).**
+**Overall: 703 / 769 implemented (91.4% coverage).**
 
 | Disposition | Count | Share |
 |---|---:|---:|
-| **implemented** | **701** | **91.2%** |
-| deferred (planned, later milestone / post-v1) | 2 | 0.3% |
+| **implemented** | **703** | **91.4%** |
+| deferred (planned, later milestone / post-v1) | 0 | 0.0% |
 | out-of-scope (raises `PdfUnsupportedError`) | 66 | 8.6% |
 | **Total catalogued symbols** | **769** | 100% |
 
@@ -60,14 +60,14 @@
 | `IRect` | 25 | 25 | 0 | 0 | 100% |
 | `Quad` | 17 | 17 | 0 | 0 | 100% |
 | `Document` | 150 | 136 | 0 | 14 | 91% |
-| `Page` | 117 | 114 | 1 | 2 | 97% |
+| `Page` | 117 | 115 | 0 | 2 | 98% |
 | `TextPage` | 17 | 17 | 0 | 0 | 100% |
 | `Pixmap` | 43 | 43 | 0 | 0 | 100% |
 | `Annot` | 51 | 47 | 0 | 4 | 92% |
 | `Widget` | 35 | 28 | 0 | 7 | 80% |
 | `Link` | 14 | 14 | 0 | 0 | 100% |
 | `Outline` | 11 | 11 | 0 | 0 | 100% |
-| `DisplayList` | 5 | 4 | 1 | 0 | 80% |
+| `DisplayList` | 5 | 5 | 0 | 0 | 100% |
 | `Shape` | 24 | 24 | 0 | 0 | 100% |
 | `Font` | 23 | 22 | 0 | 1 | 96% |
 | `TextWriter` | 10 | 10 | 0 | 0 | 100% |
@@ -79,7 +79,7 @@
 | Module-level functions | 32 | 29 | 0 | 3 | 91% |
 | `Tools` / `TOOLS` | 22 | 15 | 0 | 7 | 68% |
 | `exceptions` | 10 | 10 | 0 | 0 | 100% |
-| **Total** | **769** | **701** | **2** | **66** | **91.2%** |
+| **Total** | **769** | **703** | **0** | **66** | **91.4%** |
 
 ### Per-milestone breakdown
 
@@ -87,8 +87,7 @@
 > per-symbol `milestone` field, so it cannot be recomputed mechanically. Use the **per-class table
 > above** (recomputed from the live `COMPAT.toml`) + `docs/PRD-NEXT.md` §3.B for current status. By
 > milestone, all of M0–M8's headline paths are landed (geometry, parsing, text, edit/save, annot/forms,
-> image-docs/Pixmap, rendering near-parity, SVG/tables/OCG, OCR-via-Tesseract); the 2 deferred are the
-> long tails and the 66 out-of-scope are the HTML/CSS story engine + render-era knobs.
+> image-docs/Pixmap, rendering near-parity, SVG/tables/OCG, OCR-via-Tesseract); there are no deferred symbols; the 66 out-of-scope are the HTML/CSS story engine + render-era knobs.
 
 ---
 
@@ -117,7 +116,7 @@ per-symbol truth (every name, disposition, milestone, note) is in [`COMPAT.toml`
 
 ### Partial (headline paths landed, long tail deferred)
 
-- [x] **`Page` (114/117)** — text extraction (`get_text` all variants, `get_textpage`, `extend_textpage`, `search_for`, `TEXTFLAGS`,
+- [x] **`Page` (115/117)** — text extraction (`get_text` all variants, `get_textpage`, `extend_textpage`, `search_for`, `TEXTFLAGS`,
   OCR textpage), inventory (`get_fonts`/`get_images`/`get_xobjects`/`get_image_info`/`get_image_bbox`/
   `get_image_rects`/`get_drawings`/`get_cdrawings`/`cluster_drawings`), the full annotation `add_*` family
   (incl. `add_caret_annot`/`add_widget`) + `delete`/`delete_widget`/`apply_redactions`, widgets
@@ -154,7 +153,7 @@ per-symbol truth (every name, disposition, milestone, note) is in [`COMPAT.toml`
   fontsize/maxlen/format, field_display, is_signed, on_state, reset, rb_parent) + `update`; 7 out-of-scope.
 - [x] **`TextPage` (17/17)** — fully landed: `extractText`/TEXT/BLOCKS/WORDS/DICT/JSON/RAWDICT/RAWJSON +
   `extractHTML`/XHTML/XML + `extractSelection`/`extractTextbox`/`search`/`extractIMGINFO` + `rect`/`poolsize`.
-- [x] **`DisplayList` (4/5)** — constructor, `get_pixmap`, `get_textpage`, `rect` (records the render-op stream; replay via
+- [x] **`DisplayList` (5/5)** — constructor, `get_pixmap`, `get_textpage`, `run`, `rect` (records the render-op stream; replay via
   `get_pixmap`).
 - [x] **`constants` (41/43)** — geometry singletons/aliases + encryption-method constants
   (`PDF_ENCRYPT_NONE/RC4_128/AES_128/AES_256`) + the enum tables (TEXT_*/PDF_ANNOT_*/…); 2 out-of-scope.
@@ -183,11 +182,11 @@ per-symbol truth (every name, disposition, milestone, note) is in [`COMPAT.toml`
 
 ## Remaining work
 
-The authoritative, prioritised list of the **2 deferred** symbols (grouped, with quick-wins flagged)
-now lives in **[`docs/PRD-NEXT.md`](docs/PRD-NEXT.md) §3.B** — kept there to avoid two divergent lists.
-In brief the deferred set is:
-**Page (1)** device-callback replay (`run`); **DisplayList (1)** `run`
-(device-callback replay).
+No catalogued symbols remain deferred. `Page.run` and `DisplayList.run` use
+pdfspine's own `ReplayDevice` callback, TextPage and RGB/RGBA Pixmap targets;
+this is not native `FzDevice2` handle compatibility. See the
+[replay contract](docs/replay-callback-contract.md) for normalized semantics.
+Further quality work remains in `docs/PRD-NEXT.md` §0.
 
 The **66 out-of-scope** symbols (raise `PdfUnsupportedError`) are dominated by `Story` / `Xml` /
 `Archive` (the HTML/CSS -> PDF layout engine, PRD §3.2 #2) + render-era `Tools` knobs + EPUB

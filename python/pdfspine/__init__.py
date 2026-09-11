@@ -81,6 +81,7 @@ from .helpers import (
     unicode_to_glyph_name,
 )
 from .models import FilledRectangle, ImageBlock, LinkAnnotation, TextBlock
+from .replay import ReplayDevice, ReplayEvent
 
 try:
     # The single source of truth: the version baked into the installed wheel's
@@ -126,6 +127,8 @@ __all__ = [
     "Page",
     "Pixmap",
     "DisplayList",
+    "ReplayDevice",
+    "ReplayEvent",
     "TextPage",
     "Annot",
     "Widget",

@@ -21,6 +21,18 @@ feature-complete, but the public API and on-disk formats may still change.
   scales the offset once. None/identity retain default output. No automatic
   OOXML script policy, consumer mapping or global lineGap change is introduced.
 
+### Replay devices
+
+- Added `ReplayDevice(callback)`, immutable `ReplayEvent`, and typed
+  `for_textpage` / `for_pixmap` targets for `Page.run` and `DisplayList.run`.
+  These are pdfspine extensions, not native FzDevice2 handle compatibility.
+  Events retain frozen resources with lazy font/image bytes; callback exceptions
+  stop replay. Typed targets commit atomically and reject concurrent conflicts.
+- RGB/RGBA targets draw over existing straight-alpha samples with the existing
+  renderer, preserving unchanged bytes, DPI, origin and exported old views.
+  Area conservatively selects whole operations rather than clipping pixels.
+  See `docs/replay-callback-contract.md` for lifecycle and resource-error limits.
+  Catalog coverage is 703/769 (91.4%), with zero deferred and 66 out-of-scope.
 
 ### Solid paragraph borders
 
@@ -39,7 +51,7 @@ feature-complete, but the public API and on-disk formats may still change.
 - Unreleased Rust API change: `page_get_displaylist` and
   `page_get_displaylist_with_annots` now return `Result<DisplayList>`; callers
   must propagate or handle snapshot errors. Python signatures are unchanged.
-  This does not implement `Page.run` or `DisplayList.run` callbacks.
+  Replay callbacks are provided by the separate addition above.
 
 ### Dynamic subset font names
 

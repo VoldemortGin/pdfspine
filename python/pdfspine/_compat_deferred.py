@@ -7,9 +7,4 @@ spelled ``Class.member`` (or a bare module-level name).
 
 from __future__ import annotations
 
-DEFERRED: frozenset[str] = frozenset(
-    {
-        "DisplayList.run",
-        "Page.run",
-    }
-)
+DEFERRED: frozenset[str] = frozenset({})

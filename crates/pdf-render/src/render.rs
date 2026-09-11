@@ -64,7 +64,7 @@ use crate::vector::{
 
 /// Max device pixels for a render target (never-OOM guard, PRD §9.6.2). ~178 MP
 /// (the largest 16384² target tiny-skia can comfortably allocate).
-const MAX_RENDER_PIXELS: u64 = 16384 * 16384;
+pub(crate) const MAX_RENDER_PIXELS: u64 = 16384 * 16384;
 
 /// Options controlling a page render (PyMuPDF `Page.get_pixmap` parameters,
 /// PRD §8.11).
@@ -149,6 +149,12 @@ impl DisplayList {
         self.cropbox
     }
 
+    /// Immutable ordered operations for owned callback replay.
+    #[must_use]
+    pub fn operations(&self) -> &[RenderOp] {
+        &self.ops
+    }
+
     /// The number of recorded drawcalls (diagnostic).
     #[must_use]
     pub fn len(&self) -> usize {
@@ -159,6 +165,73 @@ impl DisplayList {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.ops.is_empty()
+    }
+
+    /// Paints selected operations onto an independent RGB(A) target snapshot.
+    /// Source skips match the ordinary best-effort renderer; errors never mutate target.
+    ///
+    /// # Errors
+    /// Unsupported target formats, invalid storage/indices and raster failures propagate.
+    pub fn replay_into(
+        &self,
+        doc: &DocumentStore,
+        target: &Pixmap,
+        base: Matrix,
+        selected: &[usize],
+    ) -> Result<Pixmap> {
+        self.replay_into_staged(doc, target, base, selected, |_| Ok(()))
+    }
+
+    fn replay_into_staged(
+        &self,
+        doc: &DocumentStore,
+        target: &Pixmap,
+        base: Matrix,
+        selected: &[usize],
+        finish: impl FnOnce(&Canvas) -> Result<()>,
+    ) -> Result<Pixmap> {
+        if ![base.a, base.b, base.c, base.d, base.e, base.f]
+            .into_iter()
+            .all(f64::is_finite)
+        {
+            return Err(Error::InvalidArgument("nonfinite replay target transform"));
+        }
+        if target.colorspace != Colorspace::Rgb || target.n != 3 + u8::from(target.alpha) {
+            return Err(Error::Unsupported("replay target must be RGB or RGBA"));
+        }
+        let stride = (target.width as usize)
+            .checked_mul(target.n as usize)
+            .ok_or(Error::LimitExceeded("replay target stride overflow"))?;
+        let len = stride
+            .checked_mul(target.height as usize)
+            .ok_or(Error::LimitExceeded("replay target storage overflow"))?;
+        if target.stride != stride || target.samples().len() != len {
+            return Err(Error::InvalidArgument(
+                "invalid replay target sample storage",
+            ));
+        }
+        if selected.iter().any(|i| *i >= self.ops.len())
+            || selected.windows(2).any(|p| p[0] >= p[1])
+        {
+            return Err(Error::InvalidArgument("invalid replay selection order"));
+        }
+        if target.width == 0 || target.height == 0 {
+            return Ok(target.clone());
+        }
+        let mut canvas = Canvas::from_rgb_pixmap(target, base)?;
+        replay_iter(
+            &mut canvas,
+            doc,
+            selected.iter().map(|i| &self.ops[*i]),
+            &RenderCtx::page(),
+        )?;
+        finish(&canvas)?;
+        let result = canvas.into_pixmap_preserving(Some(target))?;
+        if result.samples() == target.samples() {
+            Ok(target.clone())
+        } else {
+            Ok(result)
+        }
     }
 
     /// Replays the recorded drawcalls into a [`Pixmap`] under `opts` (PyMuPDF
@@ -313,6 +386,15 @@ fn replay(
     canvas: &mut Canvas,
     doc: &DocumentStore,
     ops: &[RenderOp],
+    ctx: &RenderCtx,
+) -> Result<()> {
+    replay_iter(canvas, doc, ops.iter(), ctx)
+}
+
+fn replay_iter<'a>(
+    canvas: &mut Canvas,
+    doc: &DocumentStore,
+    ops: impl IntoIterator<Item = &'a RenderOp>,
     ctx: &RenderCtx,
 ) -> Result<()> {
     // Per-stream font program cache: the font dict identity (its BaseFont + a
@@ -1358,4 +1440,37 @@ fn image_mask_decode_inverted(dict: &Dict) -> bool {
     arr.len() >= 2
         && arr[0].as_f64().is_some_and(|v| v >= 0.5)
         && arr[1].as_f64().is_some_and(|v| v < 0.5)
+}
+
+#[cfg(test)]
+mod replay_target_tests {
+    use super::*;
+
+    #[test]
+    fn actual_selected_replay_post_paint_error_does_not_commit() {
+        let doc=DocumentStore::from_bytes(b"%PDF-1.7\n1 0 obj\n<< /Type /Catalog >>\nendobj\ntrailer\n<< /Root 1 0 R /Size 2 >>\n%%EOF\n".to_vec(),pdf_core::Limits::default()).unwrap();
+        let list = DisplayList::from_ops(
+            vec![RenderOp::Fill {
+                items: vec![pdf_text::PathItem::Rect(Rect::new(0.0, 0.0, 2.0, 2.0))],
+                close: true,
+                color: 0xff0000,
+                alpha: 255,
+                even_odd: false,
+            }],
+            Rect::new(0.0, 0.0, 2.0, 2.0),
+            0,
+        );
+        let source = Pixmap::new(2, 2, Colorspace::Rgb, false, vec![77; 12]);
+        let original = source.samples.clone();
+        let result = list.replay_into_staged(&doc, &source, Matrix::IDENTITY, &[0], |canvas| {
+            assert_eq!(&canvas.pixmap().data()[0..4], &[255, 0, 0, 255]);
+            Err(Error::InvalidArgument("test-only post-paint failure"))
+        });
+        assert!(matches!(
+            result,
+            Err(Error::InvalidArgument("test-only post-paint failure"))
+        ));
+        assert!(std::sync::Arc::ptr_eq(&source.samples, &original));
+        assert_eq!(source.samples(), [77; 12]);
+    }
 }

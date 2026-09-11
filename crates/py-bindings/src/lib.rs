@@ -11,9 +11,11 @@
 //! released via [`Python::detach`]. Errors map to a typed exception hierarchy
 //! rooted at `_core.PdfError` (PRD §9.3).
 
+mod replay;
+
 use std::ffi::{c_int, c_void, CString};
 use std::ptr;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use pdf_api::geom::{IRect, Matrix, Point, Quad, Rect};
@@ -143,7 +145,7 @@ fn map_err(e: ApiError) -> PyErr {
 /// instead of a bare `AttributeError`. `test_core_alias_deferred_set_matches_rust`
 /// guards this list against drift from `_compat_deferred.DEFERRED`.
 const PIXMAP_DEFERRED: &[&str] = &[];
-const DISPLAYLIST_DEFERRED: &[&str] = &["run"];
+const DISPLAYLIST_DEFERRED: &[&str] = &[];
 const TOOLS_DEFERRED: &[&str] = &[];
 
 /// Raises `PdfUnsupportedError` when `name` is a deferred member of `group`, else
@@ -338,6 +340,20 @@ struct PyTextPage {
 }
 
 impl PyTextPage {
+    fn promote_for_append(
+        &self,
+    ) -> pdf_api::Result<(pdf_api::TextPage, pdf_api::ExtendedTextResources)> {
+        let mut tp = self.tp.clone();
+        let resources = match &self.source {
+            TextPageSource::Page(page) => pdf_api::ExtendedTextResources::from_page(page, &mut tp)?,
+            TextPageSource::Recorded { resources, flags } => {
+                pdf_api::ExtendedTextResources::from_recorded(&mut tp, resources.clone(), *flags)
+            }
+            TextPageSource::Extended(resources) => (**resources).clone(),
+        };
+        Ok((tp, resources))
+    }
+
     fn extract_output(&self, py: Python<'_>, opt: &str) -> PyResult<Py<PyAny>> {
         self.extract_output_sorted(py, opt, false)
     }
@@ -2130,20 +2146,7 @@ impl PyPage {
         }
         let (tp, resources) = py
             .detach(|| -> pdf_api::Result<_> {
-                let mut tp = target.tp.clone();
-                let mut resources = match &target.source {
-                    TextPageSource::Page(page) => {
-                        pdf_api::ExtendedTextResources::from_page(page, &mut tp)?
-                    }
-                    TextPageSource::Recorded { resources, flags } => {
-                        pdf_api::ExtendedTextResources::from_recorded(
-                            &mut tp,
-                            resources.clone(),
-                            *flags,
-                        )
-                    }
-                    TextPageSource::Extended(resources) => (**resources).clone(),
-                };
+                let (mut tp, mut resources) = target.promote_for_append()?;
                 let recorded = pdf_api::page_get_displaylist_with_annots(&self.page, true)?;
                 let new = recorded.get_textpage_transformed(
                     flags,
@@ -4799,6 +4802,7 @@ struct PyPixmap {
     /// itself rides on the `Arc` strong count, which the boxed clone bumps).
     /// Atomic so the `#[pyclass]` stays `Sync` (PyO3 0.29 requirement).
     exports: AtomicUsize,
+    replay_lease: Arc<AtomicBool>,
     /// The pixmap origin `(x, y)` (PyMuPDF `Pixmap.x` / `.y`). Pure metadata that
     /// does not affect the samples; mirrors PyMuPDF's `set_origin`.
     origin: (i64, i64),
@@ -4812,6 +4816,7 @@ impl PyPixmap {
         PyPixmap {
             pix,
             exports: AtomicUsize::new(0),
+            replay_lease: Arc::new(AtomicBool::new(false)),
             origin: (0, 0),
             dpi: (96, 96),
         }
@@ -4820,6 +4825,41 @@ impl PyPixmap {
 
 #[pymethods]
 impl PyPixmap {
+    /// Stages raster work without holding a target borrow and commits once.
+    fn _replay_pixmap(
+        slf: Bound<'_, Self>,
+        py: Python<'_>,
+        record: &PyDisplayList,
+        matrix: Option<(f64, f64, f64, f64, f64, f64)>,
+        area: Option<(f64, f64, f64, f64)>,
+    ) -> PyResult<()> {
+        let (original, origin, dpi, _lease) = {
+            let target = slf.try_borrow()?;
+            let lease = replay::PixmapLease::claim(target.replay_lease.clone())
+                .map_err(PyRuntimeError::new_err)?;
+            (target.pix.clone(), target.origin, target.dpi, lease)
+        };
+        let inner = record.inner.clone();
+        let result = py.detach(|| {
+            let selected = replay::selected_operations(inner.clone(), matrix, area)?;
+            let matrix = matrix.map_or(Matrix::IDENTITY, |(a, b, c, d, e, f)| {
+                Matrix::new(a, b, c, d, e, f)
+            });
+            inner
+                .replay_pixmap(&original, matrix, origin, &selected)
+                .map_err(map_err)
+        });
+        let mut target = slf.try_borrow_mut()?;
+        replay::commit_pixmap(&mut target, &original, origin, dpi, result).map_err(|error| {
+            match error {
+                replay::PixmapCommitError::Stage(error) => error,
+                replay::PixmapCommitError::Changed => {
+                    PyRuntimeError::new_err("target Pixmap changed during replay")
+                }
+            }
+        })
+    }
+
     /// A deferred baseline member (e.g. `warp`) raises `PdfUnsupportedError`
     /// instead of leaking a bare `AttributeError` (PRD §7 / §9.5).
     fn __getattr__(&self, name: &str) -> PyResult<Py<PyAny>> {
@@ -5290,6 +5330,71 @@ struct PyDisplayList {
 
 #[pymethods]
 impl PyDisplayList {
+    fn _replay_textpage(
+        &self,
+        py: Python<'_>,
+        target: &PyTextPage,
+        flags: u32,
+        matrix: Option<(f64, f64, f64, f64, f64, f64)>,
+        area: Option<(f64, f64, f64, f64)>,
+    ) -> PyResult<Option<PyTextPage>> {
+        py.detach(|| {
+            let selected = replay::selected_operations(self.inner.clone(), matrix, area)?;
+            let matrix = matrix.map_or(Matrix::IDENTITY, |(a, b, c, d, e, f)| {
+                Matrix::new(a, b, c, d, e, f)
+            });
+            let Some(new) = self.inner.replay_textpage(
+                &selected,
+                flags,
+                matrix,
+                Rect::new(0.0, 0.0, target.tp.width, target.tp.height),
+            ) else {
+                return Ok(None);
+            };
+            let (mut tp, mut resources) = target.promote_for_append().map_err(map_err)?;
+            let transforms = self.inner.text_image_transforms(matrix);
+            resources.append(
+                &mut tp,
+                new,
+                self.inner.text_resources(),
+                flags,
+                &transforms,
+            );
+            Ok(Some(PyTextPage {
+                tp,
+                source: TextPageSource::Extended(Arc::new(resources)),
+            }))
+        })
+    }
+
+    /// pdfspine callback extension; native device handles are intentionally unsupported.
+    fn run(
+        &self,
+        py: Python<'_>,
+        dw: &Bound<'_, PyAny>,
+        m: &Bound<'_, PyAny>,
+        area: &Bound<'_, PyAny>,
+    ) -> PyResult<()> {
+        let record = Py::new(
+            py,
+            PyDisplayList {
+                inner: self.inner.clone(),
+            },
+        )?;
+        py.import("pdfspine.replay")?
+            .getattr("_run")?
+            .call1((record, dw, m, area))?;
+        Ok(())
+    }
+
+    fn _replay_prepare(
+        &self,
+        matrix: Option<(f64, f64, f64, f64, f64, f64)>,
+        area: Option<(f64, f64, f64, f64)>,
+    ) -> PyResult<Vec<replay::PyReplayEvent>> {
+        replay::prepare(self.inner.clone(), matrix, area)
+    }
+
     /// A deferred baseline member (e.g. `get_textpage` / `run`) raises
     /// `PdfUnsupportedError` instead of a bare `AttributeError` (PRD §7 / §9.5).
     fn __getattr__(&self, name: &str) -> PyResult<Py<PyAny>> {
@@ -6089,6 +6194,7 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyShape>()?;
     m.add_class::<PyPixmap>()?;
     m.add_class::<PyDisplayList>()?;
+    m.add_class::<replay::PyReplayEvent>()?;
     m.add_class::<PyTableFinder>()?;
     m.add_class::<PyTable>()?;
     m.add_class::<PyImageTable>()?;
