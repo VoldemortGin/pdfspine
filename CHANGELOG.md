@@ -72,6 +72,17 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ### Added
 
+- **Solid paragraph shading.** `pdf-typeset` supports optional solid backgrounds
+  in flowing paragraphs, text boxes and table cells. Matching adjacent backgrounds
+  cover intervening spacing within a page; text positions and pagination stay
+  unchanged. The default remains unshaded.
+- **Nonnegative character spacing.** `RunStyle` accepts validated finite
+  `CharacterSpacing`, default zero. Measured advances drive wrapping/alignment,
+  decoration/link widths and textbox scaling, with combining-mark preservation
+  during tracking. Negative and nonfinite values return typed errors. Condensed
+  spacing, scripts, paragraph borders/pattern fills and `lineGap` remain open.
+
+
 - `DisplayList.get_textpage(flags=3)` returns a public `TextPage` backed by
   recorded text, resolved font names and independently owned image resources.
   Text extraction survives source edits/closure and respects creation flags;

@@ -263,7 +263,32 @@
     implementing it).
   - *Acceptance:* LibreOffice-oracle SSIM on the docx / pptx fixtures does not
     regress and rises on a new border/shading fixture; new pdf-typeset Rust tests.
-  - *Size:* **M**.
+  - [x] **Solid paragraph shading** (`09740d7`). `ParaProps.shading` defaults
+    to `None`; shared flow/textbox/table-cell layout paints solid fills without
+    changing text positions or pagination. Adjacent equal fills with equal
+    horizontal indents join their spacing on the same page; isolated paragraphs,
+    different fills/indents and page boundaries retain separate backgrounds.
+    LO shading SSIM **0.9514 → 0.9868**; four prior engine PDFs byte-identical.
+  - [x] **Finite nonnegative character spacing** (`448fb53`). Validated
+    `CharacterSpacing` on `RunStyle`, default zero; negative/NaN/Inf values return
+    typed errors. Mixed runs, spaces, hard/soft breaks, forced wrapping, tabs,
+    decoration/link widths and textbox scaling use measured tracking advances.
+    Active tracking preserves base-plus-combining-mark sequences, including CJK
+    token and run boundaries; this does not add complete shaping/grapheme support.
+    LO +1pt tracking SSIM **0.8631 → 0.9749**; five prior engine PDFs byte-identical.
+  - [ ] **Remaining:** paragraph borders and pattern shading, condensed negative
+    character spacing, superscript/subscript, and verified Word `lineGap` placement.
+  - *Increment validation:* LibreOffice 26.8.0.3 at 100 dpi, same renderer:
+    existing DOCX/PPTX **0.9822 / 0.9780**, unchanged. These are the current
+    comparison baseline, not the historical TS-12 **0.9815 / 0.9777** results.
+    Final isolated crate gate: **165 tests**, clippy/fmt/Rustdoc green; independent
+    review passed. Final regenerated PDFs match the scored PDFs byte for byte.
+    Integrated on the DisplayList snapshot baseline: 165 crate tests, read-back
+    4/4 order/F1 = 1, seven-page raster gate, fmt and public-doc coverage pass.
+    The two new `.ssimref` files are pdfspine-rendered regression snapshots at
+    100 dpi, not independent layout oracles; old references/manifest are unchanged.
+    LO improvement evidence remains `conformance/gt/TYPESET-LO-REPORT.md`.
+  - *Size:* **M** (remaining scope).
 
 - [ ] **6. Coverage ratchet + Rust branch coverage.**
   - *Goal:* keep the `fail_under` ratchet moving up and add Rust branch coverage.
@@ -1628,6 +1653,25 @@ lists why · files · effort · **Acceptance**, the green condition that means "
   super/subscript, letter-spacing and caps (`RunStyle` gaps both consumers share); the residual docx 0.98
   (Writer places the hhea line gap **below** the descent, the engine above it — 0.5 pt at 12 pt, 1 pt at
   24 pt; verify Word's behaviour before changing).
+- **TS-13 · Solid paragraph shading** — ✅ DONE 2026-09-10 (`09740d7`).
+  Optional `ParaProps.shading: Option<Rgb>` reuses `FillRect` in shared paragraph
+  layout. One fill per page fragment precedes text; equal adjacent fills with
+  equal horizontal indents connect intervening spacing within a page. Empty styled
+  paragraphs, indents, different colors, page breaks, text boxes and table cells
+  are covered by six tests. Text layout/pagination and the four old PDFs remain
+  unchanged. LO shading **0.9514 → 0.9868**; solid fills only, no borders/patterns.
+- **TS-14 · Nonnegative run character spacing** — ✅ DONE 2026-09-10 (`448fb53`).
+  Typed finite nonnegative `CharacterSpacing` defaults to zero and rejects negative
+  and nonfinite input. Measured fragment advances drive wrap/alignment and
+  decoration/link extents; text-box font scaling scales spacing. Final paragraph
+  and soft-wrap lines omit their last tracking advance; explicit breaks retain it,
+  matching the measured positive LO cases. Ten tests cover mixed runs, spacing,
+  breaks, forced wrapping, tabs, decorations/links, scaling and Unicode combining
+  boundaries; zero tracking retains legacy handling. LO **0.8631 → 0.9749** and
+  all five prior engine PDFs are byte-identical. No global `Tc`/renderer change;
+  negative tracking, scripts, full shaping/graphemes and `lineGap` remain outside
+  this increment. Combined isolated crate gate: **165 tests**, clippy/fmt/Rustdoc
+  green. Current DOCX/PPTX/shading scores **0.9822 / 0.9780 / 0.9868** are unchanged.
 - **Downstream unblocking:** **Phase B (pptspine `ppt-render`)** starts when the TS-2/3/5/6 gates are
   green; **Phase C (docspine `doc-render`)** when the TS-2/3/4 gates (incl. TS-4's table primitives) are
   green. Phase B/C PRDs live in the consumer repos; each pins a pdfspine rev with its needed TS tasks
