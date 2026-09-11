@@ -498,6 +498,18 @@
   compiled-Rust comparison are in `/Volumes/ExternalSSD/tmp/ocg-intent/`.
 
 - [ ] **9. Table-structure backend benchmark + ONNX validation (P3-6, proposed).**
+  - *TableFormer evaluator increment (2026-09-11):* explicit fast/accurate
+    raw-structure goldcrop tracks use fixed Docling IBM Models 4.0.2 and cached
+    model/config hashes. Matching, row/column compression and overlap correction
+    are disabled; native word assignment reuses the existing geometric rule.
+    This is evaluator-only, not a production `find_tables` backend or detector.
+    Both variants passed one offline CPU ADBE readiness crop (188 native words,
+    128 final cells each, detect=0/recognize=1); counts are not quality scores.
+    Validation: 17 dedicated / 132 related tests passed, five existing model
+    skips, independent review and lint/docs checks. The HF symlink-directory
+    load failure was preserved and fixed with a red/green regression. The
+    isolated 38-package hash lock and two readiness records are external evidence;
+    no 40-page TableFormer result or human/ADR acceptance is claimed here.
   - *Complete diagnostic collection (2026-09-11):* all six native lines/text,
     TATR and ONNX page-e2e / goldcrop tracks processed **40 pages / 60 tables**,
     split into 10 development / 30 evaluation pages. See
@@ -551,7 +563,7 @@
     from these counts. The earlier 97.2680% coverage is a pre-increment baseline.
   - *Still open:* human correction/review, authentic gold-word inputs,
     evaluation-set quality scoring and real backend comparison. No TEDS,
-    TableFormer/alias implementation or ADR/default-model decision is claimed.
+    production TableFormer/alias registry or ADR/default-model decision is claimed.
   - *Goal:* validate the landed ONNX backend and finish the multi-backend seam.
   - *Why / evidence:* `find_tables(strategy="vision", backend="onnx")`
     (PP-DocLayoutV3 + SLANet-plus) landed 2026-09-08 but is **not yet validated
