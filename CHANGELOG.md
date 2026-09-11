@@ -11,6 +11,13 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
+### TableFormer evaluation adapter
+
+- Added explicit fixed-model fast/accurate raw-structure goldcrop experiments,
+  with native-word assignment, bounded lossless invalid-cell diagnostics and
+  runtime/model provenance. Production table extraction defaults are unchanged.
+  Two single-crop offline readiness checks are not accuracy or human acceptance.
+
 ### FinTabNet cropped-page evaluation
 
 - Goldcrop evaluation validates original source-page extent proof before model
