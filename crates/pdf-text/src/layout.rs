@@ -317,6 +317,8 @@ fn textpage_core(
     //    group each column's lines into paragraphs by vertical gaps.
     let mut blocks = group_blocks_columned(lines, width, height);
     replace_header_fragments(&mut blocks, header_replacements);
+    let image_bounds: Vec<_> = images.iter().map(|image| image_bbox(image, &p)).collect();
+    defer_wide_image_captions(&mut blocks, &image_bounds);
 
     // image blocks (device-space bbox via the placement CTM → page transform).
     for img in images {
@@ -623,6 +625,77 @@ fn name_flags(name: &str) -> u32 {
 
 // === line grouping ========================================================
 
+/// Recognize an isolated large initial beside three aligned ordinary rows.
+/// Withhold it from baseline clustering, then attach the original glyph to the
+/// first row after splitting; its large tolerance must not bridge later rows.
+fn dropped_initials(dev: &[DevGlyph]) -> Vec<(usize, usize)> {
+    let mut sizes: Vec<_> = dev.iter().map(dev_glyph_effective_size).collect();
+    let Some(body_size) = median_finite(&mut sizes) else {
+        return Vec::new();
+    };
+    let mut initials = Vec::new();
+    for (index, glyph) in dev.iter().enumerate() {
+        let size = dev_glyph_effective_size(glyph);
+        if size < 2.5 * body_size
+            || glyph.wmode != 0
+            || glyph.dir != (1.0, 0.0)
+            || glyph.text.chars().count() != 1
+            || !glyph.text.chars().all(char::is_alphabetic)
+        {
+            continue;
+        }
+        if dev.iter().any(|other| {
+            other.seq != glyph.seq
+                && dev_glyph_effective_size(other) > 0.8 * size
+                && (other.origin.y - glyph.origin.y).abs() < 0.3 * size
+                && other.bbox.x0 < glyph.bbox.x1 + size
+                && other.bbox.x1 > glyph.bbox.x0 - size
+        }) {
+            continue;
+        }
+        let mut starts: Vec<_> = dev
+            .iter()
+            .enumerate()
+            .filter(|(_, other)| {
+                other.font == glyph.font
+                    && other.dir == glyph.dir
+                    && other.wmode == 0
+                    && (dev_glyph_effective_size(other) - body_size).abs() < 0.2 * body_size
+                    && other.bbox.x0 >= glyph.bbox.x1 - 0.25 * body_size
+                    && other.bbox.x0 <= glyph.bbox.x1 + 0.5 * body_size
+                    && other.origin.y >= glyph.bbox.y0 + 0.5 * body_size
+                    && other.origin.y <= glyph.bbox.y1
+            })
+            .map(|(i, other)| (other.origin.y, other.bbox.x0, i))
+            .collect();
+        // Only row starts wrap around the initial. Interior glyphs in the
+        // following full-width row can happen to share the same x coordinate.
+        starts.retain(|&(baseline, x, _)| {
+            !dev.iter().any(|other| {
+                other.seq != glyph.seq
+                    && other.dir == glyph.dir
+                    && (other.origin.y - baseline).abs() < 0.25 * body_size
+                    && other.bbox.x0 >= glyph.bbox.x0 - 0.25 * body_size
+                    && other.bbox.x0 < x - 0.25 * body_size
+            })
+        });
+        starts.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.total_cmp(&b.1)));
+        starts.dedup_by(|a, b| (a.0 - b.0).abs() < 0.5 * body_size);
+        if starts.len() < 3
+            || starts.len() > 4
+            || (starts.last().expect("nonempty rows").0 - glyph.origin.y).abs() > 0.5 * body_size
+            || starts.windows(2).any(|pair| {
+                let gap = pair[1].0 - pair[0].0;
+                gap < 0.75 * body_size || gap > 1.75 * body_size
+            })
+        {
+            continue;
+        }
+        initials.push((index, starts[0].2));
+    }
+    initials
+}
+
 /// Clusters device glyphs into lines by cross-axis (baseline) proximity, then
 /// splits each baseline run on column gutters and into spans. Lines are returned
 /// in top-to-bottom order.
@@ -641,6 +714,9 @@ fn group_lines(dev: &[DevGlyph], inhibit_spaces: bool) -> (Vec<Line>, Vec<Header
     // the raw `Tf` operand: PDFs may bake scale into either direction (`Tf 1`
     // plus a large CTM, or `Tf 327.68` plus a shrinking CTM). Geometry-first
     // sizing keeps both forms invariant while still joining superscripts.
+    let dropped = dropped_initials(dev);
+    let dropped_indices: std::collections::BTreeSet<_> =
+        dropped.iter().map(|(index, _)| *index).collect();
     let mut clusters: Vec<Vec<usize>> = Vec::new();
     let mut cluster_cross: Vec<f64> = Vec::new();
     // Representative size/dir per cluster, kept in parallel arrays so the hot
@@ -651,6 +727,9 @@ fn group_lines(dev: &[DevGlyph], inhibit_spaces: bool) -> (Vec<Line>, Vec<Header
     let mut cluster_dir: Vec<(f64, f64)> = Vec::new();
 
     for (i, g) in dev.iter().enumerate() {
+        if dropped_indices.contains(&i) {
+            continue;
+        }
         let cross = g.cross();
         let g_size = dev_glyph_effective_size(g);
         let g_dir = g.dir;
@@ -764,6 +843,14 @@ fn group_lines(dev: &[DevGlyph], inhibit_spaces: bool) -> (Vec<Line>, Vec<Header
     // x-containment keeps it column-safe (a left-column marker is never inside a
     // right-column line's x-span).
     reattach_fragment_runs(&mut final_runs, dev);
+    for (initial, target) in dropped {
+        if let Some(run) = final_runs.iter_mut().find(|run| run.contains(&target)) {
+            run.push(initial);
+            run.sort_by(|a, b| dev[*a].along().total_cmp(&dev[*b].along()));
+        } else {
+            final_runs.push(vec![initial]);
+        }
+    }
     let lines = final_runs
         .into_iter()
         .map(|run| line_from_run(run, dev, inhibit_spaces))
@@ -3041,6 +3128,221 @@ fn push_text_blocks(mut lines: Vec<Line>, out: &mut Vec<Block>) {
 }
 
 // === reading order ========================================================
+
+/// Keep a floating illustration's caption out of the surrounding column flow.
+/// Classification happens after XY-cut: neither image nor repaired caption
+/// geometry can alter the existing partition or the relative order of prose.
+fn defer_wide_image_captions(blocks: &mut Vec<Block>, images: &[Rect]) {
+    if images.is_empty() {
+        return;
+    }
+    let mut widths: Vec<_> = blocks
+        .iter()
+        .flat_map(|block| &block.lines)
+        .filter(|line| {
+            line.wmode == 0
+                && line
+                    .spans
+                    .iter()
+                    .map(|span| span.chars.len())
+                    .sum::<usize>()
+                    >= 20
+        })
+        .map(|line| line.bbox.width())
+        .collect();
+    let Some(column_width) = median_finite(&mut widths) else {
+        return;
+    };
+    let mut sizes: Vec<_> = blocks
+        .iter()
+        .flat_map(|block| &block.lines)
+        .flat_map(|line| &line.spans)
+        .map(|span| span.rendered_size)
+        .collect();
+    let Some(body_size) = median_finite(&mut sizes) else {
+        return;
+    };
+    let mut selected = vec![false; blocks.len()];
+    let mut groups = Vec::new();
+    for image in images {
+        // A single-column inline illustration does not interrupt column flow.
+        if image.width() < 1.5 * column_width
+            || !blocks.iter().any(|block| {
+                (block.bbox.x0 >= image.x1 || block.bbox.x1 <= image.x0)
+                    && block.bbox.y0 < image.y1
+                    && block.bbox.y1 > image.y0
+                    && block.lines.len() >= 2
+            })
+        {
+            continue;
+        }
+        let mut below: Vec<_> = blocks
+            .iter()
+            .enumerate()
+            .filter(|(index, block)| {
+                !selected[*index]
+                    && !block.lines.is_empty()
+                    && block.bbox.x0 >= image.x0 - 1.0
+                    && block.bbox.y0 >= image.y1
+            })
+            .map(|(index, _)| index)
+            .collect();
+        below.sort_by(|a, b| blocks[*a].bbox.y0.total_cmp(&blocks[*b].bbox.y0));
+        let Some(anchor) = below.iter().position(|index| {
+            let block = &blocks[*index];
+            block.bbox.x1 <= image.x1 + 1.0
+                && block.bbox.y0 - image.y1 <= 3.0 * body_size
+                && block
+                    .lines
+                    .first()
+                    .and_then(|line| line.spans.first())
+                    .is_some_and(|span| {
+                        if span.flags & flags::BOLD == 0 {
+                            return false;
+                        }
+                        let words: Vec<_> = span.text.split_whitespace().collect();
+                        words.len() == 2
+                            && words[0].chars().all(char::is_alphabetic)
+                            && !words[1].trim_end_matches(['.', ':']).is_empty()
+                            && words[1]
+                                .trim_end_matches(['.', ':'])
+                                .chars()
+                                .all(|c| c.is_ascii_digit())
+                    })
+        }) else {
+            continue;
+        };
+        let title = &blocks[below[anchor]];
+        let embedded_body = title.lines.len() > 1;
+        let first_line = if embedded_body {
+            &title.lines[1]
+        } else {
+            let Some(&next) = below.get(anchor + 1) else {
+                continue;
+            };
+            let Some(line) = blocks[next].lines.first() else {
+                continue;
+            };
+            line
+        };
+        let Some(style) = first_line.spans.first() else {
+            continue;
+        };
+        let caption_size = style.rendered_size;
+        if caption_size >= body_size || first_line.bbox.y0 - title.lines[0].bbox.y1 > body_size {
+            continue;
+        }
+        let matching_line = |line: &Line| {
+            line.spans.iter().all(|span| {
+                span.font == style.font && (span.rendered_size - caption_size).abs() < 0.1
+            })
+        };
+        if !title.lines[1..].iter().all(&matching_line)
+            || title.lines[1..].windows(2).any(|pair| {
+                pair[1].spans[0].origin.y - pair[0].spans[0].origin.y > 1.5 * caption_size
+            })
+        {
+            continue;
+        }
+        let coherent_lines = |lines: &[Line]| {
+            lines.windows(2).all(|pair| {
+                pair[1].spans[0].origin.y - pair[0].spans[0].origin.y <= 1.5 * caption_size
+            })
+        };
+        let is_footer = |block: &Block| {
+            block.lines.len() == 1
+                && blocks.iter().any(|other| {
+                    other.lines.len() == 1
+                        && (other.bbox.x0 > image.x1 || other.bbox.x1 < image.x0)
+                        && (other.lines[0].spans[0].origin.y - block.lines[0].spans[0].origin.y)
+                            .abs()
+                            < 0.25 * caption_size
+                })
+        };
+        let mut group = vec![below[anchor]];
+        let mut bottom = title.bbox.y1;
+        let mut ambiguous = false;
+        let mut preceding_line = title.lines.last().expect("caption title has a line");
+        for &index in &below[anchor + 1..] {
+            let block = &blocks[index];
+            if block.bbox.y0 - bottom > body_size
+                || is_footer(block)
+                || !matching_line(&block.lines[0])
+            {
+                break;
+            }
+            if block.bbox.x1 > image.x1 + 1.0 || !block.lines.iter().all(&matching_line) {
+                ambiguous = true;
+                break;
+            }
+            if !coherent_lines(&block.lines) {
+                ambiguous = true;
+                break;
+            }
+            if (group.len() > 1 || embedded_body)
+                && preceding_line.bbox.x1 < image.x0 + 0.75 * image.width()
+            {
+                ambiguous = true;
+                break;
+            }
+            group.push(index);
+            bottom = bottom.max(block.bbox.y1);
+            preceding_line = block.lines.last().expect("caption candidate has a line");
+        }
+        if ambiguous || group.len() == 1 && !embedded_body {
+            continue;
+        }
+        // A compact identifier between the image and the numbered title belongs
+        // to the same float; unrelated page furniture below uses another style.
+        if anchor > 0 {
+            let index = below[anchor - 1];
+            let block = &blocks[index];
+            let text: String = block
+                .lines
+                .iter()
+                .flat_map(|line| &line.spans)
+                .map(|span| span.text.as_str())
+                .collect();
+            let identifier = text.split_once(':').is_some_and(|(label, value)| {
+                !label.is_empty()
+                    && label.len() <= 12
+                    && label.chars().all(char::is_alphabetic)
+                    && !value.trim().chars().any(char::is_whitespace)
+                    && value.chars().any(|c| c.is_ascii_digit())
+                    && value.contains(['/', '.'])
+            });
+            if identifier
+                && block.bbox.width() < 0.5 * image.width()
+                && block.lines.len() == 1
+                && block.bbox.y0 - image.y1 < body_size
+                && block.lines[0]
+                    .spans
+                    .iter()
+                    .all(|span| span.rendered_size < caption_size)
+            {
+                group.insert(0, index);
+            }
+        }
+        for &index in &group {
+            selected[index] = true;
+        }
+        groups.push(group);
+    }
+    if groups.is_empty() {
+        return;
+    }
+    let mut old: Vec<_> = std::mem::take(blocks).into_iter().map(Some).collect();
+    for (index, block) in old.iter_mut().enumerate() {
+        if !selected[index] {
+            blocks.extend(block.take());
+        }
+    }
+    for group in groups {
+        for index in group {
+            blocks.extend(old[index].take());
+        }
+    }
+}
 
 /// Assigns sequential numbers to blocks already emitted in document / region
 /// reading order (PRD §8.6.2).

@@ -14,7 +14,8 @@
 - **Repository:** `/Users/linhan/startup/spine/pdfspine`, branch `main`.
   The reading-order follow-up below started at **`93298af`** (the 2026-09-10
   backlog update); SECCI started at **`3faa62d`**, and the conservative FR
-  header increment at **`b0414f7`**. Use the log
+  header increment at **`b0414f7`**, and the PMC float / dropped-initial
+  increment at **`9223553`**. Use the log
   for the current post-fix HEAD; clean up only the completed item's branch /
   worktree, preserving other active tasks. Inspect with
   `git -C /Users/linhan/startup/spine/pdfspine log --oneline --first-parent -6`
@@ -99,17 +100,16 @@
   the local pre-push gate PASSED, but it ran >10 min and GitHub dropped the idle
   SSH connection mid-transfer, so the `push` failed; the same already-gated
   commit was re-pushed with `--no-verify`.
-  **The next open backlog item is #1.**
+  **The next open backlog item is #3.**
 
-- [ ] **1. Reading-order follow-ups** (from the 2026-09-09 stage-3 attribution;
-  sub-items 1–3 completed within their conservative scopes below).
+- [x] **1. Reading-order follow-ups — done (2026-09-10, conservative increments).**
+  All four sub-items are complete within the scopes below.
   - *Goal:* close the four residual reading-order gaps left after stage 3 + D4.
   - *Why / evidence:* `docs/reading-order-root-cause.md` "后续该修" + the variant
-    table. The hard bars are met at HEAD (PMC 7 order 0.9600 vs fitz 0.9605;
+    table. The hard bars are met at HEAD (PMC 7 order 0.9605 vs fitz 0.9605;
     EUR-Lex 40 lev 0.9392 / order 0.9794; FR misplaced 22/2493 vs fitz 64/2517;
-    FR fragmented 82 pages vs fitz 0). Sub-items 1–3 are complete within
-    the conservative scopes below; sub-item 4 remains open, with form/header
-    edge cases explicitly retained for future refinements.
+    FR fragmented 82 pages vs fitz 0). All four target increments are complete; form/header edge cases and
+    ambiguous multi-paragraph captions remain explicit future refinements.
   - *Where:* `crates/pdf-text/src/layout.rs` — `find_column_cut`, `cut_lines`,
     `emit_column_cut` / `SPANNING_BANDS_PARTITION_ROWS`, `group_blocks_columned`,
     `detect_page_gutters` / `split_on_gutter`.
@@ -161,10 +161,23 @@
        to `secci-final`, so their validated scores are reused rather than claimed
        as a new full GT run; PMC is freshly rescored and unchanged. Full evidence
        and gate results are in the **FR 孤立刊头** section of the root-cause report.
-       Sub-item **4** is next.
-    4. **PMC order 0.9605 / PMC212689 0.749 targets** still unmet — the PLoS
-       3-column, mid-page spanning-caption float-vs-rows semantics that stage 3
-       did not touch.
+    4. **PMC float captions and dropped initials — done (2026-09-10).**
+       Wide image-anchored numbered captions now move as complete original
+       blocks after the surrounding prose, without feeding repaired geometry
+       back into XY-cut. Style / spacing boundaries exclude page furniture;
+       ambiguous neighboring paragraphs reject the entire proposed move.
+       A solitary enlarged initial wrapping three aligned rows no longer
+       bridges their baselines; its original glyph rejoins the first row,
+       retaining explicit spaces and excluding multi-letter large headings.
+       PMC 7 order reaches **0.9605**, with **PMC212689 0.7495** (targets
+       0.9605 / 0.749). Only this document's p0/p3 change; the other six PMC
+       documents keep all scored metrics. The p3 four-block figure caption
+       moves intact; pre-existing footer positions are retained, so this does
+       not claim literal prose adjacency after removing every kind of float.
+       FR 2551 pages and EUR-Lex 3365 pages remain block-identical to their
+       latest validated baselines; born six full texts are byte-identical.
+       These are conservative geometric rules, not general caption or formula
+       semantics. Evidence: **PMC 图注与首字下沉** in the root-cause report.
   - *Stage-4 caveat:* if the in-region geometric line order is retried, add a
     **"no side-by-side columns inside the region" guard first** (two rows at the
     same y with disjoint x → fall back to `seq`); without it V3 broke the
