@@ -2135,7 +2135,7 @@ impl PyPage {
                     }
                     TextPageSource::Extended(resources) => (**resources).clone(),
                 };
-                let recorded = pdf_api::page_get_displaylist_with_annots(&self.page, true);
+                let recorded = pdf_api::page_get_displaylist_with_annots(&self.page, true)?;
                 let new = recorded.get_textpage_transformed(
                     flags,
                     Matrix::new(a, b, c, d, e, f),
@@ -2580,7 +2580,9 @@ impl PyPage {
     /// (PyMuPDF `Page.get_displaylist`). Replay it with `dl.get_pixmap(...)`.
     #[pyo3(signature = (annots=true))]
     fn get_displaylist(&self, py: Python<'_>, annots: bool) -> PyResult<PyDisplayList> {
-        let inner = py.detach(|| pdf_api::page_get_displaylist_with_annots(&self.page, annots));
+        let inner = py
+            .detach(|| pdf_api::page_get_displaylist_with_annots(&self.page, annots))
+            .map_err(map_err)?;
         Ok(PyDisplayList {
             inner: Arc::new(inner),
         })

@@ -571,3 +571,29 @@ fn crypt_doc_005_strict_mode_encrypted_opens() {
     doc.authenticate(b"").unwrap();
     assert_eq!(resolved_title(&doc), SECRET_STR);
 }
+
+#[test]
+fn snapshot_preserves_authentication_without_live_cache() {
+    let fx = build_r234(
+        3,
+        16,
+        b"id-bytes-0001234",
+        -44,
+        true,
+        b"u",
+        b"o",
+        CryptMethod::Rc4,
+        CryptMethod::Rc4,
+    );
+    let bytes = build_encrypted_pdf(&fx, encrypt_dict_r234(&fx.config));
+    let doc = open(&bytes);
+    let locked = doc.snapshot().unwrap();
+    doc.authenticate(b"u").unwrap();
+    assert!(locked.needs_pass());
+    assert_eq!(resolved_title(&doc), SECRET_STR);
+    let frozen = doc.snapshot().unwrap();
+    assert_eq!(frozen.cached_object_count(), 0);
+    assert!(!frozen.needs_pass());
+    drop(doc);
+    assert_eq!(resolved_title(&frozen), SECRET_STR);
+}
