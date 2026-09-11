@@ -232,6 +232,8 @@ pub struct ContentInterpreter<'a> {
     /// The number of enclosing hidden marked-content sections; while non-zero
     /// nothing is painted (glyphs, images, paths, shadings).
     hidden_depth: u32,
+    /// Own-AP textbox extraction retains all glyphs before the query clip.
+    ignore_text_scissor: bool,
 }
 
 impl<'a> ContentInterpreter<'a> {
@@ -247,6 +249,7 @@ impl<'a> ContentInterpreter<'a> {
             image_color_spaces: Vec::new(),
             oc: OcVisibility::read(doc),
             hidden_depth: 0,
+            ignore_text_scissor: false,
         }
     }
 
@@ -263,6 +266,7 @@ impl<'a> ContentInterpreter<'a> {
             image_color_spaces: Vec::new(),
             oc: OcVisibility::read(doc),
             hidden_depth: 0,
+            ignore_text_scissor: false,
         }
     }
 
@@ -321,6 +325,16 @@ impl<'a> ContentInterpreter<'a> {
             image_ops: self.image_ops.unwrap_or_default(),
             image_color_spaces: self.image_color_spaces,
         }
+    }
+
+    /// Extracts visible annotation appearances without recording page content.
+    /// Glyph scissors are ignored until the caller's bbox query, matching
+    /// annotation textbox extraction rather than page/display-list replay.
+    #[must_use]
+    pub fn run_annotation_text(mut self, page: &Dict) -> InterpretResult {
+        self.ignore_text_scissor = true;
+        self.record_annotation_appearances(page);
+        self.out
     }
 
     fn record_annotation_appearances(&mut self, page: &Dict) {
@@ -1079,6 +1093,7 @@ impl<'a> ContentInterpreter<'a> {
                 code,
                 n_bytes,
                 &font_name,
+                self.ignore_text_scissor,
                 gs,
                 tm,
             );
@@ -1794,6 +1809,7 @@ fn emit_glyph_into(
     code: u32,
     n_bytes: u8,
     font_name: &SmolStr,
+    ignore_text_scissor: bool,
     gs: &GraphicsState,
     tm: &mut Matrix,
 ) -> bool {
@@ -1859,7 +1875,7 @@ fn emit_glyph_into(
         let bbox = cell.transform(&trm);
         // Vertical advance `ty = w1y·Tfs + Tc + Tw`: no `Th`, along text y.
         let spacing_advance = spacing_vector(0.0, ts.char_spacing + tw);
-        let emitted = glyph_survives_clip(&unicode, bbox, &trm, gs.clip);
+        let emitted = ignore_text_scissor || glyph_survives_clip(&unicode, bbox, &trm, gs.clip);
 
         if emitted {
             if let Some(trms) = trms {
@@ -1902,7 +1918,7 @@ fn emit_glyph_into(
     // Horizontal advance `tx = (w0·Tfs + Tc + Tw)·Th`: the spacing share carries
     // `Th`, along text x.
     let spacing_advance = spacing_vector((ts.char_spacing + tw) * ts.h_scale, 0.0);
-    let emitted = glyph_survives_clip(&unicode, bbox, &trm, gs.clip);
+    let emitted = ignore_text_scissor || glyph_survives_clip(&unicode, bbox, &trm, gs.clip);
 
     if emitted {
         if let Some(trms) = trms {

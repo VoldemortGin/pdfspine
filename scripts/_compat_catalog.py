@@ -1219,9 +1219,15 @@ add_many(
         "get_text",
         "get_textpage",
         "next",
-        "get_textbox",
     ],
-    "get_textbox needs the annot's OWN appearance textpage (fitz semantics), not page-region delegation",
+    "Legacy page-region text helpers",
+)
+add(
+    "Annot.get_textbox",
+    "Annot",
+    IMPLEMENTED,
+    "M4",
+    "Own visible AP text; bbox-overlap query; prebuilt textpage unsupported (ValueError)",
 )
 add(
     "Annot.get_pixmap",

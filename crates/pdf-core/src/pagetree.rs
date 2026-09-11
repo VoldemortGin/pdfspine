@@ -201,6 +201,12 @@ fn inherited(doc: &DocumentStore, page_ref: ObjRef, key: &str) -> Option<Object>
     }
 }
 
+/// Resolves a page's effective resources, including guarded ancestor inheritance.
+#[must_use]
+pub fn resources(doc: &DocumentStore, page_ref: ObjRef) -> Option<Dict> {
+    inherited(doc, page_ref, "Resources").and_then(|value| value.as_dict().cloned())
+}
+
 /// A page's `/Type /Page` dictionary (the leaf itself, references followed).
 #[must_use]
 pub fn page_dict(doc: &DocumentStore, page_ref: ObjRef) -> Option<Dict> {
