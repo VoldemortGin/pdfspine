@@ -9,6 +9,16 @@ The old output selection requested CMYK too early, failed decoding, and the
 renderer skipped every strip. `pdf-image` now selects output by SOF component
 count, preserving native four-channel output and `/Decode` handling.
 
+Integration through Python exposed a second defect: successful JPEG decoding
+activated the public facade's native-image shortcut, which returned only the
+first of eight strips (5313×885 at 150 dpi). The shortcut now requires exactly
+one image invocation; multi-image pages use the full renderer. A public Rust
+facade regression checks two non-overlapping images, complete page bounds, and
+both colors at 72/144 dpi. The rebuilt Python `Page.get_pixmap(dpi=150)`
+returns the correct 1275×1650 canvas and SSIM **0.995987**; all three P1-3
+references also pass through that public API. Integration evidence is in
+`/Volumes/ExternalSSD/tmp/pdfspine-integration-20260910/public-api-smoke.json`.
+
 At 150 dpi, target SSIM improves **0.2654 → 0.995987**; mean RGB sample value
 falls from 255 (all white) to 170.3947, versus fitz's 170.3323. The same-input
 comparison covers **35 of the 43 historical documents**: the other 34 outputs

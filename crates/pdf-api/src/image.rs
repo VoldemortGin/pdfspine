@@ -95,9 +95,10 @@ pub fn page_get_pixmap(page: &Page, scale: f64, alpha: bool) -> Result<Pixmap> {
 }
 
 /// Renders `page` to a [`Pixmap`] under `args` — the full PyMuPDF `get_pixmap`
-/// (PRD §8.11). Any page type renders: an image-only page takes the fast image
+/// (PRD §8.11). Any page type renders: a single-image page takes the fast image
 /// decode path (native raster × scale); every other page (vector / text / mixed)
-/// is rasterized via [`pdf_render::render_page`] onto a CropBox-sized canvas.
+/// including multi-image scans, is rasterized via [`pdf_render::render_page`] onto
+/// a CropBox-sized canvas.
 ///
 /// # Errors
 ///
@@ -107,10 +108,18 @@ pub fn page_render(page: &Page, args: &RenderArgs) -> Result<Pixmap> {
     // Image-only fast path: decode the page's image at native resolution × scale
     // (the scanned-document optimization). Only used when no clip / Gray-CMYK
     // conversion is requested, so the fast path's RGB raster matches the request.
-    if args.clip.is_none() && args.colorspace == Colorspace::Rgb && page_is_image_only(page) {
+    if args.clip.is_none() && args.colorspace == Colorspace::Rgb {
         if let Some(dict) = page.dict() {
-            if let Ok(pix) = getpixmap::page_pixmap(doc, &dict, args.scale(), args.alpha) {
-                return Ok(pix);
+            // Classification includes multi-strip scans. The native-raster
+            // helper returns only the first image, so those pages need the full
+            // renderer to apply each placement and preserve the page bounds.
+            if matches!(
+                getpixmap::classify_page(doc, &dict),
+                getpixmap::PageClass::ImageOnly { refs } if refs.len() == 1
+            ) {
+                if let Ok(pix) = getpixmap::page_pixmap(doc, &dict, args.scale(), args.alpha) {
+                    return Ok(pix);
+                }
             }
         }
         // Fall through to the full renderer on any image-only decode failure.

@@ -327,3 +327,42 @@ fn ocg_api_006_set_ocmd_get_ocmd_get_oc() {
     assert_eq!(after.policy, None);
     assert_eq!(after.ve, Some(ve));
 }
+
+/// Multi-strip scans must retain the page canvas and every image placement.
+#[test]
+fn image_only_multi_strip_render_uses_page_canvas() {
+    let content = b"q 100 0 0 50 0 0 cm /A Do Q q 100 0 0 50 0 50 cm /B Do Q";
+    let mut stream = format!("<< /Length {} >>\nstream\n", content.len()).into_bytes();
+    stream.extend_from_slice(content);
+    stream.extend_from_slice(b"\nendstream");
+    let image = |rgb: &[u8]| {
+        let mut body = b"<< /Type /XObject /Subtype /Image /Width 1 /Height 1 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Length 3 >>\nstream\n".to_vec();
+        body.extend_from_slice(rgb);
+        body.extend_from_slice(b"\nendstream");
+        body
+    };
+    let red = image(&[255, 0, 0]);
+    let blue = image(&[0, 0, 255]);
+    let bytes = build_pdf(&[
+        (1, b"<< /Type /Catalog /Pages 2 0 R >>"),
+        (2, b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>"),
+        (3, b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Contents 4 0 R /Resources << /XObject << /A 5 0 R /B 6 0 R >> >> >>"),
+        (4, &stream), (5, &red), (6, &blue),
+    ], 1, "");
+    let doc = Document::open_bytes(bytes).expect("open");
+    let page = doc.load_page(0).expect("page");
+    assert!(pdf_api::page_is_image_only(&page));
+    for dpi in [72, 144] {
+        let args = pdf_api::RenderArgs {
+            dpi: Some(dpi),
+            ..Default::default()
+        };
+        let pix = pdf_api::page_render(&page, &args).expect("render");
+        let side = 100 * dpi / 72;
+        assert_eq!((pix.width, pix.height), (side, side));
+        for (y, expected) in [(side / 4, [0, 0, 255]), (3 * side / 4, [255, 0, 0])] {
+            let offset = y as usize * pix.stride + (side / 2) as usize * 3;
+            assert_eq!(&pix.samples()[offset..offset + 3], &expected);
+        }
+    }
+}
