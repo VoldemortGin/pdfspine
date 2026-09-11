@@ -138,15 +138,12 @@ def test_pydoc_003_metadata_keys(two_page_path):
     assert md["encryption"] == ""
 
 
-def test_pydoc_004_unimplemented_raises(two_page_path):
-    # PYDOC-004: a known-but-unimplemented method raises PdfUnsupportedError.
-    # PDF reflow remains out of scope; Page.run now accepts ReplayDevice.
+def test_pydoc_004_replay_and_unknown_attribute(two_page_path):
+    # Page.run is implemented; invalid devices and unknown names stay explicit.
     doc = pdfspine.open(two_page_path)
     page = doc[0]
     pix = page.get_pixmap()
     assert pix.width > 0 and pix.height > 0
-    with pytest.raises(pdfspine.PdfUnsupportedError):
-        doc.layout()
     with pytest.raises(TypeError, match="ReplayDevice"):
         page.run(None, None)
     events = []
