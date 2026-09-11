@@ -1,0 +1,249 @@
+{
+  "source_commit": "74c4c94edc85765e25bb0d0814f539515b522814",
+  "source_tree": "2ed3d226469a08a9ca36e39e25a0f1051687866e",
+  "native": {
+    "path": "/Volumes/ExternalSSD/tmp/pdfspine-coverage-current/python/pdfspine/_core.abi3.so",
+    "sha256": "b09795fe698a4d73f66926a326342023e3625a9be69ef26dd31290aaa4ea2b7e"
+  },
+  "rust_passed": 2046,
+  "full_python_passed": 1520,
+  "full_python_skipped": 83,
+  "oracle_supplement_passed": 15,
+  "oracle_nodeids": [
+    "python/tests/test_longtail9.py::test_font_fontfile_cross_check_oracle",
+    "python/tests/test_longtail9.py::test_font_valid_codepoints_subset_of_fitz",
+    "python/tests/test_displaylist_textpage.py::test_displaylist_textpage_live_oracle[forms]",
+    "python/tests/test_displaylist_textpage.py::test_displaylist_textpage_live_oracle[annotations]",
+    "python/tests/test_displaylist_textpage.py::test_displaylist_textpage_live_oracle[transformed]",
+    "python/tests/test_displaylist_textpage.py::test_displaylist_textpage_live_oracle[hidden]",
+    "python/tests/test_displaylist_textpage.py::test_displaylist_textpage_live_oracle[named-inline]",
+    "python/tests/test_ocg_layers.py::test_pyocg_037_live_oracle_forward",
+    "python/tests/test_ocg_layers.py::test_pyocg_038_live_oracle_reverse",
+    "python/tests/test_ocg_layers.py::test_pyocg_046_live_oracle_oc_forward",
+    "python/tests/test_ocg_layers.py::test_pyocg_047_live_oracle_oc_reverse",
+    "python/tests/test_ocg_layers.py::test_pyocg_056_live_oracle_usage_matrix",
+    "python/tests/test_m4.py::test_pym4_redact_003_quote_operators_match_real_pymupdf",
+    "python/tests/test_fontfile_subset.py::test_ts3_songti_subset_fitz_oracle_readback",
+    "python/tests/test_tools_annot_stem.py::test_stem_ascii_live_oracle"
+  ],
+  "unique_python_passed": 1535,
+  "remaining_skipped": 68,
+  "python": {
+    "covered_lines": 6916,
+    "num_statements": 7031,
+    "percent_covered": 97.40848720440557,
+    "percent_covered_display": "97",
+    "missing_lines": 115,
+    "excluded_lines": 4,
+    "percent_statements_covered": 98.36438628929028,
+    "percent_statements_covered_display": "98",
+    "num_branches": 2230,
+    "num_partial_branches": 121,
+    "covered_branches": 2105,
+    "missing_branches": 125,
+    "percent_branches_covered": 94.39461883408072,
+    "percent_branches_covered_display": "94"
+  },
+  "rust": {
+    "lines": {
+      "covered": 44919,
+      "count": 48921
+    },
+    "branches": {
+      "covered": 5774,
+      "count": 7910
+    }
+  },
+  "rust_crates": {
+    "pdf-api": {
+      "lines": {
+        "covered": 3610,
+        "count": 3898
+      },
+      "branches": {
+        "covered": 281,
+        "count": 388
+      }
+    },
+    "pdf-core": {
+      "lines": {
+        "covered": 5929,
+        "count": 6515
+      },
+      "branches": {
+        "covered": 746,
+        "count": 948
+      }
+    },
+    "pdf-crypto": {
+      "lines": {
+        "covered": 804,
+        "count": 836
+      },
+      "branches": {
+        "covered": 97,
+        "count": 112
+      }
+    },
+    "pdf-edit": {
+      "lines": {
+        "covered": 8931,
+        "count": 9698
+      },
+      "branches": {
+        "covered": 1049,
+        "count": 1530
+      }
+    },
+    "pdf-fonts": {
+      "lines": {
+        "covered": 2226,
+        "count": 2444
+      },
+      "branches": {
+        "covered": 362,
+        "count": 488
+      }
+    },
+    "pdf-image": {
+      "lines": {
+        "covered": 2449,
+        "count": 2919
+      },
+      "branches": {
+        "covered": 303,
+        "count": 526
+      }
+    },
+    "pdf-markdown": {
+      "lines": {
+        "covered": 1821,
+        "count": 1930
+      },
+      "branches": {
+        "covered": 246,
+        "count": 316
+      }
+    },
+    "pdf-ocr": {
+      "lines": {
+        "covered": 486,
+        "count": 531
+      },
+      "branches": {
+        "covered": 33,
+        "count": 50
+      }
+    },
+    "pdf-render": {
+      "lines": {
+        "covered": 3873,
+        "count": 4241
+      },
+      "branches": {
+        "covered": 504,
+        "count": 781
+      }
+    },
+    "pdf-text": {
+      "lines": {
+        "covered": 6764,
+        "count": 7145
+      },
+      "branches": {
+        "covered": 1237,
+        "count": 1599
+      }
+    },
+    "pdf-typeset": {
+      "lines": {
+        "covered": 3977,
+        "count": 4366
+      },
+      "branches": {
+        "covered": 746,
+        "count": 944
+      }
+    },
+    "py-bindings": {
+      "lines": {
+        "covered": 4049,
+        "count": 4398
+      },
+      "branches": {
+        "covered": 170,
+        "count": 228
+      }
+    }
+  },
+  "python_native_evidence": {
+    "bindings_before_python": {
+      "lines": {
+        "covered": 136,
+        "count": 4398
+      },
+      "branches": {
+        "covered": 6,
+        "count": 228
+      }
+    },
+    "bindings_after_python": {
+      "lines": {
+        "covered": 4049,
+        "count": 4398
+      },
+      "branches": {
+        "covered": 170,
+        "count": 228
+      }
+    },
+    "covered_delta": {
+      "lines": 3913,
+      "branches": 164
+    },
+    "llvm_profile_file": "/Volumes/Cargo/target/pdfspine-coverage-current/pdfspine-coverage-current-%p-%16m.profraw",
+    "toolchain": "nightly-2026-04-17",
+    "note": "LH is a degradation sentinel; zero delta alone does not disprove Python execution"
+  },
+  "lcov": {
+    "branches": 7910,
+    "covered_branches": 5774
+  },
+  "status": "valid",
+  "python_threshold": 96,
+  "threshold_passed": true,
+  "only_up_rule_floor_score_minus_one": 96,
+  "recommended_threshold_change": null,
+  "supplement_rust_delta": {
+    "lines": 48,
+    "branches": 3
+  },
+  "reports": {
+    "coverage-rust.json": "d6379bd28aa2d9336af5e7c43fad0ac9655dd6c3380cf37e87fed65c7a52e113",
+    "coverage-rust-before-python.json": "1c759a391fdc36bebfcdf7ef05ecb5daaa5bc82027ae731b88caafe32d9e9a20",
+    "coverage-python.json": "697c977ffbfa3fd30af87f4b9d727051aee370d8791300608f2f50f2c9244e8b",
+    "coverage-python.xml": "75909232c79bcb05371e7fdd2171e2392dd381bb2cc68d0b823da5054391596a",
+    "coverage-summary.json": "e8d45f439ffcaec8da7c13ecdf30d55e501b309fbadecc7a07d543bc60d14859",
+    "coverage-versions.txt": "f6207589722782561d97f04e8a3be3878b915251c9216d1a88e817bbd4241109",
+    "lcov.info": "83dbeccb39c14df938370b77c53f19dc87bdee0a0904c779c0c2379c99faccdd",
+    ".coverage": "adb72ac907f6a6f8cdb1d76a15c6e9d86d9e5596806dcc350f4e8a41205104f2",
+    ".cov-env.sh": "bb5255d7f670e020fc2a7144ce584677cba36fde531849016426a01ba4c6fc69",
+    "native-before-python.json": "4a6b7973f0b093d1542ed1563f97e20670e707e8a78a0c4482d8cecaf67f2fcc"
+  },
+  "logs": {
+    "combined.log": "18149c00fa89b74f1aefa6b395bab765d6061fd7ed277d57f5e84e391b7dc5b0",
+    "oracle-supplement.log": "eefa53af7aee872cd4f74a694792511c756c6c981dc649bb5a77a935eeb1ad76",
+    "install.log": "92916118ef6856b7f3424174db2f31617f3b1354097b020fe3d5d38edd7b5c0f"
+  },
+  "dependency_provenance": "12 existing installed distributions copied and hashed; not official wheel validation",
+  "counts_note": "one whole Rust+Python run plus exact15 oracle missing-environment supplement; no new tests; no main modification",
+  "external_archive": "pdfspine-coverage-current-evidence",
+  "external_report_directory": "final-complete",
+  "scope": "current production snapshot; same-nightly Rust unit plus debug extension driven by Python; not a stable release gate",
+  "tools": {
+    "rust_toolchain": "nightly-2026-04-17",
+    "cargo_llvm_cov": "0.8.5",
+    "python": "3.12.11",
+    "maturin": "1.15.0"
+  }
+}
