@@ -182,6 +182,9 @@ pub(crate) struct Frag {
     pub(crate) width: f64,
     /// Extra advance after this scalar (deferred until a combining sequence ends).
     pub(crate) tracking: f64,
+    /// Preserve the paragraph's signed-cluster policy even when its final gap
+    /// is omitted or all remaining fragments have zero spacing.
+    pub(crate) signed_cluster: bool,
     /// A collapsible inter-word space (justify widens these).
     pub(crate) space: bool,
     /// Width was widened by justify (breaks the text-op merge chain).
@@ -199,8 +202,8 @@ fn painted_width(frag: &Frag) -> f64 {
 
 /// Rightmost untracked advance-cell edge, independent of overlapping pen positions.
 /// Returns None on the untouched positive-only path.
-fn signed_extent<'a>(frags: impl Iterator<Item = &'a Frag> + Clone) -> Option<f64> {
-    if !frags.clone().any(|f| f.tracking < 0.0) {
+fn signed_extent<'a>(frags: impl Iterator<Item = &'a Frag> + Clone, hard: bool) -> Option<f64> {
+    if !frags.clone().any(|f| f.signed_cluster) {
         return None;
     }
     let mut pen = 0.0_f64;
@@ -211,7 +214,7 @@ fn signed_extent<'a>(frags: impl Iterator<Item = &'a Frag> + Clone) -> Option<f6
         pen += f.width;
         last_gap = f.tracking;
     }
-    Some(right.max(pen - last_gap))
+    Some(right.max(if hard { pen } else { pen - last_gap }))
 }
 
 /// One wrapped output line.
@@ -343,6 +346,9 @@ pub(crate) fn tokens(ts: &mut Typesetter, runs: &[Run]) -> Vec<Tok> {
     let has_tracking = runs
         .iter()
         .any(|run| run.style.character_spacing.points() != 0.0);
+    let signed_cluster = runs
+        .iter()
+        .any(|run| run.style.character_spacing.points() < 0.0);
     let mut cluster_spacing = 0.0;
     for (run_index, run) in runs.iter().enumerate() {
         let style = &run.style;
@@ -398,6 +404,7 @@ pub(crate) fn tokens(ts: &mut Typesetter, runs: &[Run]) -> Vec<Tok> {
                         text: String::new(),
                         width: 0.0,
                         tracking: 0.0,
+                        signed_cluster,
                         space: true,
                         stretched: true,
                         tab: true,
@@ -427,6 +434,7 @@ pub(crate) fn tokens(ts: &mut Typesetter, runs: &[Run]) -> Vec<Tok> {
                         text: " ".to_string(),
                         width,
                         tracking,
+                        signed_cluster,
                         space: true,
                         stretched: tracking != 0.0,
                         tab: false,
@@ -449,6 +457,7 @@ pub(crate) fn tokens(ts: &mut Typesetter, runs: &[Run]) -> Vec<Tok> {
                 text: ch.to_string(),
                 width,
                 tracking,
+                signed_cluster,
                 space: false,
                 stretched: tracking != 0.0,
                 tab: false,
@@ -487,8 +496,8 @@ fn flush_word(out: &mut Vec<Tok>, word: &mut Vec<Frag>, word_w: &mut f64) {
 /// multiple, matching the wrap-time pen behaviour.
 pub(crate) fn natural_width(toks: &[Tok], tab_interval: f64) -> f64 {
     if toks.iter().any(|t| match t {
-        Tok::Word { frags, .. } => frags.iter().any(|f| f.tracking < 0.0),
-        Tok::Space { frag } => frag.tracking < 0.0,
+        Tok::Word { frags, .. } => frags.iter().any(|f| f.signed_cluster),
+        Tok::Space { frag } => frag.signed_cluster,
         _ => false,
     }) {
         let mut pen = 0.0_f64;
@@ -497,7 +506,7 @@ pub(crate) fn natural_width(toks: &[Tok], tab_interval: f64) -> f64 {
         for tok in toks {
             match tok {
                 Tok::Break => {
-                    max_right = max_right.max(right);
+                    max_right = max_right.max(right).max(pen);
                     pen = 0.0;
                     right = 0.0;
                 }
@@ -561,8 +570,8 @@ pub(crate) fn wrap(
     tab_interval: f64,
 ) -> Vec<LineOut> {
     let has_signed = toks.iter().any(|t| match t {
-        Tok::Word { frags, .. } => frags.iter().any(|f| f.tracking < 0.0),
-        Tok::Space { frag } => frag.tracking < 0.0,
+        Tok::Word { frags, .. } => frags.iter().any(|f| f.signed_cluster),
+        Tok::Space { frag } => frag.signed_cluster,
         _ => false,
     });
     let mut lines: Vec<LineOut> = Vec::new();
@@ -588,7 +597,7 @@ pub(crate) fn wrap(
         }
         if !cur.is_empty() || keep_empty {
             let width = if has_signed {
-                signed_extent(cur.iter()).unwrap_or(*cur_w)
+                signed_extent(cur.iter(), hard).unwrap_or(*cur_w)
             } else {
                 *cur_w
             };
@@ -629,7 +638,9 @@ pub(crate) fn wrap(
             }
             Tok::Word { frags, width } => {
                 let trailing = frags.last().map_or(0.0, |frag| frag.tracking);
-                let tracked_word = frags.iter().any(|frag| frag.tracking != 0.0);
+                let tracked_word = frags
+                    .iter()
+                    .any(|frag| frag.tracking != 0.0 || frag.signed_cluster);
                 // CJK bases are separate word tokens. A following tracked mark
                 // must join its base before any later scalar can wrap.
                 let starts_combining = tracked_word
@@ -639,7 +650,7 @@ pub(crate) fn wrap(
                         .is_some_and(unicode_normalization::char::is_combining_mark);
                 if !cur.is_empty()
                     && (if has_signed {
-                        signed_extent(cur.iter().chain(frags.iter()))
+                        signed_extent(cur.iter().chain(frags.iter()), false)
                             .unwrap_or(cur_w + width - trailing)
                     } else {
                         cur_w + width - trailing
@@ -651,14 +662,14 @@ pub(crate) fn wrap(
                 }
                 let limit = if lines.is_empty() { w_first } else { w_rest };
                 if (if has_signed {
-                    signed_extent(frags.iter()).unwrap_or(*width - trailing)
+                    signed_extent(frags.iter(), false).unwrap_or(*width - trailing)
                 } else {
                     *width - trailing
                 }) > limit + EPS
                     || (starts_combining
                         && !cur.is_empty()
                         && (if has_signed {
-                            signed_extent(cur.iter().chain(frags.iter()))
+                            signed_extent(cur.iter().chain(frags.iter()), false)
                                 .unwrap_or(cur_w + width - trailing)
                         } else {
                             cur_w + width - trailing
@@ -1904,4 +1915,29 @@ fn sanitized_crop(crop: Option<[f64; 4]>) -> Option<[f64; 4]> {
         return None; // nothing left visible: ignore the crop
     }
     Some(c)
+}
+
+#[cfg(test)]
+mod signed_width_tests {
+    use super::*;
+    use crate::{CharacterSpacing, FontResolver, RunStyle};
+
+    #[test]
+    fn natural_width_keeps_hard_break_gap_but_omits_paragraph_end_gap() {
+        let mut ts = Typesetter::new(FontResolver::without_system_fonts());
+        let style = RunStyle::new("Liberation Sans", 12.0);
+        let ma = natural_width(&tokens(&mut ts, &[Run::new("M", style.clone())]), 36.0);
+        let ia = natural_width(&tokens(&mut ts, &[Run::new("i", style.clone())]), 36.0);
+        let mut head = style.clone();
+        head.character_spacing = CharacterSpacing::resolved_signed(-1.0).unwrap();
+        let mut tail = style;
+        tail.character_spacing = CharacterSpacing::new(5.0).unwrap();
+        for (suffix, gap) in [("i\n", 5.0), ("i", 0.0)] {
+            let toks = tokens(
+                &mut ts,
+                &[Run::new("M", head.clone()), Run::new(suffix, tail.clone())],
+            );
+            assert!((natural_width(&toks, 36.0) - (ma - 1.0 + ia + gap)).abs() < 1e-9);
+        }
+    }
 }

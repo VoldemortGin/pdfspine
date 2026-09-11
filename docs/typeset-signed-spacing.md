@@ -68,7 +68,10 @@ Focused tests cover constructor compatibility, moderate condensation, all four
 typed failures, provider call ordering, multiple/nested paragraph warnings,
 caller-input preservation, the large-M/small-i advance-cell extent regression,
 combining/CJK source preservation, soft wrapping, scripts/autofit, explicit
-controls, and omitted final gaps. The extent test failed before its fix;
+controls, and omitted final gaps. Regression tests retain terminal combining
+marks on their base line even when no nonzero gap remains, and preserve a
+positive final gap at an explicit hard break inside a signed paragraph. Natural
+width and wrapped line width both follow that break rule. The extent test failed before its fix;
 it does not test outline overhang. A new authored -1pt uniform Serif fixture
 improves local LibreOffice comparison **0.8903 → 0.9868** at 100dpi. The baseline
 is the actual prior default-spacing fixture for the same content, representing

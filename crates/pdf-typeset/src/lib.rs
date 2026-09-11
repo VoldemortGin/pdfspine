@@ -300,7 +300,7 @@ impl Typesetter {
             return boxes::layout_text_box(self, spec);
         }
         let mut prepared = spec.clone();
-        prepared.blocks = signed_spacing::fallback(self, &spec.blocks, errors).into_owned();
+        signed_spacing::fallback_in_place(self, &mut prepared.blocks, errors);
         boxes::layout_text_box(self, &prepared)
     }
 

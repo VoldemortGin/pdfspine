@@ -287,3 +287,49 @@ fn paragraph_final_gap_is_not_consumed_or_checked_as_a_move() {
     );
     assert!((actual.max_width - normal.max_width).abs() < 1e-9);
 }
+
+#[test]
+fn terminal_combining_marks_stay_with_bases_when_no_gap_remains() {
+    for width in [1.0, 14.0] {
+        for runs in [
+            vec![signed("中", -1.0), signed("\u{301}", -0.5)],
+            vec![signed("e\u{301}", -1.0)],
+        ] {
+            let original: String = runs.iter().map(|r| r.text.as_str()).collect();
+            let mut t = ts();
+            let b = vec![Block::Paragraph(ParaProps::new(), runs)];
+            let m = t.try_measure_blocks(&b, width, true).unwrap();
+            assert_eq!(m.lines.len(), 1, "width={width}, text={original}");
+            let ops = t
+                .try_layout_text_box(&TextBoxSpec::new(Rect::new(0.0, 0.0, width, 100.0), b))
+                .unwrap();
+            assert_eq!(text(&ops), original);
+        }
+    }
+}
+#[test]
+fn signed_paragraph_retains_positive_gap_at_explicit_hard_break() {
+    let mut t = ts();
+    let ordinary = |text| {
+        vec![Block::Paragraph(
+            ParaProps::new(),
+            vec![Run::new(text, style(12.0))],
+        )]
+    };
+    let ma = t.measure_blocks(&ordinary("M"), 200.0, false).max_width;
+    let ia = t.measure_blocks(&ordinary("i"), 200.0, false).max_width;
+    let mut tail = Run::new("i\n", style(12.0));
+    tail.style.character_spacing = CharacterSpacing::new(5.0).unwrap();
+    let b = vec![Block::Paragraph(
+        ParaProps::new(),
+        vec![signed("M", -1.0), tail],
+    )];
+    for wrap in [false, true] {
+        let m = t.try_measure_blocks(&b, 200.0, wrap).unwrap();
+        assert!(
+            (m.max_width - (ma - 1.0 + ia + 5.0)).abs() < 1e-6,
+            "wrap={wrap}, width={}",
+            m.max_width
+        );
+    }
+}

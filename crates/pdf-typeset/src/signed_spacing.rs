@@ -267,11 +267,19 @@ pub(crate) fn fallback<'a>(
         return Cow::Borrowed(blocks);
     }
     let mut copy = blocks.to_vec();
-    reset(&mut copy, &mut Vec::new(), &errors);
+    fallback_in_place(ts, &mut copy, errors);
+    Cow::Owned(copy)
+}
+
+pub(crate) fn fallback_in_place(
+    ts: &mut Typesetter,
+    blocks: &mut [Block],
+    errors: Vec<SignedSpacingError>,
+) {
+    reset(blocks, &mut Vec::new(), &errors);
     ts.warnings.extend(
         errors
             .into_iter()
             .map(|error| ExportWarning::SignedSpacingFallback { error }),
     );
-    Cow::Owned(copy)
 }
