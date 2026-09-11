@@ -405,7 +405,8 @@
     page fragments; matching sibling strokes share outer edges while preserving
     each paragraph's side spacing. Default None retains all six prior PDFs
     byte-for-byte. New LO fixture **0.9527 → 0.9836**; previous DOCX/PPTX/shading/
-    tracking scores unchanged. `between` and non-solid styles remain unsupported.
+    tracking scores unchanged. This original increment covers solid edges; the
+    explicit dashed extension is recorded below.
     See `docs/typeset-paragraph-borders.md`; consumer mappings/pins are unchanged.
   - [x] **Resolved script run placement** (unreleased).
     Optional validated glyph scale and upward-positive point baseline shift keep
@@ -424,7 +425,15 @@
     cover advance-cell extents, not outline ink bounds. New LO sample
     **0.8903 → 0.9868**; nine prior PDFs byte-identical. See
     `docs/typeset-signed-spacing.md`. No LO saturation/Word policy is inferred.
-  - [ ] **Remaining:** non-solid/between paragraph borders and pattern shading,
+  - [x] **Caller-resolved paragraph dash pairs** (unreleased).
+    `ParagraphBorder::with_dash` validates two positive lengths using actual PDF
+    serialization and finite f32-cycle rules. Phase zero/butt restarts per edge
+    and page fragment; grouping includes dash identity. Layout/measurement and
+    autofit preserve solid-border geometry; all ten prior PDFs remain byte-identical.
+    Seven new tests, 217 isolated crate tests, 9/9 readback and 12/12 render pages
+    pass; LO 0.9803 is advisory, not Word or endpoint-phase equivalence.
+    See `docs/typeset-paragraph-borders.md`; no automatic enum mapping.
+  - [ ] **Remaining:** other non-solid/between paragraph borders and pattern shading,
     automatic signed-spacing/script policy and consumer mappings, and verified
     Word `lineGap` placement.
   - *Increment validation:* LibreOffice 26.8.0.3 at 100 dpi, same renderer:
