@@ -286,7 +286,10 @@
     than native phase/weight errors. Six new Rust and 16 public Python cases
     cover identity, colors, asymmetric quads, alpha, ownership and limits.
     Related checks: 114 pdf-image tests, 45 Python tests (2 existing skips),
-    and workspace clippy with all targets/features pass. See the behavior record.
+    and workspace clippy with all targets/features pass. Final combined five-phase
+    gate passes **1959 Rust / 1341 Python tests**, 66 existing Python skips, plus
+    wheel/sdist installation smoke. The installed wheel also passes the explicit
+    warp center/metadata smoke. See the behavior record.
   - *Remaining order:* device callbacks `Page.run` /
     `DisplayList.run`; `Page.insert_font`,
     `Tools.set_subset_fontnames` remain deferred.
