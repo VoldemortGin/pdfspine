@@ -53,6 +53,12 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import dataclasses
+import hashlib
+import importlib.metadata
+import math
+import platform
+from functools import lru_cache
 import json
 import os
 import queue
@@ -147,6 +153,10 @@ def _table_record(tbl) -> dict:
     if ext is not None:
         try:
             for row, column, row_span, column_span, bbox in tbl.spans:
+                raw_span = [row, column, row_span, column_span]
+                if any(type(value) is not int for value in raw_span) or row < 0 or column < 0 or row_span <= 0 or column_span <= 0 or max(row_span, column_span) > 1_000_000:
+                    rec["cells"].append({"row_nums": [], "column_nums": [], "cell_text": "", "raw_span": raw_span})
+                    continue
                 text = ""
                 if row < len(ext) and column < len(ext[row] or []):
                     text = str(ext[row][column] or "")
@@ -158,8 +168,10 @@ def _table_record(tbl) -> dict:
                     "bbox": _as_bbox(bbox),
                     "cell_text": text,
                 })
-        except Exception:  # noqa: BLE001
-            rec["cells"] = []
+        except AttributeError:
+            rec.pop("cells", None)  # A legacy table without spans may use HTML.
+        except Exception as exc:  # noqa: BLE001
+            rec["serialization_error"] = f"{type(exc).__name__}: {exc}"
     for attr in ("confidence", "source", "text_source", "metadata"):
         try:
             rec[attr] = getattr(tbl, attr)
@@ -175,50 +187,140 @@ def _table_record(tbl) -> dict:
     return rec
 
 
-def _vision_runtime_metadata(strategy: str) -> dict:
-    """Return process-level TATR metadata even when no table was detected.
+WORKER_SCHEMA = "pdfspine.table-worker.v2"
 
-    Table metadata alone is insufficient for benchmark reproducibility: a page
-    with zero detections has no ``Table`` object from which to read it.  The
-    vision runtime is already cached by ``find_tables``, so this lookup does not
-    reload either checkpoint.
-    """
-    if strategy.casefold() not in {"vision", "tatr"}:
-        return {}
 
-    from pdfspine import _tatr
+def eval_config(strategy="lines", backend=None, vision_options=None):
+    strategy = strategy.casefold()
+    backend = (backend or ("tatr" if strategy in {"vision", "tatr"} else "native")).casefold()
+    if backend not in {"native", "tatr", "onnx"}:
+        raise ValueError(f"unsupported evaluation backend: {backend}")
+    if strategy not in {"lines", "lines_strict", "text", "vision", "tatr"}:
+        raise ValueError(f"unsupported strategy: {strategy}")
+    if (backend == "native") != (strategy not in {"vision", "tatr"}):
+        raise ValueError("native strategies and vision backends cannot be mixed")
+    if vision_options is not None and not isinstance(vision_options, dict):
+        raise ValueError("vision options must be a JSON object")
+    options = dict(vision_options or {})
+    json.dumps(options, allow_nan=False)
+    if backend == "native" and options:
+        raise ValueError("native evaluation does not accept vision options")
+    if options.get("local_files_only") is False:
+        raise ValueError("evaluation does not download model weights")
+    return {"strategy": strategy, "backend": backend, "options": options}
 
-    options = _tatr.TatrOptions()
-    runtime = _tatr._get_runtime(options)
-    metadata = dict(getattr(runtime, "metadata", {}))
-    metadata.update({
-        "strategy": strategy,
-        "dpi": options.dpi,
-        "detection_threshold": options.detection_threshold,
-        "structure_threshold": options.structure_threshold,
-        "crop_padding": options.crop_padding,
-        "local_files_only": options.local_files_only,
-        "ocr_if_no_text": options.ocr_if_no_text,
-        "native_line_guidance": options.native_line_guidance,
-        "adaptive_crop": options.adaptive_crop,
-    })
+
+@lru_cache(maxsize=64)
+def _file_identity(filename, size, modified):
+    path = Path(filename)
+    with path.open("rb") as stream:
+        sha = hashlib.file_digest(stream, "sha256").hexdigest()
+    return {"path": str(path.resolve()), "bytes": size, "sha256": sha}
+
+
+def _identity(path):
+    path = Path(path).resolve()
+    stat = path.stat()
+    return _file_identity(str(path), stat.st_size, stat.st_mtime_ns)
+
+
+def _vision_runtime_metadata(strategy, backend=None, vision_options=None):
+    config = eval_config(strategy, backend, vision_options)
+    import pdfspine
+    from pdfspine import _core
+    metadata = {"backend": config["backend"], "requested": config,
+                "evaluator_source": _identity(THIS),
+                "python": sys.version, "executable": sys.executable,
+                "platform": platform.platform(), "module": pdfspine.__file__,
+                "extension": _identity(_core.__file__)}
+    if config["backend"] == "native":
+        metadata["effective_options"] = {}
+        return metadata
+    if config["backend"] == "onnx":
+        from pdfspine import _onnx as implementation
+        options = implementation.OnnxOptions.from_mapping(config["options"])
+        packages = ("onnxruntime", "numpy", "Pillow")
+    else:
+        from pdfspine import _tatr as implementation
+        options = implementation.TatrOptions.from_mapping(config["options"])
+        packages = ("torch", "transformers", "numpy", "Pillow")
+    runtime = implementation._get_runtime(options)
+    metadata.update(dict(runtime.metadata))
+    metadata["effective_options"] = dataclasses.asdict(options)
+    metadata["backend_source"] = _identity(implementation.__file__)
+    metadata["word_policy"] = "native-with-ocr-fallback" if options.ocr_if_no_text else "native-only"
+    metadata["packages"] = {name: importlib.metadata.version(name) for name in packages}
+    if config["backend"] == "onnx":
+        metadata["session_providers"] = {name: session.get_providers() for name, session in getattr(runtime, "_sessions", {}).items()}
+    files = []
+    for role in ("layout", "table") if config["backend"] == "onnx" else ("detection", "structure"):
+        source = metadata.get(role + "_model")
+        if not source:
+            raise ValueError(f"runtime omitted {role} model provenance")
+        path = Path(source).expanduser()
+        if not path.exists() and config["backend"] == "tatr":
+            from huggingface_hub import try_to_load_from_cache
+            for filename in ("config.json", "model.safetensors", "pytorch_model.bin"):
+                cached = try_to_load_from_cache(source, filename, revision=metadata.get(role + "_revision"))
+                if isinstance(cached, str):
+                    files.append({"role": role, "filename": filename, **_identity(cached)})
+            if not any(f["role"] == role for f in files):
+                raise ValueError(f"cached model provenance unavailable: {source}")
+        elif path.is_dir():
+            for child in sorted(path.rglob("*")):
+                if child.is_file() and child.suffix in {".json", ".safetensors", ".bin", ".onnx"}:
+                    files.append({"role": role, "filename": child.name, **_identity(child)})
+        else:
+            files.append({"role": role, "filename": path.name, **_identity(path)})
+    for role in (("layout", "table") if config["backend"] == "onnx" else ("detection", "structure")):
+        if not any(item["role"] == role and Path(item["filename"]).suffix in {".onnx", ".safetensors", ".bin"} for item in files):
+            raise ValueError(f"missing model weight fingerprint: {role}")
+    metadata["model_files"] = files
     return metadata
+
+
+def _validate_response(value, request_id=None, expected_config=None):
+    if not isinstance(value, dict) or type(value.get("ok")) is not bool:
+        raise ValueError("worker response must contain boolean ok")
+    if request_id is not None and value.get("request_id") != request_id:
+        raise ValueError("worker response request_id mismatch")
+    if not isinstance(value.get("tables"), list):
+        raise ValueError("worker tables must be a list")
+    if not isinstance(value.get("backend_metadata", {}), dict):
+        raise ValueError("worker metadata must be an object")
+    if value["ok"] and expected_config is not None:
+        metadata = value.get("backend_metadata", {})
+        if metadata.get("backend") != expected_config["backend"] or metadata.get("requested") != expected_config:
+            raise ValueError("worker backend/options identity does not match request")
+    for table in value["tables"]:
+        if not isinstance(table, dict):
+            raise ValueError("worker table must be an object")
+        bbox = table.get("bbox")
+        if not isinstance(bbox, (tuple, list)) or len(bbox) != 4 or any(type(x) not in (int, float) or not math.isfinite(x) for x in bbox):
+            raise ValueError("worker table bbox must be finite")
+        if "cells" in table and (not isinstance(table["cells"], list) or any(not isinstance(c, dict) for c in table["cells"])):
+            raise ValueError("worker cells must be a list of objects")
+    return value
 
 
 def _worker_pdfspine(
     pdf: str,
     page_index: int,
-    strategy: str = "lines",
+    strategy: str = "lines", backend=None, vision_options=None,
 ) -> tuple[list[dict], dict]:
     import pdfspine
 
     doc = pdfspine.open(pdf)
     try:
         page = doc.load_page(page_index)
-        finder = page.find_tables(strategy=strategy)
+        config = eval_config(strategy, backend, vision_options)
+        kwargs = {} if config["backend"] == "native" else {"backend": config["backend"], "vision_options": config["options"]}
+        finder = page.find_tables(strategy=strategy, **kwargs)
         tables = list(getattr(finder, "tables", finder))
         records = [_table_record(t) for t in tables]
-        metadata = _vision_runtime_metadata(strategy)
+        if any(record.get("extract_error") or record.get("serialization_error") for record in records):
+            raise ValueError("table extraction failed during worker serialization")
+        metadata = _vision_runtime_metadata(strategy, backend, vision_options)
         if not metadata:
             metadata = next(
                 (
@@ -253,7 +355,7 @@ def _worker_fitz(pdf: str, page_index: int) -> list[dict]:
             pass
 
 
-def _run_worker(mode: str, pdf: str, page_index: int, strategy: str = "lines") -> int:
+def _run_worker(mode: str, pdf: str, page_index: int, strategy: str = "lines", backend=None, vision_options=None, request_id=None) -> int:
     """Worker entrypoint: emit ``{"ok":bool, "tables":[...], "error":...}`` JSON.
 
     fitz (and MuPDF's C layer) write warnings to **stdout** ("Consider using the
@@ -263,6 +365,7 @@ def _run_worker(mode: str, pdf: str, page_index: int, strategy: str = "lines") -
     on stderr, then write the JSON result to the saved real stdout.
     """
     out: dict = {
+        "schema": WORKER_SCHEMA, "type": "result", "request_id": request_id,
         "ok": False,
         "tables": [],
         "backend_metadata": {},
@@ -275,7 +378,7 @@ def _run_worker(mode: str, pdf: str, page_index: int, strategy: str = "lines") -
         try:
             if mode == "pdfspine":
                 out["tables"], out["backend_metadata"] = _worker_pdfspine(
-                    pdf, page_index, strategy
+                    pdf, page_index, strategy, backend, vision_options
                 )
             elif mode == "fitz":
                 out["tables"] = _worker_fitz(pdf, page_index)
@@ -316,13 +419,13 @@ def _write_json_line(fd: int, obj: dict) -> None:
     _write_all(fd, (json.dumps(obj) + "\n").encode("utf-8"))
 
 
-def _run_jsonl_worker(strategy: str) -> int:
+def _run_jsonl_worker(strategy: str, backend=None, vision_options=None) -> int:
     """Persistent pdfspine worker; TATR models are loaded at most once."""
     real_stdout_fd = os.dup(1)
     os.dup2(2, 1)
     sys.stdout = sys.stderr
     _write_json_line(real_stdout_fd, {
-        "schema": "pdfspine.table-worker.v1",
+        "schema": WORKER_SCHEMA,
         "type": "ready",
         "backend": {"name": "pdfspine", "strategy": strategy},
     })
@@ -333,14 +436,17 @@ def _run_jsonl_worker(strategy: str) -> int:
                 request = json.loads(raw)
                 if request.get("type") == "close":
                     break
+                if request.get("schema") != WORKER_SCHEMA or request.get("type") != "extract":
+                    raise ValueError("invalid worker request schema/type")
                 request_id = request.get("request_id")
                 tables, backend_metadata = _worker_pdfspine(
                     str(request["pdf"]),
                     int(request.get("page_index", 0)),
                     str(request.get("strategy") or strategy),
+                    request.get("backend", backend), request.get("options", vision_options),
                 )
                 response = {
-                    "schema": "pdfspine.table-worker.v1",
+                    "schema": WORKER_SCHEMA,
                     "type": "result",
                     "request_id": request_id,
                     "ok": True,
@@ -350,7 +456,7 @@ def _run_jsonl_worker(strategy: str) -> int:
                 }
             except Exception as exc:  # noqa: BLE001
                 response = {
-                    "schema": "pdfspine.table-worker.v1",
+                    "schema": WORKER_SCHEMA,
                     "type": "result",
                     "request_id": request.get("request_id"),
                     "ok": False,
@@ -373,8 +479,9 @@ class PersistentPdfspineWorker:
         python: str,
         strategy: str,
         timeout: float,
-        startup_timeout: float,
+        startup_timeout: float, backend=None, vision_options=None,
     ) -> None:
+        self.config = eval_config(strategy, backend, vision_options)
         self.strategy = strategy
         self.timeout = timeout
         self.startup_timeout = startup_timeout
@@ -398,7 +505,7 @@ class PersistentPdfspineWorker:
         self._reader.start()
         try:
             ready = self._read_line(30.0)
-            if ready.get("type") != "ready":
+            if ready.get("type") != "ready" or ready.get("schema") != WORKER_SCHEMA:
                 raise RuntimeError(
                     f"persistent table worker did not become ready: {ready}"
                 )
@@ -421,12 +528,13 @@ class PersistentPdfspineWorker:
         self._sequence += 1
         request_id = f"{pdf.name}:{page_index}:{self._sequence}"
         request = {
-            "schema": "pdfspine.table-worker.v1",
+            "schema": WORKER_SCHEMA,
             "type": "extract",
             "request_id": request_id,
             "pdf": str(pdf),
             "page_index": int(page_index),
             "strategy": self.strategy,
+            "backend": self.config["backend"], "options": self.config["options"],
         }
         try:
             if self._process.stdin is None:
@@ -438,7 +546,9 @@ class PersistentPdfspineWorker:
             self._first_request = False
             if response.get("request_id") != request_id:
                 raise RuntimeError("table worker response request_id mismatch")
-            return response
+            if response.get("schema") != WORKER_SCHEMA or response.get("type") != "result":
+                raise ValueError("worker result schema/type mismatch")
+            return _validate_response(response, request_id, self.config)
         except Exception as exc:  # noqa: BLE001
             self.close()
             return {
@@ -481,7 +591,7 @@ class PersistentPdfspineWorker:
 # PARENT MODE — drives both workers per page, compares, reports.
 # ===========================================================================
 def call_worker(py: str, mode: str, pdf: Path, page_index: int, timeout: float,
-                strategy: str = "lines") -> dict:
+                strategy: str = "lines", backend=None, vision_options=None) -> dict:
     """Spawn an isolated worker; return its JSON (or a synthesized failure rec).
 
     A timeout / non-zero exit / SIGABRT (Rust panic) becomes ``ok=False`` with an
@@ -491,7 +601,13 @@ def call_worker(py: str, mode: str, pdf: Path, page_index: int, timeout: float,
     """
     cmd = [py, str(THIS), "--worker", mode, "--pdf", str(pdf), "--page", str(page_index),
            "--strategy", strategy]
+    if backend is not None:
+        cmd += ["--backend", backend]
+    if vision_options is not None:
+        cmd += ["--options-json", json.dumps(vision_options, allow_nan=False)]
     try:
+        request_id = f"{pdf.name}:{page_index}"
+        cmd += ["--request-id", request_id]
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired:
         return {
@@ -517,8 +633,11 @@ def call_worker(py: str, mode: str, pdf: Path, page_index: int, timeout: float,
             "error": f"exit {proc.returncode}: {tail[0][:200]}",
         }
     try:
-        return json.loads(proc.stdout)
-    except json.JSONDecodeError:
+        response = json.loads(proc.stdout)
+        if not isinstance(response, dict) or response.get("schema") != WORKER_SCHEMA or response.get("type") != "result":
+            raise ValueError("worker result schema/type mismatch")
+        return _validate_response(response, request_id, eval_config(strategy, backend, vision_options) if mode == "pdfspine" else None)
+    except (json.JSONDecodeError, ValueError, TypeError):
         tail = (proc.stdout or "").strip()[-200:]
         return {
             "ok": False,
@@ -705,8 +824,6 @@ def _gold_cells_from_annotation(table_anno: dict) -> tuple[list[dict], list[floa
     for c in table_anno.get("cells", []):
         rn = list(c.get("row_nums") or [])
         cn = list(c.get("column_nums") or [])
-        if not rn or not cn:
-            continue
         text = (c.get("json_text_content") or c.get("pdf_text_content") or "")
         cells.append({"row_nums": rn, "column_nums": cn, "cell_text": text.strip()})
     bbox = [float(v) for v in (table_anno.get("pdf_table_bbox") or [0, 0, 0, 0])[:4]]
@@ -786,24 +903,15 @@ def _pred_cells_from_html(html: str | None) -> list[dict]:
 
 def _pred_cells_from_record(record: dict) -> list[dict]:
     """Prefer a predictor's direct cells; fall back to historical HTML."""
-    direct: list[dict] = []
-    for cell in record.get("cells") or []:
-        rows = [int(v) for v in cell.get("row_nums") or []]
-        columns = [int(v) for v in cell.get("column_nums") or []]
-        if not rows or not columns:
-            continue
-        direct.append({
-            "row_nums": rows,
-            "column_nums": columns,
-            "cell_text": " ".join(str(cell.get("cell_text") or "").split()),
-        })
-    return direct if direct else _pred_cells_from_html(record.get("html"))
+    if "cells" in record:
+        return [{**cell, "cell_text": " ".join(str(cell.get("cell_text") or "").split())} for cell in record["cells"]]
+    return _pred_cells_from_html(record.get("html"))
 
 
 def process_doc_gold(pdf: Path, doc_id: str, gold_tables: list[dict],
                      page_index: int, pdfspine_py: str, timeout: float,
                      strategy: str = "lines", predictor=None,
-                     match_iou: float = 0.5) -> dict:
+                     match_iou: float = 0.5, backend=None, vision_options=None) -> dict:
     """Score one page's pdfspine tables vs the page's gold tables with GriTS.
 
     ``gold_tables`` is the list of FinTabNet.c annotation tables for this page
@@ -811,21 +919,27 @@ def process_doc_gold(pdf: Path, doc_id: str, gold_tables: list[dict],
     matched table, GriTS_Top and GriTS_Con; unmatched gold tables count as 0.
     """
     from grits import grits_con, grits_top  # local import (pure stdlib helper)
+    from cell_alignment import score_cells, topology_error, aggregate
 
     # Gold side.
     golds: list[dict] = []
     for t in gold_tables:
         cells, bbox = _gold_cells_from_annotation(t)
-        if cells:
-            golds.append({"cells": cells, "bbox": bbox})
+        if topology_error(cells):
+            raise ValueError(f"invalid gold topology: {topology_error(cells)}")
+        golds.append({"cells": cells, "bbox": bbox})
 
     # Native strategies retain per-page isolation. Vision uses a persistent
     # worker supplied by run_gold so two large models are loaded only once.
     ox_res = (
         predictor(pdf, page_index)
         if predictor is not None
-        else call_worker(pdfspine_py, "pdfspine", pdf, page_index, timeout, strategy)
+        else call_worker(pdfspine_py, "pdfspine", pdf, page_index, timeout, strategy, **({"backend": backend, "vision_options": vision_options} if backend is not None or vision_options is not None else {}))
     )
+    try:
+        _validate_response(ox_res)
+    except (ValueError, TypeError) as exc:
+        ox_res = {"ok": False, "tables": [], "error": f"protocol: {exc}"}
     raw_metadata = ox_res.get("backend_metadata")
     backend_metadata = dict(raw_metadata) if isinstance(raw_metadata, dict) else {}
     if not ox_res.get("ok"):
@@ -884,6 +998,8 @@ def process_doc_gold(pdf: Path, doc_id: str, gold_tables: list[dict],
     detection_by_gold = {gold_i: (pred_i, score) for gold_i, pred_i, score in detection_pairs}
 
     table_recs: list[dict] = []
+    cell_records = []
+    used_predictions = set()
     for gi, g in enumerate(golds):
         detection_match = detection_by_gold.get(gi)
         detection_fields = {
@@ -893,6 +1009,7 @@ def process_doc_gold(pdf: Path, doc_id: str, gold_tables: list[dict],
         match = next((pr for pr in structure_pairs if pr[0] == gi), None)
         if match is None:
             # Gold table the predictor missed entirely -> GriTS 0 (full penalty).
+            cell_records.append(score_cells(g["cells"], []))
             table_recs.append({
                 "matched": False, "iou": 0.0,
                 "grits_top": 0.0, "grits_con": 0.0,
@@ -902,16 +1019,27 @@ def process_doc_gold(pdf: Path, doc_id: str, gold_tables: list[dict],
             continue
         _, pi, v = match
         p = preds[pi]
-        gt_top, _, _ = grits_top(g["cells"], p["cells"])
-        gt_con, _, _ = grits_con(g["cells"], p["cells"])
+        used_predictions.add(pi)
+        alignment = score_cells(g["cells"], p["cells"])
+        cell_records.append(alignment)
+        if alignment["invalid_prediction"]:
+            gt_top = gt_con = 0.0
+        else:
+            gt_top, _, _ = grits_top(g["cells"], p["cells"])
+            gt_con, _, _ = grits_con(g["cells"], p["cells"])
         table_recs.append({
             "matched": True, "iou": round(v, 3),
             # Keep full precision for aggregate statistics; round only in reports.
             "grits_top": gt_top, "grits_con": gt_con,
-            "gold_shape": _shape(g["cells"]), "pred_shape": _shape(p["cells"]),
+            "gold_shape": _shape(g["cells"]), "pred_shape": None if alignment["invalid_prediction"] else _shape(p["cells"]),
+            "invalid_prediction": alignment["invalid_prediction"],
+            "prediction_error": alignment["prediction_error"], "cell_alignment": alignment,
             **detection_fields,
         })
 
+    for pi, prediction in enumerate(preds):
+        if pi not in used_predictions:
+            cell_records.append(score_cells([], prediction["cells"]))
     n_gold = len(golds)
     n_matched = sum(1 for r in table_recs if r["matched"])
     n_detection_matched = len(detection_pairs)
@@ -938,6 +1066,11 @@ def process_doc_gold(pdf: Path, doc_id: str, gold_tables: list[dict],
         "match_iou": match_iou,
         "backend_metadata": backend_metadata,
         "tables": table_recs,
+        "input_pdf": _identity(pdf) if pdf.is_file() else None,
+        "text_sources": sorted({str(rec.get("text_source", "not-reported")) for rec in ox_res.get("tables", [])}),
+        "raw_predictions": ox_res.get("tables", []),
+        "cell_alignment_records": cell_records,
+        "cell_alignment": aggregate(cell_records),
         "grits_top_sum": sum(r["grits_top"] for r in table_recs),
         "grits_con_sum": sum(r["grits_con"] for r in table_recs),
     }
@@ -952,6 +1085,7 @@ def _gold_metric_summary(docs: list[dict]) -> dict:
     falling back to ``Table.bbox`` for backends without separate detector output.
     Neither view is silently computed from failed worker pages.
     """
+    from cell_alignment import aggregate
     valid = [d for d in docs if d.get("status", "valid") == "valid" and d.get("ox_ok")]
     total_gold = sum(d["n_gold"] for d in valid)
     total_pred = sum(d["n_pred"] for d in valid)
@@ -982,6 +1116,7 @@ def _gold_metric_summary(docs: list[dict]) -> dict:
         "detection_precision": precision,
         "detection_recall": recall,
         "detection_f1": detection_f1,
+        "cell_alignment": aggregate([r for d in valid for r in d.get("cell_alignment_records", [])]),
         "end_to_end": {
             "n_tables": total_gold,
             "grits_top_mean": sum(end_top) / total_gold if total_gold else 0.0,
@@ -1017,29 +1152,168 @@ def load_gold_manifest(path: Path) -> list[dict]:
     """
     data = json.loads(path.read_text(encoding="utf-8"))
     entries = data.get("entries") if isinstance(data, dict) else data
+    if not isinstance(entries, list):
+        raise ValueError("manifest entries must be a list")
     mdir = path.resolve().parent
     out: list[dict] = []
-    for e in entries or []:
-        anno = e.get("annotation")
-        anno_p = Path(anno)
-        if not anno_p.is_absolute():
-            anno_p = mdir / anno
+    manifest_issues = []
+    ledger_tables = {}
+    legacy = isinstance(data, dict) and data.get("schema") is None and data.get("dataset") == "FinTabNet.c"
+    financial = isinstance(data, dict) and data.get("schema") == "pdfspine.financial-eval-drafts.v1"
+    if not legacy and not financial:
+        manifest_issues.append("unknown evaluation manifest schema/track")
+    if financial and data.get("review_status") not in ("unreviewed", "reviewed"):
+        manifest_issues.append("financial manifest requires explicit review_status")
+    for name in ("selection", "review_ledger"):
+        resource = data.get(name) if isinstance(data, dict) else None
+        if financial and resource is None:
+            manifest_issues.append(f"missing required {name} reference")
+        if resource is not None:
+            if not isinstance(resource, dict) or not isinstance(resource.get("path"), str):
+                manifest_issues.append(f"invalid {name} reference")
+            else:
+                resource_path = (mdir / resource["path"]).resolve()
+                if not resource_path.is_file():
+                    manifest_issues.append(f"missing {name}")
+                elif not resource.get("sha256") or _identity(resource_path)["sha256"] != resource["sha256"]:
+                    manifest_issues.append(f"{name} SHA-256 mismatch")
+    if financial and not any("review_ledger" in issue for issue in manifest_issues):
         try:
-            tables = json.loads(anno_p.read_text(encoding="utf-8"))
-        except Exception:  # noqa: BLE001
-            continue
-        gold_tables = [t for t in tables if not t.get("exclude_for_structure")]
+            ledger = json.loads((mdir / data["review_ledger"]["path"]).read_text())
+            if ledger.get("dataset_id") != data.get("dataset_id") or ledger.get("selection_sha256") != data.get("selection", {}).get("sha256"):
+                raise ValueError("ledger dataset/selection identity mismatch")
+            for table in ledger["tables"]:
+                identity = table["structure_id"]
+                if not isinstance(identity, str) or identity in ledger_tables:
+                    raise ValueError("ledger table IDs must be unique strings")
+                ledger_tables[identity] = table
+        except (ValueError, OSError, KeyError, TypeError, AttributeError) as exc:
+            manifest_issues.append(f"invalid review_ledger: {exc}")
+            ledger_tables = {}
+    for index, e in enumerate(entries or []):
+        issues = list(manifest_issues)
+        if not isinstance(e, dict):
+            e = {}
+            issues.append("entry must be an object")
+        table_refs = []
+        ledger_reviews_complete = not financial
+        if financial:
+            ledger_reviews_complete = True
+            if e.get("review_status") not in ("unreviewed", "reviewed"):
+                issues.append("entry requires explicit review_status")
+            for name in ("pdf_sha256", "annotation_sha256"):
+                value = e.get(name)
+                if not isinstance(value, str) or len(value) != 64 or any(c not in "0123456789abcdefABCDEF" for c in value):
+                    issues.append(f"missing/invalid required {name}")
+            table_refs = e.get("tables")
+            if not isinstance(table_refs, list) or not table_refs:
+                issues.append("financial entry requires table artifact/review bindings")
+                table_refs = []
+            else:
+                raw_table_refs = table_refs
+                table_refs = []
+                for table_ref in raw_table_refs:
+                    if not isinstance(table_ref, dict):
+                        issues.append("invalid table artifact reference")
+                        continue
+                    identity = table_ref.get("structure_id")
+                    if not isinstance(identity, str) or not identity:
+                        issues.append("table structure_id must be a nonempty string")
+                        continue
+                    if type(table_ref.get("source_table_index")) is not int or table_ref["source_table_index"] < 0:
+                        issues.append("table source_table_index must be a nonnegative integer")
+                        continue
+                    if table_ref.get("review_status") not in ("unreviewed", "reviewed"):
+                        issues.append("table requires explicit review_status")
+                        continue
+                    if any(not isinstance(table_ref.get(name), str) or not table_ref[name] for name in ("html", "html_sha256", "cells", "cells_sha256")):
+                        issues.append("table artifact path/SHA fields must be nonempty strings")
+                        continue
+                    table_refs.append(table_ref)
+                    ledger_table = ledger_tables.get(identity, {})
+                    if not ledger_table:
+                        issues.append("table missing from review_ledger")
+                    else:
+                        for name in ("document_id", "pdf_sha256", "annotation_sha256"):
+                            if ledger_table.get(name) != e.get(name):
+                                issues.append(f"ledger {name} binding mismatch")
+                        for name in ("html", "html_sha256", "cells", "cells_sha256", "source_table_index", "review_status"):
+                            if ledger_table.get(name) != table_ref.get(name):
+                                issues.append(f"ledger table {name} binding mismatch")
+                    human = ledger_table.get("human_review", {})
+                    ledger_reviews_complete = ledger_reviews_complete and isinstance(human, dict) and human.get("status") == "reviewed" and bool(human.get("reviewer")) and bool(human.get("reviewed_at"))
+                    if table_ref.get("review_status") not in ("unreviewed", "reviewed"):
+                        issues.append("table requires explicit review_status")
+                    for name in ("html", "cells"):
+                        filename, expected = table_ref.get(name), table_ref.get(name + "_sha256")
+                        if not isinstance(filename, str) or not isinstance(expected, str):
+                            issues.append(f"missing table {name}/SHA binding")
+                            continue
+                        artifact = (mdir / filename).resolve()
+                        if not artifact.is_file():
+                            issues.append(f"missing table {name}")
+                        elif _identity(artifact)["sha256"] != expected:
+                            issues.append(f"table {name} SHA-256 mismatch")
+        anno = e.get("annotation")
+        if not isinstance(anno, str) or not anno:
+            issues.append("annotation path must be a nonempty string")
+            anno = None
+        anno_p = (mdir / anno).resolve() if anno else None
         pdf = e.get("pdf")
-        pdf_p = None
-        if pdf:
-            pdf_p = Path(pdf)
-            if not pdf_p.is_absolute():
-                pdf_p = mdir / pdf
+        if not isinstance(pdf, str) or not pdf:
+            issues.append("PDF path must be a nonempty string")
+            pdf = None
+        pdf_p = (mdir / pdf).resolve() if pdf else None
+        page_index = e.get("pdf_page_index", 0)
+        if type(page_index) is not int or page_index < 0:
+            issues.append("pdf_page_index must be a nonnegative integer")
+            page_index = 0
+        review_state = e.get("review_status", data.get("review_status", "source-annotations" if legacy else "unknown") if isinstance(data, dict) else "unknown")
+        if not isinstance(review_state, str):
+            issues.append("review_status must be a string")
+            review_state = "invalid"
+        tables = []
+        if anno_p is None or not anno_p.is_file():
+            issues.append("missing annotation")
+        else:
+            try:
+                tables = json.loads(anno_p.read_text(encoding="utf-8"))
+                if not isinstance(tables, list) or any(not isinstance(t, dict) for t in tables):
+                    raise ValueError("annotation must be a list of tables")
+            except (ValueError, OSError) as exc:
+                tables = []
+                issues.append(f"invalid annotation: {exc}")
+        if pdf_p is None or not pdf_p.is_file():
+            issues.append("missing PDF")
+        for role, target in (("pdf", pdf_p), ("annotation", anno_p)):
+            expected = e.get(role + "_sha256")
+            if expected and target and target.is_file() and _identity(target)["sha256"] != expected:
+                issues.append(f"{role} SHA-256 mismatch")
+        gold_tables = [t for t in tables if not t.get("exclude_for_structure")]
+        if financial:
+            eligible = {index: table for index, table in enumerate(tables) if not table.get("exclude_for_structure")}
+            references = table_refs
+            indices = [ref.get("source_table_index") for ref in references if isinstance(ref, dict)] if isinstance(references, list) else []
+            if any(type(index) is not int for index in indices) or len(indices) != len(set(indices)) or set(indices) != set(eligible):
+                issues.append("table review bindings do not cover eligible annotation tables exactly")
+            else:
+                for ref in references:
+                    if eligible[ref["source_table_index"]].get("structure_id") != ref.get("structure_id"):
+                        issues.append("annotation structure_id does not match review binding")
         out.append({
-            "document_id": e.get("document_id") or anno_p.stem,
-            "pdf": pdf_p,
+            "document_id": e.get("document_id") or (anno_p.stem if anno_p else f"entry-{index}"),
+            "pdf": pdf_p, "annotation": anno_p,
+            "partition": e.get("partition"),
+            "historical_benchmark_exposure": e.get("historical_benchmark_exposure"),
+            "input_issues": issues,
+            "manifest_track": "historical-source-annotations" if legacy else "financial-drafts" if financial else "unknown",
+            "manifest_review_status": data.get("review_status") if isinstance(data, dict) else None,
+            "ledger_reviews_complete": ledger_reviews_complete,
+            "all_table_reviews_complete": not financial or all(isinstance(t, dict) and t.get("review_status") == "reviewed" for t in table_refs),
+            "input_identities": {role: _identity(path) for role, path in (("pdf", pdf_p), ("annotation", anno_p)) if path and path.is_file()},
+            "review_status": review_state,
             "pdf_status": e.get("pdf_status"),
-            "page_index": int(e.get("pdf_page_index", 0)),
+            "page_index": page_index,
             "gold_tables": gold_tables,
             "anno_license": e.get("anno_license"),
             "pdf_license": e.get("pdf_license"),
@@ -1049,37 +1323,61 @@ def load_gold_manifest(path: Path) -> list[dict]:
 
 def run_gold(manifest_path: Path, pdfspine_py: str, timeout: float,
              report_path: Path, json_path: Path, strategy: str = "lines",
-             startup_timeout: float = 600.0, match_iou: float = 0.5) -> int:
+             startup_timeout: float = 600.0, match_iou: float = 0.5,
+             backend=None, vision_options=None) -> int:
     """Drive the gold-GT GriTS run over a FinTabNet.c manifest; write report+json.
 
     If no source PDFs are present (the common BLOCKED case in restricted
     environments), still writes a clean report stating exactly what is missing and
     how to obtain it — never a fabricated score.
     """
-    pages = load_gold_manifest(manifest_path)
-    if not pages:
-        print(f"No gold pages in manifest {manifest_path}", file=sys.stderr)
-        return 2
-    scored = [p for p in pages if p["pdf"] and p["pdf"].exists()]
+    config = eval_config(strategy, backend, vision_options)
+    try:
+        pages = load_gold_manifest(manifest_path)
+        if not pages:
+            raise ValueError("manifest has no requested pages")
+    except (ValueError, OSError, TypeError, KeyError, AttributeError) as exc:
+        failure = {"status": "incomplete", "execution_status": "not-started", "comparable": False,
+                   "error_phase": "input-validation", "error": f"{type(exc).__name__}: {exc}",
+                   "n_pages_requested": None, "n_pages_attempted": 0,
+                   "grits_end_to_end": None, "cell_alignment": None, "docs": []}
+        json_path.parent.mkdir(parents=True, exist_ok=True)
+        json_path.write_text(json.dumps(failure, indent=2))
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text("# INCOMPLETE evaluation input\n\n" + failure["error"] + "\nNo score was computed.\n")
+        return 3
+    scored = [p for p in pages if p["pdf"] and p["pdf"].exists() and not p.get("input_issues")]
     print(f"Gold pages: {len(pages)} (PDF present: {len(scored)})", flush=True)
 
-    wants_persistent = strategy.casefold() in {"vision", "tatr"} and bool(scored)
+    wants_persistent = config["backend"] != "native" and bool(scored)
     persistent = None
     docs: list[dict] = []
     run_error: str | None = None
+    observed_session_providers = {}
     try:
         if wants_persistent:
             persistent = PersistentPdfspineWorker(
-                pdfspine_py, strategy, timeout, startup_timeout
+                pdfspine_py, strategy, timeout, startup_timeout, backend, vision_options
             )
         for k, pg in enumerate(scored, 1):
             d = process_doc_gold(
                 pg["pdf"], pg["document_id"], pg["gold_tables"],
                 pg["page_index"], pdfspine_py, timeout, strategy,
                 predictor=persistent.call if persistent is not None else None,
-                match_iou=match_iou,
+                match_iou=match_iou, backend=backend, vision_options=vision_options,
             )
             docs.append(d)
+            prior_metadata = next((item.get("backend_metadata") for item in docs[:-1] if item.get("backend_metadata")), None)
+            current_metadata = d.get("backend_metadata", {})
+            if prior_metadata:
+                def stable(metadata):
+                    return {k: v for k, v in metadata.items() if k != "session_providers"}
+                if stable(current_metadata) != stable(prior_metadata):
+                    raise ValueError("backend metadata changed within one evaluation run")
+            for role, providers in current_metadata.get("session_providers", {}).items():
+                if role in observed_session_providers and observed_session_providers[role] != providers:
+                    raise ValueError("backend session providers changed within one evaluation run")
+                observed_session_providers[role] = providers
             if not d["ox_ok"]:
                 run_error = (
                     f"{pg['document_id']} page {pg['page_index']}: "
@@ -1114,8 +1412,12 @@ def run_gold(manifest_path: Path, pdfspine_py: str, timeout: float,
                 if run_error is None:
                     run_error = f"worker shutdown failed: {type(exc).__name__}: {exc}"
 
-    status = "invalid" if run_error else ("blocked" if not scored else "valid")
-    summary = _gold_metric_summary(docs) if status == "valid" else None
+    execution_status = "failed" if run_error else ("partial" if len(scored) != len(pages) else "success")
+    review_statuses = sorted({p.get("review_status", "unknown") for p in pages})
+    review_complete = all(value in {"source-annotations", "reviewed"} for value in review_statuses) and all(p.get("all_table_reviews_complete", True) and p.get("ledger_reviews_complete", True) and (p.get("manifest_track") != "financial-drafts" or p.get("manifest_review_status") == "reviewed") for p in pages)
+    status = "invalid" if run_error else ("valid" if execution_status == "success" and review_complete else "incomplete")
+    comparable = status == "valid"
+    summary = _gold_metric_summary(docs) if comparable else None
     backend_metadata = next(
         (d["backend_metadata"] for d in docs if d.get("backend_metadata")),
         {},
@@ -1123,6 +1425,24 @@ def run_gold(manifest_path: Path, pdfspine_py: str, timeout: float,
 
     payload = {
         "status": status,
+        "execution_status": execution_status,
+        "comparable": comparable, "review_statuses": review_statuses,
+        "purpose": "acceptance" if comparable else "diagnostic",
+        "configuration": config,
+        "gold_track": "original-source-annotations",
+        "gold_text_selection": "historical-json-truthy-fallback-pdf",
+        "manifest_sha256": _identity(manifest_path)["sha256"],
+        "input_provenance": [{"id": p["document_id"], "files": p.get("input_identities", {}), "partition": p.get("partition"), "historical_benchmark_exposure": p.get("historical_benchmark_exposure")} for p in pages],
+        "metric_source": _identity(GT_DIR / "cell_alignment.py"),
+        "grits_source": _identity(GT_DIR / "grits.py"),
+        "missing_inputs": [{"id": p["document_id"], "issues": p.get("input_issues") or ["missing PDF"]} for p in pages if p not in scored],
+        "n_pages_requested": len(pages), "n_pages_missing": len(pages) - len(scored),
+        "n_tables_requested_known": sum(len(p["gold_tables"]) for p in pages),
+        "n_pages_unknown_table_count": sum(any("annotation" in issue for issue in p.get("input_issues", [])) for p in pages),
+        "n_tables_missing_known": sum(len(p["gold_tables"]) for p in pages if p not in scored),
+        "n_tables_evaluated": sum(d["n_gold"] for d in docs if d.get("ox_ok")),
+        "diagnostic_summary": _gold_metric_summary(docs) if not comparable else None,
+        "cell_alignment": summary["cell_alignment"] if summary is not None and comparable else None,
         "error": run_error,
         "mode": "gold-fintabnet",
         "manifest": str(manifest_path),
@@ -1167,10 +1487,16 @@ def run_gold(manifest_path: Path, pdfspine_py: str, timeout: float,
         status=status,
         run_error=run_error,
     )
+    if not comparable:
+        report = "**DIAGNOSTIC ONLY — not a complete reviewed/comparable acceptance run.**\n\n" + report
+    report += "\n## Evaluation v2 contract\n\n" + f"Configuration: `{json.dumps(config, sort_keys=True)}`\n\nComparable: **{comparable}**; review states: {review_statuses}.\n"
+    report += f"Requested/evaluated/missing pages: {len(pages)}/{len(docs)}/{len(pages)-len(scored)}. Draft or incomplete metrics are diagnostic only.\n"
+    if summary is not None:
+        report += "\nStrict cell_span_f1_v1 (micro): `" + json.dumps(summary["cell_alignment"], sort_keys=True) + "`\n"
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(report, encoding="utf-8")
     print(f"\nWrote {json_path}\nWrote {report_path}", flush=True)
-    return 3 if status == "invalid" else 0
+    return 0 if comparable else 3
 
 
 def build_gold_report(manifest_path: Path, pages: list[dict], scored: list[dict],
@@ -1237,9 +1563,9 @@ def build_gold_report(manifest_path: Path, pages: list[dict], scored: list[dict]
              "(`conformance/gt/corpus-*/`); the committed deliverables are the fetcher, the "
              "metric, the harness mode, and this report.\n")
 
-    if status == "invalid":
-        L.append("## Status: INVALID — worker/model execution failed\n")
-        L.append(f"- Error: `{run_error or 'pdfspine worker failed'}`")
+    if status in {"invalid", "incomplete"}:
+        L.append(f"## Status: {status.upper()} — execution failed or requested inputs unavailable\n")
+        L.append(f"- Error: `{run_error or 'requested PDF/annotation/provenance inputs unavailable'}`")
         L.append(f"- Pages completed successfully: **{sum(1 for d in docs if d.get('ox_ok'))}**; "
                  f"attempted: **{len(docs)}** / {n_pdf} PDFs present.")
         L.append("- **No aggregate detection or GriTS score is reported.** An execution "
@@ -1579,6 +1905,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--worker", choices=["pdfspine", "fitz"], default=None,
                     help=argparse.SUPPRESS)
     ap.add_argument("--worker-jsonl", action="store_true", help=argparse.SUPPRESS)
+    ap.add_argument("--request-id", default=None, help=argparse.SUPPRESS)
     ap.add_argument("--pdf", default=None, help=argparse.SUPPRESS)
     ap.add_argument("--page", type=int, default=0, help=argparse.SUPPRESS)
     # Parent CLI.
@@ -1595,6 +1922,8 @@ def main(argv: list[str] | None = None) -> int:
                     help="first persistent vision request timeout, including model load (s)")
     ap.add_argument("--match-iou", type=float, default=0.5,
                     help="minimum bbox IoU for gold table matching (default: 0.5)")
+    ap.add_argument("--backend", choices=["native", "tatr", "onnx"], default=None)
+    ap.add_argument("--options-json", default=None, help="explicit vision options JSON object; no downloads")
     ap.add_argument("--strategy", default="lines",
                     help="find_tables strategy for the pdfspine worker in --gold mode "
                          "('lines' = default & historical behavior, 'text' = text-based "
@@ -1609,19 +1938,24 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--report", type=Path, default=GT_DIR / "GT-REPORT-tables.md")
     ap.add_argument("--json", type=Path, default=GT_DIR / "gt-tables.json")
     args = ap.parse_args(argv)
+    try:
+        options = json.loads(args.options_json) if args.options_json is not None else None
+        config = eval_config(args.strategy, args.backend, options)
+    except (ValueError, TypeError) as exc:
+        ap.error(str(exc))
     if not 0.0 <= args.match_iou <= 1.0:
         ap.error("--match-iou must be between 0 and 1")
-    if args.timeout <= 0 or args.startup_timeout <= 0:
+    if any(not math.isfinite(v) or v <= 0 for v in (args.timeout, args.startup_timeout)):
         ap.error("--timeout and --startup-timeout must be positive")
 
     # Worker dispatch (isolated subprocess).
     if args.worker_jsonl:
-        return _run_jsonl_worker(args.strategy)
+        return _run_jsonl_worker(args.strategy, args.backend, options)
     if args.worker:
         if not args.pdf:
             sys.stdout.write(json.dumps({"ok": False, "tables": [], "error": "no --pdf"}))
             return 2
-        return _run_worker(args.worker, args.pdf, args.page, args.strategy)
+        return _run_worker(args.worker, args.pdf, args.page, args.strategy, args.backend, options, args.request_id)
 
     # GOLD-GT mode (absolute cell-structure score vs FinTabNet.c via GriTS).
     if args.gold is not None:
@@ -1630,14 +1964,20 @@ def main(argv: list[str] | None = None) -> int:
         # Non-default strategies get suffixed default paths so a 'text' run can
         # never silently clobber the canonical (lines-default) gold report.
         sfx = "" if args.strategy == "lines" else f"-{args.strategy}"
+        if args.backend is not None or options is not None:
+            digest = hashlib.sha256(json.dumps(config, sort_keys=True).encode()).hexdigest()[:10]
+            sfx += f"-{config['backend']}-{digest}"
         report = (args.report if args.report != GT_DIR / "GT-REPORT-tables.md"
                   else GT_DIR / f"GT-REPORT-tables-gold{sfx}.md")
         jsonp = (args.json if args.json != GT_DIR / "gt-tables.json"
                  else GT_DIR / f"gt-tables-gold{sfx}.json")
         return run_gold(
             args.gold, args.pdfspine_python, args.timeout, report, jsonp,
-            args.strategy, args.startup_timeout, args.match_iou,
+            args.strategy, args.startup_timeout, args.match_iou, args.backend, options,
         )
+
+    if args.backend is not None or options is not None:
+        ap.error("--backend/--options-json require --gold; parity mode retains its historical native path")
 
     # Parent.
     from score import score_all  # local, pure stdlib

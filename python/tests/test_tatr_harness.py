@@ -65,6 +65,7 @@ def test_run_gold_stops_at_first_failure_and_writes_invalid_report(
     manifest.write_text(
         json.dumps(
             {
+                "dataset": "FinTabNet.c",
                 "annotations_license": "CDLA-Permissive-2.0",
                 "pdf_license": "CDLA-Permissive-1.0",
                 "sample_requested": 2,

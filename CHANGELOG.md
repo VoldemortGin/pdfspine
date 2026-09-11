@@ -11,6 +11,17 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
+### Table evaluation infrastructure
+
+- Added explicit evaluator backend/options, runtime/model provenance and versioned
+  worker validation, plus strict cell span/content F1. Missing inputs and draft
+  review status prevent official scores; invalid predicted topology is counted
+  as quality failure while execution/protocol errors invalidate the run.
+- Added deterministic 40-page / 60-table financial annotation drafts with source
+  hashes and unreviewed human-review ledgers. Historical source-annotation scoring
+  remains explicit. No model comparison, human gold, production backend change,
+  TEDS implementation or ADR acceptance is included.
+
 ### OCR benchmark acceptance notes
 
 - Document the four `AI` → `Al` cases as accepted remaining OCR quality misses
