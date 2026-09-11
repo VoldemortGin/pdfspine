@@ -41,6 +41,8 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ### Documentation
 
+- Add a repository development guide covering the workspace, gate/environment
+  setup and family routing.
 - Define the v0.8.0 pinned git baseline and upgrade policy for Rust consumers
   of `pdf-api`, `pdf-typeset` and `pdf-fonts`, retaining `publish = false`.
 
