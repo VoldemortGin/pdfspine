@@ -12,7 +12,31 @@ use pdf_core::{DocumentStore, Limits, ObjRef, Page};
 use pdf_image::pixmap::{Colorspace, Pixmap};
 use pdf_render::{render_page, DisplayList, RenderOptions};
 
+#[path = "../../pdf-image/tests/codec_common/adobe_jpeg.rs"]
+mod adobe_jpeg;
 mod synth;
+
+#[test]
+fn render_page_adobe_rgb_jpeg_is_not_skipped() {
+    let jpeg = adobe_jpeg::adobe_jpeg(0, &[64, 128, 192]);
+    let bytes = page_pdf_extra(
+        b"q 100 0 0 100 50 50 cm /Im Do Q",
+        "<< /XObject << /Im 10 0 R >> >>",
+        0,
+        vec![(
+            10,
+            stream(
+                "/Type /XObject /Subtype /Image /Width 8 /Height 8 \
+             /BitsPerComponent 8 /ColorSpace /DeviceRGB /Filter /DCTDecode",
+                &jpeg,
+            ),
+        )],
+    );
+    let (doc, page) = open_page(bytes);
+    let pixmap = render(&doc, &page, &RenderOptions::default());
+    assert_eq!(px(&pixmap, 100, 100), (64, 128, 192));
+    assert_eq!(px(&pixmap, 10, 10), (255, 255, 255));
+}
 
 // ============================================================================
 // Minimal classic-xref PDF builder.
