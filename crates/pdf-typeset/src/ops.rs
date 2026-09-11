@@ -347,3 +347,23 @@ pub(crate) fn translate_segs(segs: &mut [PathSeg], dx: f64, dy: f64) {
         }
     }
 }
+
+/// Formats a scalar for a content operator: integers without a decimal point,
+/// otherwise ≤ 4 fractional digits with trailing zeros trimmed (the pdf-edit
+/// convention). Non-finite values degrade to `0`.
+pub(crate) fn pdf_scalar(v: f64) -> String {
+    if !v.is_finite() {
+        return "0".to_string();
+    }
+    if v == v.trunc() && v.abs() < 1e15 {
+        return format!("{}", v as i64);
+    }
+    let mut s = format!("{v:.4}");
+    while s.ends_with('0') {
+        s.pop();
+    }
+    if s.ends_with('.') {
+        s.pop();
+    }
+    s
+}

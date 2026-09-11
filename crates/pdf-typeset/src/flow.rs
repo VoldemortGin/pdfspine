@@ -39,10 +39,10 @@ use std::rc::Rc;
 
 use crate::faces::FaceRegistry;
 use crate::model::{
-    Align, Block, ImageSpec, LineHeightRule, LineSpacing, ListLabel, ParaProps, ParagraphBorders,
-    Run,
+    Align, Block, ImageSpec, LineHeightRule, LineSpacing, ListLabel, ParaProps, ParagraphBorder,
+    ParagraphBorders, Run,
 };
-use crate::ops::{FaceId, Op, PageOps, PathSeg};
+use crate::ops::{FaceId, Op, PageOps, PathSeg, Stroke};
 use crate::warn::ExportWarning;
 use crate::{Rgb, Typesetter};
 
@@ -1028,7 +1028,7 @@ fn borders_join(a: &Block, b: &Block) -> bool {
         (Block::Paragraph(a, ar), Block::Paragraph(b, br)) => {
             let strokes = |p: &ParaProps| {
                 let b = paragraph_borders(p);
-                [b.top, b.right, b.bottom, b.left].map(|edge| edge.map(|e| e.stroke()))
+                [b.top, b.right, b.bottom, b.left].map(|edge| edge.map(|e| (e.stroke(), e.dash())))
             };
             bordered(a)
                 && strokes(a) == strokes(b)
@@ -1040,6 +1040,31 @@ fn borders_join(a: &Block, b: &Block) -> bool {
                 })
         }
         _ => false,
+    }
+}
+
+fn paragraph_border_op(edge: ParagraphBorder, x1: f64, y1: f64, x2: f64, y2: f64) -> Op {
+    let stroke = edge.stroke();
+    if let Some(dash) = edge.dash() {
+        let mut paint = Stroke::new(stroke.color, stroke.width);
+        paint.dashes = dash.to_vec();
+        Op::Path {
+            segs: vec![
+                PathSeg::MoveTo { x: x1, y: y1 },
+                PathSeg::LineTo { x: x2, y: y2 },
+            ],
+            fill: None,
+            stroke: Some(paint),
+        }
+    } else {
+        Op::Line {
+            x1,
+            y1,
+            x2,
+            y2,
+            width: stroke.width,
+            color: stroke.color,
+        }
     }
 }
 
@@ -1190,14 +1215,9 @@ impl BorderGroup<'_> {
                     } else {
                         -stroke.width * 0.5
                     };
-                    ctx.pages[f.page].ops.push(Op::Line {
-                        x1,
-                        y1: center,
-                        x2,
-                        y2: center,
-                        width: stroke.width,
-                        color: stroke.color,
-                    });
+                    ctx.pages[f.page]
+                        .ops
+                        .push(paragraph_border_op(e, x1, center, x2, center));
                 }
             }
             for (edge, x, left_side) in [
@@ -1211,14 +1231,9 @@ impl BorderGroup<'_> {
                     } else {
                         -stroke.width * 0.5
                     };
-                    ctx.pages[f.page].ops.push(Op::Line {
-                        x1: center,
-                        y1: f.top,
-                        x2: center,
-                        y2: f.bottom,
-                        width: stroke.width,
-                        color: stroke.color,
-                    });
+                    ctx.pages[f.page]
+                        .ops
+                        .push(paragraph_border_op(e, center, f.top, center, f.bottom));
                 }
             }
         }

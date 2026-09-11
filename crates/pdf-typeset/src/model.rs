@@ -311,7 +311,7 @@ impl ListLabel {
 #[non_exhaustive]
 #[derive(Clone, Debug, PartialEq)]
 pub struct ParaProps {
-    /// Solid paragraph edges; absent by default. Border dimensions participate in layout.
+    /// Paragraph edges; absent by default. Border dimensions participate in layout.
     pub borders: Option<Box<ParagraphBorders>>,
     /// Optional solid paragraph background, spanning the indented paragraph
     /// width. Adjacent paragraphs with the same fill and horizontal indents
@@ -384,17 +384,20 @@ pub enum ColumnWidth {
     Auto,
 }
 
-/// A solid paragraph edge with validated point width and text-to-edge space.
-/// Other line styles and between-paragraph separators are not represented.
+/// A paragraph edge with validated point dimensions and optional resolved dashes.
+/// Between-paragraph separators and automatic OOXML style mapping are not represented.
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct ParagraphBorder {
     stroke: BorderEdge,
     space: f64,
+    dash: Option<[f64; 2]>,
 }
 
 /// Invalid paragraph-border dimensions.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ParagraphBorderError {
+    /// Dash lengths must serialize to positive finite f32 values with a finite cycle.
+    Dash,
     /// Width must be finite and strictly positive.
     Width,
     /// Space must be finite and nonnegative, with a finite total edge extent.
@@ -404,6 +407,7 @@ pub enum ParagraphBorderError {
 impl std::fmt::Display for ParagraphBorderError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
+            Self::Dash => "paragraph dash lengths must serialize to positive finite values with a finite f32 cycle",
             Self::Width => "paragraph border width must be finite and positive",
             Self::Space => {
                 "paragraph border space must be finite and nonnegative with finite total extent"
@@ -425,10 +429,49 @@ impl ParagraphBorder {
         if !space.is_finite() || space < 0.0 || !(stroke.width + space).is_finite() {
             return Err(ParagraphBorderError::Space);
         }
-        Ok(Self { stroke, space })
+        Ok(Self {
+            stroke,
+            space,
+            dash: None,
+        })
     }
 
-    /// The solid stroke width and color.
+    /// Add caller-resolved on/off lengths in points, with butt caps and phase zero.
+    /// The phase restarts for each emitted edge and paragraph/page fragment.
+    /// Font autofit leaves these paragraph dimensions unchanged. This is not an
+    /// automatic mapping from an OOXML border-style enumeration.
+    ///
+    /// # Errors
+    /// Rejects nonpositive/nonfinite lengths, values rounded to zero by the
+    /// actual PDF number formatter, and a nonfinite f32 dash cycle at unit scale.
+    /// Arbitrary extreme external transforms are not guaranteed representable.
+    pub fn with_dash(mut self, on: f64, off: f64) -> Result<Self, ParagraphBorderError> {
+        let mut encoded = [0.0_f32; 2];
+        for (slot, value) in encoded.iter_mut().zip([on, off]) {
+            if !value.is_finite() || value <= 0.0 {
+                return Err(ParagraphBorderError::Dash);
+            }
+            *slot = crate::ops::pdf_scalar(value)
+                .parse::<f32>()
+                .map_err(|_| ParagraphBorderError::Dash)?;
+            if !slot.is_finite() || *slot <= 0.0 {
+                return Err(ParagraphBorderError::Dash);
+            }
+        }
+        if !(encoded[0] + encoded[1]).is_finite() {
+            return Err(ParagraphBorderError::Dash);
+        }
+        self.dash = Some([on, off]);
+        Ok(self)
+    }
+
+    /// Caller-resolved on/off point lengths; `None` is a solid edge.
+    #[must_use]
+    pub fn dash(self) -> Option<[f64; 2]> {
+        self.dash
+    }
+
+    /// The stroke width and color.
     #[must_use]
     pub fn stroke(self) -> BorderEdge {
         self.stroke
@@ -445,7 +488,7 @@ impl ParagraphBorder {
     }
 }
 
-/// Optional solid edges of a paragraph. No edges is the default.
+/// Optional paragraph edges. No edges is the default.
 /// Matching adjacent stroke styles share their outer top/bottom edges;
 /// per-edge space still positions each paragraph's side strokes separately.
 #[derive(Copy, Clone, Debug, Default, PartialEq)]

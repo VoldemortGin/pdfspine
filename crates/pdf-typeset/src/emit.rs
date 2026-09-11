@@ -28,7 +28,7 @@ use pdf_image::imagedoc::{image_profile, open_image_document, ImageFormat};
 use pdf_image::pixmap::Colorspace;
 
 use crate::faces::FaceRegistry;
-use crate::ops::{Fill, LineCap, LineJoin, Op, PageOps, PathSeg, Stroke};
+use crate::ops::{pdf_scalar as fmt, Fill, LineCap, LineJoin, Op, PageOps, PathSeg, Stroke};
 use crate::{Matrix, Point, Rgb};
 
 /// The cubic-Bézier circle constant κ = 4/3·(√2 − 1) (same as `pdf-edit`).
@@ -798,24 +798,4 @@ fn emit_circle(out: &mut Vec<u8>, cx: f64, cy: f64, r: f64, color: Rgb) {
         ),
     );
     write_line(out, "f");
-}
-
-/// Formats a scalar for a content operator: integers without a decimal point,
-/// otherwise ≤ 4 fractional digits with trailing zeros trimmed (the pdf-edit
-/// convention). Non-finite values degrade to `0`.
-fn fmt(v: f64) -> String {
-    if !v.is_finite() {
-        return "0".to_string();
-    }
-    if v == v.trunc() && v.abs() < 1e15 {
-        return format!("{}", v as i64);
-    }
-    let mut s = format!("{v:.4}");
-    while s.ends_with('0') {
-        s.pop();
-    }
-    if s.ends_with('.') {
-        s.pop();
-    }
-    s
 }
