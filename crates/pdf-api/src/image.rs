@@ -130,12 +130,13 @@ pub fn page_render(page: &Page, args: &RenderArgs) -> Result<Pixmap> {
 /// A recorded, replayable page render — the PyMuPDF `DisplayList` (PRD §8.11).
 /// Wraps [`pdf_render::DisplayList`] so the bindings depend only on `pdf-api`.
 pub struct DisplayList {
-    inner: RenderDisplayList,
-    doc: Arc<DocumentStore>,
+    pub(crate) inner: RenderDisplayList,
+    pub(crate) doc: Arc<DocumentStore>,
     text: pdf_text::InterpretResult,
-    text_resources: Arc<crate::RecordedTextResources>,
-    cropbox: pdf_core::geom::Rect,
-    rotation: i32,
+    pub(crate) text_resources: Arc<crate::RecordedTextResources>,
+    pub(crate) replay_images: Vec<Option<usize>>,
+    pub(crate) cropbox: pdf_core::geom::Rect,
+    pub(crate) rotation: i32,
 }
 
 impl DisplayList {
@@ -264,12 +265,15 @@ pub fn page_get_displaylist_with_annots(page: &Page, annots: bool) -> Result<Dis
         crate::RecordedTextResources::capture(&doc, &ops, &image_ops, &color_spaces);
     let cropbox = page.cropbox();
     let rotation = page.rotation();
+    // Retain the already-built identity map; allocate no per-operation callback sidecar.
+    let replay_images = image_ops;
     let inner = RenderDisplayList::from_ops(ops, cropbox, rotation);
     Ok(DisplayList {
         inner,
         doc,
         text,
         text_resources,
+        replay_images,
         cropbox,
         rotation,
     })

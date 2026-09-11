@@ -149,6 +149,12 @@ impl DisplayList {
         self.cropbox
     }
 
+    /// Immutable ordered operations for owned callback replay.
+    #[must_use]
+    pub fn operations(&self) -> &[RenderOp] {
+        &self.ops
+    }
+
     /// The number of recorded drawcalls (diagnostic).
     #[must_use]
     pub fn len(&self) -> usize {

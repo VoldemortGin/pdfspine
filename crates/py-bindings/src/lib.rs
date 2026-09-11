@@ -11,6 +11,8 @@
 //! released via [`Python::detach`]. Errors map to a typed exception hierarchy
 //! rooted at `_core.PdfError` (PRD §9.3).
 
+mod replay;
+
 use std::ffi::{c_int, c_void, CString};
 use std::ptr;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -5290,6 +5292,34 @@ struct PyDisplayList {
 
 #[pymethods]
 impl PyDisplayList {
+    /// pdfspine callback extension; native device handles are intentionally unsupported.
+    fn run(
+        &self,
+        py: Python<'_>,
+        dw: &Bound<'_, PyAny>,
+        m: &Bound<'_, PyAny>,
+        area: &Bound<'_, PyAny>,
+    ) -> PyResult<()> {
+        let record = Py::new(
+            py,
+            PyDisplayList {
+                inner: self.inner.clone(),
+            },
+        )?;
+        py.import("pdfspine.replay")?
+            .getattr("_run")?
+            .call1((record, dw, m, area))?;
+        Ok(())
+    }
+
+    fn _replay_prepare(
+        &self,
+        matrix: Option<(f64, f64, f64, f64, f64, f64)>,
+        area: Option<(f64, f64, f64, f64)>,
+    ) -> PyResult<Vec<replay::PyReplayEvent>> {
+        replay::prepare(self.inner.clone(), matrix, area)
+    }
+
     /// A deferred baseline member (e.g. `get_textpage` / `run`) raises
     /// `PdfUnsupportedError` instead of a bare `AttributeError` (PRD §7 / §9.5).
     fn __getattr__(&self, name: &str) -> PyResult<Py<PyAny>> {
@@ -6089,6 +6119,7 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyShape>()?;
     m.add_class::<PyPixmap>()?;
     m.add_class::<PyDisplayList>()?;
+    m.add_class::<replay::PyReplayEvent>()?;
     m.add_class::<PyTableFinder>()?;
     m.add_class::<PyTable>()?;
     m.add_class::<PyImageTable>()?;

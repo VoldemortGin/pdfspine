@@ -2327,6 +2327,10 @@ class Page:
             clip=_as_clip(clip),
         )
 
+    def run(self, dw, m) -> None:
+        """Replay into pdfspine.ReplayDevice (not a native MuPDF device)."""
+        return self.get_displaylist().run(dw, m, None)
+
     def get_displaylist(self, annots: bool = True) -> "DisplayList":
         """Records the page's drawcalls into a :class:`DisplayList` (PyMuPDF
         ``page.get_displaylist``). Replay with ``dl.get_pixmap(...)``."""
