@@ -20,19 +20,22 @@
   worktree, preserving other active tasks. Inspect with
   `git -C /Users/linhan/startup/spine/pdfspine log --oneline --first-parent -6`
   and `git -C /Users/linhan/startup/spine/pdfspine worktree list`.
-- **Released vs unreleased.** The published release is **`v0.8.0`** (annotated
-  tag at commit `f1f6ab4`, 2026-09-10; on PyPI as `pdfspine` 0.8.0 — **6 files**:
-  five abi3 wheels [macOS x86_64/arm64, manylinux x86_64/aarch64, win_amd64] +
-  sdist; plus a GitHub Release `v0.8.0` carrying the same 6 artifacts). It
-  shipped the full post-0.7.1 slate: `markdown_to_pdf(links=, toc=)`,
-  layout-preserving `get_text("layout")`, PDF→Markdown `to_markdown()`, the
-  7-method OCG layer surface + `oc=` writers + `/Usage`/`/AS` visibility, the
-  ONNX vision layout/table backend (PP-DocLayoutV3 default + SLANet-plus),
-  reading-order stage 3 + D4 (geometric XY-cut block order), `remove_rotation`
-  widget/annot rects, `get_text(clip=)`, and the `pdf-typeset` FontIndependent
-  line-height rule. **`CHANGELOG.md` `[Unreleased]` records the subsequent reading-order,
-  Adobe RGB rendering and OCG Intent fixes, plus the developer/consumer guides**.
-  These changes are not part of the published 0.8.0 release.
+- **Released vs unreleased.** The published release is **`v0.9.0`** (annotated
+  tag at commit `b0c995f`, 2026-09-15; release run `35051374064`; on PyPI as
+  `pdfspine` 0.9.0 — **6 files**: five abi3 wheels [macOS x86_64/arm64,
+  manylinux x86_64/aarch64, win_amd64] + sdist; plus a GitHub Release `v0.9.0`
+  carrying the same 6 artifacts). It shipped the full post-0.8.0 slate:
+  `ReplayDevice` + typed `for_textpage`/`for_pixmap` replay targets, `Pixmap.warp`,
+  `Page.insert_font`, `Tools.set_subset_fontnames`, annotation appearance-text
+  extraction + `set_annot_stem` IDs, DisplayList resource revisions (plus the
+  `get_displaylist(annots=True)` appearance fix), glyph mask rendering, the
+  `pdf-typeset` paragraph connections / dash pairs / solid borders / signed
+  spacing / resolved script placement work, and the reading-order fixes (PMC
+  caption + dropped initial, SECCI label/value, fragmented running headers,
+  full-width-title columns) plus Adobe RGB JPEG rendering, OCG Intent
+  visibility, the documentation validation baselines and the TableFormer /
+  FinTabNet evaluation adapters. **`CHANGELOG.md` `[Unreleased]` is now empty**;
+  all post-0.8.0 work is captured under `## [0.9.0] — 2026-09-15`.
 - **Gate.** `./ci.sh` runs `scripts/quality_gate.py`, phases in order
   `rust → extension → python → drift → artifacts`. The `extension` phase
   fingerprints `crates/**`, `vendor/**`, `Cargo.toml`, `Cargo.lock`, `pyproject.toml` and
@@ -101,6 +104,8 @@
   SSH connection mid-transfer, so the `push` failed; the same already-gated
   commit was re-pushed with `--no-verify`.
   **The next open backlog item is #3.**
+
+- [x] **Cut release `v0.9.0`** — annotated tag `v0.9.0` at `b0c995f` (2026-09-15); release run `35051374064`; on PyPI (6 files) + GitHub Release `v0.9.0`.
 
 - [x] **1. Reading-order follow-ups — done (2026-09-10, conservative increments).**
   All four sub-items are complete within the scopes below.

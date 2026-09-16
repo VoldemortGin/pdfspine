@@ -70,9 +70,9 @@ The current local source targets **PyMuPDF 1.24.x**. The machine-readable
 | Out-of-scope | 66 | Intentionally never in v1 |
 | **Total baseline** | **769** | **91.4% implemented** |
 
-Published **v0.8.0** at `f1f6ab4208876b0ba867edd76cc4e5da7ad8add2`
-has **694/769 (90.2%) implemented, 9 deferred**. The newer catalog above is
-unreleased. The named 2026-09-11 local paragraph-dash full gate passed **2,034 Rust /
+Published **v0.9.0** at `b0c995f1e18bfbffde3ba71a1122e279d39aee1f`
+has **703/769 (91.4%) implemented, 0 deferred**. The named 2026-09-11 local
+paragraph-dash full gate passed **2,034 Rust /
 1,535 Python tests**, with 68 existing Python skips, including the earlier
 TableFormer evaluator increment. See [validation baselines](validation-baselines.md)
 for exact checkpoint identities and the distinction from release validation.

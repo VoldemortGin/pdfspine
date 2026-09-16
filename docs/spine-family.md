@@ -57,7 +57,7 @@
 | `ocrspine/` | `VoldemortGin/ocrspine` | Rust 单 crate | crate `ocrspine` 0.0.1（`publish = false`）；数据包 `ocrspine-models` 0.0.3 | crate 仅 git dep；`ocrspine-models` 已发 PyPI | L0 底座 | 2026-09-06 / 11 | 活跃（小） |
 | `ragspine/` | `VoldemortGin/ragspine` | Python（hatchling，FastAPI，内置 Vite 前端） | **`rag-spine`**（import `ragspine`）0.13.0 | 已发 PyPI | L1 引擎 | 2026-09-03（实质功能停在 08-03）/ 245 | 活跃，最成熟 |
 | `spineagent/` | `VoldemortGin/spineagent` | Python（hatchling） | `spineagent` 0.3.1 | 已发 PyPI | L1 引擎 | 2026-07-30 / 42 | 停滞约 5 周 |
-| `pdfspine/` | `VoldemortGin/pdfspine` | Rust 2021 + PyO3 0.29 + maturin | `pdfspine` 0.8.0（2026-09-10 发布）；13 个 crate 全 `publish = false` | 已发 PyPI；crates.io 未发 | L1 引擎（含 `pdf-typeset` / `pdf-fonts` 被 git dep） | 2026-09-07 / 339 | 最活跃 |
+| `pdfspine/` | `VoldemortGin/pdfspine` | Rust 2021 + PyO3 0.29 + maturin | `pdfspine` 0.9.0（2026-09-15 发布）；13 个 crate 全 `publish = false` | 已发 PyPI；crates.io 未发 | L1 引擎（含 `pdf-typeset` / `pdf-fonts` 被 git dep） | 2026-09-15 / 518 | 最活跃 |
 | `docspine/` | `VoldemortGin/docspine` | Rust + PyO3 + maturin | `docspine`，tag v0.5.1（Cargo 内长期 0.0.1 占位） | 已发 PyPI | L2 文档引擎 | 2026-07-30 / 29 | 停滞 |
 | `pptspine/` | `VoldemortGin/pptspine` | Rust + PyO3 + maturin | `pptspine`，tag v0.5.1（Cargo 内 0.0.1 占位） | 已发 PyPI | L2 文档引擎 | 2026-07-30 / 37 | 停滞 |
 | `spinestudio/` | `VoldemortGin/spinestudio` | Python（FastAPI）+ TS（Next.js 16）+ Python SDK | `spinestudio` 0.3.1、`spinestudio-sdk` 0.2.1、`spinestudio-web` 0.1.0（private） | 有 `dist/` 与 tag，**无 release CI**，大概率未上 PyPI | L3 应用 | 2026-07-30 / 46 | 停滞 |
@@ -85,7 +85,7 @@ graph TD
     subgraph L1["L1 引擎"]
         ragspine["ragspine (PyPI: rag-spine) 0.13.0"]
         spineagent["spineagent 0.3.1"]
-        pdfspine["pdfspine 0.8.0 (含 pdf-typeset / pdf-fonts)"]
+        pdfspine["pdfspine 0.9.0 (含 pdf-typeset / pdf-fonts)"]
     end
     subgraph L2["L2 文档引擎"]
         docspine["docspine v0.5.1"]
@@ -279,7 +279,7 @@ L0 底座     corespine (deps=[])        ocrspine (crate, 零依赖)
   pdfspine-studio（path 取 `pdf-api`）；pptspine 测试（未声明）；examples。
 - **家族相关文档在哪**：**没有 `CLAUDE.md`**（`git ls-files | grep -i claude` 为空），与家族 README"各子项目另有自己的 CLAUDE.md"不符。
   家族关系散在 `README.md:7,70,104,213`、`llms.txt`、`docs/RELEASE-PYPI.md`、`crates/pdf-typeset/Cargo.toml:1-4`、`crates/pdf-ocr/Cargo.toml:29-40`。
-- **当前状态与注意事项**：0.8.0（2026-09-10 发布，CHANGELOG 已归档到 [0.8.0]），339 commits，最活跃；2026-09-09 起只有 `main` 分支，
+- **当前状态与注意事项**：0.9.0（2026-09-15 发布，CHANGELOG 已归档到 [0.9.0]），518 commits，最活跃；2026-09-09 起只有 `main` 分支，
   4 个未提交改动，本地 main 有 5 个 commit 未推。5 个 `.claude/worktrees/*` 仍钉 ocrspine 旧 rev `732975f`。
   `packages/pdfspine-ocr-models/` 旧伴随包残留，与 `ocrspine-models` 重复，仅作第 3 顺位回退。`dist/` 残留 0.4.0。
 

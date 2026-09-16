@@ -5,13 +5,13 @@ published release, and earlier full-suite counts do not describe every later HEA
 
 | Scope | Source | Implemented / baseline | Deferred |
 |---|---|---:|---:|
-| Published v0.8.0 | `f1f6ab4208876b0ba867edd76cc4e5da7ad8add2` | 694 / 769 (90.2%) | 9 |
+| Published v0.9.0 | `b0c995f1e18bfbffde3ba71a1122e279d39aee1f` | 703 / 769 (91.4%) | 0 |
 | Current local source catalog | [COMPAT.toml](../COMPAT.toml) | 703 / 769 (91.4%) | 0 |
 
-Both retain 66 out-of-scope symbols. The nine later implementations are
-unreleased; some, such as replay, use explicitly documented pdfspine contracts
-rather than native-handle compatibility. See [PARITY](../PARITY.md) and the
-[release history](../CHANGELOG.md#080--2026-09-10).
+Both retain 66 out-of-scope symbols. The published v0.9.0 catalog now matches
+the current local source; some implementations, such as replay, use explicitly
+documented pdfspine contracts rather than native-handle compatibility. See
+[PARITY](../PARITY.md) and the [release history](../CHANGELOG.md#090--2026-09-15).
 
 ## Most recent recorded full gate
 
