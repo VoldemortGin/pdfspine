@@ -1,3 +1,8 @@
+# Vendored sources are a byte-exact supply-chain snapshot verified by per-file
+# sha256; disable all git eol conversion so a fresh checkout (e.g. Windows with
+# core.autocrlf=true) keeps the repository LF bytes intact.
+vendor/** -text
+
 # Unified patches encode empty context lines as a literal space. Source files
 # retain the normal whitespace checks; the patch is also checksum-verified.
 vendor/patches/*.patch whitespace=-blank-at-eol
