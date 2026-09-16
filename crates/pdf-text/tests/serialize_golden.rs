@@ -7,7 +7,7 @@
 use pdf_core::geom::{Matrix, Point, Rect};
 use pdf_text::model::WritingDir;
 use pdf_text::serialize::{defaults, to_html, to_xhtml, to_xml};
-use pdf_text::{textpage_from_glyphs, PositionedGlyph};
+use pdf_text::{textpage_from_glyphs, ImageRef, PositionedGlyph};
 use smol_str::SmolStr;
 
 fn letter() -> Rect {
@@ -106,6 +106,32 @@ const XML_GOLDEN: &str = concat!(
 fn html_001_positioned_golden() {
     let tp = golden_tp();
     assert_eq!(to_html(&tp, defaults::HTML), HTML_GOLDEN);
+}
+
+#[test]
+fn html_002_image_block_has_pointer_events_none() {
+    // HTML-002: an image placeholder must not swallow mouse events. Image
+    // blocks are serialized as absolutely-positioned `<img>` after the text
+    // `<p>`s; with the default `pointer-events:auto` a full-page image covers
+    // the text and blocks selection in a browser. The inline style carries
+    // `pointer-events:none` so events fall through to the text beneath.
+    let img = ImageRef {
+        name: Some(SmolStr::new("Im0")),
+        inline: false,
+        ctm: Matrix::new(80.0, 0.0, 0.0, 80.0, 40.0, 40.0),
+        width: Some(8),
+        height: Some(9),
+    };
+    let tp = textpage_from_glyphs(&[], &[img], letter(), 0);
+    let html = to_html(&tp, defaults::HTML);
+    let img_tag = html
+        .lines()
+        .find(|line| line.starts_with("<img"))
+        .expect("html output should contain an <img> image block");
+    assert!(
+        img_tag.contains("pointer-events:none"),
+        "img placeholder must carry pointer-events:none, got: {img_tag}"
+    );
 }
 
 #[test]

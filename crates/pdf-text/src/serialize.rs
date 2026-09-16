@@ -1415,7 +1415,7 @@ fn html_span(s: &mut String, span: &Span) {
 fn html_image_block(s: &mut String, block: &Block) {
     let b = block.bbox.normalize();
     s.push_str(&format!(
-        "<img style=\"top:{}pt;left:{}pt;width:{}pt;height:{}pt\"/>\n",
+        "<img style=\"top:{}pt;left:{}pt;width:{}pt;height:{}pt;pointer-events:none\"/>\n",
         fmt_num(b.y0),
         fmt_num(b.x0),
         fmt_num(b.x1 - b.x0),

@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import re
+
 import pdfspine
 import pytest
+
+from python.tests.test_dict_image import _image_only_pdf, _rgb_samples
 
 
 def test_to_html_empty_document_is_complete_html5() -> None:
@@ -37,6 +41,17 @@ def test_to_html_escapes_metadata_title() -> None:
     assert (
         "<title>R&amp;D &lt;notes&gt; &quot;draft&quot; &#x27;one&#x27;</title>" in html
     )
+
+
+def test_get_text_html_image_placeholders_let_mouse_events_pass_through() -> None:
+    w, h = 8, 6
+    doc = pdfspine.open(stream=_image_only_pdf(w, h, _rgb_samples(w, h)))
+
+    html = doc[0].get_text("html")
+    img_tags = re.findall(r"<img[^>]*>", html)
+
+    assert img_tags, "image page HTML should contain at least one <img> block"
+    assert all("pointer-events:none" in tag for tag in img_tags)
 
 
 def test_save_html_accepts_pathlike_and_writes_utf8(tmp_path) -> None:

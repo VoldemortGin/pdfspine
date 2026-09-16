@@ -11,6 +11,11 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
+### Fixed
+
+- HTML export (`get_text("html")`): image placeholders no longer block mouse
+  selection of the text beneath them (`pointer-events:none`).
+
 ### Explicit paragraph connections
 
 - Added a checked-only Rust `ParagraphConnections` overlay and four additive
