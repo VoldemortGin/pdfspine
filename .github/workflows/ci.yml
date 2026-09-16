@@ -35,7 +35,7 @@ jobs:
       - name: Install Cargo dependency policy gate
         run: cargo install cargo-deny --locked
       - name: Install Python build and quality dependencies
-        run: python -m pip install -e ".[test,quality]"
+        run: python -m pip install -e ".[test,quality]" Pillow numpy
       - name: Run the authoritative repository gate
         # The editable install above already built `_core` with the hosted
         # interpreter (no venv), so skip the gate's venv-only extension rebuild.
