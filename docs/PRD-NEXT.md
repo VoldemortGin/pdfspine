@@ -20,11 +20,17 @@
   worktree, preserving other active tasks. Inspect with
   `git -C /Users/linhan/startup/spine/pdfspine log --oneline --first-parent -6`
   and `git -C /Users/linhan/startup/spine/pdfspine worktree list`.
-- **Released vs unreleased.** The published release is **`v0.9.0`** (annotated
-  tag at commit `b0c995f`, 2026-09-15; release run `35051374064`; on PyPI as
-  `pdfspine` 0.9.0 — **6 files**: five abi3 wheels [macOS x86_64/arm64,
-  manylinux x86_64/aarch64, win_amd64] + sdist; plus a GitHub Release `v0.9.0`
-  carrying the same 6 artifacts). It shipped the full post-0.8.0 slate:
+- **Released vs unreleased.** The published release is **`v0.9.1`** (annotated
+  tag at commit `e34de54`, 2026-09-16; release run `35067501343`; on PyPI as
+  `pdfspine` 0.9.1 — **6 files**: five abi3 wheels [macOS x86_64/arm64,
+  manylinux x86_64/aarch64, win_amd64] + sdist; plus a GitHub Release `v0.9.1`
+  carrying the same 6 artifacts). It is a packaging / CI follow-up to
+  **`v0.9.0`** (tag `b0c995f`, 2026-09-15) with no API or coverage change
+  (still 703/769, 91.4%): the `test` extra now declares `Pillow` and `numpy`,
+  vendored sources are checked out byte-exact (`vendor/** -text`) so the
+  supply-chain checksum holds on Windows `core.autocrlf` checkouts, and the CI
+  pytest matrix + unified quality-gate job install the optional image deps. The
+  v0.9.0 base it ships on top of carried the full post-0.8.0 slate:
   `ReplayDevice` + typed `for_textpage`/`for_pixmap` replay targets, `Pixmap.warp`,
   `Page.insert_font`, `Tools.set_subset_fontnames`, annotation appearance-text
   extraction + `set_annot_stem` IDs, DisplayList resource revisions (plus the
@@ -35,7 +41,8 @@
   full-width-title columns) plus Adobe RGB JPEG rendering, OCG Intent
   visibility, the documentation validation baselines and the TableFormer /
   FinTabNet evaluation adapters. **`CHANGELOG.md` `[Unreleased]` is now empty**;
-  all post-0.8.0 work is captured under `## [0.9.0] — 2026-09-15`.
+  0.9.1 is captured under `## [0.9.1] — 2026-09-16` and the 0.9.0 slate under
+  `## [0.9.0] — 2026-09-15`.
 - **Gate.** `./ci.sh` runs `scripts/quality_gate.py`, phases in order
   `rust → extension → python → drift → artifacts`. The `extension` phase
   fingerprints `crates/**`, `vendor/**`, `Cargo.toml`, `Cargo.lock`, `pyproject.toml` and
@@ -104,6 +111,8 @@
   SSH connection mid-transfer, so the `push` failed; the same already-gated
   commit was re-pushed with `--no-verify`.
   **The next open backlog item is #3.**
+
+- [x] **Cut release `v0.9.1`** — annotated tag `v0.9.1` at `e34de54` (2026-09-16); release run `35067501343`; on PyPI (6 files) + GitHub Release `v0.9.1`.
 
 - [x] **Cut release `v0.9.0`** — annotated tag `v0.9.0` at `b0c995f` (2026-09-15); release run `35051374064`; on PyPI (6 files) + GitHub Release `v0.9.0`.
 
