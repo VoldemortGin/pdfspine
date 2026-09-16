@@ -11,10 +11,14 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
+## [0.9.0] — 2026-09-15
+
 ### Fixed
 
 - HTML export (`get_text("html")`): image placeholders no longer block mouse
   selection of the text beneath them (`pointer-events:none`).
+- **sdist packaging.** The source distribution retains the complete vendored
+  source tree so builds from sdist no longer fail on missing files.
 
 ### Explicit paragraph connections
 
@@ -1042,7 +1046,8 @@ published wheel's version is set from the `v0.1.0` git tag at build time.
   2858 ms → 819 ms). `rayon` is a feature-gated (`paddle-ocr`) optional dep and
   is not in the lean base wheel.
 
-[Unreleased]: https://github.com/VoldemortGin/pdfspine/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/VoldemortGin/pdfspine/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/VoldemortGin/pdfspine/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/VoldemortGin/pdfspine/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/VoldemortGin/pdfspine/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/VoldemortGin/pdfspine/compare/v0.6.1...v0.7.0
