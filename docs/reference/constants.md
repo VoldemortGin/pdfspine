@@ -375,11 +375,11 @@ The 247 PyMuPDF-compatible module-level constants below are re-exported at the t
 
 | Name | Value |
 |---|---|
-| `VersionBind` | `'0.9.0'` |
+| `VersionBind` | `'0.9.1'` |
 | `VersionDate` | `None` |
-| `VersionFitz` | `'0.9.0'` |
-| `version` | `('0.9.0', '0.9.0', None)` |
-| `version_info` | `('0.9.0', '0.9.0', None)` |
+| `VersionFitz` | `'0.9.1'` |
+| `version` | `('0.9.1', '0.9.1', None)` |
+| `version_info` | `('0.9.1', '0.9.1', None)` |
 
 ## Colorspace singletons & font tables
 

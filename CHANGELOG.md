@@ -11,6 +11,21 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
+## [0.9.1] — 2026-09-16
+
+### Packaging
+
+- The `test` extra now declares `Pillow` and `numpy`, which the optional
+  image and table-evaluation tests import.
+- Vendored sources are checked out byte-exact (`vendor/** -text`) so the
+  supply-chain checksum verification holds on Windows checkouts that enable
+  `core.autocrlf`.
+
+### CI
+
+- The pytest matrix and the unified quality-gate job install the optional
+  image dependencies, so optional-feature tests run instead of erroring.
+
 ## [0.9.0] — 2026-09-15
 
 ### Fixed
@@ -1046,7 +1061,8 @@ published wheel's version is set from the `v0.1.0` git tag at build time.
   2858 ms → 819 ms). `rayon` is a feature-gated (`paddle-ocr`) optional dep and
   is not in the lean base wheel.
 
-[Unreleased]: https://github.com/VoldemortGin/pdfspine/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/VoldemortGin/pdfspine/compare/v0.9.1...HEAD
+[0.9.1]: https://github.com/VoldemortGin/pdfspine/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/VoldemortGin/pdfspine/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/VoldemortGin/pdfspine/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/VoldemortGin/pdfspine/compare/v0.7.0...v0.7.1
