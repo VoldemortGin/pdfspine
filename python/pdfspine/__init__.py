@@ -80,7 +80,14 @@ from .helpers import (
     set_messages,
     unicode_to_glyph_name,
 )
-from .models import FilledRectangle, ImageBlock, LinkAnnotation, TextBlock
+from .models import (
+    FilledRectangle,
+    ImageBlock,
+    LinkAnnotation,
+    TableCell,
+    TableSlot,
+    TextBlock,
+)
 from .replay import ReplayDevice, ReplayEvent
 
 try:
@@ -135,6 +142,8 @@ __all__ = [
     "Shape",
     "Table",
     "TableFinder",
+    "TableCell",
+    "TableSlot",
     "ImageTable",
     "ImageTableCell",
     "LayoutBlock",

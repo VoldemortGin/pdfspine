@@ -87,7 +87,8 @@ pub use pdf_fonts::{Font, BASE14_FONTNAMES};
 // Table detection (M7): `find_tables`, `TableFinder`, `Table` (PRD §7). The
 // bindings depend only on `pdf-api`.
 pub use tables::{
-    page_find_tables, strategy_from_str, CellSpan, Strategy, Table, TableFinder, TableOptions,
+    page_find_tables, strategy_from_str, CellRecord, CellSpan, Strategy, Table, TableFinder,
+    TableOptions,
 };
 
 // Image-table reconstruction (opt-in OCR build only): parse a table living

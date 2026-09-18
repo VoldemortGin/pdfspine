@@ -1,6 +1,7 @@
 """Type stubs for :mod:`pdfspine.models` (typed page-content value objects)."""
 
 from dataclasses import dataclass
+from typing import Literal
 
 from .geometry import Rect
 
@@ -28,3 +29,22 @@ class LinkAnnotation:
 class FilledRectangle:
     rect: Rect
     fill: tuple[float, ...]
+
+@dataclass(frozen=True)
+class TableCell:
+    row: int
+    col: int
+    row_span: int
+    col_span: int
+    bbox: Rect
+    state: Literal["present", "blank", "unavailable"]
+    text: str | None
+
+@dataclass(frozen=True)
+class TableSlot:
+    row: int
+    col: int
+    state: Literal["present", "blank", "unavailable", "continuation"]
+    cell: TableCell | None
+    @property
+    def origin(self) -> tuple[int, int] | None: ...

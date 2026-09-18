@@ -82,6 +82,8 @@ from .models import (
     FilledRectangle as FilledRectangle,
     ImageBlock as ImageBlock,
     LinkAnnotation as LinkAnnotation,
+    TableCell as TableCell,
+    TableSlot as TableSlot,
     TextBlock as TextBlock,
 )
 
@@ -105,6 +107,8 @@ __all__ = [
     "Shape",
     "Table",
     "TableFinder",
+    "TableCell",
+    "TableSlot",
     "LayoutBlock",
     "OnnxOptions",
     "Link",

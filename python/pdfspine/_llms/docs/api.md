@@ -632,10 +632,33 @@ t.bbox -> Rect ; t.row_count : int ; t.col_count : int
 t.header -> list ; t.rows -> list[float] ; t.cols -> list[float]
 t.cells -> list[list[Rect | None]]
 t.spans -> list[tuple[int,int,int,int,Rect]]    # 合并单元格
-t.extract() -> list[list]                        # 行×列文本
+t.slots -> tuple[tuple[TableSlot, ...], ...]    # 显式逐槽位状态，缓存快照
+t.origin_cells -> tuple[TableCell, ...]        # 每个origin一次，行优先
+t.extract() -> list[list[str | None]]            # 兼容文本网格，None有多种含义
 t.to_markdown() -> str                           # 别名 toMarkdown
 t.to_html() -> str                               # 保留合并单元格
+
+slot.row : int ; slot.col : int                  # 从0开始
+slot.state : Literal["present", "blank", "unavailable", "continuation"]
+slot.cell -> TableCell | None
+slot.origin -> tuple[int, int] | None            # origin自身也返回其坐标
+cell.row : int ; cell.col : int
+cell.row_span : int ; cell.col_span : int
+cell.bbox -> Rect                               # 整个origin的bbox
+cell.state : Literal["present", "blank", "unavailable"]
+cell.text : str | None
 ```
+
+`TableCell` / `TableSlot` 是从 `pdfspine` 导出的 frozen dataclass，native、
+TATR、ONNX 共用同一契约。`present` 保留原始非空文字；`blank` 表示有可用
+文本来源但提取为空或仅空白字符，`cell.text == ""`；`unavailable` 表示没有
+文本结果，`cell.text is None`。整页无可用词时保守使用 `unavailable`；`blank`
+不证明画面物理空白。旧 `text_source` 标签不能单独用于判断这些状态。
+
+`continuation` 仅由结构跨度产生，`slot.cell` 与其唯一origin引用同一个对象；
+即使origin为空或无文本，它覆盖的槽位仍然是 `continuation`。结构缺口为
+`unavailable` 且 `cell` / `origin` 均为 `None`。`origin_cells` 保留每个origin的
+行列、跨度和完整bbox。typed属性不调用legacy网格来猜测状态，也不重跑模型或OCR。
 
 ## `Annot`
 关键属性/方法（核对自 `document.pyi`）：

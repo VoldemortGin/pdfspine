@@ -167,11 +167,21 @@ tf = page.find_tables()                  # TableFinder
 print(len(tf.tables), "table(s)")
 for t in tf.tables:
     print(t.row_count, "x", t.col_count)
-    print(t.extract())                   # list[list[str]]
+    print(t.extract())                   # list[list[str | None]]，兼容旧语义
     print(t.to_markdown())               # Markdown 表
     print(t.to_html())                   # HTML（保留合并单元格）
+    for row in t.slots:
+        for slot in row:
+            if slot.state == "continuation":
+                print("合并覆盖", slot.row, slot.col, "origin:", slot.origin)
+            elif slot.cell is not None:
+                print(slot.cell.state, slot.cell.text, slot.cell.bbox)
 ```
 （在 `fixtures/corpus/irs-fw9.pdf` 第 1 页实跑：找到 4 个表，首表 4x2。）
+
+`slots` 的四种显式状态是 `present` / `blank` / `unavailable` / `continuation`；
+不要依据 `extract()` / `cells` 的 `None` 推断合并。空白或无文本的origin仍在
+`origin_cells` 中保留 `row` / `col` / `row_span` / `col_span` / `bbox`。
 
 无边框或复杂视觉表格可启用可选 TATR 后端：
 

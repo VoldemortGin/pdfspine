@@ -19,6 +19,8 @@ from . import _core
 from ._compat_deferred import DEFERRED as _DEFERRED_SYMBOLS
 from ._core import PdfError, PdfUnsupportedError
 from ._layout import layout_text as _layout_text
+from ._table_slots import TableSnapshot as _TableSnapshot
+from ._table_slots import table_snapshot as _table_snapshot
 from ._markdown import (
     MarkdownOptions,
     TableRegion,
@@ -47,7 +49,14 @@ from .constants import PDF_ENCRYPT_RC4_128 as PDF_ENCRYPT_RC4_128  # noqa: F401,
 from .constants import PDF_ENCRYPT_UNKNOWN as PDF_ENCRYPT_UNKNOWN  # noqa: F401,PLC0414
 from .constants import PDF_PERM_ACCESSIBILITY as PDF_PERM_ACCESSIBILITY  # noqa: F401,PLC0414
 from .geometry import FZ_MAX_INF_RECT, FZ_MIN_INF_RECT, Matrix, Point, Quad, Rect
-from .models import FilledRectangle, ImageBlock, LinkAnnotation, TextBlock
+from .models import (
+    FilledRectangle,
+    ImageBlock,
+    LinkAnnotation,
+    TableCell,
+    TableSlot,
+    TextBlock,
+)
 
 # Deferred baseline symbols carry richer, human-facing hints where we have one;
 # the authoritative deferred set itself is the generated ``_compat_deferred``
@@ -1507,12 +1516,15 @@ class Table:
     Python TATR structure record (vision strategy), returning geometry as
     :class:`Rect` value types. ``extract()`` returns the cell-text grid
     (PyMuPDF-compatible); ``to_markdown()`` / ``to_html()`` render the table.
+    Use ``slots`` and ``origin_cells`` for explicit text states and unambiguous
+    ownership of merged cells across native, TATR, and ONNX backends.
     """
 
-    __slots__ = ("_table",)
+    __slots__ = ("_table", "_slot_cache")
 
     def __init__(self, core_table) -> None:
         self._table = core_table
+        self._slot_cache: _TableSnapshot | None = None
 
     @property
     def bbox(self) -> Rect:
@@ -1547,7 +1559,11 @@ class Table:
     @property
     def cells(self) -> list:
         """The per-slot cell rects (row-major), each a :class:`Rect` or ``None``
-        for an absent / merge-continuation slot (PyMuPDF ``Table.cells``)."""
+        for an absent / merge-continuation slot (PyMuPDF ``Table.cells``).
+
+        This compatibility grid does not identify why a slot is ``None``.
+        Use :attr:`slots` for explicit states and originating cells.
+        """
         return [
             [(_rect(c) if c is not None else None) for c in row]
             for row in self._table.cells
@@ -1560,6 +1576,38 @@ class Table:
         return [
             (r, c, rs, cs, _rect(rect)) for (r, c, rs, cs, rect) in self._table.spans
         ]
+
+    def _typed_snapshot(self) -> _TableSnapshot:
+        if self._slot_cache is None:
+            self._slot_cache = _table_snapshot(
+                self.row_count, self.col_count, self._table.cell_records
+            )
+        return self._slot_cache
+
+    @property
+    def slots(self) -> tuple[tuple[TableSlot, ...], ...]:
+        """The complete row-major grid of explicit, zero-based slot states.
+
+        States are ``present``, ``blank``, ``unavailable`` or ``continuation``.
+        Every continuation references its unique originating :class:`TableCell`
+        through ``slot.cell`` and its coordinates through ``slot.origin``.
+        An uncovered structural gap is unavailable with no originating cell.
+
+        The tuple grid is cached together with :attr:`origin_cells`; accessing
+        either property does not rerun detection, model inference, or OCR.
+        Invalid overlapping or out-of-grid backend spans raise ``ValueError``.
+        """
+        return self._typed_snapshot()[0]
+
+    @property
+    def origin_cells(self) -> tuple[TableCell, ...]:
+        """The detected originating cells, row-major, including empty cells.
+
+        Each cell retains its zero-based row/column, spans, full bounding box,
+        explicit text state and text. Origin and continuation slots reference
+        these same objects; continuation slots do not add another cell.
+        """
+        return self._typed_snapshot()[1]
 
     @property
     def confidence(self) -> float | None:
@@ -1584,7 +1632,11 @@ class Table:
 
     def extract(self) -> list[list]:
         """The cell-text grid (row-major); ``None`` for an empty /
-        continuation slot (PyMuPDF ``Table.extract``)."""
+        unavailable / continuation slot (PyMuPDF ``Table.extract``).
+
+        Use :attr:`slots` to distinguish these cases without guessing from
+        ``None``; this compatibility return value remains unchanged.
+        """
         return self._table.extract()
 
     def to_markdown(self) -> str:

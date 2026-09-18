@@ -126,6 +126,21 @@ pub struct CellSpan {
     pub rect: Rect,
 }
 
+/// One detected origin cell with its explicit geometry and extracted text.
+///
+/// Unlike the compatibility grid returned by [`Table::extract`], this record
+/// never represents a continuation slot. [`Self::span`] identifies every slot
+/// covered by the cell, independently of whether text was available.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CellRecord {
+    /// The originating row/column, row/column spans, and full cell rectangle.
+    pub span: CellSpan,
+    /// Extracted text, including `Some("")` for an empty cell when the page has
+    /// a usable word source. `None` means no page words were available, rather
+    /// than identifying a merged-cell continuation or an absent cell.
+    pub text: Option<String>,
+}
+
 /// One detected table.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Table {
@@ -182,6 +197,34 @@ impl Table {
                 row.iter()
                     .map(|cell| cell.and_then(|rect| cell_text(rect, words)))
                     .collect()
+            })
+            .collect()
+    }
+
+    /// Returns one structured record per detected origin cell, including
+    /// origins with no extracted text. Continuations and undetected slots are
+    /// absent from this list; their identities come from the explicit spans,
+    /// never from the text value.
+    ///
+    /// An empty or whitespace-only result from a usable page word source
+    /// becomes `Some("")`. When `words` is empty, text is unavailable (`None`)
+    /// for every detected cell.
+    /// This describes extraction availability, not visual proof that a cell
+    /// contains no raster content or undecodable glyphs.
+    #[must_use]
+    pub fn cell_records(&self, words: &[Word]) -> Vec<CellRecord> {
+        self.spans
+            .iter()
+            .map(|&span| CellRecord {
+                span,
+                text: (!words.is_empty()).then(|| {
+                    let text = cell_text(span.rect, words).unwrap_or_default();
+                    if text.trim().is_empty() {
+                        String::new()
+                    } else {
+                        text
+                    }
+                }),
             })
             .collect()
     }

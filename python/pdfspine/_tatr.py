@@ -1184,6 +1184,8 @@ class _TatrTableRecord:
         text_source: str,
         metadata: Mapping[str, Any],
         rotated: bool = False,
+        *,
+        has_text_source: bool | None = None,
     ) -> None:
         self.row_count = max(
             len(row_boxes),
@@ -1210,6 +1212,16 @@ class _TatrTableRecord:
         ]
         self._covered: set[tuple[int, int]] = set()
         self._by_origin: dict[tuple[int, int], dict[str, Any]] = {}
+        # Unlike the legacy text grid, this transport uses None only for an
+        # unavailable text result, and "" for an extracted blank. Production
+        # callers supply actual word availability rather than relying on the
+        # historical source label (which may say native even on a textless page).
+        text_available = (
+            text_source != "none" if has_text_source is None else has_text_source
+        )
+        self.cell_records: list[
+            tuple[int, int, int, int, tuple[float, float, float, float], str | None]
+        ] = []
         self.spans: list[
             tuple[int, int, int, int, tuple[float, float, float, float]]
         ] = []
@@ -1237,6 +1249,15 @@ class _TatrTableRecord:
             text = str(cell.get("cell_text") or "")
             self._text[origin[0]][origin[1]] = text or None
             self.spans.append((origin[0], origin[1], len(rows), len(columns), rect))
+            if text.strip():
+                typed_text: str | None = text
+            elif text_available and cell.get("cell_text") is not None:
+                typed_text = ""
+            else:
+                typed_text = None
+            self.cell_records.append(
+                (origin[0], origin[1], len(rows), len(columns), rect, typed_text)
+            )
         self._records = accepted
         if row_boxes and column_boxes:
             self.bbox = (
@@ -1473,6 +1494,7 @@ def _table_from_structure(
         rendered.text_source,
         table_metadata,
         rotated=display_axes_rotated,
+        has_text_source=bool(rendered.tokens or crop.tokens),
     )
     return result if result.spans else None
 

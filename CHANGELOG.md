@@ -11,6 +11,16 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
+## [0.10.0] — 2026-09-18
+
+### Added
+
+- `Table.slots` and `Table.origin_cells`, with typed `TableSlot` / `TableCell`
+  values, distinguish present, blank, unavailable and continuation slots across
+  native, TATR and ONNX backends. Every continuation identifies its unique
+  origin, including blank merged cells; existing `extract()` / `cells` values
+  remain compatible.
+
 ## [0.9.1] — 2026-09-16
 
 ### Packaging
@@ -1061,7 +1071,8 @@ published wheel's version is set from the `v0.1.0` git tag at build time.
   2858 ms → 819 ms). `rayon` is a feature-gated (`paddle-ocr`) optional dep and
   is not in the lean base wheel.
 
-[Unreleased]: https://github.com/VoldemortGin/pdfspine/compare/v0.9.1...HEAD
+[Unreleased]: https://github.com/VoldemortGin/pdfspine/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/VoldemortGin/pdfspine/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/VoldemortGin/pdfspine/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/VoldemortGin/pdfspine/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/VoldemortGin/pdfspine/compare/v0.7.1...v0.8.0

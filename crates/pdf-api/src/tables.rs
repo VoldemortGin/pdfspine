@@ -17,7 +17,7 @@ use pdf_core::page::Page;
 use pdf_text::tables as core_tables;
 use pdf_text::Word;
 
-pub use pdf_text::tables::{CellSpan, Strategy};
+pub use pdf_text::tables::{CellRecord, CellSpan, Strategy};
 
 /// The PyMuPDF-style table-detection request (PRD §7 / M7). Built from the
 /// Python kwargs; maps onto [`core_tables::TableOptions`].
@@ -137,6 +137,15 @@ impl Table {
     #[must_use]
     pub fn extract(&self) -> Vec<Vec<Option<String>>> {
         self.inner.extract(&self.words)
+    }
+
+    /// One record per detected origin cell, carrying explicit span geometry
+    /// and text availability. Empty text is `Some("")` when the page has words;
+    /// `None` means no page word source was available. Neither represents a
+    /// continuation: covered slots are identified only by each record's span.
+    #[must_use]
+    pub fn cell_records(&self) -> Vec<CellRecord> {
+        self.inner.cell_records(&self.words)
     }
 
     /// The table as a GitHub-Flavored-Markdown string (PyMuPDF

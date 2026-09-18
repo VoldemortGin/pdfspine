@@ -1235,6 +1235,7 @@ def _table_from_region(
         rendered.text_source,
         metadata,
         rotated=bool(rendered.rotation % 180),
+        has_text_source=bool(rendered.tokens),
     )
     return record if record.spans else None
 

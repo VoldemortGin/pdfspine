@@ -3,6 +3,62 @@
 `Page.find_tables(...)` returns a `TableFinder` (iterable; `.tables` is the list
 of detected `Table`s).
 
+## Explicit cell and slot states
+
+Use `Table.slots` and `Table.origin_cells` when empty cells and merged cells
+must be distinguished. These typed APIs have the same contract for native,
+TATR and ONNX tables. The compatibility APIs `extract()`, `cells` and `spans`
+retain their existing values; `None` in `extract()` or `cells` alone does not
+identify a merged cell.
+
+`slots` is a rectangular tuple of row tuples containing `TableSlot` objects.
+Each slot has zero-based `row` / `col`, an explicit `state`, a `cell` reference,
+and an `origin` coordinate:
+
+| Slot state | Meaning | `slot.cell` / text |
+| --- | --- | --- |
+| `present` | Origin with extracted text | `TableCell`, original text |
+| `blank` | Origin whose available text source yielded no non-whitespace text | `TableCell`, `text == ""` |
+| `unavailable` | Origin without a text result, or an uncovered structural gap | Origin: `TableCell`, `text is None`; gap: `cell is None` |
+| `continuation` | Slot covered by another cell's rowspan or colspan | The same `TableCell` as its unique origin |
+
+Every detected origin appears once in the row-major `origin_cells` tuple. Its
+`TableCell` preserves `row`, `col`, `row_span`, `col_span`, `bbox`, `state` and
+`text`, including when it is blank or unavailable. `slot.origin` is the cell's
+`(row, col)` for both origin and continuation slots; it is `None` only for a
+structural gap. A continuation's `slot.cell.bbox` is the full originating
+cell's bounding box, not a separate rectangle for the covered slot.
+
+```python
+table = page.find_tables()[0]
+for row in table.slots:
+    for slot in row:
+        if slot.state == "continuation":
+            print("covered by", slot.origin)
+        elif slot.cell is not None:
+            cell = slot.cell
+            print(cell.row, cell.col, cell.state, cell.text, cell.bbox)
+
+for cell in table.origin_cells:
+    print(cell.row_span, cell.col_span)  # Blank merged origins retain their spans.
+```
+
+`blank` describes the extraction result from the available PDF/OCR text source;
+it does not prove that the rendered cell is visually empty. When a page has no
+usable words, empty origins are conservatively `unavailable`, including when
+OCR is disabled or returns no words. Existing `text_source` labels remain
+provenance metadata; use the explicit states for slot semantics.
+
+The grid, cells and frozen value objects form a cached snapshot per `Table`;
+all slots covered by an origin share that same cell object. Access does not
+rerun detection, model inference or OCR. Structural gaps do not create cells
+or continuations, and overlapping or out-of-grid backend origin records raise
+`ValueError` rather than assign ambiguous ownership.
+
+The value-object fields are frozen, but `cell.bbox` remains a mutable `Rect`.
+Copy it with `Rect(cell.bbox)` before modifying or transforming it, so the
+cached origin shared by its slots is preserved.
+
 ## Vision / Table Transformer
 
 For borderless or visually complex tables, install the optional runtime and use
@@ -170,6 +226,14 @@ are returned, as with TATR.
 ## Table
 
 ::: pdfspine.Table
+
+## TableCell
+
+::: pdfspine.TableCell
+
+## TableSlot
+
+::: pdfspine.TableSlot
 
 ## ImageTable
 

@@ -1815,6 +1815,39 @@ impl PyTable {
             .collect()
     }
 
+    /// Explicit origin records for the public typed table API, as
+    /// `(row, col, row_span, col_span, bbox, text)`. Text is `""` for an empty
+    /// cell with a usable page word source, or `None` when no source exists.
+    /// Continuations are identified by these spans and have no separate record.
+    #[getter]
+    #[allow(clippy::type_complexity)]
+    fn cell_records(
+        &self,
+    ) -> Vec<(
+        usize,
+        usize,
+        usize,
+        usize,
+        (f64, f64, f64, f64),
+        Option<String>,
+    )> {
+        self.table
+            .cell_records()
+            .into_iter()
+            .map(|cell| {
+                let span = cell.span;
+                (
+                    span.row,
+                    span.col,
+                    span.row_span,
+                    span.col_span,
+                    rect_tuple(span.rect),
+                    cell.text,
+                )
+            })
+            .collect()
+    }
+
     /// The cell text grid (row-major); `None` for an empty / continuation slot
     /// (PyMuPDF `Table.extract`).
     fn extract(&self) -> Vec<Vec<Option<String>>> {

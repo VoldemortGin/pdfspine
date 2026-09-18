@@ -11,6 +11,7 @@ surface (they are not tracked in COMPAT.toml).
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
 
 from .geometry import Rect
 
@@ -89,3 +90,51 @@ class FilledRectangle:
 
     rect: Rect
     fill: tuple[float, ...]
+
+
+@dataclass(frozen=True)
+class TableCell:
+    """One originating table cell, including its complete merged geometry.
+
+    Returned by :attr:`pdfspine.Table.origin_cells` and referenced by every
+    :class:`TableSlot` covered by this cell. ``row`` / ``col`` locate its
+    zero-based top-left slot; both spans are positive and ``bbox`` covers the
+    entire cell, including when accessed through a continuation slot.
+
+    ``state`` is ``"present"`` for extracted text, ``"blank"`` for an empty
+    result from an available text source, or ``"unavailable"`` when there is no
+    text result. ``text`` is respectively the original string, ``""``, or
+    ``None``. Blank describes extraction, not proof of visually empty pixels.
+
+    Fields are frozen, but ``bbox`` remains a mutable :class:`Rect`. Copy it
+    with ``Rect(cell.bbox)`` before modifying it to preserve the cached origin.
+    """
+
+    row: int
+    col: int
+    row_span: int
+    col_span: int
+    bbox: Rect
+    state: Literal["present", "blank", "unavailable"]
+    text: str | None
+
+
+@dataclass(frozen=True)
+class TableSlot:
+    """One position in the rectangular :attr:`pdfspine.Table.slots` grid.
+
+    An originating slot has its cell's text state. A ``"continuation"`` slot
+    references the same :class:`TableCell` as its unique origin, including when
+    the originating cell is blank or unavailable. An uncovered structural gap
+    has ``state="unavailable"`` and ``cell=None``.
+    """
+
+    row: int
+    col: int
+    state: Literal["present", "blank", "unavailable", "continuation"]
+    cell: TableCell | None
+
+    @property
+    def origin(self) -> tuple[int, int] | None:
+        """The originating cell's ``(row, col)``, or ``None`` for a gap."""
+        return None if self.cell is None else (self.cell.row, self.cell.col)

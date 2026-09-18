@@ -60,10 +60,13 @@ fn ruled_table_pdf() -> Vec<u8> {
         c.push_str(&format!("1 0 0 1 {x} {y} Tm ({t}) Tj\n"));
     }
     c.push_str("ET\n");
-    let content = c.into_bytes();
+    table_pdf(c.as_bytes())
+}
+
+fn table_pdf(content: &[u8]) -> Vec<u8> {
     let stream = {
         let mut s = format!("<< /Length {} >>\nstream\n", content.len()).into_bytes();
-        s.extend_from_slice(&content);
+        s.extend_from_slice(content);
         s.extend_from_slice(b"\nendstream");
         s
     };
@@ -145,6 +148,115 @@ fn tables_api_003_strategy_from_str() {
     assert_eq!(pdf_api::strategy_from_str("text"), Strategy::Text);
     assert_eq!(pdf_api::strategy_from_str("LINES"), Strategy::Lines);
     assert_eq!(pdf_api::strategy_from_str("bogus"), Strategy::Lines);
+}
+
+#[test]
+fn tables_api_004_cell_records_preserve_blank_origins() {
+    let content = b"1 w\n\
+        100 700 m 300 700 l S 100 670 m 300 670 l S 100 640 m 300 640 l S\n\
+        100 640 m 100 700 l S 200 640 m 200 700 l S 300 640 m 300 700 l S\n\
+        BT /F1 10 Tf 1 0 0 1 110 685 Tm (A) Tj ET";
+    let doc = Document::open_bytes(table_pdf(content)).expect("open");
+    let page = doc.load_page(0).expect("page");
+    let finder = pdf_api::page_find_tables(&page, &TableOptions::default());
+    assert_eq!(finder.len(), 1);
+    let table = &finder.tables[0];
+    let records = table.cell_records();
+    assert_eq!(records.len(), 4, "blank physical cells remain origins");
+    assert_eq!(records[0].text.as_deref(), Some("A"));
+    for cell in &records[1..] {
+        assert_eq!(cell.text.as_deref(), Some(""));
+        assert_eq!((cell.span.row_span, cell.span.col_span), (1, 1));
+        assert_eq!(
+            table.cells()[cell.span.row][cell.span.col],
+            Some(cell.span.rect)
+        );
+        assert_eq!(table.extract()[cell.span.row][cell.span.col], None);
+    }
+}
+
+#[test]
+fn tables_api_005_cell_records_preserve_origins_without_text_source() {
+    let content = b"1 w\n\
+        100 700 m 300 700 l S 100 670 m 300 670 l S 100 640 m 300 640 l S\n\
+        100 640 m 100 700 l S 200 640 m 200 700 l S 300 640 m 300 700 l S";
+    let doc = Document::open_bytes(table_pdf(content)).expect("open");
+    let page = doc.load_page(0).expect("page");
+    let finder = pdf_api::page_find_tables(&page, &TableOptions::default());
+    assert_eq!(finder.len(), 1);
+    let table = &finder.tables[0];
+    let records = table.cell_records();
+    assert_eq!(records.len(), 4, "unavailable text does not erase geometry");
+    assert!(records.iter().all(|cell| cell.text.is_none()));
+    assert_eq!(
+        records.iter().map(|cell| cell.span).collect::<Vec<_>>(),
+        table.spans()
+    );
+    assert!(table.cells().iter().flatten().all(Option::is_some));
+    assert!(table.extract().iter().flatten().all(Option::is_none));
+}
+
+#[test]
+fn tables_api_006_cell_records_distinguish_blank_spans_and_missing_slots() {
+    // A 3x3 lattice: blank colspan at (0,0), text rowspan at (1,0), ordinary
+    // blank cells, and no enclosing rectangle at (2,2). Both continuations
+    // and the absent corner are None in the legacy grid, but only the former
+    // are covered by an explicit origin span.
+    let content = b"1 w\n\
+        100 700 m 400 700 l S 100 670 m 400 670 l S\n\
+        200 640 m 400 640 l S 100 610 m 300 610 l S\n\
+        100 610 m 100 700 l S 200 610 m 200 670 l S\n\
+        300 610 m 300 700 l S 400 640 m 400 700 l S\n\
+        BT /F1 10 Tf 1 0 0 1 310 685 Tm (R) Tj\n\
+        1 0 0 1 110 655 Tm (L) Tj ET";
+    let doc = Document::open_bytes(table_pdf(content)).expect("open");
+    let page = doc.load_page(0).expect("page");
+    let finder = pdf_api::page_find_tables(&page, &TableOptions::default());
+    assert_eq!(finder.len(), 1);
+    let table = &finder.tables[0];
+    assert_eq!((table.row_count(), table.col_count()), (3, 3));
+    let records = table.cell_records();
+    let signatures: Vec<_> = records
+        .iter()
+        .map(|cell| {
+            (
+                cell.span.row,
+                cell.span.col,
+                cell.span.row_span,
+                cell.span.col_span,
+                cell.text.as_deref(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        signatures,
+        vec![
+            (0, 0, 1, 2, Some("")),
+            (0, 2, 1, 1, Some("R")),
+            (1, 0, 2, 1, Some("L")),
+            (1, 1, 1, 1, Some("")),
+            (1, 2, 1, 1, Some("")),
+            (2, 1, 1, 1, Some("")),
+        ]
+    );
+    let mut owners = vec![vec![Vec::new(); table.col_count()]; table.row_count()];
+    for cell in &records {
+        let span = cell.span;
+        assert_eq!(table.cells()[span.row][span.col], Some(span.rect));
+        for row in owners.iter_mut().skip(span.row).take(span.row_span) {
+            for slot in row.iter_mut().skip(span.col).take(span.col_span) {
+                slot.push((span.row, span.col));
+            }
+        }
+    }
+    assert_eq!(owners[0][1], vec![(0, 0)], "colspan has one origin");
+    assert_eq!(owners[2][0], vec![(1, 0)], "rowspan has one origin");
+    assert!(owners[2][2].is_empty(), "absent slot has no origin");
+    assert!(owners.iter().flatten().all(|slot| slot.len() <= 1));
+    for (row, col) in [(0, 1), (2, 0), (2, 2)] {
+        assert_eq!(table.cells()[row][col], None);
+        assert_eq!(table.extract()[row][col], None);
+    }
 }
 
 #[test]
