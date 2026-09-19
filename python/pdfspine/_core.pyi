@@ -27,6 +27,7 @@ __all__ = [
     "Shape",
     "Pixmap",
     "DisplayList",
+    "PaintProfile",
     "TableFinder",
     "Table",
     "Font",
@@ -449,6 +450,7 @@ class Page:
     ) -> list[tuple[float, ...]]: ...
     def get_fonts(self, full: bool = ...) -> list[tuple[Any, ...]]: ...
     def get_images(self, full: bool = ...) -> list[tuple[Any, ...]]: ...
+    def get_paint_profile(self) -> PaintProfile: ...
     def get_pixmap(
         self,
         *,
@@ -930,6 +932,21 @@ class Pixmap:
     # work. Declared here for PEP 688 buffer awareness; it has no Python-level
     # callable at runtime (stubtest reports this single known, intentional miss).
     def __buffer__(self, flags: int, /) -> memoryview: ...
+
+@final
+class PaintProfile:
+    @property
+    def version(self) -> str: ...
+    @property
+    def complete(self) -> bool: ...
+    @property
+    def resource_scopes(self) -> tuple[Mapping[str, Any], ...]: ...
+    @property
+    def operators(self) -> tuple[Mapping[str, Any], ...]: ...
+    @property
+    def inline_images(self) -> tuple[Mapping[str, Any], ...]: ...
+    @property
+    def diagnostics(self) -> tuple[Mapping[str, Any], ...]: ...
 
 @final
 class DisplayList:

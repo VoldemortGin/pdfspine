@@ -190,9 +190,12 @@ pub fn build_textpage_flagged(
     _limits: &Limits,
     flags: u32,
 ) -> TextPage {
-    let Some(page_dict) = page.dict() else {
+    let Some(mut page_dict) = page.dict() else {
         return TextPage::default();
     };
+    if let Some(resources) = page.effective_resources() {
+        page_dict.insert(Name::new("Resources"), Object::Dictionary(resources));
+    }
     let res: InterpretResult = ContentInterpreter::new(doc).run_page(&page_dict);
     // CropBox is the shared coordinate basis: it drives both the device transform
     // (origin baked out) and the page size, *and* is the out-of-page glyph clip —

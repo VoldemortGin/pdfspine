@@ -245,7 +245,7 @@ pub fn page_get_displaylist(page: &Page) -> Result<DisplayList> {
 pub fn page_get_displaylist_with_annots(page: &Page, annots: bool) -> Result<DisplayList> {
     let doc = Arc::new(page.document().snapshot()?);
     let page = Page::new(Arc::clone(&doc), page.number(), page.obj_ref());
-    let recording = page.dict().map(|dict| {
+    let recording = crate::paint_profile::page_dict_with_effective_resources(&page).map(|dict| {
         pdf_text::ContentInterpreter::new(&doc).run_page_recorded_with_annots(&dict, annots)
     });
     let (text, ops, image_ops, color_spaces, text_ops) = match recording {

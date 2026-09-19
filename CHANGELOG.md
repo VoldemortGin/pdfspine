@@ -11,6 +11,14 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
+### Added
+
+- `Page.get_paint_profile()` returns an immutable, versioned audit of content
+  operators and selected page/Form resources. It uses checked inherited
+  resources and fails closed on malformed content, unresolved references,
+  unsupported paint/state, images, transparency, optional content and parser
+  recovery instead of treating omitted rendering as complete.
+
 ## [0.10.0] — 2026-09-18
 
 ### Added

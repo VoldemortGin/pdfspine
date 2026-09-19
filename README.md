@@ -129,6 +129,11 @@ print(page.get_text())                       # plain text
 print(page.search_for("invoice"))            # list[Rect]
 page.get_pixmap(dpi=150).save("page1.png")   # render to image
 
+# pdfspine extension: immutable, fail-closed source paint/resource audit.
+# `complete` is an accounting result, not a semantic or visual qualification.
+paint = page.get_paint_profile()
+print(paint.version, paint.complete, paint.diagnostics)
+
 tables = page.find_tables()
 for t in tables.tables:
     print(t.to_markdown())                    # or t.to_html() for merged cells

@@ -2197,6 +2197,10 @@ class Page:
         """The page's images as PyMuPDF tuples (PyMuPDF ``page.get_images``)."""
         return self._page.get_images(full)
 
+    def get_paint_profile(self) -> _core.PaintProfile:
+        """Return pdfspine's immutable strict paint/resource profile."""
+        return self._page.get_paint_profile()
+
     def get_xobjects(self) -> list[tuple]:
         """The page's XObjects (PyMuPDF ``page.get_xobjects``).
 

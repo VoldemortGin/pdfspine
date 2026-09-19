@@ -93,6 +93,39 @@ fn one_page_with_resources(resources: Object, extra: &[(u32, Object)]) -> Vec<u8
     build_pdf(&objects, 1, &[])
 }
 
+#[test]
+fn inventory_uses_inherited_page_resources_without_mutating_leaf_dict() {
+    let font = Object::Dictionary(dict(&[
+        ("Type", name_obj("Font")),
+        ("Subtype", name_obj("Type1")),
+        ("BaseFont", name_obj("Helvetica")),
+    ]));
+    let resources = Object::Dictionary(dict(&[(
+        "Font",
+        Object::Dictionary(dict(&[("F1", rref(4, 0))])),
+    )]));
+    let catalog = Object::Dictionary(dict(&[
+        ("Type", name_obj("Catalog")),
+        ("Pages", rref(2, 0)),
+    ]));
+    let pages = Object::Dictionary(dict(&[
+        ("Type", name_obj("Pages")),
+        ("Count", Object::Integer(1)),
+        ("Kids", Object::Array(vec![rref(3, 0)])),
+        ("MediaBox", int_array(&[0, 0, 200, 200])),
+        ("Resources", resources),
+    ]));
+    let page = Object::Dictionary(dict(&[("Type", name_obj("Page")), ("Parent", rref(2, 0))]));
+    let bytes = build_pdf(&[(1, catalog), (2, pages), (3, page), (4, font)], 1, &[]);
+    let doc = Document::open_bytes(bytes).unwrap();
+    let page = doc.load_page(0).unwrap();
+
+    assert!(page
+        .dict()
+        .is_some_and(|d| !d.contains_key(&Name::new("Resources"))));
+    assert_eq!(get_fonts(&page).len(), 1);
+}
+
 // === FONTS-INV-* ==========================================================
 
 #[test]

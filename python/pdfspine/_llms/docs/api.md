@@ -424,12 +424,21 @@ assert [ln["number"] for ln in sorted(lines, key=lambda ln: ln["number"])] == li
 page.get_fonts(full=False) -> list[tuple]        # 别名 getImages 等见下
 page.get_images(full=False) -> list[tuple]       # 别名 getImages
 page.get_xobjects() -> list[tuple]
+page.get_paint_profile() -> _core.PaintProfile   # pdfspine 扩展：严格、只读的 paint/resource 审计
 page.get_image_rects(...) -> list[Rect]
 page.get_image_info(...) -> list[dict]
 page.get_image_bbox(name_or_xref, ...) -> Rect
 page.get_drawings(**_) -> list[dict]             # 别名 getDrawings
 page.get_cdrawings(**_) -> list[dict]            # 别名 getCdrawings
 ```
+
+`PaintProfile` 的集合字段都是 tuple，内部结构是只读 mapping：
+`version` 标识审计契约；`resource_scopes` 记录 page/Form 有效资源及
+direct/inherited/parent-fallback 来源和资源摘要；`operators` 记录 scope、序号、
+操作符、支持状态、选择的资源名和有限数值操作数；`inline_images` 不暴露图像
+字节；`diagnostics` 使用稳定错误码。只有没有任何 fail-closed diagnostic 时
+`complete=True`。这不等于视觉或业务语义已经验证，也不证明 native SVG 对
+stroke/transparency 的完整保真；调用方仍须绑定原 PDF 摘要和自己的证据策略。
 
 ### 内容流
 ```python

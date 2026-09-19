@@ -1042,10 +1042,8 @@ pub fn search(
 /// The page's `/Resources /<sub>` dictionary, resolving each level. `None` when
 /// the page has no resources or the sub-dict is absent.
 fn resource_subdict(doc: &DocumentStore, page: &Page, sub: &str) -> Option<Dict> {
-    let page_dict = page.dict()?;
-    let resources = resolve_key(doc, &page_dict, "Resources")?;
-    let res_dict = resources.as_dict()?;
-    let sub_obj = resolve_key(doc, res_dict, sub)?;
+    let resources = page.effective_resources()?;
+    let sub_obj = resolve_key(doc, &resources, sub)?;
     sub_obj.as_dict().cloned()
 }
 

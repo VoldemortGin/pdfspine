@@ -16,6 +16,7 @@ pub mod image;
 pub mod image_table;
 pub mod markdown;
 pub mod ocr;
+pub mod paint_profile;
 pub mod recorded_text;
 pub mod replay;
 pub mod svg;
@@ -31,6 +32,11 @@ use pdf_core::source::MmapMode;
 use pdf_core::{DocumentStore, Limits, ObjRef};
 
 pub use error::{Error, Result};
+pub use paint_profile::{
+    page_get_paint_profile, ExtGStateProfile, InlineImageProfile, PaintDiagnostic,
+    PaintDisposition, PaintOperator, PaintProfile, PaintResourceEntry, PaintResourceScope,
+    ResourceOrigin, PAINT_PROFILE_VERSION,
+};
 pub use pdf_core::page::Page;
 pub use pdf_core::repair::ParseMode;
 pub use pdf_core::{OnRepaired, SaveOptions, XrefStyle};

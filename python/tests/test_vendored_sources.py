@@ -36,6 +36,15 @@ def test_vendor_inventory_detects_modified_and_extra_source(tmp_path):
         checker.verify(tmp_path)
 
 
+def test_vendor_inventory_ignores_cargo_target_cache(tmp_path):
+    checker = module("check_vendored_sources")
+    shutil.copytree(ROOT / "vendor", tmp_path / "vendor")
+    cache = tmp_path / "vendor/tiny-skia/target/CACHEDIR.TAG"
+    cache.parent.mkdir(exist_ok=True)
+    cache.write_text("cargo-generated cache marker")
+    assert checker.verify(tmp_path) == 190
+
+
 def test_vendor_edit_invalidates_extension_fingerprint(tmp_path, monkeypatch):
     gate = module("quality_gate")
     monkeypatch.setattr(gate, "ROOT", tmp_path)
@@ -56,8 +65,10 @@ def test_sdist_inventory_checks_real_members_including_reserved_metadata(tmp_pat
     for omit_original_manifest in [False, True]:
         with tarfile.open(archive, "w:gz") as tar:
             for path in (ROOT / "vendor").rglob("*"):
-                if path.is_file() and not (
-                    omit_original_manifest and path.name == "Cargo.toml.orig"
+                if (
+                    path.is_file()
+                    and not (omit_original_manifest and path.name == "Cargo.toml.orig")
+                    and not path.is_relative_to(ROOT / "vendor/tiny-skia/target")
                 ):
                     tar.add(
                         path,

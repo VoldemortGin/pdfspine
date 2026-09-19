@@ -155,6 +155,9 @@ include = [
     "python/pdfspine/_llms/llms.txt",
     "python/pdfspine/_llms/docs/*.md",
 ]
+# Cargo may create this ignored cache marker while maturin collects an sdist.
+# It is a build artifact, not part of the pinned tiny-skia source inventory.
+exclude = [{ path = "vendor/tiny-skia/target/**/*", format = "sdist" }]
 
 [tool.pytest.ini_options]
 testpaths = ["python/tests"]

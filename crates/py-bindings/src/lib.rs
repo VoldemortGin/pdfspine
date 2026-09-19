@@ -11,6 +11,7 @@
 //! released via [`Python::detach`]. Errors map to a typed exception hierarchy
 //! rooted at `_core.PdfError` (PRD §9.3).
 
+mod paint_profile;
 mod replay;
 
 use std::ffi::{c_int, c_void, CString};
@@ -2389,6 +2390,12 @@ impl PyPage {
             list.append(t)?;
         }
         Ok(list)
+    }
+
+    /// Returns the immutable strict paint/resource accounting profile for this
+    /// page. This is a pdfspine extension, not a PyMuPDF compatibility method.
+    fn get_paint_profile(&self) -> paint_profile::PyPaintProfile {
+        paint_profile::PyPaintProfile::new(pdf_api::page_get_paint_profile(&self.page))
     }
 
     /// The image placements on the page (PyMuPDF `page.get_image_rects`).
@@ -6227,6 +6234,7 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyShape>()?;
     m.add_class::<PyPixmap>()?;
     m.add_class::<PyDisplayList>()?;
+    m.add_class::<paint_profile::PyPaintProfile>()?;
     m.add_class::<replay::PyReplayEvent>()?;
     m.add_class::<PyTableFinder>()?;
     m.add_class::<PyTable>()?;

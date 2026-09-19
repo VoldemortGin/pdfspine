@@ -19,6 +19,7 @@ pub mod font_display;
 pub mod interp;
 pub mod layout;
 pub mod model;
+pub mod paint_profile;
 pub mod renderops;
 pub mod search;
 pub mod serialize;
@@ -39,6 +40,11 @@ pub use layout::{
 pub use model::{
     flags, rendered_font_size, Block, BlockKind, Char, DrawPath, ImageBlock, ImageRef,
     InterpretResult, Line, PaintKind, PathItem, PositionedGlyph, Span, TextPage, Word, WritingDir,
+};
+pub use paint_profile::{
+    build_paint_profile, ExtGStateProfile, InlineImageProfile, PaintDiagnostic, PaintDisposition,
+    PaintOperator, PaintProfile, PaintResourceEntry, PaintResourceScope, ResourceOrigin,
+    TransparencyGroupProfile, PAINT_PROFILE_VERSION,
 };
 pub use renderops::{ImageOp, PageRecording, RenderOp, RenderSink, ShadingOp, TextRun};
 pub use search::{search, SearchOptions};

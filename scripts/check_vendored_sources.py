@@ -21,7 +21,9 @@ def verify(root: Path, archive: Path | None = None) -> int:
     manifest = json.loads((vendor / "tiny-skia.provenance.json").read_text())
     expected = manifest["files"]
     actual = {
-        p.relative_to(source).as_posix() for p in source.rglob("*") if p.is_file()
+        relative.as_posix()
+        for p in source.rglob("*")
+        if p.is_file() and not (relative := p.relative_to(source)).parts[0] == "target"
     }
     if actual != set(expected):
         raise ValueError("vendored source inventory differs from the pinned release")
