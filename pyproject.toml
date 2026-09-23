@@ -161,6 +161,7 @@ exclude = [{ path = "vendor/tiny-skia/target/**/*", format = "sdist" }]
 
 [tool.pytest.ini_options]
 testpaths = ["python/tests"]
+pythonpath = ["."]
 addopts = "--import-mode=importlib"
 filterwarnings = ["error"]
 
