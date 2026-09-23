@@ -20,13 +20,21 @@
   worktree, preserving other active tasks. Inspect with
   `git -C /Users/linhan/startup/spine/pdfspine log --oneline --first-parent -6`
   and `git -C /Users/linhan/startup/spine/pdfspine worktree list`.
-- **Released vs unreleased.** The published release is **`v0.9.1`** (annotated
-  tag at commit `e34de54`, 2026-09-16; release run `35067501343`; on PyPI as
-  `pdfspine` 0.9.1 — **6 files**: five abi3 wheels [macOS x86_64/arm64,
-  manylinux x86_64/aarch64, win_amd64] + sdist; plus a GitHub Release `v0.9.1`
-  carrying the same 6 artifacts). It is a packaging / CI follow-up to
-  **`v0.9.0`** (tag `b0c995f`, 2026-09-15) with no API or coverage change
-  (still 703/769, 91.4%): the `test` extra now declares `Pillow` and `numpy`,
+- **Released vs unreleased.** The published release is **`v0.11.1`** (annotated
+  tag at commit `4dd50bd`, 2026-09-23; release run `35836561369`, published via
+  PyPI Trusted Publishing / OIDC; on PyPI as `pdfspine` 0.11.1 — **6 files**:
+  five cp311-abi3 wheels [macOS x86_64/arm64, manylinux x86_64/aarch64,
+  win_amd64] + sdist; plus a GitHub Release `v0.11.1`). It is a bug-fix release
+  on top of **`v0.11.0`** (tag `5a1f22e`, 2026-09-19; PyPI + tag only, **no
+  GitHub Release**), which added `Page.get_paint_profile()`, itself on top of
+  **`v0.10.0`** (tag `f48854b`, 2026-09-18; GitHub Release `v0.10.0`), which
+  added typed `Table.slots` / `Table.origin_cells`. 0.11.1 fixes the
+  `engine="paddle"` OCR sort panic (`ocrspine` bumped to `041958a`; engine
+  panics become `PdfUnsupportedError`) and corrects the OCR docstrings/README.
+  Coverage is unchanged at 703/769 (91.4%). The earlier **`v0.9.1`** (tag
+  `e34de54`, 2026-09-16; release run `35067501343`) was a packaging / CI
+  follow-up to **`v0.9.0`** (tag `b0c995f`, 2026-09-15): the `test` extra
+  declares `Pillow` and `numpy`,
   vendored sources are checked out byte-exact (`vendor/** -text`) so the
   supply-chain checksum holds on Windows `core.autocrlf` checkouts, and the CI
   pytest matrix + unified quality-gate job install the optional image deps. The
@@ -41,8 +49,8 @@
   full-width-title columns) plus Adobe RGB JPEG rendering, OCG Intent
   visibility, the documentation validation baselines and the TableFormer /
   FinTabNet evaluation adapters. **`CHANGELOG.md` `[Unreleased]` is now empty**;
-  0.9.1 is captured under `## [0.9.1] — 2026-09-16` and the 0.9.0 slate under
-  `## [0.9.0] — 2026-09-15`.
+  each release is captured under its own heading, from `## [0.11.1] — 2026-09-23`
+  back to the 0.9.0 slate under `## [0.9.0] — 2026-09-15`.
 - **Gate.** `./ci.sh` runs `scripts/quality_gate.py`, phases in order
   `rust → extension → python → drift → artifacts`. The `extension` phase
   fingerprints `crates/**`, `vendor/**`, `Cargo.toml`, `Cargo.lock`, `pyproject.toml` and
@@ -111,6 +119,8 @@
   SSH connection mid-transfer, so the `push` failed; the same already-gated
   commit was re-pushed with `--no-verify`.
   **The next open backlog item is #3.**
+
+- [x] **Cut release `v0.11.1`** — annotated tag `v0.11.1` at `4dd50bd` (2026-09-23); release run `35836561369` (Trusted Publishing / OIDC); on PyPI (6 files) + GitHub Release `v0.11.1`. (`v0.11.0` at `5a1f22e`, 2026-09-19, shipped to PyPI with a tag but no GitHub Release.)
 
 - [x] **Cut release `v0.9.1`** — annotated tag `v0.9.1` at `e34de54` (2026-09-16); release run `35067501343`; on PyPI (6 files) + GitHub Release `v0.9.1`.
 
