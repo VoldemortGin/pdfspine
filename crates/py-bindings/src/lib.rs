@@ -2677,8 +2677,10 @@ impl PyPage {
     /// OCR confidence (`pdfspine` extra; not in PyMuPDF).
     ///
     /// `engine` must be `"paddle"` — the local, deterministic PaddleOCR engine,
-    /// available only in the opt-in OCR build (`pip install pdfspine[ocr]`). On a
-    /// lean build, or any other engine, this raises `PdfUnsupportedError`.
+    /// compiled into the default wheel (models installed automatically via the
+    /// `ocrspine-models` dependency). A lean / source build needs the `ocr`
+    /// feature; without it, or with any other engine, this raises
+    /// `PdfUnsupportedError`.
     /// Returns the list of reconstructed [`PyImageTable`]s (at most one in v1).
     /// Heavy render + OCR + sampling work runs with the GIL released.
     #[cfg(feature = "ocr")]
@@ -2726,7 +2728,8 @@ impl PyPage {
     ) -> PyResult<Vec<PyImageTable>> {
         Err(PdfUnsupportedError::new_err(
             "find_image_tables requires the OCR build (the pure-Rust PaddleOCR \
-             engine); install it with `pip install pdfspine[ocr]`.",
+             engine); install the default `pdfspine` wheel or rebuild with \
+             `maturin develop --features ocr`.",
         ))
     }
 

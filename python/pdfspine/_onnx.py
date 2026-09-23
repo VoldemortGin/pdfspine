@@ -2,7 +2,8 @@
 
 The two networks only predict *where* things are (layout regions, table cells).
 Every character of text comes from the PDF text layer through pdfspine's native
-word coordinates; the models never regenerate text and no OCR is applied.
+word coordinates; the models never regenerate text. A page with no text layer
+is OCR'd automatically when ``OnnxOptions.ocr_if_no_text`` is true (default).
 
 Both models are Apache-2.0 (PaddleX/PaddleOCR upstream, ONNX exports published
 by RapidAI). The layout detector is a PP-DocLayout RT-DETR: ``PP-DocLayoutV3``
@@ -1395,7 +1396,7 @@ def get_layout_html(
     options: Mapping[str, object] | None = None,
     _runtime: Any = None,
 ) -> str:
-    """Semantic HTML for one page; every character comes from the text layer."""
+    """Semantic HTML for one page; text layer, else OCR fallback."""
 
     config, runtime, rendered = _prepare(page, options, _runtime)
     if _area(rendered.page_bbox) <= 0:

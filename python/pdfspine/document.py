@@ -2494,7 +2494,10 @@ class Page:
         ``<table>`` with ``rowspan``/``colspan``, ``<figure>`` placeholders)
         using the ONNX layout + table models for geometry only.
 
-        Every character comes from the PDF text layer; no OCR is performed.
+        On a page with a text layer every character comes from it and no OCR is
+        performed; a page with no text layer is OCR'd automatically when
+        ``ocr_if_no_text=True`` (the default; see ``ocr_engine`` /
+        ``ocr_language``).
         Keyword arguments are :class:`pdfspine.OnnxOptions` fields.
         """
         from ._onnx import get_layout_html as _get_layout_html
@@ -2522,9 +2525,11 @@ class Page:
         raster detail back.
 
         ``engine`` must be ``"paddle"`` — the local, deterministic pure-Rust
-        PaddleOCR engine, available only in the OCR build
-        (``pip install pdfspine[ocr]``). On a lean build, or any other engine,
-        this raises :class:`PdfUnsupportedError`. ``dpi`` is the render
+        PaddleOCR engine, compiled into the default wheel; its PP-OCRv5 models
+        are installed automatically with pdfspine via the ``ocrspine-models``
+        dependency. A lean / source build needs the ``ocr`` feature
+        (``maturin develop --features ocr``); without it, or with any other
+        engine, this raises :class:`PdfUnsupportedError`. ``dpi`` is the render
         resolution (higher is sharper for OCR but slower); ``min_confidence``
         drops low-confidence OCR words before gridding; ``row_gap_ratio`` /
         ``col_gap_ratio`` tune the row/column clustering.
