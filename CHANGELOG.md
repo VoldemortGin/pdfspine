@@ -11,13 +11,7 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
-### Added
-
-- `Page.get_paint_profile()` returns an immutable, versioned audit of content
-  operators and selected page/Form resources. It uses checked inherited
-  resources and fails closed on malformed content, unresolved references,
-  unsupported paint/state, images, transparency, optional content and parser
-  recovery instead of treating omitted rendering as complete.
+## [0.11.1] — 2026-09-23
 
 ### Fixed
 
@@ -32,6 +26,16 @@ feature-complete, but the public API and on-disk formats may still change.
   engine and models (no `pdfspine[ocr]` extra needed), and `get_layout_html()`
   falls back to OCR on pages without a text layer when `ocr_if_no_text` is set
   (the default).
+
+## [0.11.0] — 2026-09-19
+
+### Added
+
+- `Page.get_paint_profile()` returns an immutable, versioned audit of content
+  operators and selected page/Form resources. It uses checked inherited
+  resources and fails closed on malformed content, unresolved references,
+  unsupported paint/state, images, transparency, optional content and parser
+  recovery instead of treating omitted rendering as complete.
 
 ## [0.10.0] — 2026-09-18
 
@@ -1093,7 +1097,9 @@ published wheel's version is set from the `v0.1.0` git tag at build time.
   2858 ms → 819 ms). `rayon` is a feature-gated (`paddle-ocr`) optional dep and
   is not in the lean base wheel.
 
-[Unreleased]: https://github.com/VoldemortGin/pdfspine/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/VoldemortGin/pdfspine/compare/v0.11.1...HEAD
+[0.11.1]: https://github.com/VoldemortGin/pdfspine/compare/v0.11.0...v0.11.1
+[0.11.0]: https://github.com/VoldemortGin/pdfspine/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/VoldemortGin/pdfspine/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/VoldemortGin/pdfspine/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/VoldemortGin/pdfspine/compare/v0.8.0...v0.9.0
