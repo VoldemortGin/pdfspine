@@ -64,21 +64,46 @@ impl OcrEngine for PaddleOcr {
         let (w, h) = (rgb.width(), rgb.height());
         let ocr_image =
             ocrspine::OcrImage::from_rgb(w, h, rgb.into_raw()).map_err(map_ocrspine_err)?;
-        let words = self.inner.recognize(&ocr_image).map_err(map_ocrspine_err)?;
+        // ocrspine <= e810a9c sorts detection boxes with a non-transitive
+        // comparator, which Rust >= 1.81 `sort_by` may reject with a panic. Contain
+        // any engine panic here so it surfaces as an error instead of unwinding
+        // across the Python boundary (the engine holds no lock while inferring).
+        let words = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            self.inner.recognize(&ocr_image)
+        }))
+        .map_err(|payload| {
+            let msg = payload
+                .downcast_ref::<&str>()
+                .map(|s| (*s).to_owned())
+                .or_else(|| payload.downcast_ref::<String>().cloned())
+                .unwrap_or_else(|| "unknown panic".to_owned());
+            Error::Unsupported(format!("ocrspine: PaddleOCR engine panicked: {msg}"))
+        })?
+        .map_err(map_ocrspine_err)?;
 
         // Map ocrspine's `OcrWord` (BBox + quad) into pdf-ocr's `OcrWord` (Rect,
         // no quad): the PDF pipeline only needs the axis-aligned box, the text and
         // the [0,100] confidence. The quad is dropped — the integration layer
         // (TextPage / sandwich / image-table) works purely off the bbox.
-        Ok(words
-            .into_iter()
-            .map(|w| OcrWord {
-                text: w.text,
-                bbox: Rect::new(w.bbox.x0, w.bbox.y0, w.bbox.x1, w.bbox.y1),
-                confidence: w.confidence,
-            })
-            .collect())
+        Ok(sanitize_words(words.into_iter().map(|w| OcrWord {
+            text: w.text,
+            bbox: Rect::new(w.bbox.x0, w.bbox.y0, w.bbox.x1, w.bbox.y1),
+            confidence: w.confidence,
+        })))
     }
+}
+
+/// Drops words whose bbox or confidence is not finite. A NaN/inf box has no
+/// meaningful position (clamping would invent geometry), and downstream
+/// geometry sorts / clustering assume finite coordinates.
+fn sanitize_words(words: impl IntoIterator<Item = OcrWord>) -> Vec<OcrWord> {
+    words
+        .into_iter()
+        .filter(|w| {
+            let b = &w.bbox;
+            [b.x0, b.y0, b.x1, b.y1].iter().all(|v| v.is_finite()) && w.confidence.is_finite()
+        })
+        .collect()
 }
 
 /// Maps an [`ocrspine::OcrError`] into pdf-ocr's [`Error`].
@@ -141,4 +166,30 @@ fn pixmap_to_rgb(pix: &Pixmap) -> RgbImage {
         }
     }
     img
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn word(bbox: Rect, confidence: f32) -> OcrWord {
+        OcrWord {
+            text: "w".to_owned(),
+            bbox,
+            confidence,
+        }
+    }
+
+    #[test]
+    fn sanitize_drops_non_finite_words() {
+        let words = vec![
+            word(Rect::new(1.0, 2.0, 3.0, 4.0), 90.0),
+            word(Rect::new(f64::NAN, 2.0, 3.0, 4.0), 90.0),
+            word(Rect::new(1.0, 2.0, f64::INFINITY, 4.0), 90.0),
+            word(Rect::new(1.0, 2.0, 3.0, 4.0), f32::NAN),
+        ];
+        let kept = sanitize_words(words);
+        assert_eq!(kept.len(), 1);
+        assert_eq!(kept[0].bbox, Rect::new(1.0, 2.0, 3.0, 4.0));
+    }
 }

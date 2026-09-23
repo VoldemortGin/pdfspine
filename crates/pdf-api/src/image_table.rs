@@ -227,13 +227,7 @@ pub fn page_find_image_tables(
                 let (wa, wb) = (words[a].bbox.normalize(), words[b].bbox.normalize());
                 let ca = (wa.y0 + wa.y1) / 2.0;
                 let cb = (wb.y0 + wb.y1) / 2.0;
-                ca.partial_cmp(&cb)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-                    .then(
-                        wa.x0
-                            .partial_cmp(&wb.x0)
-                            .unwrap_or(std::cmp::Ordering::Equal),
-                    )
+                ca.total_cmp(&cb).then(wa.x0.total_cmp(&wb.x0))
             });
 
             let text = ordered
@@ -357,11 +351,7 @@ fn cluster_rows(words: &[OcrWord], gap_ratio: f64) -> Vec<Band> {
     let threshold = (gap_ratio * median_h).max(1.0);
 
     let mut idx: Vec<usize> = (0..words.len()).collect();
-    idx.sort_by(|&a, &b| {
-        center_y(&words[a])
-            .partial_cmp(&center_y(&words[b]))
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
+    idx.sort_by(|&a, &b| center_y(&words[a]).total_cmp(&center_y(&words[b])));
 
     let mut bands: Vec<Band> = Vec::new();
     let mut run_mean = 0.0_f64;
@@ -400,11 +390,7 @@ fn cluster_cols(words: &[OcrWord], gap_ratio: f64) -> Vec<Band> {
     let threshold = (gap_ratio * median_w).max(1.0);
 
     let mut idx: Vec<usize> = (0..words.len()).collect();
-    idx.sort_by(|&a, &b| {
-        center_x(&words[a])
-            .partial_cmp(&center_x(&words[b]))
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
+    idx.sort_by(|&a, &b| center_x(&words[a]).total_cmp(&center_x(&words[b])));
 
     let mut bands: Vec<Band> = Vec::new();
     let mut prev_cx: Option<f64> = None;
@@ -735,5 +721,42 @@ fn median(vals: impl IntoIterator<Item = f64>) -> f64 {
         v[n / 2]
     } else {
         (v[n / 2 - 1] + v[n / 2]) / 2.0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Words with NaN coordinates must not break the band sorts' total order
+    /// (Rust >= 1.81 `sort_by` panics on an inconsistent comparator).
+    #[test]
+    fn clustering_tolerates_non_finite_word_boxes() {
+        let mut seed = 0x9e37_79b9_7f4a_7c15_u64;
+        let mut next = || {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            seed
+        };
+        for n in 2..300 {
+            let words: Vec<OcrWord> = (0..n)
+                .map(|_| {
+                    let r = next();
+                    let v = if r % 4 == 0 {
+                        f64::NAN
+                    } else {
+                        (r % 50) as f64
+                    };
+                    OcrWord {
+                        text: "w".to_owned(),
+                        bbox: Rect::new(v, v, v + 10.0, v + 8.0),
+                        confidence: 90.0,
+                    }
+                })
+                .collect();
+            assert!(!cluster_rows(&words, 0.5).is_empty());
+            assert!(!cluster_cols(&words, 0.5).is_empty());
+        }
     }
 }

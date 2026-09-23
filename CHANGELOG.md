@@ -19,6 +19,20 @@ feature-complete, but the public API and on-disk formats may still change.
   unsupported paint/state, images, transparency, optional content and parser
   recovery instead of treating omitted rendering as complete.
 
+### Fixed
+
+- `engine="paddle"` OCR could abort the calling thread with an uncatchable
+  Rust panic ("comparison function does not correctly implement a total
+  order") on pages with many text boxes of uneven height. `ocrspine` is bumped
+  to `041958a`, whose reading-order sort is now a strict total order; the
+  PaddleOCR adapter additionally converts any engine panic into
+  `PdfUnsupportedError` and drops words with non-finite geometry, and
+  `find_image_tables` sorts words with `total_cmp`.
+- OCR docstrings and README: the default wheel already ships the PaddleOCR
+  engine and models (no `pdfspine[ocr]` extra needed), and `get_layout_html()`
+  falls back to OCR on pages without a text layer when `ocr_if_no_text` is set
+  (the default).
+
 ## [0.10.0] — 2026-09-18
 
 ### Added
