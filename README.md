@@ -113,7 +113,7 @@ package — a runtime dependency `pip` pulls in automatically — so the wheel i
 stays lean and no longer embeds them. To build from source instead, see
 [Build & install](#build--install).
 
-Python **3.12+** is supported. Prebuilt wheels are published for Linux x86-64 /
+Python **3.11+** is supported. Prebuilt wheels are published for Linux x86-64 /
 ARM64, macOS Intel / Apple silicon, and Windows x86-64; an sdist is also available
 for other supported environments.
 
@@ -207,7 +207,7 @@ broader CJK) is tracked in [`docs/PRD-NEXT.md`](https://github.com/VoldemortGin/
 ## Build & install
 
 Requirements: Rust (pinned to **1.96.0** by `rust-toolchain.toml`), **Python ≥
-3.12**, [maturin](https://www.maturin.rs/) ≥ 1.12,<2. [uv](https://docs.astral.sh/uv/)
+3.11**, [maturin](https://www.maturin.rs/) ≥ 1.12,<2. [uv](https://docs.astral.sh/uv/)
 recommended.
 
 ```bash

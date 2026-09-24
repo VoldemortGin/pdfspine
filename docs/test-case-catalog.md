@@ -2758,7 +2758,7 @@ deterministic model-output fixtures.
 | `TATR-017` | zero detections still preserve process-level model revisions/device metadata | benchmark reproducibility contract | green |
 | `TATR-018` | aggregate output separates recall-weighted end-to-end GriTS from matched-only structure GriTS; detector P/R/F1 uses raw `detection_bbox`, while GriTS pairing uses final `Table.bbox` | benchmark metric contract | green |
 | `TATR-019` | persistent JSONL protocol retries legal short writes instead of truncating large table payloads | benchmark runtime contract | green |
-| `TATR-020` | optional-dependency markers encode Python 3.12–3.14 plus the supported Linux/macOS/Windows CPU matrix without restricting the base wheel; musl is documented separately | packaging support contract | green |
+| `TATR-020` | optional-dependency markers encode Python 3.11–3.14 plus the supported Linux/macOS/Windows CPU matrix without restricting the base wheel; musl is documented separately | packaging support contract | green |
 | `TATR-021` | matching native vector-line geometry or model edge evidence may enlarge only the structure-recognition crop; metadata preserves detector/crop provenance, and both guidance controls are independently disableable | pdfspine evidence-fusion contract | green |
 | `TATR-022` | `iou`/`iob` numeric values plus the zero-area/zero-union guarded returns | TATR postprocess parity | green |
 | `TATR-023` | `apply_class_thresholds` keeps only bboxes above their per-class score | TATR postprocess parity | green |

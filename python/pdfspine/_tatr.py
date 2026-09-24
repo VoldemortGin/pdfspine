@@ -409,7 +409,7 @@ def _runtime_platform_error(
     os_name = platform_name or sys.platform
     arch = (machine or platform.machine()).casefold()
     if version >= (3, 15):
-        return "the prebuilt TATR runtime currently supports Python 3.12-3.14"
+        return "the prebuilt TATR runtime currently supports Python 3.11-3.14"
     if os_name not in {"darwin", "win32"} and not os_name.startswith("linux"):
         return f"prebuilt PyTorch wheels are not supported on platform {os_name!r}"
     if os_name == "darwin" and arch in {"x86_64", "amd64"}:
@@ -434,7 +434,7 @@ def _missing_runtime(exc: BaseException) -> PdfUnsupportedError:
     if unsupported:
         return PdfUnsupportedError(
             f"The optional TATR backend is unavailable on this platform: {unsupported}. "
-            "Use Apple Silicon macOS, glibc Linux, or Windows with Python 3.12-3.14, "
+            "Use Apple Silicon macOS, glibc Linux, or Windows with Python 3.11-3.14, "
             "or provide a separately validated source-built Torch runtime."
         )
     return PdfUnsupportedError(
