@@ -20,17 +20,21 @@
   worktree, preserving other active tasks. Inspect with
   `git -C /Users/linhan/startup/spine/pdfspine log --oneline --first-parent -6`
   and `git -C /Users/linhan/startup/spine/pdfspine worktree list`.
-- **Released vs unreleased.** The published release is **`v0.11.1`** (annotated
-  tag at commit `4dd50bd`, 2026-09-23; release run `35836561369`, published via
-  PyPI Trusted Publishing / OIDC; on PyPI as `pdfspine` 0.11.1 — **6 files**:
+- **Released vs unreleased.** The published release is **`v0.11.2`** (annotated
+  tag at commit `78a64d6`, 2026-09-24; release run `35970760425`, published via
+  PyPI Trusted Publishing / OIDC; on PyPI as `pdfspine` 0.11.2 — **6 files**:
   five cp311-abi3 wheels [macOS x86_64/arm64, manylinux x86_64/aarch64,
-  win_amd64] + sdist; plus a GitHub Release `v0.11.1`). It is a bug-fix release
-  on top of **`v0.11.0`** (tag `5a1f22e`, 2026-09-19; PyPI + tag only, **no
-  GitHub Release**), which added `Page.get_paint_profile()`, itself on top of
-  **`v0.10.0`** (tag `f48854b`, 2026-09-18; GitHub Release `v0.10.0`), which
-  added typed `Table.slots` / `Table.origin_cells`. 0.11.1 fixes the
-  `engine="paddle"` OCR sort panic (`ocrspine` bumped to `041958a`; engine
-  panics become `PdfUnsupportedError`) and corrects the OCR docstrings/README.
+  win_amd64] + sdist; plus a GitHub Release `v0.11.2`). It is a bug-fix release
+  on top of **`v0.11.1`** (tag `4dd50bd`, 2026-09-23; release run
+  `35836561369`; GitHub Release `v0.11.1`), which fixed the `engine="paddle"`
+  OCR sort panic (`ocrspine` bumped to `041958a`; engine panics become
+  `PdfUnsupportedError`), itself on top of **`v0.11.0`** (tag `5a1f22e`,
+  2026-09-19; PyPI + tag only, **no GitHub Release**), which added
+  `Page.get_paint_profile()`, itself on top of **`v0.10.0`** (tag `f48854b`,
+  2026-09-18; GitHub Release `v0.10.0`), which added typed `Table.slots` /
+  `Table.origin_cells`. 0.11.2 switches the remaining float sort comparators
+  (table, Markdown, typeset) from `partial_cmp` to `total_cmp` (ADR 0006), so a
+  NaN coordinate no longer panics the sort; finite-input output is unchanged.
   Coverage is unchanged at 703/769 (91.4%). The earlier **`v0.9.1`** (tag
   `e34de54`, 2026-09-16; release run `35067501343`) was a packaging / CI
   follow-up to **`v0.9.0`** (tag `b0c995f`, 2026-09-15): the `test` extra
@@ -49,7 +53,7 @@
   full-width-title columns) plus Adobe RGB JPEG rendering, OCG Intent
   visibility, the documentation validation baselines and the TableFormer /
   FinTabNet evaluation adapters. **`CHANGELOG.md` `[Unreleased]` is now empty**;
-  each release is captured under its own heading, from `## [0.11.1] — 2026-09-23`
+  each release is captured under its own heading, from `## [0.11.2] — 2026-09-24`
   back to the 0.9.0 slate under `## [0.9.0] — 2026-09-15`.
 - **Gate.** `./ci.sh` runs `scripts/quality_gate.py`, phases in order
   `rust → extension → python → drift → artifacts`. The `extension` phase
@@ -119,6 +123,8 @@
   SSH connection mid-transfer, so the `push` failed; the same already-gated
   commit was re-pushed with `--no-verify`.
   **The next open backlog item is #3.**
+
+- [x] **Cut release `v0.11.2`** — annotated tag `v0.11.2` at `78a64d6` (2026-09-24); release run `35970760425` (Trusted Publishing / OIDC); on PyPI (6 files) + GitHub Release `v0.11.2`.
 
 - [x] **Cut release `v0.11.1`** — annotated tag `v0.11.1` at `4dd50bd` (2026-09-23); release run `35836561369` (Trusted Publishing / OIDC); on PyPI (6 files) + GitHub Release `v0.11.1`. (`v0.11.0` at `5a1f22e`, 2026-09-19, shipped to PyPI with a tag but no GitHub Release.)
 

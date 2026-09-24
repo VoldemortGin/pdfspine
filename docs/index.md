@@ -70,7 +70,7 @@ The current local source targets **PyMuPDF 1.24.x**. The machine-readable
 | Out-of-scope | 66 | Intentionally never in v1 |
 | **Total baseline** | **769** | **91.4% implemented** |
 
-Published **v0.11.1** at `4dd50bdf37f4cdcc5a35704daa2df9c7bed06e22`
+Published **v0.11.2** at `78a64d6e252ab739fcbad66c0d7f5328a080d667`
 has **703/769 (91.4%) implemented, 0 deferred**. The named 2026-09-11 local
 paragraph-dash full gate passed **2,034 Rust /
 1,535 Python tests**, with 68 existing Python skips, including the earlier
