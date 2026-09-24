@@ -11,6 +11,14 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
+### Fixed
+
+- `Page.get_pixmap()` (render fallback path), `DisplayList.get_pixmap()` and
+  `Page.get_svg_image()` now convert a Rust panic raised while rendering (e.g.
+  inside tiny-skia rasterization or ttf-parser font parsing) into
+  `PdfUnsupportedError` instead of letting an uncatchable
+  `pyo3_runtime.PanicException` escape to Python (ADR 0006).
+
 ## [0.11.2] — 2026-09-24
 
 ### Fixed

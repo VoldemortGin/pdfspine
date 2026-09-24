@@ -51,7 +51,7 @@ use pdf_image::pixmap::{Colorspace, Pixmap};
 use pdf_text::{interpret_page_render, ImageOp, RenderOp, ShadingOp, TextRun};
 
 use crate::canvas::Canvas;
-use crate::error::{Error, Result};
+use crate::error::{contain_render_panic, Error, Result};
 use crate::glyph_cache::GlyphMaskCache;
 use crate::image::{
     draw_axial_shading, draw_image, draw_image_mask, draw_radial_shading, PdfFunction,
@@ -240,11 +240,17 @@ impl DisplayList {
     /// # Errors
     ///
     /// [`Error::InvalidArgument`] / [`Error::LimitExceeded`] for bad geometry;
+    /// [`Error::Unsupported`] for a panic contained at this boundary (ADR 0006);
     /// propagates `pdf-core` / `pdf-image` errors during op replay.
     pub fn get_pixmap(&self, doc: &DocumentStore, opts: &RenderOptions) -> Result<Pixmap> {
-        let mut canvas = build_canvas(self.cropbox, self.rotate, opts)?;
-        replay(&mut canvas, doc, &self.ops, &RenderCtx::page())?;
-        canvas.into_pixmap()
+        contain_render_panic(
+            "pdf-render: DisplayList::get_pixmap panicked on malformed content",
+            || {
+                let mut canvas = build_canvas(self.cropbox, self.rotate, opts)?;
+                replay(&mut canvas, doc, &self.ops, &RenderCtx::page())?;
+                canvas.into_pixmap()
+            },
+        )
     }
 }
 
@@ -253,24 +259,32 @@ impl DisplayList {
 /// Computes the device transform + target geometry, builds a [`Canvas`], records
 /// the page's ordered drawcalls (reusing the [`pdf_text`] interpreter via its
 /// opt-in render sink), replays them in z-order, and converts to the requested
-/// output format. Never panics on malformed content (PRD §8.1).
+/// output format. Never panics on malformed content (PRD §8.1): a panic raised
+/// while rendering (e.g. inside tiny-skia or ttf-parser) is caught at this
+/// boundary and returned as [`Error::Unsupported`] (ADR 0006).
 ///
 /// # Errors
 ///
 /// [`Error::InvalidArgument`] for a degenerate render geometry,
-/// [`Error::LimitExceeded`] when the target would exceed the pixel ceiling, and
-/// propagated `pdf-core` / `pdf-image` errors.
+/// [`Error::LimitExceeded`] when the target would exceed the pixel ceiling,
+/// [`Error::Unsupported`] for a contained rendering panic, and propagated
+/// `pdf-core` / `pdf-image` errors.
 pub fn render_page(doc: &DocumentStore, page: &Page, opts: &RenderOptions) -> Result<Pixmap> {
-    let cropbox = page.cropbox();
-    let rotate = page.rotation();
-    let mut canvas = build_canvas(cropbox, rotate, opts)?;
+    contain_render_panic(
+        "pdf-render: render_page panicked on malformed content",
+        || {
+            let cropbox = page.cropbox();
+            let rotate = page.rotation();
+            let mut canvas = build_canvas(cropbox, rotate, opts)?;
 
-    let ops = match page.dict() {
-        Some(dict) => interpret_page_render(doc, &dict),
-        None => Vec::new(),
-    };
-    replay(&mut canvas, doc, &ops, &RenderCtx::page())?;
-    canvas.into_pixmap()
+            let ops = match page.dict() {
+                Some(dict) => interpret_page_render(doc, &dict),
+                None => Vec::new(),
+            };
+            replay(&mut canvas, doc, &ops, &RenderCtx::page())?;
+            canvas.into_pixmap()
+        },
+    )
 }
 
 // === canvas + device transform ============================================

@@ -60,3 +60,50 @@ impl Error {
 
 /// Convenience alias used throughout `pdf-render`.
 pub type Result<T> = std::result::Result<T, Error>;
+
+/// Contains a panic from third-party rendering code (tiny-skia rasterization,
+/// ttf-parser font parsing, ...) at a `pdf-render` public entry point, turning
+/// it into [`Error::Unsupported`]`(ctx)` instead of letting it unwind across the
+/// PyO3 boundary as `pyo3_runtime.PanicException` (a `BaseException`, not caught
+/// by `except Exception`). See ADR 0006. The panic payload is discarded, as in
+/// the `pdf-image` codec wrappers; the default panic hook still reports it on
+/// stderr.
+///
+/// # Unwind safety
+///
+/// `AssertUnwindSafe` is sound here: `pdf-render` holds no shared mutable state
+/// (its `FontCache` / `GlyphMaskCache` are locals of each call and are dropped
+/// with the unwound frame), the `pdf-fonts` tables are `OnceLock`s that stay
+/// unset if their init panics, and the `DocumentStore` `RwLock` guards are held
+/// only across a map lookup/insert inside `pdf-core`, never across rendering
+/// code; a poisoned lock there degrades to a typed error or a cache miss.
+pub(crate) fn contain_render_panic<T>(
+    ctx: &'static str,
+    f: impl FnOnce() -> Result<T>,
+) -> Result<T> {
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)) {
+        Ok(result) => result,
+        Err(_) => Err(Error::Unsupported(ctx)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn contain_render_panic_converts_panic_to_error() {
+        let result: Result<()> = contain_render_panic("test: injected panic", || panic!("boom"));
+        assert!(matches!(
+            result,
+            Err(Error::Unsupported("test: injected panic"))
+        ));
+    }
+
+    #[test]
+    fn contain_render_panic_passes_through_results() {
+        assert_eq!(contain_render_panic("unused", || Ok(7)).unwrap(), 7);
+        let err = contain_render_panic::<()>("unused", || Err(Error::InvalidArgument("bad")));
+        assert!(matches!(err, Err(Error::InvalidArgument("bad"))));
+    }
+}

@@ -48,7 +48,7 @@ use pdf_text::model::{PathItem, PositionedGlyph};
 use pdf_text::{interpret_page_render, ImageOp, RenderOp, ShadingOp, TextRun};
 use ttf_parser::{Face, GlyphId, OutlineBuilder};
 
-use crate::error::Result;
+use crate::error::{contain_render_panic, Result};
 
 /// Options controlling an SVG export (PyMuPDF `Page.get_svg_image(matrix=…)`).
 #[derive(Clone, Debug)]
@@ -72,20 +72,28 @@ impl Default for SvgOptions {
 /// Records the page's ordered [`RenderOp`] stream (reusing the rasterizer's
 /// interpreter sink) and serializes it to a well-formed `<svg>` document. An
 /// empty / contentless page yields a valid empty `<svg>`; malformed content
-/// degrades op-by-op and never panics.
+/// degrades op-by-op, and a panic raised while serializing (e.g. inside
+/// ttf-parser) is caught at this boundary (ADR 0006).
 ///
 /// # Errors
 ///
-/// Currently infallible for the serialization itself (the `Result` mirrors the
-/// sibling render entry points and leaves room for future limit checks).
+/// [`Error::Unsupported`](crate::error::Error::Unsupported) for a contained
+/// panic; the serialization itself is otherwise infallible (the `Result`
+/// mirrors the sibling render entry points and leaves room for future limit
+/// checks).
 pub fn get_svg_image(doc: &DocumentStore, page: &Page, opts: &SvgOptions) -> Result<String> {
-    let cropbox = page.cropbox();
-    let rotate = page.rotation();
-    let ops = match page.dict() {
-        Some(dict) => interpret_page_render(doc, &dict),
-        None => Vec::new(),
-    };
-    Ok(serialize(doc, &ops, cropbox, rotate, opts))
+    contain_render_panic(
+        "pdf-render: get_svg_image panicked on malformed content",
+        || {
+            let cropbox = page.cropbox();
+            let rotate = page.rotation();
+            let ops = match page.dict() {
+                Some(dict) => interpret_page_render(doc, &dict),
+                None => Vec::new(),
+            };
+            Ok(serialize(doc, &ops, cropbox, rotate, opts))
+        },
+    )
 }
 
 /// Serializes an ordered op stream into a standalone SVG document.
