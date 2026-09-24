@@ -32,9 +32,12 @@
 //!   (the decoded Pixmap re-encoded to PNG), placed by its CTM.
 //! - **Shading** ([`RenderOp::Shading`]) → a `<linearGradient>`/`<radialGradient>`
 //!   def + a filled rect over the page.
+//! - **Transparency group** ([`RenderOp::BeginGroup`]) → a `<g opacity=…>` when
+//!   the group alpha is below 1 (otherwise no markup).
 //!
 //! Deferrals (documented gaps, never errors): shading types 1/4–7 (only axial 2 /
-//! radial 3 emit a gradient), tiling patterns, blend modes, dashed-stroke
+//! radial 3 emit a gradient), tiling patterns, blend modes, soft masks, group
+//! `/BBox` clips, dashed-stroke
 //! patterns (solid stroke is emitted). Malformed input never panics — a broken
 //! op is skipped, mirroring the rasterizer's degradation contract.
 
@@ -221,6 +224,22 @@ fn walk_ops(doc: &DocumentStore, ops: &[RenderOp], w: &mut SvgWriter, body: &mut
             RenderOp::Text(run) => write_text(doc, run, body),
             RenderOp::Image(img) => write_image(doc, img, body),
             RenderOp::Shading(sh) => write_shading(doc, sh, w, body),
+            RenderOp::BeginGroup(group) => {
+                // A group scope; clips opened inside it close with the group.
+                let opacity = opacity_attr("opacity", group.alpha);
+                if opacity.is_empty() {
+                    scopes.push(0);
+                } else {
+                    let _ = writeln!(body, "<g{opacity}>");
+                    scopes.push(1);
+                }
+            }
+            RenderOp::EndGroup => {
+                for _ in 0..scopes.pop().unwrap_or(0) {
+                    body.push_str("</g>\n");
+                }
+            }
+            RenderOp::BlendMode(_) | RenderOp::SoftMask(_) => {}
         }
     }
 

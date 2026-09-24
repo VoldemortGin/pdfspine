@@ -48,7 +48,9 @@ use pdf_core::geom::{IRect, Matrix, Rect};
 use pdf_core::{Dict, DocumentStore, Name, ObjRef, Object, Page};
 use pdf_image::codecs::{decode_image_stream, pixmap_from_decoded};
 use pdf_image::pixmap::{Colorspace, Pixmap};
-use pdf_text::{interpret_page_render, ImageOp, RenderOp, ShadingOp, TextRun};
+use pdf_text::{
+    interpret_page_render, ImageOp, PathItem, RenderOp, ShadingOp, SoftMaskOp, TextRun,
+};
 
 use crate::canvas::Canvas;
 use crate::error::{Error, Result};
@@ -404,6 +406,9 @@ fn replay_iter<'a>(
     // BaseFont + FontDescriptor object identity is not available; use a Vec of
     // (fingerprint, bytes) so repeated runs of the same font reuse the parse.
     let mut font_cache: FontCache = FontCache::new();
+    // Groups opened by this stream are closed at its end even when the
+    // (selected / malformed) stream leaves them unbalanced.
+    let group_depth = canvas.group_depth();
 
     for op in ops {
         match op {
@@ -417,7 +422,7 @@ fn replay_iter<'a>(
                 even_odd,
             } => {
                 let color = ctx.fill_override.unwrap_or(*color);
-                let paint = Paint::from_rgb_alpha(color, *alpha);
+                let paint = Paint::from_rgb_alpha(color, *alpha).with_blend(canvas.blend());
                 // Geometry already carries the CTM (interpreter applies it);
                 // `ctx.extra_ctm` adds the Type3 glyph-space → user-space map
                 // (identity at the page level).
@@ -433,7 +438,7 @@ fn replay_iter<'a>(
                 dashes,
             } => {
                 let color = ctx.fill_override.unwrap_or(*color);
-                let paint = Paint::from_rgb_alpha(color, *alpha);
+                let paint = Paint::from_rgb_alpha(color, *alpha).with_blend(canvas.blend());
                 let eff_ctm = Matrix::concat(ctm, &ctx.extra_ctm);
                 let dev_scale = scale_for_ctm(eff_ctm, canvas.base_transform());
                 let style = stroke_style(*width, dev_scale, dashes);
@@ -445,9 +450,74 @@ fn replay_iter<'a>(
             RenderOp::Text(run) => draw_text(canvas, doc, run, &mut font_cache, ctx)?,
             RenderOp::Image(img) => draw_image_op(canvas, doc, img)?,
             RenderOp::Shading(sh) => draw_shading_op(canvas, doc, sh)?,
+            RenderOp::BlendMode(mode) => canvas.set_blend(*mode),
+            RenderOp::SoftMask(mask) => {
+                let mask = match mask {
+                    Some(sm) => Some(build_soft_mask(canvas, doc, sm, ctx)?),
+                    None => None,
+                };
+                canvas.set_soft_mask(mask);
+            }
+            RenderOp::BeginGroup(group) => {
+                canvas.begin_group(group.alpha, group.isolated)?;
+                if let Some(q) = group.bbox {
+                    let items = [
+                        PathItem::Line(q.ll, q.lr),
+                        PathItem::Line(q.lr, q.ur),
+                        PathItem::Line(q.ur, q.ul),
+                        PathItem::Line(q.ul, q.ll),
+                    ];
+                    set_clip(canvas, &items, ctx.extra_ctm, false)?;
+                }
+            }
+            RenderOp::EndGroup => {
+                if canvas.group_depth() > group_depth {
+                    canvas.end_group();
+                }
+            }
         }
     }
+    canvas.end_groups_to(group_depth);
     Ok(())
+}
+
+/// Rasterizes an ExtGState soft mask (PDF 32000-1 §11.6.5.2) into a
+/// device-space mask for `canvas`: the mask group is painted onto a scratch
+/// canvas of the same geometry — over its opaque `/BC` backdrop for a
+/// luminosity mask, over transparency for an alpha mask — and each pixel's
+/// luminosity (Rec. 601 weights) or alpha, mapped through `/TR`, becomes the
+/// mask value. Outside the group's `/BBox` the value is the backdrop's.
+fn build_soft_mask(
+    canvas: &Canvas,
+    doc: &DocumentStore,
+    sm: &SoftMaskOp,
+    ctx: &RenderCtx,
+) -> Result<tiny_skia::Mask> {
+    let (w, h) = (canvas.width(), canvas.height());
+    let mut scratch = Canvas::blank(w, h, canvas.base_transform(), Colorspace::Rgb, true)?;
+    if sm.luminosity {
+        let [_, r, g, b] = sm.backdrop.to_be_bytes();
+        scratch.fill_background([r, g, b, 255]);
+    }
+    replay(&mut scratch, doc, &sm.ops, ctx)?;
+    let mut mask = tiny_skia::Mask::new(w, h).ok_or(Error::LimitExceeded("soft mask too large"))?;
+    for (m, px) in mask.data_mut().iter_mut().zip(scratch.pixmap().pixels()) {
+        let v = if sm.luminosity {
+            // Premultiplied channels: a partially transparent pixel reads as
+            // composited over black.
+            let y = 0.30 * f32::from(px.red())
+                + 0.59 * f32::from(px.green())
+                + 0.11 * f32::from(px.blue());
+            y.round().clamp(0.0, 255.0) as u8
+        } else {
+            px.alpha()
+        };
+        *m = match &sm.transfer {
+            Some(lut) => lut.get(usize::from(v)).copied().unwrap_or(v),
+            None => v,
+        };
+    }
+    Ok(mask)
 }
 
 /// Builds a device-space [`StrokeStyle`] from a user-space line width, the CTM's
@@ -759,6 +829,7 @@ fn draw_text(
             &mut scratch,
             Some(&mut *glyph_masks),
             key,
+            run.fill_alpha,
         );
     }
     Ok(())

@@ -32,10 +32,9 @@
 //!
 //! ## Deferrals
 //!
-//! Tiling patterns (type 1), PostScript (type 4) functions, shading types 1/4–7
-//! (function-based / mesh), transparency-group isolation/knockout, and blend
-//! modes other than normal `SrcOver` are **deferred** (documented gaps). Images
-//! and shadings paint through the canvas clip.
+//! Tiling patterns (type 1), PostScript (type 4) functions and shading types
+//! 1/4–7 (function-based / mesh) are **deferred** (documented gaps). Images and
+//! shadings paint through the canvas clip / soft mask and blend mode.
 
 use pdf_core::geom::Matrix;
 use pdf_image::pixmap::{Colorspace, Pixmap};
@@ -95,7 +94,7 @@ pub fn draw_image(canvas: &mut Canvas, image: &Pixmap, ctm: Matrix, alpha: u8) -
 
     let paint = PixmapPaint {
         opacity: alpha as f32 / 255.0,
-        blend_mode: tiny_skia::BlendMode::SourceOver,
+        blend_mode: crate::canvas::sk_blend(canvas.blend()),
         quality: FilterQuality::Bilinear,
     };
     let (pixmap, mask) = canvas.pixmap_and_clip_mut();
@@ -165,7 +164,7 @@ pub fn draw_image_mask(
         .ok_or(Error::InvalidArgument("stencil pixmap build failed"))?;
     let paint = PixmapPaint {
         opacity: alpha as f32 / 255.0,
-        blend_mode: tiny_skia::BlendMode::SourceOver,
+        blend_mode: crate::canvas::sk_blend(canvas.blend()),
         quality: FilterQuality::Bilinear,
     };
     let (pixmap, mask) = canvas.pixmap_and_clip_mut();
@@ -369,6 +368,7 @@ fn fill_canvas_with_shader(canvas: &mut Canvas, shader: Shader) -> Result<()> {
     let paint = SkPaint {
         shader,
         anti_alias: true,
+        blend_mode: crate::canvas::sk_blend(canvas.blend()),
         ..SkPaint::default()
     };
     let (pixmap, mask) = canvas.pixmap_and_clip_mut();

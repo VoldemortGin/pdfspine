@@ -7,10 +7,11 @@
 
 use std::sync::Arc;
 
-use tiny_skia::{Mask, Pixmap as SkPixmap, Transform};
+use tiny_skia::{Mask, Pixmap as SkPixmap, PixmapPaint, Transform};
 
 use pdf_core::geom::Matrix;
 use pdf_image::pixmap::{Colorspace, Pixmap};
+use pdf_text::BlendMode;
 
 use crate::error::{Error, Result};
 
@@ -41,8 +42,64 @@ pub struct Canvas {
     /// bump instead of deep-copying the device-size buffer; a later
     /// `intersect_clip` copies on write only if a snapshot still shares it.
     clip: Option<Arc<Mask>>,
-    /// The saved graphics-state clip snapshots (the `q`/`Q` clip stack).
-    clip_stack: Vec<Option<Arc<Mask>>>,
+    /// The current ExtGState soft mask (device-space mask values), or `None`.
+    soft_mask: Option<Arc<Mask>>,
+    /// The mask every paint uses: `clip ∩ soft_mask` (either alone when the
+    /// other is absent), recomputed whenever one of them changes.
+    paint_mask: Option<Arc<Mask>>,
+    /// The current blend mode (ExtGState `/BM`).
+    blend: BlendMode,
+    /// The saved graphics-state snapshots (the `q`/`Q` stack).
+    state_stack: Vec<SavedState>,
+    /// Open transparency groups, innermost last.
+    layers: Vec<Layer>,
+}
+
+/// One `q` snapshot of the canvas-held graphics state.
+struct SavedState {
+    clip: Option<Arc<Mask>>,
+    soft_mask: Option<Arc<Mask>>,
+    paint_mask: Option<Arc<Mask>>,
+    blend: BlendMode,
+}
+
+/// An open transparency group. When the group needs its own backing store
+/// (`backdrop` is `Some`), painting goes to a fresh transparent pixmap and the
+/// parent's pixels wait in `backdrop` until [`Canvas::end_group`].
+struct Layer {
+    backdrop: Option<SkPixmap>,
+    /// Group constant alpha (0–255).
+    alpha: u8,
+    /// The soft mask / blend mode in effect at the group, applied when it is
+    /// composited (and restored afterwards).
+    soft_mask: Option<Arc<Mask>>,
+    blend: BlendMode,
+    /// `state_stack` length right after the group's own save; a `Q` inside the
+    /// group never pops below it.
+    state_depth: usize,
+}
+
+/// The rasterizer blend mode for a PDF blend mode.
+pub(crate) fn sk_blend(mode: BlendMode) -> tiny_skia::BlendMode {
+    use tiny_skia::BlendMode as Sk;
+    match mode {
+        BlendMode::Normal => Sk::SourceOver,
+        BlendMode::Multiply => Sk::Multiply,
+        BlendMode::Screen => Sk::Screen,
+        BlendMode::Overlay => Sk::Overlay,
+        BlendMode::Darken => Sk::Darken,
+        BlendMode::Lighten => Sk::Lighten,
+        BlendMode::ColorDodge => Sk::ColorDodge,
+        BlendMode::ColorBurn => Sk::ColorBurn,
+        BlendMode::HardLight => Sk::HardLight,
+        BlendMode::SoftLight => Sk::SoftLight,
+        BlendMode::Difference => Sk::Difference,
+        BlendMode::Exclusion => Sk::Exclusion,
+        BlendMode::Hue => Sk::Hue,
+        BlendMode::Saturation => Sk::Saturation,
+        BlendMode::Color => Sk::Color,
+        BlendMode::Luminosity => Sk::Luminosity,
+    }
 }
 
 /// Rounded division by 255 without a widening integer division. For byte
@@ -85,7 +142,11 @@ impl Canvas {
             out_colorspace,
             out_alpha,
             clip: None,
-            clip_stack: Vec::new(),
+            soft_mask: None,
+            paint_mask: None,
+            blend: BlendMode::Normal,
+            state_stack: Vec::new(),
+            layers: Vec::new(),
         })
     }
 
@@ -184,11 +245,118 @@ impl Canvas {
         self.clip.as_deref()
     }
 
-    /// Mutable pixmap **and** a shared borrow of the clip together (disjoint
-    /// fields), so a fill/stroke can pass the clip straight to tiny-skia without
-    /// cloning the whole device-size mask on every paint op.
+    /// Mutable pixmap **and** a shared borrow of the paint mask (the clip,
+    /// intersected with any soft mask) together (disjoint fields), so a paint
+    /// can pass it straight to tiny-skia without cloning the whole device-size
+    /// mask on every paint op.
     pub(crate) fn pixmap_and_clip_mut(&mut self) -> (&mut SkPixmap, Option<&Mask>) {
-        (&mut self.pixmap, self.clip.as_deref())
+        (&mut self.pixmap, self.paint_mask.as_deref())
+    }
+
+    /// The current blend mode (ExtGState `/BM`).
+    pub(crate) fn blend(&self) -> BlendMode {
+        self.blend
+    }
+
+    /// Sets the blend mode for later paints (scoped by `save`/`restore`).
+    pub(crate) fn set_blend(&mut self, blend: BlendMode) {
+        self.blend = blend;
+    }
+
+    /// Sets (or clears) the soft mask for later paints (scoped by
+    /// `save`/`restore`). The mask must be device-sized.
+    pub(crate) fn set_soft_mask(&mut self, mask: Option<Mask>) {
+        self.soft_mask = mask.map(Arc::new);
+        self.refresh_paint_mask();
+    }
+
+    /// Recomputes `paint_mask = clip ∩ soft_mask`.
+    fn refresh_paint_mask(&mut self) {
+        self.paint_mask = match (&self.clip, &self.soft_mask) {
+            (Some(clip), Some(soft)) => {
+                let mut both = (**clip).clone();
+                for (a, b) in both.data_mut().iter_mut().zip(soft.data()) {
+                    *a = intersect_coverage(*a, *b);
+                }
+                Some(Arc::new(both))
+            }
+            (Some(one), None) | (None, Some(one)) => Some(one.clone()),
+            (None, None) => None,
+        };
+    }
+
+    /// Opens a transparency group: saves the graphics state (like `save`),
+    /// then resets alpha / blend mode / soft mask for the group's content.
+    ///
+    /// The group paints into its own transparent layer when its result cannot
+    /// equal direct painting: a constant `alpha` below 255, a non-Normal blend
+    /// mode or a soft mask in effect, or an `isolated` group. Otherwise it is
+    /// painted straight onto the current target. Non-isolated groups that do
+    /// get a layer are composited as isolated, and knockout is not modelled
+    /// (documented approximations).
+    ///
+    /// # Errors
+    /// [`Error::LimitExceeded`] when the layer cannot be allocated.
+    pub(crate) fn begin_group(&mut self, alpha: u8, isolated: bool) -> Result<()> {
+        self.save();
+        let needs_layer =
+            alpha < 255 || self.blend != BlendMode::Normal || self.soft_mask.is_some() || isolated;
+        let backdrop = if needs_layer {
+            let layer = SkPixmap::new(self.pixmap.width(), self.pixmap.height())
+                .ok_or(Error::LimitExceeded("transparency group too large"))?;
+            Some(std::mem::replace(&mut self.pixmap, layer))
+        } else {
+            None
+        };
+        self.layers.push(Layer {
+            backdrop,
+            alpha,
+            soft_mask: self.soft_mask.take(),
+            blend: std::mem::take(&mut self.blend),
+            state_depth: self.state_stack.len(),
+        });
+        self.refresh_paint_mask();
+        Ok(())
+    }
+
+    /// Closes the innermost transparency group: composites its layer onto the
+    /// parent with the group alpha, blend mode and soft mask, then restores the
+    /// state saved by [`Canvas::begin_group`]. A tolerant no-op without an
+    /// open group.
+    pub(crate) fn end_group(&mut self) {
+        let Some(layer) = self.layers.pop() else {
+            return;
+        };
+        self.state_stack.truncate(layer.state_depth);
+        if let Some(backdrop) = layer.backdrop {
+            let content = std::mem::replace(&mut self.pixmap, backdrop);
+            let paint = PixmapPaint {
+                opacity: f32::from(layer.alpha) / 255.0,
+                blend_mode: sk_blend(layer.blend),
+                quality: tiny_skia::FilterQuality::Nearest,
+            };
+            self.pixmap.draw_pixmap(
+                0,
+                0,
+                content.as_ref(),
+                &paint,
+                Transform::identity(),
+                layer.soft_mask.as_deref(),
+            );
+        }
+        self.restore();
+    }
+
+    /// The number of open transparency groups.
+    pub(crate) fn group_depth(&self) -> usize {
+        self.layers.len()
+    }
+
+    /// Closes open groups until at most `depth` remain (unbalanced content).
+    pub(crate) fn end_groups_to(&mut self, depth: usize) {
+        while self.layers.len() > depth {
+            self.end_group();
+        }
     }
 
     /// Composes a PDF user-space CTM with the canvas base transform and converts
@@ -209,6 +377,9 @@ impl Canvas {
     /// device-space coverage mask). The first clip on a canvas simply adopts the
     /// mask; subsequent clips multiply coverage (clip regions only shrink).
     pub(crate) fn intersect_clip(&mut self, mask: Mask) {
+        // Release the derived paint mask first: it may share the clip's `Arc`,
+        // which would force the copy-on-write below to clone needlessly.
+        self.paint_mask = None;
         match &mut self.clip {
             Some(existing) => {
                 // Copy-on-write: `make_mut` clones the mask data only if a `save`
@@ -221,6 +392,7 @@ impl Canvas {
             }
             None => self.clip = Some(Arc::new(mask)),
         }
+        self.refresh_paint_mask();
     }
 
     /// Saves the current clip state (PDF `q`). Pairs with [`Canvas::restore`].
@@ -229,18 +401,31 @@ impl Canvas {
     /// q/Q handling); `allow(dead_code)` as M6a exercises it only in unit tests.
     #[allow(dead_code)]
     pub(crate) fn save(&mut self) {
-        self.clip_stack.push(self.clip.clone());
+        self.state_stack.push(SavedState {
+            clip: self.clip.clone(),
+            soft_mask: self.soft_mask.clone(),
+            paint_mask: self.paint_mask.clone(),
+            blend: self.blend,
+        });
     }
 
     /// Restores the most recently saved clip state (PDF `Q`). A `Q` without a
-    /// matching `q` is a tolerant no-op.
+    /// matching `q` (including one inside a transparency group that would pop
+    /// the group's own save) is a tolerant no-op.
     ///
     /// Part of the frozen crate API consumed by the M6d page driver; see
     /// [`Canvas::save`].
     #[allow(dead_code)]
     pub(crate) fn restore(&mut self) {
-        if let Some(prev) = self.clip_stack.pop() {
-            self.clip = prev;
+        let floor = self.layers.last().map_or(0, |l| l.state_depth);
+        if self.state_stack.len() <= floor {
+            return;
+        }
+        if let Some(prev) = self.state_stack.pop() {
+            self.clip = prev.clip;
+            self.soft_mask = prev.soft_mask;
+            self.paint_mask = prev.paint_mask;
+            self.blend = prev.blend;
         }
     }
 

@@ -33,7 +33,7 @@
 use std::collections::HashMap;
 
 use pdf_core::geom::{Matrix, Point};
-use pdf_text::PositionedGlyph;
+use pdf_text::{BlendMode, PositionedGlyph};
 use tiny_skia::{FillRule, Paint as SkPaint, PathBuilder, Stroke, Transform};
 use ttf_parser::{Face, GlyphId, OutlineBuilder};
 
@@ -407,6 +407,7 @@ pub fn draw_glyph_with_font(
         &mut scratch,
         None,
         (0, 0),
+        0xFF,
     );
     Ok(())
 }
@@ -426,7 +427,9 @@ pub fn draw_glyph_with_font(
 /// present the fill is served through it ([`GlyphMaskCache::fill_glyph`], keyed
 /// by `glyph_key = (font entry index, glyph id)`), which reproduces
 /// `Pixmap::fill_path` byte-for-byte to within the sub-pixel phase rounding. The
-/// frozen (font-less) callers pass `None` to keep the direct fill.
+/// frozen (font-less) callers pass `None` to keep the direct fill. The cache
+/// only serves opaque Normal-blend fills; a translucent `fill_alpha` (`ca`) or
+/// another blend mode fills directly.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn draw_glyph_path(
     canvas: &mut Canvas,
@@ -438,6 +441,7 @@ pub(crate) fn draw_glyph_path(
     scratch: &mut SkPaint<'static>,
     mask_cache: Option<&mut GlyphMaskCache>,
     glyph_key: (usize, u16),
+    fill_alpha: u8,
 ) {
     let mode = glyph.render_mode;
     if mode == 3 {
@@ -449,15 +453,19 @@ pub(crate) fn draw_glyph_path(
         return;
     }
 
+    let blend = canvas.blend();
     let (pixmap, clip) = canvas.pixmap_and_clip_mut();
     scratch.anti_alias = true;
+    scratch.blend_mode = crate::canvas::sk_blend(blend);
 
     if do_fill {
         let rgb = unpack_rgb(glyph.color);
         match mask_cache {
-            Some(cache) => cache.fill_glyph(pixmap, clip, path, transform, glyph_key, rgb),
-            None => {
-                scratch.set_color_rgba8(rgb[0], rgb[1], rgb[2], 0xFF);
+            Some(cache) if fill_alpha == 0xFF && blend == BlendMode::Normal => {
+                cache.fill_glyph(pixmap, clip, path, transform, glyph_key, rgb);
+            }
+            _ => {
+                scratch.set_color_rgba8(rgb[0], rgb[1], rgb[2], fill_alpha);
                 pixmap.fill_path(path, scratch, FillRule::Winding, transform, clip);
             }
         }

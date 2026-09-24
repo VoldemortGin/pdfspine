@@ -46,7 +46,7 @@ use smol_str::SmolStr;
 use crate::model::{
     DrawPath, ImageRef, InterpretResult, PaintKind, PathItem, PositionedGlyph, WritingDir,
 };
-use crate::renderops::{ImageOp, RenderOp, ShadingOp, TextRun};
+use crate::renderops::{BlendMode, GroupOp, ImageOp, RenderOp, ShadingOp, SoftMaskOp, TextRun};
 use crate::state::GraphicsState;
 use crate::tokenizer::{tokenize, Event};
 
@@ -713,9 +713,10 @@ impl<'a> ContentInterpreter<'a> {
                 }
             }
             b"gs" => {
-                // ExtGState: pull constant alpha `ca`/`CA` for the render sink.
+                // ExtGState: constant alpha, blend mode and soft mask for the
+                // render sink.
                 if self.recording() {
-                    self.apply_extgstate(ops, gs, resources);
+                    self.apply_extgstate(ops, gs, resources, depth, visited);
                 }
             }
             b"cm" => {
@@ -1438,65 +1439,125 @@ impl<'a> ContentInterpreter<'a> {
                 self.record_image_xobject(xname, stream, obj_num, gs, resources);
             }
             Some("Form") | None => {
-                // Depth + cycle guards.
-                if depth + 1 > MAX_FORM_DEPTH {
-                    return;
-                }
-                if let Some(num) = obj_num {
-                    if !visited.insert(num) {
-                        return; // cycle
-                    }
-                }
-                // Form /Matrix premultiplies the CTM.
-                let form_matrix = stream
-                    .dict
-                    .get(&Name::new("Matrix"))
-                    .and_then(Object::as_array)
-                    .and_then(array_to_matrix)
-                    .unwrap_or(Matrix::IDENTITY);
-                let inner_ctm = Matrix::concat(&form_matrix, &gs.ctm);
-                let mut inner_gs = gs.clone();
-                inner_gs.ctm = inner_ctm;
-                // MuPDF starts a Form with a fresh text state. In particular,
-                // a show operator before the Form's own `Tf` must not borrow
-                // the caller's font/size (real-world appearance streams often
-                // contain positioning + padding spaces before selecting one).
-                inner_gs.text = Default::default();
-                // A Form XObject is implicitly clipped to the transformed
-                // envelope of its `/BBox`, matching MuPDF structured text's
-                // scissor behavior for rotated/skewed boxes.
-                if let Some(bbox) = stream
-                    .dict
-                    .get(&Name::new("BBox"))
-                    .and_then(Object::as_array)
-                    .and_then(rect_from_array)
-                {
-                    apply_rectangular_clip(&mut inner_gs, Some(bbox.transform(&inner_ctm)));
-                }
-
-                // Form /Resources (fall back to the parent's per spec).
-                let form_res = self
-                    .doc
-                    .resolve_dict_key(&stream.dict, &Name::new("Resources"))
-                    .ok()
-                    .flatten()
-                    .and_then(|o| o.as_dict().cloned())
-                    .unwrap_or_else(|| resources.clone());
-
-                if let Ok(bytes) = self
-                    .doc
-                    .decode_stream(stream)
-                    .and_then(|o| o.into_decoded())
-                {
-                    self.run_with_state(&bytes, &form_res, inner_gs, depth + 1, visited);
-                }
-                if let Some(num) = obj_num {
-                    visited.remove(&num);
-                }
+                self.run_form(stream, obj_num, gs.clone(), resources, depth, visited);
             }
             // Other subtypes (PS, …): ignore.
             _ => {}
         }
+    }
+
+    /// Runs a Form XObject stream from `inner_gs` (the caller's state for `Do`,
+    /// a fresh state for a soft-mask group), applying its `/Matrix`, `/BBox`
+    /// clip and `/Resources`. When recording, a transparency group (`/Group /S
+    /// /Transparency`) is bracketed by [`RenderOp::BeginGroup`] (carrying the
+    /// caller's fill alpha and the `/BBox` clip) and [`RenderOp::EndGroup`];
+    /// its content then starts from alpha 1 (PDF 32000-1 §11.6.6).
+    fn run_form(
+        &mut self,
+        stream: &pdf_core::StreamObj,
+        obj_num: Option<u32>,
+        mut inner_gs: GraphicsState,
+        resources: &Dict,
+        depth: u32,
+        visited: &mut HashSet<u32>,
+    ) {
+        // Depth + cycle guards.
+        if depth + 1 > MAX_FORM_DEPTH {
+            return;
+        }
+        if let Some(num) = obj_num {
+            if !visited.insert(num) {
+                return; // cycle
+            }
+        }
+        // Form /Matrix premultiplies the CTM.
+        let form_matrix = stream
+            .dict
+            .get(&Name::new("Matrix"))
+            .and_then(Object::as_array)
+            .and_then(array_to_matrix)
+            .unwrap_or(Matrix::IDENTITY);
+        let inner_ctm = Matrix::concat(&form_matrix, &inner_gs.ctm);
+        inner_gs.ctm = inner_ctm;
+        // MuPDF starts a Form with a fresh text state. In particular,
+        // a show operator before the Form's own `Tf` must not borrow
+        // the caller's font/size (real-world appearance streams often
+        // contain positioning + padding spaces before selecting one).
+        inner_gs.text = Default::default();
+        // A Form XObject is implicitly clipped to the transformed
+        // envelope of its `/BBox`, matching MuPDF structured text's
+        // scissor behavior for rotated/skewed boxes.
+        let bbox = stream
+            .dict
+            .get(&Name::new("BBox"))
+            .and_then(Object::as_array)
+            .and_then(rect_from_array);
+        if let Some(bbox) = bbox {
+            apply_rectangular_clip(&mut inner_gs, Some(bbox.transform(&inner_ctm)));
+        }
+
+        // Form /Resources (fall back to the parent's per spec).
+        let form_res = self
+            .doc
+            .resolve_dict_key(&stream.dict, &Name::new("Resources"))
+            .ok()
+            .flatten()
+            .and_then(|o| o.as_dict().cloned())
+            .unwrap_or_else(|| resources.clone());
+
+        let group = if self.recording() {
+            self.transparency_group(&stream.dict)
+        } else {
+            None
+        };
+        if let Some(mut group) = group {
+            group.alpha = inner_gs.fill_alpha_u8();
+            group.bbox = bbox.map(|b| b.quad().transform(&inner_ctm));
+            inner_gs.fill_alpha = 1.0;
+            inner_gs.stroke_alpha = 1.0;
+            self.emit(RenderOp::BeginGroup(group));
+        }
+
+        if let Ok(bytes) = self
+            .doc
+            .decode_stream(stream)
+            .and_then(|o| o.into_decoded())
+        {
+            self.run_with_state(&bytes, &form_res, inner_gs, depth + 1, visited);
+        }
+        if group.is_some() {
+            self.emit(RenderOp::EndGroup);
+        }
+        if let Some(num) = obj_num {
+            visited.remove(&num);
+        }
+    }
+
+    /// The `/Group` of a Form XObject when it is a transparency group (`/S
+    /// /Transparency`), with its `/I` isolated and `/K` knockout flags.
+    fn transparency_group(&self, form: &Dict) -> Option<GroupOp> {
+        let group = self
+            .doc
+            .resolve_dict_key(form, &Name::new("Group"))
+            .ok()
+            .flatten()?;
+        let group = group.as_dict()?;
+        let subtype = group.get(&Name::new("S")).and_then(Object::as_name)?;
+        if subtype.as_str() != Some("Transparency") {
+            return None;
+        }
+        let flag = |key: &str| {
+            group
+                .get(&Name::new(key))
+                .and_then(Object::as_bool)
+                .unwrap_or(false)
+        };
+        Some(GroupOp {
+            bbox: None,
+            alpha: 255,
+            isolated: flag("I"),
+            knockout: flag("K"),
+        })
     }
 
     /// Records an Image XObject `Do` into the inventory (and, when recording, the
@@ -1710,9 +1771,17 @@ impl<'a> ContentInterpreter<'a> {
     // --- ExtGState + shading (render-op recording only) -------------------
 
     /// Applies a `/gs` ExtGState dict's constant alpha (`/ca`, `/CA`) to the
-    /// graphics state for the render sink. Other ExtGState keys (blend mode,
-    /// soft masks, …) are a documented deferral.
-    fn apply_extgstate(&mut self, ops: &[Object], gs: &mut GraphicsState, resources: &Dict) {
+    /// graphics state for the render sink, and records its blend mode (`/BM`)
+    /// and soft mask (`/SMask`) as ordered state ops. Other ExtGState keys
+    /// (overprint, alpha-is-shape, …) are a documented deferral.
+    fn apply_extgstate(
+        &mut self,
+        ops: &[Object],
+        gs: &mut GraphicsState,
+        resources: &Dict,
+        depth: u32,
+        visited: &mut HashSet<u32>,
+    ) {
         let Some(gname) = ops.iter().find_map(|o| o.as_name().and_then(Name::as_str)) else {
             return;
         };
@@ -1742,6 +1811,128 @@ impl<'a> ContentInterpreter<'a> {
         if let Some(ca) = dict.get(&Name::new("CA")).and_then(Object::as_f64) {
             gs.stroke_alpha = ca.clamp(0.0, 1.0);
         }
+        if let Some(bm) = dict.get(&Name::new("BM")) {
+            let names = match bm {
+                Object::Array(a) => a.iter().filter_map(Object::as_name).collect(),
+                other => other.as_name().into_iter().collect::<Vec<_>>(),
+            };
+            if let Some(mode) = names
+                .into_iter()
+                .find_map(|n| n.as_str().and_then(BlendMode::from_name))
+            {
+                self.emit(RenderOp::BlendMode(mode));
+            }
+        }
+        if let Some(smask) = self
+            .doc
+            .resolve_dict_key(&dict, &Name::new("SMask"))
+            .ok()
+            .flatten()
+        {
+            match smask.as_ref() {
+                Object::Name(n) if n.as_str() == Some("None") => {
+                    self.emit(RenderOp::SoftMask(None));
+                }
+                Object::Dictionary(d) => {
+                    let mask = self.soft_mask(d, gs, resources, depth, visited);
+                    self.emit(RenderOp::SoftMask(mask.map(Box::new)));
+                }
+                _ => {}
+            }
+        }
+    }
+
+    /// Records an ExtGState soft-mask dictionary (PDF 32000-1 §11.6.5.2): the
+    /// mask group `/G` is interpreted as a transparency group under the current
+    /// CTM into its own op stream, without touching the page's inventory or
+    /// recording indices. `None` for an unknown `/S` or a missing `/G` form (the
+    /// mask is then dropped, i.e. treated as `/None`).
+    fn soft_mask(
+        &mut self,
+        smask: &Dict,
+        gs: &GraphicsState,
+        resources: &Dict,
+        depth: u32,
+        visited: &mut HashSet<u32>,
+    ) -> Option<SoftMaskOp> {
+        let luminosity = match smask
+            .get(&Name::new("S"))
+            .and_then(Object::as_name)
+            .and_then(Name::as_str)
+        {
+            Some("Luminosity") => true,
+            Some("Alpha") => false,
+            _ => return None,
+        };
+        let g_num = smask
+            .get(&Name::new("G"))
+            .and_then(Object::as_reference)
+            .map(|r| r.num);
+        let g = self
+            .doc
+            .resolve_dict_key(smask, &Name::new("G"))
+            .ok()
+            .flatten()?;
+        let form = g.as_stream()?;
+        let backdrop = self
+            .doc
+            .resolve_dict_key(smask, &Name::new("BC"))
+            .ok()
+            .flatten()
+            .and_then(|bc| {
+                let comps: Vec<f64> = bc.as_array()?.iter().filter_map(Object::as_f64).collect();
+                approx_color(&comps)
+            })
+            .unwrap_or(0);
+        let transfer = smask.get(&Name::new("TR")).and_then(|tr| {
+            if tr.as_name().is_some() {
+                return None; // `/Identity` (or an unknown name): no transfer.
+            }
+            let func = pdf_core::parse_function(self.doc, tr)?;
+            Some(
+                (0..=255u16)
+                    .map(|i| {
+                        let v = func
+                            .eval(f32::from(i) / 255.0)
+                            .0
+                            .first()
+                            .copied()
+                            .unwrap_or(0.0);
+                        (v.clamp(0.0, 1.0) * 255.0).round() as u8
+                    })
+                    .collect(),
+            )
+        });
+
+        // Record the group into a private sink: its ops must not enter the
+        // page stream, and its glyphs / images must not enter the inventory.
+        let saved_ops = self.render_ops.replace(Vec::new());
+        let saved_out = std::mem::take(&mut self.out);
+        let saved_image_ops = self.image_ops.take();
+        let saved_text_ops = self.text_ops.take();
+        let saved_color_spaces = std::mem::take(&mut self.image_color_spaces);
+        let saved_hidden = std::mem::replace(&mut self.hidden_depth, 0);
+        self.run_form(
+            form,
+            g_num,
+            GraphicsState::new(gs.ctm),
+            resources,
+            depth,
+            visited,
+        );
+        let ops = std::mem::replace(&mut self.render_ops, saved_ops).unwrap_or_default();
+        self.out = saved_out;
+        self.image_ops = saved_image_ops;
+        self.text_ops = saved_text_ops;
+        self.image_color_spaces = saved_color_spaces;
+        self.hidden_depth = saved_hidden;
+
+        Some(SoftMaskOp {
+            luminosity,
+            backdrop,
+            transfer,
+            ops,
+        })
     }
 
     /// Handles `sh`: resolves `/Resources /Shading /<name>` and emits a

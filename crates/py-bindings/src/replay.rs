@@ -139,7 +139,17 @@ fn valid_op(op: &RenderOp, matrix: Matrix) -> bool {
         }
         RenderOp::Image(i) => finite(i.ctm) && finite(i.ctm * matrix),
         RenderOp::Shading(s) => finite(s.ctm) && finite(s.ctm * matrix),
-        RenderOp::Save | RenderOp::Restore => true,
+        RenderOp::BeginGroup(g) => g.bbox.is_none_or(|q| {
+            [q.ul, q.ur, q.ll, q.lr].into_iter().all(|p| {
+                let t = matrix.transform_point(p);
+                p.x.is_finite() && p.y.is_finite() && t.x.is_finite() && t.y.is_finite()
+            })
+        }),
+        RenderOp::Save
+        | RenderOp::Restore
+        | RenderOp::EndGroup
+        | RenderOp::BlendMode(_)
+        | RenderOp::SoftMask(_) => true,
     }
 }
 fn kind(op: &RenderOp) -> &'static str {
@@ -152,6 +162,10 @@ fn kind(op: &RenderOp) -> &'static str {
         RenderOp::Text(_) => "text",
         RenderOp::Image(_) => "image",
         RenderOp::Shading(_) => "shading",
+        RenderOp::BlendMode(_) => "blend_mode",
+        RenderOp::SoftMask(_) => "soft_mask",
+        RenderOp::BeginGroup(_) => "begin_group",
+        RenderOp::EndGroup => "end_group",
     }
 }
 
@@ -212,7 +226,21 @@ impl PyReplayEvent {
                 d.set_item("source_rect", self.record.rect())?;
                 d.set_item("area", self.area.map(rt))?;
             }
-            Some(RenderOp::Save | RenderOp::Restore) => d.set_item("depth", self.depth)?,
+            Some(RenderOp::Save | RenderOp::Restore | RenderOp::EndGroup) => {
+                d.set_item("depth", self.depth)?;
+            }
+            Some(RenderOp::BlendMode(mode)) => d.set_item("blend_mode", mode.name())?,
+            Some(RenderOp::SoftMask(mask)) => d.set_item(
+                "soft_mask",
+                mask.as_ref()
+                    .map(|m| if m.luminosity { "Luminosity" } else { "Alpha" }),
+            )?,
+            Some(RenderOp::BeginGroup(group)) => {
+                d.set_item("alpha", group.alpha)?;
+                d.set_item("isolated", group.isolated)?;
+                d.set_item("knockout", group.knockout)?;
+                d.set_item("depth", self.depth)?;
+            }
             Some(RenderOp::Fill {
                 items,
                 close,
@@ -386,7 +414,13 @@ pub(crate) fn prepare(
         }
         let state = matches!(
             op,
-            RenderOp::Save | RenderOp::Restore | RenderOp::Clip { .. }
+            RenderOp::Save
+                | RenderOp::Restore
+                | RenderOp::Clip { .. }
+                | RenderOp::BlendMode(_)
+                | RenderOp::SoftMask(_)
+                | RenderOp::BeginGroup(_)
+                | RenderOp::EndGroup
         );
         let bounds = match op {
             RenderOp::Fill { items, .. } | RenderOp::Clip { items, .. } => {
@@ -398,6 +432,7 @@ pub(crate) fn prepare(
                     .transform(&(i.ctm * matrix))
                     .rect(),
             ),
+            RenderOp::BeginGroup(g) => g.bbox.map(|q| q.transform(&matrix).rect()),
             // No recorded join/miter limit: retaining strokes is safer than an underestimated bbox.
             // Advance cells do not bound italic/Type3 ink. Do not cull text by an
             // unproven glyph envelope; payload still carries exact cell geometry.
@@ -408,7 +443,13 @@ pub(crate) fn prepare(
         }
         match op {
             RenderOp::Save => stack.push(clip),
-            RenderOp::Restore => {
+            RenderOp::BeginGroup(_) => {
+                stack.push(clip);
+                if let Some(b) = bounds {
+                    clip = Some(clip.map_or(b, |old| intersection(old, b)));
+                }
+            }
+            RenderOp::Restore | RenderOp::EndGroup => {
                 if let Some(saved) = stack.pop() {
                     clip = saved;
                 }

@@ -6,8 +6,8 @@
 //! bodies. See `ARCHITECTURE.md`.
 
 use tiny_skia::{
-    BlendMode as SkBlendMode, Color, FillRule, LineCap, LineJoin, Mask, Paint as SkPaint,
-    PathBuilder, Shader, Stroke, StrokeDash,
+    Color, FillRule, LineCap, LineJoin, Mask, Paint as SkPaint, PathBuilder, Shader, Stroke,
+    StrokeDash,
 };
 
 use pdf_core::geom::{Matrix, Point, Rect};
@@ -27,32 +27,9 @@ pub struct Paint {
     pub blend: BlendMode,
 }
 
-/// The subset of PDF blend modes the rasterizer supports (PRD §8.11). Normal
-/// (source-over) is always correct; `Multiply` and `Screen` map straight onto
-/// tiny-skia's separable equivalents. Other PDF blend modes (Overlay, Darken,
-/// …) are recognized by the interpreter but rendered as Normal here (documented
-/// deferral — see `ARCHITECTURE.md`).
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum BlendMode {
-    /// Source-over compositing (PDF `Normal` / `Compatible`).
-    #[default]
-    Normal,
-    /// Multiply blend.
-    Multiply,
-    /// Screen blend.
-    Screen,
-}
-
-impl BlendMode {
-    /// Maps to the rasterizer blend mode (unsupported → `SourceOver`).
-    fn to_sk(self) -> SkBlendMode {
-        match self {
-            BlendMode::Normal => SkBlendMode::SourceOver,
-            BlendMode::Multiply => SkBlendMode::Multiply,
-            BlendMode::Screen => SkBlendMode::Screen,
-        }
-    }
-}
+/// The PDF blend modes (ExtGState `/BM`); all map onto tiny-skia's separable
+/// and non-separable equivalents.
+pub use pdf_text::BlendMode;
 
 impl Paint {
     /// Builds an opaque paint from a packed `0x00RRGGBB` sRGB color (the form
@@ -95,7 +72,7 @@ impl Paint {
     fn to_sk_paint<'a>(self) -> SkPaint<'a> {
         SkPaint {
             shader: Shader::SolidColor(self.to_color()),
-            blend_mode: self.blend.to_sk(),
+            blend_mode: crate::canvas::sk_blend(self.blend),
             anti_alias: true,
             force_hq_pipeline: false,
         }

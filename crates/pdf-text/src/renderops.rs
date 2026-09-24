@@ -16,7 +16,7 @@
 //! [`DrawPath`]/[`ImageRef`] convention). `render_page` replays this list onto a
 //! `Canvas`; the same list is the PyMuPDF `DisplayList` record.
 
-use pdf_core::geom::Matrix;
+use pdf_core::geom::{Matrix, Quad};
 use pdf_core::{Dict, Object};
 
 use crate::model::{PathItem, PositionedGlyph};
@@ -80,6 +80,141 @@ pub enum RenderOp {
     Image(ImageOp),
     /// Paint a shading (`sh` operator, or a shading-pattern fill).
     Shading(ShadingOp),
+    /// Set the blend mode (ExtGState `/BM`) for later paints. Scoped by
+    /// [`RenderOp::Save`] / [`RenderOp::Restore`] like the clip.
+    BlendMode(BlendMode),
+    /// Set (`Some`) or clear (`None`, ExtGState `/SMask /None`) the soft mask
+    /// (ExtGState `/SMask`) for later paints. Scoped by `Save` / `Restore`.
+    SoftMask(Option<Box<SoftMaskOp>>),
+    /// Begin a transparency group (a Form XObject with `/Group /S
+    /// /Transparency`). Like [`RenderOp::Save`], it saves the graphics state,
+    /// then clips to the group's `/BBox`. The group's content is composited as
+    /// a whole with `alpha` and the blend mode / soft mask in effect at this op;
+    /// those three are reset (1, Normal, None) inside the group. Always paired
+    /// with a later [`RenderOp::EndGroup`].
+    BeginGroup(GroupOp),
+    /// End the innermost open transparency group, composite it, and restore
+    /// the graphics state saved by its [`RenderOp::BeginGroup`].
+    EndGroup,
+}
+
+/// A PDF blend mode (ExtGState `/BM`, PDF 32000-1 §11.3.5).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum BlendMode {
+    /// `Normal` / `Compatible`: source-over.
+    #[default]
+    Normal,
+    /// `Multiply`.
+    Multiply,
+    /// `Screen`.
+    Screen,
+    /// `Overlay`.
+    Overlay,
+    /// `Darken`.
+    Darken,
+    /// `Lighten`.
+    Lighten,
+    /// `ColorDodge`.
+    ColorDodge,
+    /// `ColorBurn`.
+    ColorBurn,
+    /// `HardLight`.
+    HardLight,
+    /// `SoftLight`.
+    SoftLight,
+    /// `Difference`.
+    Difference,
+    /// `Exclusion`.
+    Exclusion,
+    /// `Hue` (non-separable).
+    Hue,
+    /// `Saturation` (non-separable).
+    Saturation,
+    /// `Color` (non-separable).
+    Color,
+    /// `Luminosity` (non-separable).
+    Luminosity,
+}
+
+impl BlendMode {
+    /// Parses a PDF blend-mode name. `/BM` may also be an array of names, of
+    /// which the first recognized one applies (the caller iterates). Unknown
+    /// names return `None`.
+    #[must_use]
+    pub fn from_name(name: &str) -> Option<Self> {
+        Some(match name {
+            "Normal" | "Compatible" => Self::Normal,
+            "Multiply" => Self::Multiply,
+            "Screen" => Self::Screen,
+            "Overlay" => Self::Overlay,
+            "Darken" => Self::Darken,
+            "Lighten" => Self::Lighten,
+            "ColorDodge" => Self::ColorDodge,
+            "ColorBurn" => Self::ColorBurn,
+            "HardLight" => Self::HardLight,
+            "SoftLight" => Self::SoftLight,
+            "Difference" => Self::Difference,
+            "Exclusion" => Self::Exclusion,
+            "Hue" => Self::Hue,
+            "Saturation" => Self::Saturation,
+            "Color" => Self::Color,
+            "Luminosity" => Self::Luminosity,
+            _ => return None,
+        })
+    }
+
+    /// The PDF name of this blend mode.
+    #[must_use]
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Normal => "Normal",
+            Self::Multiply => "Multiply",
+            Self::Screen => "Screen",
+            Self::Overlay => "Overlay",
+            Self::Darken => "Darken",
+            Self::Lighten => "Lighten",
+            Self::ColorDodge => "ColorDodge",
+            Self::ColorBurn => "ColorBurn",
+            Self::HardLight => "HardLight",
+            Self::SoftLight => "SoftLight",
+            Self::Difference => "Difference",
+            Self::Exclusion => "Exclusion",
+            Self::Hue => "Hue",
+            Self::Saturation => "Saturation",
+            Self::Color => "Color",
+            Self::Luminosity => "Luminosity",
+        }
+    }
+}
+
+/// A soft mask selected by an ExtGState `/SMask` dictionary (PDF 32000-1
+/// §11.6.5.2). The mask group `/G` is recorded as its own ordered op stream,
+/// interpreted under the CTM in effect when the ExtGState was set.
+#[derive(Clone, Debug)]
+pub struct SoftMaskOp {
+    /// `/S /Luminosity` (`true`) or `/S /Alpha` (`false`).
+    pub luminosity: bool,
+    /// The `/BC` backdrop colour packed `0x00RRGGBB` (luminosity masks only;
+    /// defaults to black).
+    pub backdrop: u32,
+    /// The `/TR` transfer function sampled into a 256-entry lookup table, or
+    /// `None` for the `/Identity` default.
+    pub transfer: Option<Vec<u8>>,
+    /// The mask group's ordered render ops (already clipped to its `/BBox`).
+    pub ops: Vec<RenderOp>,
+}
+
+/// The parameters of a [`RenderOp::BeginGroup`] transparency group.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct GroupOp {
+    /// The form `/BBox` in user space (CTM applied), the group's implicit clip.
+    pub bbox: Option<Quad>,
+    /// The constant alpha (`ca` at the `Do`, 0–255) the group composites with.
+    pub alpha: u8,
+    /// `/I`: an isolated group composites its content against transparency.
+    pub isolated: bool,
+    /// `/K`: a knockout group (recorded; rendered as non-knockout).
+    pub knockout: bool,
 }
 
 /// A run of positioned glyphs from one show operator, with the data needed to

@@ -29,7 +29,10 @@ native-device callback. Resource IDs are recording-local operation indices.
 Area is a coarse selection query in final device coordinates, not an added clip.
 None is unbounded. Empty/inverted rectangles suppress paint but retain state and
 lifecycle events: an explicit normalization of native edge cases. Save/restore
-and clips are retained conservatively. Glyph advance cells cannot guarantee italic/Type3 ink bounds, so text paint
+and clips are retained conservatively, as are the transparency state events
+`blend_mode`, `soft_mask` (payload: `Luminosity`, `Alpha` or None) and the
+paired `begin_group` (alpha, isolated, knockout, depth) / `end_group`, which
+save and restore like `save` / `restore`. Glyph advance cells cannot guarantee italic/Type3 ink bounds, so text paint
 bounds also remain unknown (per-glyph cell geometry stays available in payload).
 Stroke joins/miter bounds are not fully
 recorded, so stroke bounds remain unknown and may cause extra callbacks. Shading
