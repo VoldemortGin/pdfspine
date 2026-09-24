@@ -61,8 +61,12 @@ A `Pixmap` is the native raster buffer. Key members:
 pix.save("page.png")            # format inferred from the extension
 pix.save("page.pam", "pam")     # explicit format
 
-png_bytes = pix.tobytes("png")  # "png" (default), "pam", or "ppm"/"pnm"
+png_bytes = pix.tobytes("png")  # "png" (default), "pam", "ppm"/"pnm", or "jpg"/"jpeg"
+jpg_bytes = pix.tobytes("jpg", jpg_quality=80)  # quality 1-100, default 95
 ```
+
+JPEG has no alpha channel, so a pixmap with alpha raises `PdfUnsupportedError`.
+CMYK pixmaps are converted to RGB before JPEG encoding.
 
 ### Per-pixel access & mutation
 

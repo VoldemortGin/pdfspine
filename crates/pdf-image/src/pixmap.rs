@@ -60,6 +60,9 @@ impl Colorspace {
     }
 }
 
+/// PyMuPDF's default `jpg_quality` for `Pixmap.tobytes` / `Pixmap.save`.
+pub const DEFAULT_JPEG_QUALITY: u8 = 95;
+
 /// A decoded raster: 8-bit interleaved samples plus geometry and colorspace.
 ///
 /// Field layout matches PRD §8.10 (`width, height, n, alpha, stride, samples,
@@ -693,15 +696,90 @@ impl Pixmap {
         Ok(out)
     }
 
-    /// Encodes this pixmap in `format` (`"png"`, `"ppm"`/`"pnm"`, or `"pam"`),
-    /// matching the common PyMuPDF `Pixmap.tobytes(output=…)` cases (PRD §8.10).
+    /// Encodes this pixmap as baseline JPEG at `quality` (PyMuPDF
+    /// `Pixmap.tobytes("jpg", jpg_quality=…)`).
+    ///
+    /// `quality` is clamped to `1..=100` (libjpeg / MuPDF semantics). Gray maps
+    /// to a 1-component JPEG and RGB to a 3-component one.
+    ///
+    /// **Deliberate deviation from PyMuPDF:** MuPDF writes a native 4-component
+    /// CMYK JPEG, but the `image` crate's encoder only accepts L8/Rgb8, so CMYK
+    /// is converted to RGB first — the same approach as PNG/PNM output here —
+    /// yielding a viewable approximation instead of an error.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidArgument`] if the pixmap has alpha (JPEG has no alpha
+    /// channel; PyMuPDF raises `ValueError` here too), if a dimension exceeds
+    /// the JPEG limit of 65535, or if the sample buffer length is wrong;
+    /// [`Error::Decode`] if the encoder rejects the buffer.
+    pub fn to_jpeg_bytes(&self, quality: u8) -> Result<Vec<u8>> {
+        use image::codecs::jpeg::JpegEncoder;
+        use image::ExtendedColorType;
+
+        if self.alpha {
+            return Err(Error::InvalidArgument("JPEG does not support alpha"));
+        }
+        if self.width > u32::from(u16::MAX) || self.height > u32::from(u16::MAX) {
+            return Err(Error::InvalidArgument("pixmap too large for JPEG"));
+        }
+        let (color, comps, bytes): (ExtendedColorType, usize, std::borrow::Cow<'_, [u8]>) =
+            match self.colorspace {
+                Colorspace::Gray => (
+                    ExtendedColorType::L8,
+                    1,
+                    std::borrow::Cow::Borrowed(&self.samples),
+                ),
+                Colorspace::Rgb => (
+                    ExtendedColorType::Rgb8,
+                    3,
+                    std::borrow::Cow::Borrowed(&self.samples),
+                ),
+                // No CMYK JPEG encoder available: convert to RGB (see above).
+                Colorspace::Cmyk => (
+                    ExtendedColorType::Rgb8,
+                    3,
+                    std::borrow::Cow::Owned(self.cmyk_to_rgb_color_only()),
+                ),
+            };
+        // The encoder asserts on a length mismatch; reject it as a typed error.
+        let expected = (self.width as usize)
+            .checked_mul(self.height as usize)
+            .and_then(|p| p.checked_mul(comps));
+        if expected != Some(bytes.len()) {
+            return Err(Error::InvalidArgument("pixmap sample length mismatch"));
+        }
+        let mut out = Vec::new();
+        JpegEncoder::new_with_quality(&mut out, quality.clamp(1, 100))
+            .encode(&bytes, self.width, self.height, color)
+            .map_err(|_| Error::decode("Pixmap", "JPEG encode failed"))?;
+        Ok(out)
+    }
+
+    /// Encodes this pixmap in `format` (`"png"`, `"ppm"`/`"pnm"`, `"pam"`, or
+    /// `"jpg"`/`"jpeg"`), matching the common PyMuPDF `Pixmap.tobytes(output=…)`
+    /// cases (PRD §8.10). JPEG uses PyMuPDF's default quality of 95; see
+    /// [`Pixmap::tobytes_with_quality`] to choose another.
     ///
     /// # Errors
     ///
     /// [`Error::Unsupported`] for an unrecognized format; encode errors propagate.
     pub fn tobytes(&self, format: &str) -> Result<Vec<u8>> {
+        self.tobytes_with_quality(format, DEFAULT_JPEG_QUALITY)
+    }
+
+    /// Like [`Pixmap::tobytes`], with an explicit JPEG `quality` (`1..=100`,
+    /// clamped; ignored by the non-JPEG formats) — PyMuPDF
+    /// `Pixmap.tobytes(output, jpg_quality)`.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Unsupported`] for an unrecognized format; encode errors propagate
+    /// (see [`Pixmap::to_jpeg_bytes`] for the JPEG-specific ones).
+    pub fn tobytes_with_quality(&self, format: &str, quality: u8) -> Result<Vec<u8>> {
         match format.to_ascii_lowercase().as_str() {
             "png" => self.to_png_bytes(),
+            "jpg" | "jpeg" => self.to_jpeg_bytes(quality),
             "ppm" | "pnm" | "pgm" => Ok(self.to_pnm_bytes()),
             "pam" => Ok(self.to_pam_bytes()),
             _ => Err(Error::Unsupported("Pixmap::tobytes format")),
