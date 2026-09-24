@@ -159,6 +159,7 @@ impl Canvas {
     /// Mutable access to the backing rasterizer pixmap (used by [`crate::vector`]
     /// / [`crate::text`] / [`crate::image`] to issue fill/stroke/composite
     /// drawcalls).
+    #[cfg(test)]
     pub(crate) fn pixmap_mut(&mut self) -> &mut SkPixmap {
         &mut self.pixmap
     }

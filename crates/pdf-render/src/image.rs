@@ -34,8 +34,8 @@
 //!
 //! Tiling patterns (type 1), PostScript (type 4) functions, shading types 1/4–7
 //! (function-based / mesh), transparency-group isolation/knockout, and blend
-//! modes other than normal `SrcOver` are **deferred** (documented gaps; the
-//! orchestrator wires the interpreter side in M6d).
+//! modes other than normal `SrcOver` are **deferred** (documented gaps). Images
+//! and shadings paint through the canvas clip.
 
 use pdf_core::geom::Matrix;
 use pdf_image::pixmap::{Colorspace, Pixmap};
@@ -98,9 +98,8 @@ pub fn draw_image(canvas: &mut Canvas, image: &Pixmap, ctm: Matrix, alpha: u8) -
         blend_mode: tiny_skia::BlendMode::SourceOver,
         quality: FilterQuality::Bilinear,
     };
-    canvas
-        .pixmap_mut()
-        .draw_pixmap(0, 0, src_ref, &paint, transform, None);
+    let (pixmap, mask) = canvas.pixmap_and_clip_mut();
+    pixmap.draw_pixmap(0, 0, src_ref, &paint, transform, mask);
     Ok(())
 }
 
@@ -169,9 +168,8 @@ pub fn draw_image_mask(
         blend_mode: tiny_skia::BlendMode::SourceOver,
         quality: FilterQuality::Bilinear,
     };
-    canvas
-        .pixmap_mut()
-        .draw_pixmap(0, 0, src, &paint, transform, None);
+    let (pixmap, mask) = canvas.pixmap_and_clip_mut();
+    pixmap.draw_pixmap(0, 0, src, &paint, transform, mask);
     Ok(())
 }
 
@@ -373,9 +371,8 @@ fn fill_canvas_with_shader(canvas: &mut Canvas, shader: Shader) -> Result<()> {
         anti_alias: true,
         ..SkPaint::default()
     };
-    canvas
-        .pixmap_mut()
-        .fill_rect(rect, &paint, Transform::identity(), None);
+    let (pixmap, mask) = canvas.pixmap_and_clip_mut();
+    pixmap.fill_rect(rect, &paint, Transform::identity(), mask);
     Ok(())
 }
 
