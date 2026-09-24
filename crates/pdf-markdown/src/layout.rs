@@ -977,11 +977,7 @@ fn layout_table(
         // keep it; oversized columns split the remainder evenly. Processing
         // ascending by preference (index-stable) keeps this deterministic.
         let mut order: Vec<usize> = (0..ncols).collect();
-        order.sort_by(|&a, &b| {
-            pref[a]
-                .partial_cmp(&pref[b])
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
+        order.sort_by(|&a, &b| pref[a].total_cmp(&pref[b]));
         let mut widths = vec![0.0; ncols];
         let mut remaining = avail;
         let mut cols_left = ncols;

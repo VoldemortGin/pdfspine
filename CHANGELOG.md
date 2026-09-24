@@ -11,6 +11,14 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
+### Fixed
+
+- `Page.find_tables()` (and the other table, Markdown and typeset float sorts)
+  no longer risk a Rust panic ("comparison function does not correctly
+  implement a total order") when a coordinate is NaN: the remaining
+  `partial_cmp` sort comparators now use `total_cmp` (ADR 0006). Output for
+  finite input is unchanged.
+
 ## [0.11.1] — 2026-09-23
 
 ### Fixed

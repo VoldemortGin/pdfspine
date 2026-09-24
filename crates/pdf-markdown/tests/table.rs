@@ -79,3 +79,15 @@ fn ragged_rows_pad_to_the_header_width() {
     let bytes = render(md);
     assert_in_order(&full_text(&bytes), &["A", "B", "C", "only"]);
 }
+
+#[test]
+fn nan_geometry_is_rejected_before_table_layout() {
+    // Column widths sort with `total_cmp` (ADR 0006); NaN geometry must still
+    // be refused up front instead of reaching table layout.
+    for nan in [f64::NAN, -f64::NAN] {
+        let mut opts = pdf_markdown::Options::default();
+        opts.body_font_size = nan;
+        let err = pdf_markdown::markdown_to_pdf(SIMPLE, &opts).unwrap_err();
+        assert!(matches!(err, pdf_core::error::Error::InvalidArgument(_)));
+    }
+}

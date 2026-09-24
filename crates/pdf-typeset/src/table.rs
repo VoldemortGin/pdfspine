@@ -102,11 +102,7 @@ pub(crate) fn column_widths(ts: &mut Typesetter, spec: &TableSpec, avail: f64) -
     // Fair-share shrink (pdf-markdown `layout.rs` policy, generalized): process
     // ascending by preference so under-share columns release their slack.
     let mut order: Vec<usize> = (0..ncols).collect();
-    order.sort_by(|&a, &b| {
-        pref[a]
-            .partial_cmp(&pref[b])
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
+    order.sort_by(|&a, &b| pref[a].total_cmp(&pref[b]));
     let mut widths = vec![0.0; ncols];
     let mut remaining = avail;
     let mut cols_left = ncols;

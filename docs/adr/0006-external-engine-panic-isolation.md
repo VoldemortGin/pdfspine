@@ -108,9 +108,9 @@ No test currently forces a panic through the PaddleOCR adapter; the `ocrspine`
 fix removes the only known trigger. No lint enforces decision 3; it is enforced
 by review.
 
-Known legacy: as of `5e0dfa1`, 17 `partial_cmp(..).unwrap_or(std::cmp::Ordering::Equal)`
-sites remain in 15 sort comparators (two `tables.rs` comparators use it for
-both keys):
+Known legacy (resolved): as of `5e0dfa1`, 17
+`partial_cmp(..).unwrap_or(std::cmp::Ordering::Equal)` sites remained in 15
+sort comparators (two `tables.rs` comparators used it for both keys):
 
 | File | Sites |
 |---|---|
@@ -119,8 +119,15 @@ both keys):
 | `crates/pdf-markdown/src/layout.rs` | 1 (line 983) |
 | `crates/pdf-typeset/src/table.rs` | 1 (line 108) |
 
-Some sites sort values that are finite by construction (`image_table.rs:718`
-filters non-finite values first), but the pattern remains forbidden in edited
-code.
-Convert these to `total_cmp` when the surrounding code is next changed, or in
-a dedicated slice with output-equivalence checks. This ADR does not change them.
+On 2026-09-23 all of them were converted to `total_cmp` in the follow-up commit
+`fix(sort): use total_cmp in float comparators (ADR 0006)`. The `tables.rs`
+sites sort raw device coordinates, which can in principle carry `-0.0`, so they
+go through a private `cmp_f64` helper that folds `-0.0` into `+0.0` before
+`total_cmp`; it orders every non-NaN pair exactly as `partial_cmp` did, so
+stable-sort tie order and output are unchanged. The other four sites sort
+values that are never `-0.0` or NaN (luminance of `u8` RGB, finite-filtered
+medians, column preferences bounded below by `MIN_COL_WIDTH`) and use
+`total_cmp` directly. Table extraction and Markdown output were checked
+byte-identical before and after on the `conformance/gt` and `fixtures` PDFs.
+No `partial_cmp(..).unwrap_or(..)` comparator remains under `crates/`; decision
+3 is still enforced by review only, not by a lint.

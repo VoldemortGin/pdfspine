@@ -227,3 +227,39 @@ fn nested_tables_lay_out_inside_cells() {
     assert!(toks.contains(&"outer".to_string()));
     assert!(toks.contains(&"inner".to_string()));
 }
+
+#[test]
+fn non_finite_fixed_widths_shrink_without_panicking() {
+    // The fair-share shrink sorts column preferences with `total_cmp`
+    // (ADR 0006); NaN / infinite / signed-zero fixed widths fall back to the
+    // minimum, and the grid still fits the content column.
+    let geom = PageGeom::new(300.0, 500.0, 50.0); // content width 200
+    let long = "unbreakable_word_that_wants_lots_of_space and more";
+    let spec = TableSpec::new(
+        vec![
+            ColumnWidth::Fixed(f64::NAN),
+            ColumnWidth::Auto,
+            ColumnWidth::Fixed(f64::INFINITY),
+            ColumnWidth::Fixed(-0.0),
+            ColumnWidth::Auto,
+        ],
+        vec![TableRow::new(vec![
+            cell("a", 12.0),
+            cell(long, 12.0),
+            cell("b", 12.0),
+            cell("c", 12.0),
+            cell(long, 12.0),
+        ])],
+    );
+    let (_, result) = export(&[Block::Table(spec)], geom);
+    let ws = words(&result.pdf, 0);
+    assert!(ws.iter().any(|w| w.4 == "a"));
+    for w in ws {
+        assert!(
+            w.2 <= 250.0 + 0.5,
+            "word {:?} leaks past the column (x1 = {})",
+            w.4,
+            w.2
+        );
+    }
+}

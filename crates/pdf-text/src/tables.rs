@@ -518,18 +518,7 @@ fn detect_lines(drawings: &[DrawPath], opt: &TableOptions) -> Vec<Table> {
         }
     }
     // Top-to-bottom, then left-to-right (PyMuPDF table order).
-    tables.sort_by(|a, b| {
-        a.bbox
-            .y0
-            .partial_cmp(&b.bbox.y0)
-            .unwrap_or(std::cmp::Ordering::Equal)
-            .then(
-                a.bbox
-                    .x0
-                    .partial_cmp(&b.bbox.x0)
-                    .unwrap_or(std::cmp::Ordering::Equal),
-            )
-    });
+    tables.sort_by(|a, b| cmp_f64(a.bbox.y0, b.bbox.y0).then(cmp_f64(a.bbox.x0, b.bbox.x0)));
     tables
 }
 
@@ -556,11 +545,7 @@ fn merge_edges(segs: &[Segment], tol: f64) -> Vec<Edge> {
         return Vec::new();
     }
     let mut sorted: Vec<&Segment> = segs.iter().collect();
-    sorted.sort_by(|a, b| {
-        a.pos
-            .partial_cmp(&b.pos)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
+    sorted.sort_by(|a, b| cmp_f64(a.pos, b.pos));
 
     let mut edges = Vec::new();
     // First pass: cluster by constant coordinate (snap near-coincident lines).
@@ -570,7 +555,7 @@ fn merge_edges(segs: &[Segment], tol: f64) -> Vec<Edge> {
         let pos = cluster.iter().map(|s| s.pos).sum::<f64>() / cluster.len() as f64;
         // Second pass: join only overlapping / near-touching fragments.
         let mut frags: Vec<(f64, f64)> = cluster.iter().map(|s| (s.lo, s.hi)).collect();
-        frags.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+        frags.sort_by(|a, b| cmp_f64(a.0, b.0));
         let mut lo = frags[0].0;
         let mut hi = frags[0].1;
         for &(flo, fhi) in &frags[1..] {
@@ -727,8 +712,8 @@ fn assemble_table(
         push_unique(&mut row_set, c.y0, tol);
         push_unique(&mut row_set, c.y1, tol);
     }
-    col_set.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-    row_set.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    col_set.sort_by(|a, b| cmp_f64(*a, *b));
+    row_set.sort_by(|a, b| cmp_f64(*a, *b));
     let cols = col_set;
     let rows = row_set;
     // PyMuPDF drops degenerate groups: a real table needs at least two columns
@@ -957,7 +942,7 @@ fn collect_segments(drawings: &[DrawPath], opt: &TableOptions) -> (Vec<Segment>,
 /// `tol`, returned sorted ascending.
 fn snap_positions(positions: impl Iterator<Item = f64>, tol: f64) -> Vec<f64> {
     let mut vals: Vec<f64> = positions.collect();
-    vals.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    vals.sort_by(|a, b| cmp_f64(*a, *b));
     let mut out: Vec<f64> = Vec::new();
     let mut cluster: Vec<f64> = Vec::new();
     for v in vals {
@@ -991,11 +976,11 @@ fn detect_text(words: &[Word], opt: &TableOptions) -> Vec<Table> {
     // vertical extent `[min(y0), max(y1)]` so cells are tall enough to contain
     // their word centers.
     let mut rows = cluster_extents(words, center_y, |w| (w.bbox.y0, w.bbox.y1), gap);
-    rows.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+    rows.sort_by(|a, b| cmp_f64(a.0, b.0));
     // Column bands: cluster by left edge (x0, stable for left-aligned columns),
     // tracking each band's full horizontal extent `[min(x0), max(x1)]`.
     let mut cols = cluster_extents(words, |w| w.bbox.x0, |w| (w.bbox.x0, w.bbox.x1), gap);
-    cols.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+    cols.sort_by(|a, b| cmp_f64(a.0, b.0));
 
     // A real grid needs at least 2 columns and 2 rows.
     if rows.len() < 2 || cols.len() < 2 {
@@ -1103,7 +1088,7 @@ fn cluster_extents(
             (key(w), lo, hi)
         })
         .collect();
-    items.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+    items.sort_by(|a, b| cmp_f64(a.0, b.0));
 
     let mut bands: Vec<Band> = Vec::new();
     let mut iter = items.into_iter();
@@ -1173,17 +1158,7 @@ fn cell_lines(rect: Rect, words: &[Word]) -> Vec<Vec<&Word>> {
     if hits.is_empty() {
         return Vec::new();
     }
-    hits.sort_by(|a, b| {
-        center_y(a)
-            .partial_cmp(&center_y(b))
-            .unwrap_or(std::cmp::Ordering::Equal)
-            .then(
-                a.bbox
-                    .x0
-                    .partial_cmp(&b.bbox.x0)
-                    .unwrap_or(std::cmp::Ordering::Equal),
-            )
-    });
+    hits.sort_by(|a, b| cmp_f64(center_y(a), center_y(b)).then(cmp_f64(a.bbox.x0, b.bbox.x0)));
     // Group into lines: a new line begins when the next word's vertical center
     // separates from the current line's center by more than half its height.
     let mut lines: Vec<Vec<&Word>> = Vec::new();
@@ -1204,12 +1179,7 @@ fn cell_lines(rect: Rect, words: &[Word]) -> Vec<Vec<&Word>> {
         lines.push(cur);
     }
     for line in &mut lines {
-        line.sort_by(|a, b| {
-            a.bbox
-                .x0
-                .partial_cmp(&b.bbox.x0)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
+        line.sort_by(|a, b| cmp_f64(a.bbox.x0, b.bbox.x0));
     }
     lines
 }
@@ -1271,7 +1241,80 @@ fn html_escape_into(s: &mut String, raw: &str) {
     }
 }
 
+/// A total order on `f64` for sort comparators (ADR 0006): `total_cmp` after
+/// folding `-0.0` into `+0.0`, so every non-NaN pair orders exactly as
+/// `partial_cmp` does and stable sorts keep their tie order; NaN goes to an end.
+fn cmp_f64(a: f64, b: f64) -> std::cmp::Ordering {
+    (a + 0.0).total_cmp(&(b + 0.0))
+}
+
 /// The arithmetic mean of a non-empty slice.
 fn mean(vals: &[f64]) -> f64 {
     vals.iter().sum::<f64>() / vals.len() as f64
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// NaN coordinates must not break the float sorts' total order (Rust >= 1.81
+    /// `sort_by` panics on an inconsistent comparator).
+    #[test]
+    fn sorts_tolerate_non_finite_coordinates() {
+        let mut seed = 0x9e37_79b9_7f4a_7c15_u64;
+        let mut next = || {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            seed
+        };
+        let opt = TableOptions::with_strategy(Strategy::Text);
+        for n in 2..300 {
+            let vals: Vec<f64> = (0..n)
+                .map(|_| {
+                    let r = next();
+                    if r % 4 == 0 {
+                        f64::NAN
+                    } else {
+                        (r % 50) as f64 * 7.0
+                    }
+                })
+                .collect();
+            let segs: Vec<Segment> = vals
+                .iter()
+                .map(|&v| Segment {
+                    pos: v,
+                    lo: v,
+                    hi: v + 10.0,
+                })
+                .collect();
+            assert!(!merge_edges(&segs, 3.0).is_empty());
+            assert!(!snap_positions(vals.iter().copied(), 3.0).is_empty());
+            let words: Vec<Word> = vals
+                .iter()
+                .map(|&v| Word {
+                    bbox: Rect::new(v, v, v + 10.0, v + 8.0),
+                    text: "w".to_owned(),
+                    block_no: 0,
+                    line_no: 0,
+                    word_no: 0,
+                })
+                .collect();
+            for t in detect_text(&words, &opt) {
+                let _ = t.extract(&words);
+            }
+        }
+    }
+
+    /// `cmp_f64` must order every non-NaN pair exactly as `partial_cmp`, so the
+    /// stable sorts keep their tie order (notably `-0.0` vs `0.0`).
+    #[test]
+    fn cmp_f64_matches_partial_cmp_on_non_nan() {
+        let xs = [f64::NEG_INFINITY, -1.5, -0.0, 0.0, 2.0, f64::INFINITY];
+        for a in xs {
+            for b in xs {
+                assert_eq!(Some(cmp_f64(a, b)), a.partial_cmp(&b), "{a} vs {b}");
+            }
+        }
+    }
 }

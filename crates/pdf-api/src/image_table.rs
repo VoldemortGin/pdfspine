@@ -641,7 +641,7 @@ fn sample_text_color(
     if samples.is_empty() {
         return bg;
     }
-    samples.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+    samples.sort_by(|a, b| a.0.total_cmp(&b.0));
 
     // The darkest quartile, but only pixels meaningfully darker than the
     // background (else a uniform empty cell would report its own fill).
@@ -715,7 +715,7 @@ fn median(vals: impl IntoIterator<Item = f64>) -> f64 {
     if v.is_empty() {
         return 0.0;
     }
-    v.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    v.sort_by(f64::total_cmp);
     let n = v.len();
     if n % 2 == 1 {
         v[n / 2]
@@ -758,5 +758,13 @@ mod tests {
             assert!(!cluster_rows(&words, 0.5).is_empty());
             assert!(!cluster_cols(&words, 0.5).is_empty());
         }
+    }
+
+    /// `median` drops non-finite values before its `total_cmp` sort.
+    #[test]
+    fn median_ignores_non_finite_values() {
+        let vals = [f64::NAN, 3.0, -f64::NAN, 1.0, f64::INFINITY, 2.0];
+        assert_eq!(median(vals), 2.0);
+        assert_eq!(median([f64::NAN]), 0.0);
     }
 }
