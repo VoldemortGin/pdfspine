@@ -17,7 +17,7 @@
 > images**, and **OCR** (pure-Rust PaddleOCR PP-OCRv5 ONNX by default, stronger on CJK;
 > Tesseract as an optional fallback).
 > **91.4%** (703 / 769) of the PyMuPDF 1.24 public API is implemented and tested
-> in the **current local source**. Published **v0.11.1** covers **91.4% (703 / 769)**.
+> in the **current local source**. Published **v0.11.2** covers **91.4% (703 / 769)**.
 > The named 2026-09-11 local paragraph-dash full gate passed **2,034 Rust + 1,535
 > Python tests** (68 existing Python skips). See [validation baselines](docs/validation-baselines.md) for exact source
 > and binary identities. In the dated 58-document benchmark, its aggregate mean text scores

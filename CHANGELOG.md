@@ -11,6 +11,8 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
+## [0.11.2] — 2026-09-24
+
 ### Fixed
 
 - `Page.find_tables()` (and the other table, Markdown and typeset float sorts)
@@ -1105,7 +1107,8 @@ published wheel's version is set from the `v0.1.0` git tag at build time.
   2858 ms → 819 ms). `rayon` is a feature-gated (`paddle-ocr`) optional dep and
   is not in the lean base wheel.
 
-[Unreleased]: https://github.com/VoldemortGin/pdfspine/compare/v0.11.1...HEAD
+[Unreleased]: https://github.com/VoldemortGin/pdfspine/compare/v0.11.2...HEAD
+[0.11.2]: https://github.com/VoldemortGin/pdfspine/compare/v0.11.1...v0.11.2
 [0.11.1]: https://github.com/VoldemortGin/pdfspine/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/VoldemortGin/pdfspine/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/VoldemortGin/pdfspine/compare/v0.9.1...v0.10.0
