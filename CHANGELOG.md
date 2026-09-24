@@ -11,6 +11,15 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
+### Changed
+
+- Python 3.11 is now supported: `Requires-Python` is lowered from `>=3.12` to
+  `>=3.11`, matching the `cp311-abi3` wheel tag that was already published. The
+  one 3.12-only construct in the package (PEP 695 `type` aliases in the private
+  table-slot module) is rewritten with `typing.TypeAlias`, and CI now runs the
+  pytest matrix on CPython 3.11 as well; release builds and smoke tests run on
+  3.11, the oldest supported interpreter.
+
 ## [0.11.2] — 2026-09-24
 
 ### Fixed
