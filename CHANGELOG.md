@@ -11,6 +11,32 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
+### Added
+
+- Page rendering (`get_pixmap`, `DisplayList`) implements PDF transparency:
+  transparency-group Form XObjects are composited as a whole with the `ca`,
+  blend mode and soft mask in effect at `Do` (alpha / blend / mask reset
+  inside the group, `/BBox` clip, `/I` isolated groups); ExtGState soft masks
+  (`/SMask` `/Luminosity` and `/Alpha`, with `/BC` backdrop and `/TR`
+  transfer) apply to later paints until `Q` or `/SMask /None`; and all 16
+  `/BM` blend modes apply to fills, strokes, text, images and shadings.
+  Non-isolated groups that need their own layer are composited as isolated,
+  and knockout groups as non-knockout. SVG export wraps translucent groups in
+  `<g opacity>`; `ReplayDevice` reports the new `blend_mode`, `soft_mask`,
+  `begin_group` and `end_group` state events.
+
+### Fixed
+
+- Images, stencil image masks and `sh` shadings now honor the clip path
+  (previously unclipped: square corners on rounded image frames, and a
+  shading could cover the whole page). Axis-aligned rectangular clips are
+  pixel-snapped outward, as in MuPDF and PDFium, so content placed exactly
+  inside one shows no anti-aliased seam.
+- Text now honors the fill alpha `ca`. On the USGS fact-sheet poster
+  (`usgs-fs20183024.pdf`) translucent boxes, feathered shadows, the washed-out
+  background photo and the rounded photo frame now match PDFium (page 1 mean
+  pixel difference 67 → 11 levels at 144 dpi).
+
 ## [0.11.2] — 2026-09-24
 
 ### Fixed
