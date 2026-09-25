@@ -5,7 +5,7 @@
 mod common;
 
 use common::*;
-use pdf_core::{DocumentStore, Name, Object};
+use pdf_core::{DocumentStore, Name, Object, PdfString};
 use pdf_fonts::{FontKind, FontMapper};
 
 /// Resolves the font object at `num` from `doc` and builds a [`FontMapper`].
@@ -708,6 +708,142 @@ fn cmap_cjk_fallback_001_unbundled_predefined_none() {
     assert_eq!(tu(&m, 0x4E2D), None);
     // Width still resolves (best-effort code==CID).
     assert_eq!(m.width(0x4E2D), 1000.0);
+}
+
+// === CMAP-CJK-ROS-* : /CIDSystemInfo collection fallback (no /ToUnicode) ===
+
+/// Builds a Type0 font whose descendant declares `/CIDSystemInfo`
+/// `registry-ordering`, with the given `/Encoding` object and an optional
+/// `/ToUnicode` program. Returns `(doc, font_num)`.
+fn ros_doc(
+    registry: &str,
+    ordering: &str,
+    encoding: Object,
+    tounicode: Option<&[u8]>,
+) -> (DocumentStore, u32) {
+    let mut d = FontDoc::new();
+    let encoding = match encoding {
+        Object::Stream(_) => rref(d.add(encoding), 0),
+        other => other,
+    };
+    let tu_stream = tounicode.map(|p| d.add(flate_stream([("Type", name_obj("CMap"))], p)));
+    let descendant = d.add(Object::Dictionary(dict([
+        ("Type", name_obj("Font")),
+        ("Subtype", name_obj("CIDFontType0")),
+        ("BaseFont", name_obj("MHeiHK-Light")),
+        (
+            "CIDSystemInfo",
+            Object::Dictionary(dict([
+                ("Registry", Object::String(PdfString::literal(registry))),
+                ("Ordering", Object::String(PdfString::literal(ordering))),
+                ("Supplement", Object::Integer(0)),
+            ])),
+        ),
+        ("DW", Object::Integer(1000)),
+    ])));
+    let mut font = dict([
+        ("Type", name_obj("Font")),
+        ("Subtype", name_obj("Type0")),
+        ("BaseFont", name_obj("MHeiHK-Light")),
+        ("Encoding", encoding),
+        ("DescendantFonts", Object::Array(vec![rref(descendant, 0)])),
+    ]);
+    if let Some(tu) = tu_stream {
+        font.insert(Name::new("ToUnicode"), rref(tu, 0));
+    }
+    let font = d.add(Object::Dictionary(font));
+    (d.open(), font)
+}
+
+#[test]
+fn cmap_cjk_ros_001_cns1_identity_h_without_tounicode() {
+    // Adobe-CNS1 + Identity-H + no /ToUnicode (the MHeiHK annual-report case):
+    // the code is the CID, resolved through the bundled CNS1 table.
+    let (doc, font) = ros_doc("Adobe", "CNS1", name_obj("Identity-H"), None);
+    let m = mapper_for(&doc, font);
+    for (cid, expected) in [
+        (923u32, "吉"),
+        (1083, "利"),
+        (1243, "汽"),
+        (1299, "車"),
+        (3100, "報"),
+        (5124, "營"),
+        (5464, "額"),
+    ] {
+        assert_eq!(m.cid(cid), cid, "Identity: CID == code");
+        assert_eq!(tu(&m, cid).as_deref(), Some(expected), "CID {cid}");
+    }
+    // Code → CID → GID stays Identity (no /CIDToGIDMap): the fallback only
+    // affects Unicode, never glyph selection.
+    assert_eq!(m.gid(923), 923);
+    // CIDs 1..=95 are the proportional ASCII range: CID 34 → 'A'.
+    assert_eq!(tu(&m, 34).as_deref(), Some("A"));
+    // CID 0 (.notdef) / beyond the collection stay unmapped.
+    assert_eq!(tu(&m, 0), None);
+    assert_eq!(tu(&m, 0xFFFF), None);
+}
+
+#[test]
+fn cmap_cjk_ros_002_each_adobe_collection() {
+    for (ordering, cid, expected) in [
+        ("GB1", 1242u32, "车"),
+        ("CNS1", 1299, "車"),
+        ("Japan1", 3284, "日"),
+        ("Korea1", 3296, "한"),
+    ] {
+        let (doc, font) = ros_doc("Adobe", ordering, name_obj("Identity-V"), None);
+        let m = mapper_for(&doc, font);
+        assert_eq!(tu(&m, cid).as_deref(), Some(expected), "Adobe-{ordering}");
+    }
+}
+
+#[test]
+fn cmap_cjk_ros_003_embedded_cmap_maps_code_to_cid_first() {
+    // An embedded (non-predefined) CMap: code → CID first, then CNS1 table.
+    // code 0x0001 → CID 923 (吉).
+    let program = b"begincodespacerange <0000> <FFFF> endcodespacerange \
+                    1 begincidrange <0001> <0001> 923 endcidrange endcmap";
+    let cmap = flate_stream([("Type", name_obj("CMap"))], program);
+    let (doc, font) = ros_doc("Adobe", "CNS1", cmap, None);
+    let m = mapper_for(&doc, font);
+    assert_eq!(m.cid(1), 923);
+    assert_eq!(tu(&m, 1).as_deref(), Some("吉"));
+}
+
+#[test]
+fn cmap_cjk_ros_004_tounicode_wins_and_gaps_fall_back() {
+    // /ToUnicode maps CID 923 → 'Z' but not CID 1083: the former keeps the
+    // explicit mapping, the latter falls through to the CNS1 table.
+    let (doc, font) = ros_doc(
+        "Adobe",
+        "CNS1",
+        name_obj("Identity-H"),
+        Some(b"1 beginbfchar <039B> <005A> endbfchar"),
+    );
+    let m = mapper_for(&doc, font);
+    assert_eq!(tu(&m, 923).as_deref(), Some("Z"));
+    assert_eq!(tu(&m, 1083).as_deref(), Some("利"));
+}
+
+#[test]
+fn cmap_cjk_ros_005_non_adobe_cjk_collections_stay_unmapped() {
+    // Adobe-Identity (subset TrueType), Adobe-KR (different CID space from
+    // Korea1) and a non-Adobe registry get no table.
+    for (registry, ordering) in [
+        ("Adobe", "Identity"),
+        ("Adobe", "KR"),
+        ("Adobe", "UCS"),
+        ("Acme", "CNS1"),
+    ] {
+        let (doc, font) = ros_doc(registry, ordering, name_obj("Identity-H"), None);
+        let m = mapper_for(&doc, font);
+        assert_eq!(tu(&m, 923), None, "{registry}-{ordering}");
+    }
+    // A legacy unbundled predefined CMap's code → CID is only a guess, so the
+    // collection table is not applied even for Adobe-CNS1.
+    let (doc, font) = ros_doc("Adobe", "CNS1", name_obj("ETen-B5-H"), None);
+    let m = mapper_for(&doc, font);
+    assert_eq!(tu(&m, 923), None);
 }
 
 // Confirm the predefined classification is what we documented.

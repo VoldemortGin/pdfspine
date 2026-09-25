@@ -11,6 +11,23 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
+## [0.11.3] — 2026-09-25
+
+### Fixed
+
+- Text extraction from Type0 fonts with no `/ToUnicode` whose `/Encoding` is
+  `Identity-H` / `Identity-V` (or an embedded CMap) now falls back to the
+  bundled CID→Unicode table of the Adobe CJK collection named by the
+  descendant's `/CIDSystemInfo` (`Adobe-GB1`, `Adobe-CNS1`, `Adobe-Japan1`,
+  `Adobe-Korea1`), matching MuPDF. Previously these glyphs came out as U+FFFD
+  (e.g. ~74% of the characters in HK annual reports set in MHeiHK).
+  `/ToUnicode` and bundled predefined `Uni…-UCS2` encodings keep precedence;
+  `Adobe-KR` and unbundled legacy CMaps (e.g. `ETen-B5-H`) are unchanged.
+- The bundled CJK CID→Unicode tables now resolve a CID shared by a CJK
+  Radicals Supplement code point and a unified ideograph to the ideograph
+  (e.g. Adobe-CNS1 月 / 角 / 骨 were extracted as ⺝ / ⻆ / ⻣; 44 Adobe-Japan1
+  CIDs likewise). This also affects the `Uni…-UCS2` predefined encodings.
+
 ## [0.11.2] — 2026-09-24
 
 ### Fixed
@@ -1107,7 +1124,8 @@ published wheel's version is set from the `v0.1.0` git tag at build time.
   2858 ms → 819 ms). `rayon` is a feature-gated (`paddle-ocr`) optional dep and
   is not in the lean base wheel.
 
-[Unreleased]: https://github.com/VoldemortGin/pdfspine/compare/v0.11.2...HEAD
+[Unreleased]: https://github.com/VoldemortGin/pdfspine/compare/v0.11.3...HEAD
+[0.11.3]: https://github.com/VoldemortGin/pdfspine/compare/v0.11.2...v0.11.3
 [0.11.2]: https://github.com/VoldemortGin/pdfspine/compare/v0.11.1...v0.11.2
 [0.11.1]: https://github.com/VoldemortGin/pdfspine/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/VoldemortGin/pdfspine/compare/v0.10.0...v0.11.0

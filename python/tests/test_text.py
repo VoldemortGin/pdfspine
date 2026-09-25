@@ -249,6 +249,50 @@ def cid_identity_h_pdf() -> tuple[bytes, str]:
     return _build_pdf(objs, root=1), "HELLO"
 
 
+def cid_cns1_no_tounicode_pdf() -> tuple[bytes, str]:
+    """A Type0/Identity-H font declaring Adobe-CNS1 with **no** /ToUnicode.
+
+    Mirrors the MHeiHK fonts in HK annual reports: the 2-byte Identity-H codes
+    are Adobe-CNS1 CIDs (923 吉, 1083 利, 1243 汽, 1299 車), so the text comes
+    from the bundled CNS1 CID→Unicode table.
+    """
+    content = b"BT /F1 24 Tf 72 700 Td <039B043B04DB0513> Tj ET"
+    objs = [
+        (1, b"<< /Type /Catalog /Pages 2 0 R >>"),
+        (2, b"<< /Type /Pages /Count 1 /Kids [3 0 R] >>"),
+        (
+            3,
+            b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+            b"/Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
+        ),
+        (
+            4,
+            b"<< /Length "
+            + str(len(content)).encode()
+            + b" >>\nstream\n"
+            + content
+            + b"\nendstream",
+        ),
+        (
+            5,
+            b"<< /Type /Font /Subtype /Type0 /BaseFont /MHeiHK-Light "
+            b"/Encoding /Identity-H /DescendantFonts [6 0 R] >>",
+        ),
+        (
+            6,
+            b"<< /Type /Font /Subtype /CIDFontType0 /BaseFont /MHeiHK-Light "
+            b"/CIDSystemInfo << /Registry (Adobe) /Ordering (CNS1) /Supplement 3 >> "
+            b"/FontDescriptor 7 0 R /DW 1000 >>",
+        ),
+        (
+            7,
+            b"<< /Type /FontDescriptor /FontName /MHeiHK-Light /Flags 4 "
+            b"/Ascent 880 /Descent -120 >>",
+        ),
+    ]
+    return _build_pdf(objs, root=1), "吉利汽車"
+
+
 def image_pdf() -> bytes:
     """A 1-page PDF with a single 1x1 DeviceRGB image XObject painted as /Im0."""
     import zlib
@@ -931,3 +975,12 @@ def test_accuracy_gt_003_cid_identity_h(capsys):
             f"ACCURACY-GT-003 similarity={sim:.4f} extracted={extracted!r} gt={ground_truth!r}"
         )
     assert sim >= 0.95, (extracted, ground_truth, sim)
+
+
+def test_accuracy_gt_004_cid_cns1_identity_h_without_tounicode():
+    # ACCURACY-GT-004: Adobe-CNS1 + Identity-H + no /ToUnicode → the bundled
+    # CNS1 table resolves every CID (no U+FFFD replacement characters).
+    pdf, gt = cid_cns1_no_tounicode_pdf()
+    extracted = _normalize(_page(pdf).get_text("text"))
+    assert extracted == gt, extracted
+    assert "\ufffd" not in extracted

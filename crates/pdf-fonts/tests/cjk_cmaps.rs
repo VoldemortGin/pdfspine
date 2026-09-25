@@ -89,6 +89,21 @@ fn cmap_cjk_radicals_supplement_kept_verbatim() {
     }
 }
 
+#[test]
+fn cmap_cjk_shared_cid_prefers_ideograph_over_radical_supplement() {
+    // Some CIDs are reached from both a CJK Radicals Supplement code and the
+    // unified ideograph; the ideograph is the CID's text (Adobe UCS2 ToUnicode).
+    for (name, code, ideograph) in [
+        ("UniCNS-UCS2-H", 0x6708u32, "\u{6708}"), // 月 (also ⺝ U+2E9D)
+        ("UniCNS-UCS2-H", 0x89D2, "\u{89D2}"),    // 角 (also ⻆ U+2EC6)
+        ("UniCNS-UCS2-H", 0x9AA8, "\u{9AA8}"),    // 骨 (also ⻣ U+2EE3)
+        ("UniJIS-UCS2-H", 0x5140, "\u{5140}"),    // 兀 (also ⺎ U+2E8E)
+    ] {
+        let cid = cid_for(name, code).expect("encoding CMap maps the ideograph");
+        assert_eq!(u(cid, name).as_deref(), Some(ideograph), "{name} CID {cid}");
+    }
+}
+
 // === classification + bundling ===========================================
 
 #[test]

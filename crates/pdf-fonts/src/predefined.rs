@@ -99,6 +99,27 @@ impl BundledCjk {
         }
     }
 
+    /// Maps a descendant CIDFont's `/CIDSystemInfo` `Registry`/`Ordering` to the
+    /// bundled collection with the same CID space, if any (`Adobe` +
+    /// `GB1` / `CNS1` / `Japan1` / `Korea1`).
+    ///
+    /// `Adobe-KR` is deliberately **not** matched: it is a separate collection
+    /// whose CIDs do not line up with Adobe-Korea1, so the bundled Korea1 table
+    /// would yield wrong characters.
+    #[must_use]
+    pub fn from_ordering(registry: &[u8], ordering: &[u8]) -> Option<BundledCjk> {
+        if registry != b"Adobe" {
+            return None;
+        }
+        match ordering {
+            b"GB1" => Some(BundledCjk::Gb1),
+            b"CNS1" => Some(BundledCjk::Cns1),
+            b"Japan1" => Some(BundledCjk::Japan1),
+            b"Korea1" => Some(BundledCjk::Korea1),
+            _ => None,
+        }
+    }
+
     /// The bundled raw CMap program (Adobe `Uni…-UCS2-H`, BSD-3-Clause).
     fn raw(self) -> &'static [u8] {
         match self {
@@ -172,7 +193,9 @@ static KOREA1: LazyLock<CidUnicode> = LazyLock::new(|| KOREA1_ENC.invert_to_cid_
 ///
 /// Returns `None` when `name` is not a bundled UCS2 family, or the CID is not in
 /// the table. Never panics. This is the extraction path for a Type0 font whose
-/// `/Encoding` is a predefined CJK name and which carries no `/ToUnicode`.
+/// `/Encoding` is a predefined CJK name and which carries no `/ToUnicode`
+/// (an Identity / embedded-CMap font instead selects the table by its
+/// `/CIDSystemInfo`, see [`BundledCjk::from_ordering`]).
 #[must_use]
 pub fn cid_to_unicode(name: &str, cid: u32) -> Option<SmolStr> {
     BundledCjk::from_name(name.as_bytes())?

@@ -204,9 +204,11 @@ impl CMap {
     /// dedup still ranks on the *original* source code.
     #[must_use]
     pub fn invert_to_cid_unicode(&self) -> CidUnicode {
-        // Smallest Unicode code wins per CID. We scan ranges in order; an entry
-        // only overwrites a CID's mapping if its source code is strictly smaller.
-        // The stored value is the folded char; the ranking key is the raw code.
+        // Per CID, a code outside the CJK Radicals Supplement (U+2E80–U+2EFF)
+        // beats one inside it (Adobe CNS1 / Japan1 share e.g. ⺝ U+2E9D and
+        // 月 U+6708 on one CID; the collection's UCS2 ToUnicode gives 月), then
+        // the smallest code wins. The stored value is the folded char; the
+        // ranking key is the raw code.
         let mut map: std::collections::HashMap<u32, (u32, char)> = std::collections::HashMap::new();
         for r in &self.cid_ranges {
             // Guard against absurd ranges (malformed data) blowing up memory.
@@ -221,9 +223,10 @@ impl CMap {
                     continue;
                 };
                 let ch = fold_cjk_radical(ch);
+                let rank = |c: u32| ((0x2E80..=0x2EFF).contains(&c), c);
                 map.entry(cid)
                     .and_modify(|(existing_code, existing_ch)| {
-                        if code < *existing_code {
+                        if rank(code) < rank(*existing_code) {
                             *existing_code = code;
                             *existing_ch = ch;
                         }

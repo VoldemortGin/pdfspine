@@ -6,8 +6,9 @@
 //! - [`FontMapper::iter_codes`] — split a show-string into `(code, n_bytes)`
 //!   pairs (1 byte for simple fonts; codespace-driven for Type0).
 //! - [`FontMapper::to_unicode`] — `code → Unicode` (the resolution ladder:
-//!   `/ToUnicode` overrides; else encoding + AGL for simple fonts, or the CID
-//!   CMap path for Type0).
+//!   `/ToUnicode` overrides; else encoding + AGL for simple fonts, or for Type0
+//!   the bundled predefined CJK CMap, then the Adobe CJK collection named by
+//!   the descendant's `/CIDSystemInfo`).
 //! - [`FontMapper::width`] — `code → advance` in 1000-unit text space.
 //!
 //! Everything is computed once at construction and stored; the accessors are
@@ -80,6 +81,10 @@ pub struct FontMapper {
     /// Stored for completeness / future rasterization; mapping uses it to
     /// validate a CID is present but width/unicode key on CID directly.
     cid_to_gid: Option<Vec<u16>>,
+    /// The bundled Adobe CJK collection named by the descendant's
+    /// `/CIDSystemInfo` (`Adobe-GB1/CNS1/Japan1/Korea1`), if any. Last rung of
+    /// the Type0 `to_unicode` ladder for Identity / embedded-CMap encodings.
+    cid_collection: Option<BundledCjk>,
     /// Writing mode (`0` horizontal, `1` vertical): set from the Type0
     /// `/Encoding` (predefined `-V` name or an embedded CMap's `/WMode`). Always
     /// `0` for simple fonts.
@@ -171,6 +176,7 @@ impl FontMapper {
             cid_encoding: None,
             cid_widths: CidWidths::default(),
             cid_to_gid: None,
+            cid_collection: None,
             wmode: 0,
             vertical: VerticalMetrics::default(),
         }
@@ -203,6 +209,9 @@ impl FontMapper {
         // CIDToGIDMap (Identity or stream) from the descendant.
         let cid_to_gid = descendant.as_ref().and_then(|d| load_cid_to_gid(d, doc));
 
+        // `/CIDSystemInfo` collection (Unicode fallback when no `/ToUnicode`).
+        let cid_collection = descendant.as_ref().and_then(|d| cid_collection(d, doc));
+
         let to_unicode = load_to_unicode(font, doc);
 
         FontMapper {
@@ -215,6 +224,7 @@ impl FontMapper {
             cid_encoding: Some(cid_encoding),
             cid_widths,
             cid_to_gid,
+            cid_collection,
             wmode,
             vertical,
         }
@@ -252,8 +262,10 @@ impl FontMapper {
     /// Resolves a character code to its Unicode string (PRD §8.5 ladder).
     ///
     /// `/ToUnicode` always wins. Otherwise: simple fonts use encoding + AGL;
-    /// Type0 fonts have no second path here (the CID CMap maps to CIDs, not
-    /// Unicode) and return `None` — the documented CJK-without-ToUnicode gap.
+    /// Type0 fonts with a bundled predefined CJK `/Encoding` use its inverted
+    /// UCS2 table; Type0 fonts with an Identity / embedded-CMap encoding fall
+    /// back to the table of the Adobe CJK collection their `/CIDSystemInfo`
+    /// names (MuPDF parity). Anything else returns `None`.
     #[must_use]
     pub fn to_unicode(&self, code: u32) -> Option<SmolStr> {
         if let Some(tu) = &self.to_unicode {
@@ -271,10 +283,15 @@ impl FontMapper {
                 glyph_name_to_unicode(name)
             }
             // A bundled predefined CJK CMap resolves code → CID → Unicode via the
-            // inverted UCS2 table; other Type0 encodings have no second path
-            // (the documented CJK-without-ToUnicode gap) and return None.
+            // inverted UCS2 table. Identity / embedded-CMap encodings yield real
+            // CIDs, so the `/CIDSystemInfo` collection's table applies. An
+            // unbundled legacy CMap's code → CID is only a guess, so it gets no
+            // fallback (the documented gap).
             FontKind::Type0 => match &self.cid_encoding {
                 Some(CidEncoding::Cjk(c)) => c.cid_to_unicode(self.code_to_cid(code)),
+                Some(CidEncoding::Identity | CidEncoding::CMap(_)) => {
+                    self.cid_collection?.cid_to_unicode(self.code_to_cid(code))
+                }
                 _ => None,
             },
         }
@@ -985,6 +1002,29 @@ fn resolve_descendant(font: &Dict, doc: &DocumentStore) -> Option<Dict> {
         other => std::sync::Arc::new(other.clone()),
     };
     resolved.as_dict().cloned()
+}
+
+/// Resolves the descendant's `/CIDSystemInfo` to a bundled Adobe CJK collection.
+/// `Registry` / `Ordering` are strings per spec; names are tolerated.
+fn cid_collection(descendant: &Dict, doc: &DocumentStore) -> Option<BundledCjk> {
+    let info = doc
+        .resolve_dict_key(descendant, &Name::new("CIDSystemInfo"))
+        .ok()
+        .flatten()?;
+    let info = info.as_dict()?;
+    let field = |key: &str| -> Option<Vec<u8>> {
+        match doc
+            .resolve_dict_key(info, &Name::new(key))
+            .ok()
+            .flatten()?
+            .as_ref()
+        {
+            Object::String(s) => Some(s.as_bytes().to_vec()),
+            Object::Name(n) => Some(n.as_bytes().to_vec()),
+            _ => None,
+        }
+    };
+    BundledCjk::from_ordering(&field("Registry")?, &field("Ordering")?)
 }
 
 /// Builds the CID width table from the descendant `/W` + `/DW`.
