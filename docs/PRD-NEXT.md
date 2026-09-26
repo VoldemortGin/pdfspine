@@ -1331,9 +1331,15 @@ oracle-cross-checked against real PyMuPDF 1.24.14 (`.venv-oracle`) with zero reg
        IoU 0.63); PP-DocLayoutV3 detects the full table on all three pages (IoU 0.99 / 0.85 / 0.92,
        unclaimed words 897 → 23 and 21 → 0). PP-DocLayout-L fixes ADI (0.98) but misclassifies the shaded
        ADBE table as `image` and emits a nested duplicate box on ADI — hence V3 as the default.
-    2. **Cell text assignment / column merging** — fold `"$"`-only predicted columns into their numeric
-       neighbor, assign row-label words by row-band y-range instead of nearest-cell-box (fixes multi-line
-       label misattribution), strip dotted-leader tokens (ADBE 11 vs 8 predicted columns; AMP T0 12 vs 9).
+    2. ~~**Cell text assignment / column merging**~~ — **landed 2026-09-08**: four geometric rules in
+       `_onnx.py`, each behind an `OnnxOptions` switch (`cell_postprocess=False` restores the old path).
+       Default on: `$`-style columns folded right / `%`-style left with dashes kept as values
+       (`merge_symbol_columns`) and dot-leader stripping (`strip_dot_leaders`). Opt-in, because measurement
+       put both below the default on FinTabNet.c: row-band × column-band word assignment
+       (`band_word_assignment`) and hallucinated-span splitting (`verify_spans`). FinTabNet.c 150 pages
+       GriTS_Top 0.782 → 0.794, GriTS_Con 0.692 → 0.736. `ONNX-016`–`ONNX-020`; numbers in
+       [`docs/onnx-backend-baseline-2026-09-08.md`](onnx-backend-baseline-2026-09-08.md), "Cell
+       post-processing (2026-09-08)".
     3. **Structure-model swap or fine-tune** — deferred until 1–2 land; SLANet-plus's merged-cell
        prediction is unreliable in both directions (ADI 22 spurious `colspan=2`; ADBE misses 3 gold
        `colspan=8` rows), but more than half the current rows×cols gap traces to 1–2, not the model.

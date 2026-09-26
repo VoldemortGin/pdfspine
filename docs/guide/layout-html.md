@@ -209,6 +209,80 @@ TODO: replace the band rule with a recursive XY-cut so that three-column pages
 and pages whose column layout changes mid-page are ordered correctly on
 PP-DocLayout-L too.
 
+### Table cell post-processing
+
+SLANet-plus predicts cell boxes on a rendered crop, and the text-layer words
+are then placed into those boxes geometrically. On financial statements the
+raw result has three recurring defects: `$ 1,234` comes back as two columns
+(`$` in one, the number in the next), `Revenue . . . . 1,234` carries the
+dotted leader into the cell text, and a row label that wraps onto two lines
+loses its first line to the row above (the predicted box of a multi-line cell
+hugs its *last* line, so nearest-box assignment hands the first line to the
+neighbour). Every table returned by `find_tables(backend="onnx")` and
+`get_layout_html()` therefore goes through four clean-up rules, each behind its
+own `vision_options` switch. Two are on by default, two are opt-in (see
+[what is on by default, and why](#what-is-on-by-default-and-why));
+`vision_options={"cell_postprocess": False}` turns the whole stage off and
+restores the plain overlap → centre → nearest-box assignment.
+
+1. **Symbol-column merging** (`merge_symbol_columns`, default on). A predicted column whose
+   non-empty cells are all `$`, `€`, `£`, `¥`, `₩`, `₹`, `(`, `[` or `{` is
+   folded into the column to its right; one holding only `%`, `)`, `]` or `}`
+   into the column to its left. Column indices and `colspan`s are renumbered,
+   so `$ 1,234` becomes one cell. A dash-only column is left alone (`—` is a
+   real "none" value in a statement), and the merge is abandoned when a symbol
+   cell has no partner cell in the target row (its text would otherwise be
+   lost).
+2. **Dot-leader stripping** (`strip_dot_leaders`, default on). A run of three or more dots
+   inside a token is removed. Tokens that are nothing but dots are removed
+   when the line holds three or more of them (the `. . . .` spelling), and
+   otherwise only at the start or end of the line (a leader cut by the crop
+   edge). A lone `.` inside a line is kept, so a decimal point that became its
+   own word cannot glue two numbers together; `1,234.56` and `U.S.` are
+   untouched.
+3. **Row-band × column-band word assignment** (`band_word_assignment`, opt-in).
+   Words are first clustered into visual lines. A whole line falls into one row
+   band by its centre y, so a wrapped label stays in its own row; each word then
+   falls into a column band by its centre x. A line that sits in the gap between
+   two row bands belongs to the band *below* it, because that gap is where the
+   first line of a wrapped cell lives.
+4. **Span verification** (`verify_spans`, opt-in). SLANet-plus sometimes
+   hallucinates a `rowspan` / `colspan`. When any other row or column band
+   covered by the span holds words lying outside the spanning cell's box, that
+   band has content of its own and the span is split back into single cells, one
+   per band. A span whose covered bands have no text range of their own
+   (splitting would make the cells overlap) is kept.
+
+#### What is on by default, and why
+
+The four rules were measured one at a time against the FinTabNet.c human gold
+with GriTS over all 150 corpus pages (`scripts/onnx_grits.py`; detection is
+identical in every row, so only the structure scores move):
+
+| `vision_options` | GriTS_Top | GriTS_Con |
+|---|---|---|
+| `{"cell_postprocess": false}` (the old path) | 0.7824 | 0.6916 |
+| shipped defaults | **0.7939** | **0.7360** |
+| defaults + `band_word_assignment` | 0.7939 | 0.6932 |
+| defaults + `verify_spans` | 0.7913 | 0.7351 |
+| all four rules on | 0.7913 | 0.6917 |
+
+Symbol-column merging and dot-leader stripping pay for themselves on both
+axes, so they ship on. The band rule fixes the wrapped-label case it was
+written for — and it is the only thing that does — but across 150 pages it
+moves more words into the wrong row than the right one (GriTS_Con −0.043),
+and span verification is a small net loss on both axes; both are therefore
+opt-in rather than removed. Turn one on per document when its failure mode is
+the one you actually have:
+
+```python
+tables = page.find_tables(
+    strategy="vision",
+    backend="onnx",
+    vision_options={"band_word_assignment": True},
+)
+```
+
 ## Known limitations
 
 - **`Table.rows` / `Table.cols` are approximations.** SLANet-plus predicts
@@ -230,7 +304,11 @@ PP-DocLayout-L too.
   [ONNX backend baseline (2026-09-08)](../onnx-backend-baseline-2026-09-08.md).
 - **Weak structure on borderless tables.** SLANet-plus was trained mostly on
   ruled or lightly ruled tables; long borderless statements may come back with
-  merged or split columns.
+  merged or split columns. The
+  [cell post-processing](#table-cell-post-processing) folds symbol-only
+  columns back into their numbers and splits spans the text layer contradicts,
+  but a numeric column cut in two, or two columns merged into one, still comes
+  through as predicted.
 - **Cell boxes are much weaker than the grid.** Scored over 186 FinTabNet.c
   gold tables, the ONNX backend reaches GriTS_Con **0.766** and TEDS-Struct
   **0.836** on structure alone, but cell-alignment F1 only **0.371**: the grid

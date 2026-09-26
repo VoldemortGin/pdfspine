@@ -496,6 +496,21 @@ feature-complete, but the public API and on-disk formats may still change.
   deliberate divergence from MuPDF / PyMuPDF, which ignore `/AS` and hide the
   OCG (ISO 32000-1 §8.11.4.4; registered with the `/VE` / AllOn / AnyOff
   divergences in `docs/pymupdf-compat-findings.md`).
+- **ONNX table cell post-processing.** `find_tables(backend="onnx")` and
+  `get_layout_html()` now clean up SLANet-plus cells with four geometric
+  rules, each behind its own `OnnxOptions` switch. Two are on by default:
+  `merge_symbol_columns` folds a column holding only `$`-style symbols into
+  its right neighbour (`%`-style into its left), so `$ 1,234` is one cell, and
+  `strip_dot_leaders` removes `. . . .` / `......` leader tokens from cell
+  text. Two are opt-in because they cost more than they gain over the 150-page
+  FinTabNet.c set: `band_word_assignment` (row-band × column-band word
+  assignment, which keeps a wrapped row label out of the row above) and
+  `verify_spans` (splits a `rowspan` / `colspan` whose covered bands hold
+  their own words). Over FinTabNet.c the defaults move GriTS_Top
+  0.782 → 0.794 and GriTS_Con 0.692 → 0.736; the master switch
+  `vision_options={"cell_postprocess": False}` turns the whole stage off and
+  restores the previous overlap → centre → nearest-box assignment.
+  `ONNX-016`–`ONNX-020`.
 
 ### Fixed
 

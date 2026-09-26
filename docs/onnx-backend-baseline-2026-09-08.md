@@ -353,3 +353,138 @@ export PDFSPINE_ONNX_MODELS=~/models/pdfspine-onnx   # see docs/guide/layout-htm
 `--variant` was added to `scripts/onnx_vis.py` for this run; the box captions
 in `<doc_id>.vis.png` now show the model's raw class name rather than the
 normalised label.
+
+---
+
+## Cell post-processing (2026-09-08)
+
+The two sections above are pure measurement: no repository code changed while
+they were taken. This section is the first *fix* on the ONNX table path — the
+[revised fix priority](#recommendation) item 2, "`$`-column merging and
+row-band word assignment" — and the first time the backend is scored against
+the whole 150-page FinTabNet.c corpus rather than three hand-read pages.
+
+### Scorer
+
+`scripts/onnx_grits.py` (new) scores `find_tables(strategy="vision",
+backend="onnx")` against the FinTabNet.c human gold with GriTS, reusing
+`conformance/gt/grits.py` and the gold-parsing rules of
+`conformance/gt/tables_diff.py --gold` (`exclude_for_structure` tables
+dropped, predicted↔gold tables matched by `Table.bbox` IoU ≥ 0.5). Unlike
+`tables_diff.py` it keeps every page in one process, so the two ONNX models
+load once instead of 150 times.
+
+```bash
+export PDFSPINE_ONNX_MODELS=~/models/pdfspine-onnx
+.venv/bin/python scripts/onnx_grits.py \
+    --manifest conformance/gt/corpus-fintabnet/manifest.json \
+    --out /tmp/onnx-grits.json
+# one page, one rule turned off:
+.venv/bin/python scripts/onnx_grits.py --pages ADBE_2011_page_118 \
+    --vision-options '{"cell_postprocess": false}' --out /tmp/off.json
+```
+
+`end_to_end` scores every gold table, counting an undetected one as 0;
+`matched_only` scores structure on the tables whose `Table.bbox` matched.
+Detection is untouched by this change, so it is identical in every row below
+(P 0.708 / R 0.898 / F1 0.792 over 186 gold tables on 150 pages).
+
+### The four rules and their switches
+
+All four live in `_postprocess_cells` in `python/pdfspine/_onnx.py` and run on
+the SLANet-plus cells in crop coordinates, before they are mapped back to page
+space. Each has an `OnnxOptions` switch reachable through `vision_options`;
+`cell_postprocess=False` is the master off switch and restores the previous
+`_assign_words` path exactly (verified: it reproduces the old numbers to four
+decimals).
+
+| Switch | Default | Rule |
+|---|---|---|
+| `cell_postprocess` | `True` | Master switch for the three below plus the rules' shared text rebuild. |
+| `merge_symbol_columns` | `True` | A predicted column whose non-empty cells are all `$ € £ ¥ ₩ ₹ ( [ {` is folded into the column on its right; one holding only `% ) ] }` into the column on its left. Column indices and `colspan`s are renumbered. A dash-only column is never merged (`—` is a real "nil" value); a symbol cell with no partner cell in the target row aborts the merge rather than lose its text. |
+| `strip_dot_leaders` | `True` | Runs of ≥3 dots inside a token are deleted. All-dot tokens go when the line holds ≥3 of them (the `. . . .` spelling) or when they sit at either end of a line (a leader clipped by the crop edge). A lone interior `.` survives, so a separately tokenised decimal point never glues two numbers together. |
+| `band_word_assignment` | `False` | Words are clustered into visual lines; a whole line takes one row band by its centre y and each word takes a column band by its centre x. A line in the whitespace between two row bands goes to the band *below*, because SLANet-plus cell boxes hug the last line of a multi-line cell. |
+| `verify_spans` | `False` | A `rowspan` / `colspan` whose other covered bands hold words outside the spanning cell's own box is split back into one cell per band. A span whose covered bands have no text extent of their own is kept. |
+
+### Result
+
+150 FinTabNet.c pages, 186 gold tables, `pp_doclayoutv3` + `slanet-plus`,
+`onnxruntime` 1.29.0 / `CPUExecutionProvider`:
+
+| Configuration | Top (e2e) | Con (e2e) | Top (matched) | Con (matched) |
+|---|---|---|---|---|
+| `cell_postprocess=False` (old path) | 0.7824 | 0.6916 | 0.8767 | 0.7749 |
+| **shipped defaults** | **0.7939** | **0.7360** | **0.8896** | **0.8247** |
+| defaults + `band_word_assignment` | 0.7939 | 0.6932 | 0.8896 | 0.7807 |
+| defaults + `verify_spans` | 0.7913 | 0.7351 | 0.8867 | 0.8237 |
+| all four rules on | 0.7913 | 0.6917 | 0.8867 | 0.7750 |
+| `merge_symbol_columns=False` only | 0.7802 | 0.6836 | 0.8742 | 0.7659 |
+| `strip_dot_leaders=False` only | 0.7913 | 0.6532 | 0.8867 | 0.7319 |
+
+Per table, against the old path, the shipped defaults have **no regressions at
+all**: 59 tables gain content score (+8.27 total), 13 gain topology (+2.14),
+and none of the 186 lose on either axis. Predicted column counts move toward
+gold — tables with more columns than gold fall from 37 to 28, and exact
+column-count matches rise from 125 to 134.
+
+The three hand-read pages of the sections above:
+
+| Page / table | Gold | Old path | Shipped defaults |
+|---|---|---|---|
+| ADBE_2011_page_118 | 16x8 | 16x13, Top 0.631 / Con 0.568 | 16x**11**, Top **0.697** / Con **0.624** |
+| ADI_2010_page_51 | 42x4 | 42x5, Top 0.730 / Con 0.562 | 42x5, Top 0.730 / Con **0.660** |
+| AMP_2015_page_94 T0 | 7x9 | 6x13, Top 0.646 / Con 0.424 | 6x**11**, Top **0.719** / Con **0.473** |
+| AMP_2015_page_94 T1 | 7x5 | 8x7, Top 0.525 / Con 0.471 | 8x**5**, Top **0.654** / Con **0.586** |
+| AMP_2015_page_94 T2 | 9x9 | 9x10, Top 0.764 / Con 0.673 | 9x10, Top 0.764 / Con 0.673 |
+| **all five** | | Top 0.659 / Con 0.540 | Top **0.713** / Con **0.603** |
+
+### Why two rules ship off
+
+`band_word_assignment` and `verify_spans` were written for the failure modes
+named in [Issue 3](#issue-3-multi-line-row-labels-are-misattributed-merged-cells-are-hallucinated)
+and they do fix them — the band rule is the *only* thing that repairs ADBE's
+"Gross profit<br>Gross profit as a" / "percentage<br>of revenue" garbling, and
+on the three-page set it beats the shipped defaults on content (0.596 vs
+0.603 overall but 0.718 vs 0.660 on ADI). Across 150 pages, though, the band
+rule moves more words into the wrong row than the right one (Con −0.043), and
+span verification costs a little on both axes (Top −0.003, Con −0.001). They
+are kept, documented and switchable rather than deleted, because a caller who
+has that specific failure can turn one on per document:
+
+```python
+page.find_tables(strategy="vision", backend="onnx",
+                 vision_options={"band_word_assignment": True})
+```
+
+Sharpening the band rule's gap tie-break is the obvious follow-up: the shipped
+"a gap line belongs to the band below" bias is right for wrapped row labels
+and wrong wherever a row's box hugs its *first* line. A midpoint tie-break was
+measured too and lands between the two (Con 0.6967 with spans off), which is
+still far below simply leaving the rule off.
+
+### What is still wrong
+
+- **Columns are still over-split.** ADBE predicts 11 against gold's 8. The
+  three surviving lone-`$` columns each also caught a right-aligned percentage
+  (`93%`, `97%`, `94%`) whose word centre falls inside the `$` cell's box, so
+  the column is no longer symbol-only and the merge correctly declines. This is
+  SLANet-plus placing a column boundary between `625,836` and the `93%`
+  directly beneath it; no post-processing rule reads that as one column.
+- **Merged cells are still missed, not hallucinated.** ADBE's three gold
+  `colspan=8` section rows are still absent, and `verify_spans` cannot help —
+  it only removes spans, never creates them.
+- **Detection, not structure, now dominates the end-to-end gap.** Detection F1
+  is 0.792 (precision 0.708 — 236 predicted tables against 186 gold), which is
+  why `end_to_end` trails `matched_only` by ~0.09 on both axes. That is the
+  next thing worth attacking on this path, ahead of another structure rule.
+
+### Reproducing this section
+
+```bash
+export PDFSPINE_ONNX_MODELS=~/models/pdfspine-onnx
+.venv/bin/python conformance/gt/fetch_fintabnet.py
+MAN=conformance/gt/corpus-fintabnet/manifest.json
+.venv/bin/python scripts/onnx_grits.py --manifest $MAN --out /tmp/after.json
+.venv/bin/python scripts/onnx_grits.py --manifest $MAN --out /tmp/before.json \
+    --vision-options '{"cell_postprocess": false}'
+```

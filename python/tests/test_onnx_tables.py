@@ -147,6 +147,11 @@ def test_onnx_001_options_validation_and_mapping():
     assert default.layout_size is None
     assert default.layout_variant == "auto"
     assert default.skip_layout is False
+    assert default.cell_postprocess is True
+    assert default.band_word_assignment is False
+    assert default.merge_symbol_columns is True
+    assert default.strip_dot_leaders is True
+    assert default.verify_spans is False
     listed = _onnx.OnnxOptions(
         providers=["CPUExecutionProvider"],
         channel_order=" RGB ",
@@ -187,6 +192,11 @@ def test_onnx_001_options_validation_and_mapping():
         ({"layout_model": 5}, TypeError, "layout_model"),
         ({"ocr_if_no_text": 1}, TypeError, "ocr_if_no_text"),
         ({"skip_layout": 1}, TypeError, "skip_layout must be a bool"),
+        ({"cell_postprocess": 1}, TypeError, "cell_postprocess"),
+        ({"band_word_assignment": None}, TypeError, "band_word_assignment"),
+        ({"merge_symbol_columns": "yes"}, TypeError, "merge_symbol_columns"),
+        ({"strip_dot_leaders": 0}, TypeError, "strip_dot_leaders"),
+        ({"verify_spans": 1.0}, TypeError, "verify_spans"),
         ({"ocr_engine": " "}, ValueError, "OCR engine"),
     ]:
         with pytest.raises(error, match=message):
@@ -1311,14 +1321,14 @@ def test_onnx_015_v3_read_order_and_footnote_html(monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
-# ONNX-016: skip_layout treats the clip as the sole table region
+# ONNX-021: skip_layout treats the clip as the sole table region
 # --------------------------------------------------------------------------- #
 class _NoLayoutRuntime(_TwoTableRuntime):
     def detect_layout(self, _image, _options):
         raise AssertionError("detect_layout must not run with skip_layout=True")
 
 
-def test_onnx_016_skip_layout_uses_clip_as_table_region(monkeypatch):
+def test_onnx_021_skip_layout_uses_clip_as_table_region(monkeypatch):
     rendered = _rendered(
         tokens=[
             _token([10, 30, 60, 50], "L1", 0, 0, 0),
@@ -1344,3 +1354,257 @@ def test_onnx_016_skip_layout_uses_clip_as_table_region(monkeypatch):
         _onnx.find_tables(
             None, options={"skip_layout": True}, _runtime=_NoLayoutRuntime()
         )
+
+
+# --------------------------------------------------------------------------- #
+# ONNX-016: dotted-leader stripping
+# --------------------------------------------------------------------------- #
+def test_onnx_016_strip_dot_leaders():
+    strip = _onnx._strip_dot_leaders
+    assert strip("Revenue . . . . 1,234") == "Revenue 1,234"
+    assert strip("Revenue...... 1,234") == "Revenue 1,234"
+    assert strip(". $ 2,761,503") == "$ 2,761,503"
+    assert strip("Total .") == "Total"
+    assert strip("....") == ""
+    # Decimals and an interior lone dot are never touched.
+    assert strip("1,234.56") == "1,234.56"
+    assert strip("12 . 5") == "12 . 5"
+    assert strip("U.S. Treasury") == "U.S. Treasury"
+    words = [_token([0, 0, 40, 8], "Revenue"), _token([45, 0, 60, 8], "....")]
+    cell = {"row_nums": [0], "column_nums": [0], "bbox": [0, 0, 80, 10]}
+    kept = dict(cell, _words=words)
+    _onnx._apply_cell_text([kept], strip_leaders=False)
+    assert kept["cell_text"] == "Revenue ...."
+    cleaned = dict(cell, _words=words)
+    _onnx._apply_cell_text([cleaned], strip_leaders=True)
+    assert cleaned["cell_text"] == "Revenue"
+
+
+# --------------------------------------------------------------------------- #
+# ONNX-017: row-band / column-band word assignment
+# --------------------------------------------------------------------------- #
+def _band_grid():
+    return [
+        {"row_nums": [0], "column_nums": [0], "bbox": [0, 0, 50, 10], "cell_text": ""},
+        {
+            "row_nums": [0],
+            "column_nums": [1],
+            "bbox": [50, 0, 100, 10],
+            "cell_text": "",
+        },
+        {"row_nums": [1], "column_nums": [0], "bbox": [0, 30, 50, 40], "cell_text": ""},
+        {
+            "row_nums": [1],
+            "column_nums": [1],
+            "bbox": [50, 30, 100, 40],
+            "cell_text": "",
+        },
+    ]
+
+
+def test_onnx_017_band_word_assignment_keeps_wrapped_labels():
+    infinity = float("inf")
+    bands, cores = _onnx._cell_bands(_band_grid(), axis=1)
+    assert cores == [(0, 10), (30, 40)]
+    assert bands == [(-infinity, 20.0), (20.0, infinity)]
+    columns, column_cores = _onnx._cell_bands(_band_grid(), axis=0)
+    assert column_cores == [(0, 50), (50, 100)]
+    assert columns == [(-infinity, 50.0), (50.0, infinity)]
+    # A value inside a core takes that band; one in the whitespace between two
+    # cores takes the band *below* it, where SLANet-plus puts the cell box.
+    assert _onnx._band_index(5, bands, cores) == 0
+    assert _onnx._band_index(16, bands, cores) == 1
+    assert _onnx._band_index(35, bands, cores) == 1
+    assert _onnx._band_index(99, bands, cores) == 1
+
+    tokens = [
+        _token([2, 2, 30, 8], "Gross"),
+        _token([60, 2, 90, 8], "profit"),
+        _token([2, 12, 40, 20], "as-a-percentage"),  # wrapped line, in the gap
+        _token([2, 32, 40, 38], "of-revenue"),
+        _token([60, 32, 90, 38], "96%"),
+    ]
+    legacy = _band_grid()
+    _onnx._assign_words(legacy, tokens)
+    assert legacy[0]["cell_text"] == "Gross\nas-a-percentage"  # stolen by row 0
+    banded = _band_grid()
+    assert _onnx._assign_words_bands(banded, tokens) == 1.0
+    _onnx._apply_cell_text(banded, strip_leaders=False)
+    assert [cell["cell_text"] for cell in banded] == [
+        "Gross",
+        "profit",
+        "as-a-percentage\nof-revenue",
+        "96%",
+    ]
+    assert _onnx._assign_words_bands([], tokens) == 0.0
+
+
+# --------------------------------------------------------------------------- #
+# ONNX-018: symbol-only column merging
+# --------------------------------------------------------------------------- #
+def _symbol_cell(row, column, x0, x1, text):
+    return {
+        "row_nums": [row],
+        "column_nums": [column],
+        "bbox": [x0, 0, x1, 10],
+        "header": False,
+        "score": 1.0,
+        "cell_text": "",
+        "_words": [_token([x0 + 1, 1, x1 - 1, 9], text)] if text else [],
+    }
+
+
+def test_onnx_018_symbol_columns_merge_into_their_number():
+    def grid():
+        return [
+            _symbol_cell(0, 0, 0, 40, "Revenue"),
+            _symbol_cell(0, 1, 40, 50, "$"),
+            _symbol_cell(0, 2, 50, 90, "1,234"),
+            _symbol_cell(0, 3, 90, 100, "%"),
+        ]
+
+    cells = grid()
+    assert _onnx._symbol_column(cells, 0) is None
+    assert _onnx._symbol_column(cells, 1) == "right"
+    assert _onnx._symbol_column(cells, 2) is None
+    assert _onnx._symbol_column(cells, 3) == "left"
+    assert _onnx._merge_symbol_columns(cells) == 2
+    assert [cell["column_nums"] for cell in cells] == [[0], [1]]
+    assert cells[1]["bbox"] == [40, 0, 100, 10]
+    _onnx._apply_cell_text(cells, strip_leaders=False)
+    assert [cell["cell_text"] for cell in cells] == ["Revenue", "$ 1,234 %"]
+
+    # An em-dash column means "nil" — it is a value column, never a symbol one.
+    dashes = [_symbol_cell(0, 0, 0, 40, "Total"), _symbol_cell(0, 1, 40, 50, "—")]
+    assert _onnx._symbol_column(dashes, 1) is None
+    assert _onnx._merge_symbol_columns(dashes) == 0
+
+    # A symbol cell with no partner in the target column would lose its text.
+    orphan = [_symbol_cell(0, 0, 0, 10, "$"), _symbol_cell(1, 1, 10, 20, "9")]
+    assert _onnx._merge_symbol_columns(orphan) == 0
+    assert _onnx._merge_column(orphan, 0, "left") is False
+    assert _onnx._merge_symbol_columns([_symbol_cell(0, 0, 0, 10, "$")]) == 0
+
+
+# --------------------------------------------------------------------------- #
+# ONNX-019: hallucinated row/column spans are split back apart
+# --------------------------------------------------------------------------- #
+def test_onnx_019_split_unsupported_spans():
+    def grid(rows):
+        cells = [
+            {
+                "row_nums": list(rows),
+                "column_nums": [0],
+                "bbox": [0, 0, 50, 10],
+                "header": False,
+                "score": 0.9,
+                "cell_text": "",
+            }
+        ]
+        for row, top in enumerate((0, 20, 40)):
+            cells.append(
+                {
+                    "row_nums": [row],
+                    "column_nums": [1],
+                    "bbox": [50, top, 100, top + 10],
+                    "header": False,
+                    "score": 0.9,
+                    "cell_text": "",
+                }
+            )
+        return cells
+
+    labels = ["A", "B", "C"]
+    tokens = []
+    for row, top in enumerate((0, 20, 40)):
+        tokens.append(_token([2, top + 2, 40, top + 8], labels[row]))
+        tokens.append(_token([60, top + 2, 90, top + 8], str(row)))
+
+    # Rows 1 and 2 carry label words of their own -> the rowspan is bogus.
+    cells = grid([0, 1, 2])
+    assert _onnx._split_unsupported_spans(cells, tokens) is True
+    assert sorted(tuple(cell["row_nums"]) for cell in cells) == [
+        (0,),
+        (0,),
+        (1,),
+        (1,),
+        (2,),
+        (2,),
+    ]
+    _onnx._assign_words_bands(cells, tokens)
+    _onnx._apply_cell_text(cells, strip_leaders=False)
+    assert sorted(cell["cell_text"] for cell in cells) == [
+        "0",
+        "1",
+        "2",
+        "A",
+        "B",
+        "C",
+    ]
+
+    # The same span is legitimate once the covered rows have no words of their
+    # own in that column: nothing is split.
+    empty_rows = [token for token in tokens if token["bbox"][0] > 50]
+    empty_rows.append(_token([2, 2, 40, 8], "A"))
+    kept = grid([0, 1, 2])
+    assert _onnx._split_unsupported_spans(kept, empty_rows) is False
+    assert kept[0]["row_nums"] == [0, 1, 2]
+    # A span whose covered bands have no extent of their own is left alone too.
+    lonely = [
+        {
+            "row_nums": [0, 1],
+            "column_nums": [0],
+            "bbox": [0, 0, 50, 10],
+            "header": False,
+            "score": 0.9,
+            "cell_text": "",
+        }
+    ]
+    assert _onnx._split_unsupported_spans(lonely, tokens) is False
+    assert _onnx._split_unsupported_spans([], tokens) is False
+
+
+# --------------------------------------------------------------------------- #
+# ONNX-020: every post-processing rule has its own switch
+# --------------------------------------------------------------------------- #
+def test_onnx_020_postprocess_switches():
+    def grid():
+        return [
+            _symbol_cell(0, 0, 0, 40, ""),
+            _symbol_cell(0, 1, 40, 50, ""),
+            _symbol_cell(0, 2, 50, 90, ""),
+        ]
+
+    tokens = [
+        _token([2, 1, 30, 9], "Revenue"),
+        _token([32, 1, 38, 9], "...."),
+        _token([41, 1, 48, 9], "$"),
+        _token([55, 1, 88, 9], "1,234"),
+    ]
+    for cell in grid():
+        cell.pop("_words")
+
+    def run(**options):
+        cells = grid()
+        for cell in cells:
+            cell.pop("_words", None)
+        coverage = _onnx._postprocess_cells(cells, tokens, _onnx.OnnxOptions(**options))
+        assert coverage == 1.0
+        assert all("_words" not in cell for cell in cells)
+        return [(cell["column_nums"], cell["cell_text"]) for cell in cells]
+
+    assert run() == [([0], "Revenue"), ([1], "$ 1,234")]
+    assert run(merge_symbol_columns=False) == [
+        ([0], "Revenue"),
+        ([1], "$"),
+        ([2], "1,234"),
+    ]
+    assert run(strip_dot_leaders=False) == [([0], "Revenue ...."), ([1], "$ 1,234")]
+    assert run(cell_postprocess=False) == [
+        ([0], "Revenue ...."),
+        ([1], "$"),
+        ([2], "1,234"),
+    ]
+    # The two opt-in rules leave this fixture's outcome unchanged.
+    assert run(band_word_assignment=True) == [([0], "Revenue"), ([1], "$ 1,234")]
+    assert run(verify_spans=True) == [([0], "Revenue"), ([1], "$ 1,234")]
