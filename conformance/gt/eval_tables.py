@@ -36,12 +36,11 @@ Two modes, and why ``gold-crop`` exists
   precision/recall/F1 are reported alongside.
 * ``gold-crop`` — one call per gold table with ``clip=<gold bbox>``; for the
   ONNX backend ``vision_options={"skip_layout": True}`` bypasses the layout
-  detector so only the structure model (SLANet-plus) is exercised. This is
-  the *TSR-only* measurement that ``docs/adr/0002-table-structure-backends.md``
-  names as its decision gate: the default structure model changes only when a
-  candidate's structure-stage GriTS_Con beats the incumbent on the 186-table
-  slice, and that comparison is only apples-to-apples against Microsoft's
-  published numbers when the detector is taken out of the loop. Note that the
+  detector so only the structure model (SLANet-plus) is exercised. This was
+  the historical exploratory comparison proposed in ADR 0002. It does not
+  enforce the later strict crop-provenance or human-review requirements and
+  cannot authorize a default-model change; use ``tables_diff.py`` with its
+  ``gold-crop-tsr`` mode for current acceptance. Note that the
   native ``lines``/``text`` strategies do not honour ``clip`` (pdfspine only
   forwards it to the vision backends); for them gold-crop degenerates to
   "best-overlap table on the full page" and the run is flagged
