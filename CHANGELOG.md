@@ -13,6 +13,17 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ### Added
 
+- `Pixmap` can now write JPEG natively, with no Pillow dependency:
+  `tobytes("jpg"/"jpeg", jpg_quality=95)` and
+  `save(filename, output=None, jpg_quality=95)` match the PyMuPDF signatures,
+  and `save` also infers JPEG from a `.jpg`/`.jpeg` extension.
+  `pil_tobytes("JPEG")` and `pil_save` use the same encoder and accept a
+  Pillow-style `quality=` (default 75, Pillow's default). Quality is clamped
+  to 1–100. As in PyMuPDF, a pixmap with alpha raises (here
+  `PdfUnsupportedError`) rather than silently dropping alpha. CMYK is
+  converted to RGB before encoding, where MuPDF writes a CMYK JPEG; see
+  `docs/pymupdf-compat-findings.md`.
+
 - **Table-structure evaluation harness** — `conformance/gt/eval_tables.py`
   scores `find_tables` against gold cell structure on three metrics: GriTS
   Top/Con (`grits.py`), **TEDS-Struct** (Zhang-Shasha tree edit distance over

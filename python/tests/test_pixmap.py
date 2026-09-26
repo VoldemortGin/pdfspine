@@ -12,6 +12,8 @@ import gc
 import struct
 import zlib
 
+import pytest
+
 import pdfspine
 
 
@@ -413,3 +415,77 @@ def test_pyrender_005_fitz_parity():
     assert fitz.DisplayList is pdfspine.DisplayList
     dl = page.get_displaylist()
     assert bytes(dl.get_pixmap().samples) == bytes(pix.samples)
+
+
+# --- PYPIXMAP-JPEG-*: native JPEG output (tobytes/save/pil_*) -------------
+
+
+def _jpeg_size(data: bytes) -> tuple[int, int]:
+    """(width, height) from the first SOFn marker of a baseline JPEG."""
+    assert data[:3] == b"\xff\xd8\xff"
+    i = 2
+    while i < len(data):
+        marker, seglen = data[i + 1], struct.unpack(">H", data[i + 2 : i + 4])[0]
+        if marker in (0xC0, 0xC1, 0xC2):
+            h, w = struct.unpack(">HH", data[i + 5 : i + 9])
+            return w, h
+        i += 2 + seglen
+    raise AssertionError("no SOF marker")
+
+
+def _gradient_pixmap(w: int = 32, h: int = 24):
+    doc = pdfspine.open(stream=image_only_pdf(w, h, _rgb_samples(w, h), _DRAW))
+    return doc[0].get_pixmap()
+
+
+def test_pypixmap_jpeg_001_tobytes():
+    pix = _gradient_pixmap()
+    for fmt in ("jpeg", "jpg", "JPEG"):
+        data = pix.tobytes(fmt)
+        assert data[:3] == b"\xff\xd8\xff"
+        assert _jpeg_size(data) == (pix.width, pix.height)
+    assert pix.tobytes("jpg") == pix.tobytes("jpg", jpg_quality=95)
+    low = pix.tobytes("jpeg", jpg_quality=10)
+    high = pix.tobytes("jpeg", jpg_quality=95)
+    assert len(low) < len(high)
+
+
+def test_pypixmap_jpeg_002_save(tmp_path):
+    pix = _gradient_pixmap()
+    explicit = tmp_path / "explicit.bin"
+    pix.save(str(explicit), "jpeg")
+    by_ext = tmp_path / "by_ext.jpg"
+    pix.save(str(by_ext), jpg_quality=50)
+    for path in (explicit, by_ext):
+        data = path.read_bytes()
+        assert _jpeg_size(data) == (pix.width, pix.height)
+    assert by_ext.read_bytes() == pix.tobytes("jpg", jpg_quality=50)
+
+
+def test_pypixmap_jpeg_003_pil_bridge(tmp_path):
+    pix = _gradient_pixmap()
+    data = pix.pil_tobytes("JPEG")
+    assert _jpeg_size(data) == (pix.width, pix.height)
+    # Pillow-style ``quality=`` routes to the same native encoder.
+    assert pix.pil_tobytes("JPEG", quality=80) == pix.tobytes("jpg", jpg_quality=80)
+    out = tmp_path / "pil.jpeg"
+    pix.pil_save(str(out), quality=80)
+    assert out.read_bytes() == pix.tobytes("jpg", jpg_quality=80)
+
+
+def test_pypixmap_jpeg_004_gray_and_cmyk():
+    gray = pdfspine.Pixmap(1, (0, 0, 5, 3))
+    gray.clear_with(100)
+    assert _jpeg_size(gray.tobytes("jpg")) == (5, 3)
+    # CMYK is converted to RGB (MuPDF writes CMYK JPEG; documented deviation).
+    cmyk = pdfspine.Pixmap(4, (0, 0, 5, 3))
+    cmyk.clear_with(0)
+    assert _jpeg_size(cmyk.tobytes("jpeg")) == (5, 3)
+
+
+def test_pypixmap_jpeg_005_alpha_raises():
+    pix = pdfspine.Pixmap(3, (0, 0, 4, 4), True)
+    with pytest.raises(pdfspine.PdfUnsupportedError, match="alpha"):
+        pix.tobytes("jpg")
+    with pytest.raises(pdfspine.PdfUnsupportedError, match="alpha"):
+        pix.pil_tobytes("JPEG")

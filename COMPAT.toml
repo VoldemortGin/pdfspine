@@ -3169,14 +3169,14 @@ name = "Pixmap.pil_save"
 group = "Pixmap"
 disposition = "implemented"
 milestone = "M5"
-note = "PNG/PPM/PAM bytes under the PyMuPDF Pillow-bridge names"
+note = "PNG/PPM/PAM/JPEG bytes under the PyMuPDF Pillow-bridge names"
 
 [[symbol]]
 name = "Pixmap.pil_tobytes"
 group = "Pixmap"
 disposition = "implemented"
 milestone = "M5"
-note = "PNG/PPM/PAM bytes under the PyMuPDF Pillow-bridge names"
+note = "PNG/PPM/PAM/JPEG bytes under the PyMuPDF Pillow-bridge names"
 
 [[symbol]]
 name = "Pixmap.pdfocr_save"

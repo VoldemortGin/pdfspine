@@ -117,6 +117,26 @@ create_exception!(_core, PdfLimitError, PdfError);
 create_exception!(_core, PdfRedactionError, PdfError);
 
 /// Maps a `pdf_api::Error` onto the appropriate Python exception (PRD §9.3).
+/// Clamps a Python `jpg_quality` to the `1..=100` range libjpeg / MuPDF use.
+fn clamp_jpeg_quality(q: i64) -> u8 {
+    // Lossless: the clamped value always fits in a `u8`.
+    q.clamp(1, 100) as u8
+}
+
+/// JPEG quality for the Pillow bridge: the Pillow-style `quality=` kwarg if
+/// given, else Pillow's own JPEG default of 75 (what PyMuPDF's
+/// `pil_tobytes`/`pil_save` produce, since they delegate to Pillow).
+fn pil_jpeg_quality(kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<u8> {
+    let q = match kwargs {
+        Some(kw) => match kw.get_item("quality")? {
+            Some(v) => v.extract::<i64>()?,
+            None => 75,
+        },
+        None => 75,
+    };
+    Ok(clamp_jpeg_quality(q))
+}
+
 fn map_err(e: ApiError) -> PyErr {
     let msg = e.to_string();
     match e.kind() {
@@ -5206,30 +5226,33 @@ impl PyPixmap {
 
     /// PNG (or `format`) bytes for the Pillow bridge (PyMuPDF
     /// `Pixmap.pil_tobytes`). `format` is a PIL-style name (`"PNG"`, `"PPM"`,
-    /// `"PAM"`); it is matched case-insensitively against the native encoders.
-    #[pyo3(signature = (format="PNG", **_kwargs))]
+    /// `"PAM"`, `"JPEG"`/`"JPG"`); it is matched case-insensitively against the
+    /// native encoders. A Pillow-style `quality=` kwarg sets the JPEG quality.
+    #[pyo3(signature = (format="PNG", **kwargs))]
     fn pil_tobytes<'py>(
         &self,
         py: Python<'py>,
         format: &str,
-        _kwargs: Option<&Bound<'py, PyDict>>,
+        kwargs: Option<&Bound<'py, PyDict>>,
     ) -> PyResult<Bound<'py, PyBytes>> {
         let fmt = format.to_ascii_lowercase();
+        let quality = pil_jpeg_quality(kwargs)?;
         let bytes = py
-            .detach(|| pdf_api::pixmap_tobytes(&self.pix, &fmt))
+            .detach(|| pdf_api::pixmap_tobytes_with_quality(&self.pix, &fmt, quality))
             .map_err(map_err)?;
         Ok(PyBytes::new(py, &bytes))
     }
 
     /// Saves the pixmap for the Pillow bridge (PyMuPDF `Pixmap.pil_save`). The
-    /// format is `format` or inferred from the extension (PNG default).
-    #[pyo3(signature = (filename, format=None, **_kwargs))]
+    /// format is `format` or inferred from the extension (PNG default); a
+    /// Pillow-style `quality=` kwarg sets the JPEG quality.
+    #[pyo3(signature = (filename, format=None, **kwargs))]
     fn pil_save(
         &self,
         py: Python<'_>,
         filename: &str,
         format: Option<&str>,
-        _kwargs: Option<&Bound<'_, PyDict>>,
+        kwargs: Option<&Bound<'_, PyDict>>,
     ) -> PyResult<()> {
         let fmt = format
             .map(|s| s.to_ascii_lowercase())
@@ -5240,26 +5263,42 @@ impl PyPixmap {
                     .map(|e| e.to_ascii_lowercase())
             })
             .unwrap_or_else(|| "png".to_string());
+        let quality = pil_jpeg_quality(kwargs)?;
         let bytes = py
-            .detach(|| pdf_api::pixmap_tobytes(&self.pix, &fmt))
+            .detach(|| pdf_api::pixmap_tobytes_with_quality(&self.pix, &fmt, quality))
             .map_err(map_err)?;
         std::fs::write(filename, bytes).map_err(|e| PyOSError::new_err(e.to_string()))
     }
 
     /// Encodes the pixmap and returns the bytes (PyMuPDF `Pixmap.tobytes`).
-    /// `output` is `"png"` (default), `"pam"`, or `"ppm"`/`"pnm"`.
-    #[pyo3(signature = (output="png"))]
-    fn tobytes<'py>(&self, py: Python<'py>, output: &str) -> PyResult<Bound<'py, PyBytes>> {
+    /// `output` is `"png"` (default), `"pam"`, `"ppm"`/`"pnm"`, or
+    /// `"jpg"`/`"jpeg"` (at `jpg_quality`, clamped to 1..=100).
+    #[pyo3(signature = (output="png", jpg_quality=95))]
+    fn tobytes<'py>(
+        &self,
+        py: Python<'py>,
+        output: &str,
+        jpg_quality: i64,
+    ) -> PyResult<Bound<'py, PyBytes>> {
+        let quality = clamp_jpeg_quality(jpg_quality);
         let bytes = py
-            .detach(|| pdf_api::pixmap_tobytes(&self.pix, output))
+            .detach(|| pdf_api::pixmap_tobytes_with_quality(&self.pix, output, quality))
             .map_err(map_err)?;
         Ok(PyBytes::new(py, &bytes))
     }
 
     /// Saves the pixmap to `filename` (PyMuPDF `Pixmap.save`). The format is the
-    /// `output` arg or inferred from the extension (PNG default).
-    #[pyo3(signature = (filename, output=None))]
-    fn save(&self, py: Python<'_>, filename: &str, output: Option<&str>) -> PyResult<()> {
+    /// `output` arg or inferred from the extension (PNG default); JPEG uses
+    /// `jpg_quality`.
+    #[pyo3(signature = (filename, output=None, jpg_quality=95))]
+    fn save(
+        &self,
+        py: Python<'_>,
+        filename: &str,
+        output: Option<&str>,
+        jpg_quality: i64,
+    ) -> PyResult<()> {
+        let quality = clamp_jpeg_quality(jpg_quality);
         let fmt = output
             .map(str::to_string)
             .or_else(|| {
@@ -5270,7 +5309,7 @@ impl PyPixmap {
             })
             .unwrap_or_else(|| "png".to_string());
         let bytes = py
-            .detach(|| pdf_api::pixmap_tobytes(&self.pix, &fmt))
+            .detach(|| pdf_api::pixmap_tobytes_with_quality(&self.pix, &fmt, quality))
             .map_err(map_err)?;
         std::fs::write(filename, bytes).map_err(|e| PyOSError::new_err(e.to_string()))
     }

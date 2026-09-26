@@ -1114,7 +1114,7 @@ add_many(
         "pil_save",
         "pil_tobytes",
     ],
-    "PNG/PPM/PAM bytes under the PyMuPDF Pillow-bridge names",
+    "PNG/PPM/PAM/JPEG bytes under the PyMuPDF Pillow-bridge names",
 )
 # OCR sandwich export (M8). PyMuPDF catalogs these under `Pixmap`; pdfspine
 # exposes them on `Document` (the whole-document sandwich), with the baseline

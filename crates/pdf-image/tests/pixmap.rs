@@ -132,6 +132,109 @@ fn pixmap_tobytes_001_formats() {
     assert!(pm.tobytes("bogus").is_err());
 }
 
+// --- PIXMAP-JPEG-001: RGB/Gray JPEG round-trip (lossy: tolerance compare) --
+
+fn gradient_rgb(w: u32, h: u32) -> Vec<u8> {
+    let mut samples = Vec::new();
+    for y in 0..h {
+        for x in 0..w {
+            samples.push((x * 255 / (w - 1)) as u8);
+            samples.push((y * 255 / (h - 1)) as u8);
+            samples.push(128);
+        }
+    }
+    samples
+}
+
+fn mean_abs_diff(a: &[u8], b: &[u8]) -> f64 {
+    assert_eq!(a.len(), b.len());
+    let sum: u64 = a
+        .iter()
+        .zip(b)
+        .map(|(x, y)| u64::from(x.abs_diff(*y)))
+        .sum();
+    sum as f64 / a.len() as f64
+}
+
+#[test]
+fn pixmap_jpeg_001_rgb_gray_roundtrip() {
+    let (w, h) = (32u32, 24u32);
+    let rgb = gradient_rgb(w, h);
+    let pm = Pixmap::new(w, h, Colorspace::Rgb, false, rgb.clone());
+    for fmt in ["jpg", "jpeg", "JPEG"] {
+        let jpg = pm.tobytes(fmt).unwrap();
+        assert!(jpg.starts_with(b"\xFF\xD8\xFF"), "{fmt}: no SOI");
+        let img = image::load_from_memory_with_format(&jpg, image::ImageFormat::Jpeg).unwrap();
+        assert_eq!((img.width(), img.height()), (w, h));
+        assert!(mean_abs_diff(&img.to_rgb8().into_raw(), &rgb) < 8.0);
+    }
+    assert_eq!(pm.tobytes("jpg").unwrap(), pm.to_jpeg_bytes(95).unwrap());
+
+    let gray: Vec<u8> = (0..w * h).map(|i| (i % 256) as u8).collect();
+    let pg = Pixmap::new(w, h, Colorspace::Gray, false, gray.clone());
+    let jpg = pg.to_jpeg_bytes(95).unwrap();
+    let img = image::load_from_memory_with_format(&jpg, image::ImageFormat::Jpeg).unwrap();
+    assert_eq!(img.color(), image::ColorType::L8);
+    assert_eq!((img.width(), img.height()), (w, h));
+    assert!(mean_abs_diff(&img.to_luma8().into_raw(), &gray) < 16.0);
+}
+
+// --- PIXMAP-JPEG-002: quality is honoured (and clamped, never panics) -------
+
+#[test]
+fn pixmap_jpeg_002_quality() {
+    let pm = Pixmap::new(64, 64, Colorspace::Rgb, false, gradient_rgb(64, 64));
+    let lo = pm.tobytes_with_quality("jpg", 10).unwrap();
+    let hi = pm.tobytes_with_quality("jpg", 95).unwrap();
+    assert!(lo.len() < hi.len(), "q10={} q95={}", lo.len(), hi.len());
+    // Out-of-range values clamp to 1..=100 (libjpeg semantics).
+    assert_eq!(pm.to_jpeg_bytes(0).unwrap(), pm.to_jpeg_bytes(1).unwrap());
+    assert_eq!(
+        pm.to_jpeg_bytes(255).unwrap(),
+        pm.to_jpeg_bytes(100).unwrap()
+    );
+    // Quality is ignored by the non-JPEG formats.
+    assert_eq!(
+        pm.tobytes_with_quality("png", 10).unwrap(),
+        pm.to_png_bytes().unwrap()
+    );
+}
+
+// --- PIXMAP-JPEG-003: CMYK is converted to RGB before encoding --------------
+
+#[test]
+fn pixmap_jpeg_003_cmyk_to_rgb() {
+    // Solid white (no ink) CMYK.
+    let pm = Pixmap::new(8, 8, Colorspace::Cmyk, false, vec![0u8; 8 * 8 * 4]);
+    let jpg = pm.tobytes("jpeg").unwrap();
+    let img = image::load_from_memory_with_format(&jpg, image::ImageFormat::Jpeg).unwrap();
+    assert_eq!(img.color(), image::ColorType::Rgb8);
+    assert_eq!((img.width(), img.height()), (8, 8));
+    assert!(img.to_rgb8().into_raw().iter().all(|&v| v >= 250));
+}
+
+// --- PIXMAP-JPEG-004: alpha is rejected (PyMuPDF raises), not dropped -------
+
+#[test]
+fn pixmap_jpeg_004_alpha_rejected() {
+    let pm = Pixmap::new(2, 2, Colorspace::Rgb, true, vec![0u8; 16]);
+    assert!(matches!(
+        pm.tobytes("jpg"),
+        Err(pdf_image::Error::InvalidArgument(_))
+    ));
+    let pg = Pixmap::new(2, 2, Colorspace::Gray, true, vec![0u8; 8]);
+    assert!(matches!(
+        pg.to_jpeg_bytes(95),
+        Err(pdf_image::Error::InvalidArgument(_))
+    ));
+    // A bad sample length is a typed error, not an encoder assert panic.
+    let bad = Pixmap::new(2, 2, Colorspace::Rgb, false, vec![0u8; 5]);
+    assert!(matches!(
+        bad.to_jpeg_bytes(95),
+        Err(pdf_image::Error::InvalidArgument(_))
+    ));
+}
+
 // --- PIXMAP-PIXEL-001: pixel get/set (COW preserves an older clone) --------
 
 #[test]

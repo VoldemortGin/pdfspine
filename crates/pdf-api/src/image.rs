@@ -390,6 +390,18 @@ pub fn pixmap_tobytes(pix: &Pixmap, format: &str) -> Result<Vec<u8>> {
     Ok(pix.tobytes(format)?)
 }
 
+/// Encodes a [`Pixmap`] in `format` with an explicit JPEG `quality` (PyMuPDF
+/// `Pixmap.tobytes(output, jpg_quality)`); `quality` is ignored by non-JPEG
+/// formats.
+///
+/// # Errors
+///
+/// [`Error::Unsupported`] for an unknown format or an alpha pixmap as JPEG;
+/// encode errors propagate.
+pub fn pixmap_tobytes_with_quality(pix: &Pixmap, format: &str, quality: u8) -> Result<Vec<u8>> {
+    Ok(pix.tobytes_with_quality(format, quality)?)
+}
+
 /// Writes a pixel into a [`Pixmap`] (PyMuPDF `Pixmap.set_pixel`).
 ///
 /// # Errors

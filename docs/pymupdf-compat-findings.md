@@ -328,3 +328,23 @@ rendered size 与 seq 由该段字符确定，flags 沿用原 span 的同样式�
 额外的可选共享 raw name 字段在创建期间保存，普通非 subset 字体不分配 raw name；
 并非全路径零开销。成本与默认输出回归见本轮验收记录。可执行测试：
 `python/tests/test_subset_fontnames.py` 与 `pdf-text::font_display::tests`。
+
+## Pixmap 原生 JPEG 输出（2026-09-24）
+
+`Pixmap.tobytes(output, jpg_quality=95)` / `save(filename, output=None, jpg_quality=95)`
+接受 `"jpg"` / `"jpeg"`（大小写不敏感；`save` / `pil_save` 也按 `.jpg` / `.jpeg`
+扩展名推断），`pil_tobytes("JPEG")` / `pil_save` 走同一个原生编码器（`image` crate
+的 baseline JPEG encoder，不依赖 Pillow），Pillow 风格的 `quality=` kwarg 设置质量，
+缺省用 Pillow 的 JPEG 默认值 75（PyMuPDF 的 `pil_*` 委托给 Pillow）。
+`jpg_quality` / `quality` 夹到 1–100（libjpeg 语义，与 MuPDF 一致，不报错）。
+
+- **alpha**：与 PyMuPDF 一致，带 alpha 的 pixmap 输出 JPEG 直接报错，不静默丢弃 alpha。
+  PyMuPDF 抛 `ValueError`；pdfspine 走既有的 `InvalidArgument` 映射，抛
+  `PdfUnsupportedError`（不是 `ValueError` 的子类）。
+- **CMYK（刻意偏离）**：MuPDF 能写 4 分量 CMYK JPEG；`image` crate 编码器只支持
+  L8 / Rgb8，因此 pdfspine 先按本仓库的 CMYK→RGB 近似转换再编码为 3 分量 RGB JPEG
+  （与 PNG / PNM 输出对 CMYK 的处理一致），产出可打开的近似结果而不是报错。
+  判定代码在 `crates/pdf-image/src/pixmap.rs` 的 `Pixmap::to_jpeg_bytes`。
+
+回归：`crates/pdf-image/tests/pixmap.rs`（`pixmap_jpeg_00*`）与
+`python/tests/test_pixmap.py`（`test_pypixmap_jpeg_00*`）。
