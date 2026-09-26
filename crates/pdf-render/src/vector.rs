@@ -6,8 +6,8 @@
 //! bodies. See `ARCHITECTURE.md`.
 
 use tiny_skia::{
-    BlendMode as SkBlendMode, Color, FillRule, LineCap, LineJoin, Mask, Paint as SkPaint,
-    PathBuilder, Shader, Stroke, StrokeDash,
+    Color, FillRule, LineCap, LineJoin, Mask, Paint as SkPaint, PathBuilder, Shader, Stroke,
+    StrokeDash,
 };
 
 use pdf_core::geom::{Matrix, Point, Rect};
@@ -27,32 +27,9 @@ pub struct Paint {
     pub blend: BlendMode,
 }
 
-/// The subset of PDF blend modes the rasterizer supports (PRD §8.11). Normal
-/// (source-over) is always correct; `Multiply` and `Screen` map straight onto
-/// tiny-skia's separable equivalents. Other PDF blend modes (Overlay, Darken,
-/// …) are recognized by the interpreter but rendered as Normal here (documented
-/// deferral — see `ARCHITECTURE.md`).
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum BlendMode {
-    /// Source-over compositing (PDF `Normal` / `Compatible`).
-    #[default]
-    Normal,
-    /// Multiply blend.
-    Multiply,
-    /// Screen blend.
-    Screen,
-}
-
-impl BlendMode {
-    /// Maps to the rasterizer blend mode (unsupported → `SourceOver`).
-    fn to_sk(self) -> SkBlendMode {
-        match self {
-            BlendMode::Normal => SkBlendMode::SourceOver,
-            BlendMode::Multiply => SkBlendMode::Multiply,
-            BlendMode::Screen => SkBlendMode::Screen,
-        }
-    }
-}
+/// The PDF blend modes (ExtGState `/BM`); all map onto tiny-skia's separable
+/// and non-separable equivalents.
+pub use pdf_text::BlendMode;
 
 impl Paint {
     /// Builds an opaque paint from a packed `0x00RRGGBB` sRGB color (the form
@@ -95,7 +72,7 @@ impl Paint {
     fn to_sk_paint<'a>(self) -> SkPaint<'a> {
         SkPaint {
             shader: Shader::SolidColor(self.to_color()),
-            blend_mode: self.blend.to_sk(),
+            blend_mode: crate::canvas::sk_blend(self.blend),
             anti_alias: true,
             force_hq_pipeline: false,
         }
@@ -298,6 +275,12 @@ pub fn stroke_items(
 /// `W`/`W*` followed by a path-painting operator). `even_odd` selects the clip
 /// fill rule. An unbuildable path leaves the clip unchanged (`Ok(())`).
 ///
+/// A clip that is a single device-axis-aligned rectangle becomes a hard-edged
+/// pixel rectangle rounded outward (every partially covered pixel is kept), as
+/// MuPDF and PDFium do. An anti-aliased edge there would multiply with the
+/// anti-aliased or pixel-snapped edge of content placed exactly inside the
+/// clip (the usual image frame) and leave a faint seam.
+///
 /// # Errors
 ///
 /// Never errors for arbitrary input.
@@ -320,9 +303,91 @@ pub fn set_clip(
     let Some(mut mask) = Mask::new(w, h) else {
         return Err(Error::LimitExceeded("clip mask too large"));
     };
-    mask.fill_path(&skpath, rule, true, transform);
+    match device_axis_rect(items, transform) {
+        Some([x0, y0, x1, y1]) => {
+            // Outward rounding, tolerant of float noise on exact pixel edges.
+            let span = |lo: f32, hi: f32, max: u32| {
+                let lo = (lo + 1e-3).floor().clamp(0.0, max as f32) as usize;
+                let hi = (hi - 1e-3).ceil().clamp(0.0, max as f32) as usize;
+                lo..hi.max(lo)
+            };
+            let (xs, ys) = (span(x0, x1, w), span(y0, y1, h));
+            let stride = w as usize;
+            for row in mask
+                .data_mut()
+                .chunks_exact_mut(stride)
+                .take(ys.end)
+                .skip(ys.start)
+            {
+                row[xs.clone()].fill(255);
+            }
+        }
+        None => mask.fill_path(&skpath, rule, true, transform),
+    }
     canvas.intersect_clip(mask);
     Ok(())
+}
+
+/// The device-space `[x0, y0, x1, y1]` of a path that is exactly one
+/// axis-aligned rectangle under `t` — four distinct sides, each traversed once
+/// (a `re` rectangle, or `m`/`l`/`h` along its sides) — else `None`.
+fn device_axis_rect(items: &[PathItem], t: tiny_skia::Transform) -> Option<[f32; 4]> {
+    let map = |p: Point| {
+        let mut q = [tiny_skia::Point::from_xy(p.x as f32, p.y as f32)];
+        t.map_points(&mut q);
+        (q[0].x, q[0].y)
+    };
+    let mut edges = Vec::with_capacity(4);
+    for item in items {
+        match *item {
+            PathItem::Line(a, b) => edges.push((map(a), map(b))),
+            PathItem::Rect(r) => {
+                let c = [(r.x0, r.y0), (r.x1, r.y0), (r.x1, r.y1), (r.x0, r.y1)]
+                    .map(|(x, y)| map(Point::new(x, y)));
+                edges.extend((0..4).map(|i| (c[i], c[(i + 1) % 4])));
+            }
+            PathItem::Curve(..) => return None,
+        }
+    }
+    const EPS: f32 = 1e-3;
+    let near = |a: f32, b: f32| (a - b).abs() <= EPS;
+    edges.retain(|(a, b)| !(near(a.0, b.0) && near(a.1, b.1)));
+    let points = || edges.iter().flat_map(|(a, b)| [*a, *b]);
+    let x0 = points().map(|p| p.0).fold(f32::INFINITY, f32::min);
+    let x1 = points().map(|p| p.0).fold(f32::NEG_INFINITY, f32::max);
+    let y0 = points().map(|p| p.1).fold(f32::INFINITY, f32::min);
+    let y1 = points().map(|p| p.1).fold(f32::NEG_INFINITY, f32::max);
+    if edges.len() != 4 || !(x1 - x0 > EPS && y1 - y0 > EPS) {
+        return None;
+    }
+    // Each edge must be one whole side; four edges covering four distinct
+    // sides then close exactly the rectangle.
+    let mut sides = [false; 4];
+    for (a, b) in &edges {
+        let side = if near(a.0, b.0) && near(a.1.min(b.1), y0) && near(a.1.max(b.1), y1) {
+            if near(a.0, x0) {
+                0
+            } else if near(a.0, x1) {
+                1
+            } else {
+                return None;
+            }
+        } else if near(a.1, b.1) && near(a.0.min(b.0), x0) && near(a.0.max(b.0), x1) {
+            if near(a.1, y0) {
+                2
+            } else if near(a.1, y1) {
+                3
+            } else {
+                return None;
+            }
+        } else {
+            return None;
+        };
+        if std::mem::replace(&mut sides[side], true) {
+            return None;
+        }
+    }
+    Some([x0, y0, x1, y1])
 }
 
 /// Builds a tiny-skia [`Path`] from a [`PathItem`] list, emitting a `move_to`

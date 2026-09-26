@@ -46,7 +46,10 @@ pub use paint_profile::{
     PaintOperator, PaintProfile, PaintResourceEntry, PaintResourceScope, ResourceOrigin,
     TransparencyGroupProfile, PAINT_PROFILE_VERSION,
 };
-pub use renderops::{ImageOp, PageRecording, RenderOp, RenderSink, ShadingOp, TextRun};
+pub use renderops::{
+    BlendMode, GroupOp, ImageOp, PageRecording, RenderOp, RenderSink, ShadingOp, SoftMaskOp,
+    TextRun,
+};
 pub use search::{search, SearchOptions};
 pub use serialize::{
     clip_textpage, defaults, dict_blocks, extract_selection, get_textbox, textflags, to_blocks,
