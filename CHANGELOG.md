@@ -62,6 +62,13 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ### Fixed
 
+- `Page.get_pixmap()` (render fallback path), `DisplayList.get_pixmap()` and
+  `Page.get_svg_image()` now convert a Rust panic raised while rendering (e.g.
+  inside tiny-skia rasterization or ttf-parser font parsing) into
+  `PdfUnsupportedError` instead of letting an uncatchable
+  `pyo3_runtime.PanicException` escape to Python (ADR 0006).
+
+
 - Images, stencil image masks and `sh` shadings now honor the clip path
   (previously unclipped: square corners on rounded image frames, and a
   shading could cover the whole page). Axis-aligned rectangular clips are

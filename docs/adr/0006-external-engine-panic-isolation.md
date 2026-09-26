@@ -102,6 +102,42 @@ orders its output. The unwind-safety analysis in decision 1 must be redone for
 each engine: if an engine holds a lock or other shared mutable state across a
 call that can panic, containment is not safe without further review.
 
+### Scope extension (2026-09-24): rendering entry points
+
+The rendering path is now covered by decision 1 as well. tiny-skia
+(rasterization) and ttf-parser (embedded font parsing) are third-party code that
+processes untrusted page content, so the three public `pdf-render` entry points
+wrap their whole body in `catch_unwind` through the crate-private helper
+`contain_render_panic` (`crates/pdf-render/src/error.rs:80`):
+
+- `render_page` (`crates/pdf-render/src/render.rs:272`), the non-image path of
+  `Page.get_pixmap`;
+- `DisplayList::get_pixmap` (`crates/pdf-render/src/render.rs:245`);
+- `get_svg_image` (`crates/pdf-render/src/svg.rs:84`).
+
+A contained panic becomes `pdf_render::Error::Unsupported` with a static,
+per-entry-point message (e.g. `"pdf-render: render_page panicked on malformed
+content"`); the payload is discarded, as in the `pdf-image` codec wrappers,
+because that variant carries a `&'static str`. The existing mapping
+(`crates/pdf-api/src/error.rs:112-128`, then `crates/py-bindings/src/lib.rs:133`)
+turns it into `PdfUnsupportedError` unchanged. Containment sits at the
+`pdf-render` boundary, not in the PyO3 layer, for the reason given under
+"Alternatives rejected".
+
+Unwind safety: `pdf-render`, `pdf-image` and `pdf-text` hold no `Mutex`,
+`RefCell`, `OnceLock`, `thread_local` or `static mut` state. The render caches
+(`FontCache`, `GlyphMaskCache`) are locals of each call and are dropped with the
+unwound frame. The `pdf-fonts` lookup tables are `OnceLock`s, which stay unset
+(not poisoned) if an initializer panics. The only shared mutable state reached
+is the `DocumentStore` `RwLock` object cache, whose guards are held only across
+a map lookup or insert inside `pdf-core` (`crates/pdf-core/src/document.rs:1047-1084`),
+never across rendering code; a poisoned lock there degrades to a cache miss or a
+typed error rather than a panic. The image-only fast path
+(`crates/pdf-image/src/getpixmap.rs:74`, `page_pixmap`) is not wrapped: it does
+not call tiny-skia or ttf-parser, and its third-party decoders are already
+contained by the codec wrappers. No test forces a real panic through these
+entry points (no known trigger exists); the helper itself is unit-tested.
+
 ## Consequences and follow-up
 
 No test currently forces a panic through the PaddleOCR adapter; the `ocrspine`
