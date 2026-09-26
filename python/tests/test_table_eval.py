@@ -575,3 +575,38 @@ def test_tbleval_008_page_tags():
     assert set(gold.page_tags(page(plain, spanning), lines_detected=False)) <= set(
         gold.TAG_VOCABULARY
     )
+
+
+@pytest.mark.parametrize("field", ["serialization_error", "extract_error", "bbox_error"])
+def test_legacy_eval_rejects_record_errors(field):
+    harness = _load("eval_tables")
+    with pytest.raises(ValueError, match=field):
+        harness._slim_record({field: "failed", "cells": []})
+
+
+@pytest.mark.parametrize("rows", [[], [-1], [True], [0.5]])
+def test_legacy_eval_rejects_invalid_direct_cells(rows):
+    harness = _load("eval_tables")
+    with pytest.raises(ValueError, match="invalid predicted cell"):
+        harness._pred_cells({"cells": [_cell(rows, [0], "bad")]})
+
+
+def test_legacy_eval_explicit_empty_cells_do_not_fallback_to_html():
+    harness = _load("eval_tables")
+    record = {"cells": [], "html": "<table><tr><td>fabricated</td></tr></table>"}
+    assert harness._pred_cells(record) == []
+
+
+def test_table_record_explicit_empty_spans_do_not_fallback_to_rows():
+    from types import SimpleNamespace
+
+    harness = _load("tables_diff")
+    table = SimpleNamespace(
+        bbox=(0, 0, 10, 10),
+        row_count=1,
+        col_count=1,
+        spans=[],
+        rows=[SimpleNamespace(cells=[(0, 0, 10, 10)])],
+        extract=lambda: [["fallback"]],
+    )
+    assert harness._table_record(table)["cells"] == []
