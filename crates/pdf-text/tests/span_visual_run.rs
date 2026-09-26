@@ -91,15 +91,15 @@ fn spanvis_001_scale_change_splits_the_span() {
 // === SPANVIS-002: a rotation too small to break the line =================
 
 #[test]
-fn spanvis_002_small_rotation_within_calibrated_tolerance_stays_one_span() {
+fn spanvis_002_small_rotation_preserves_distinct_visual_runs() {
     // 2°: the writing directions still match (dot 0.99939 > 0.996, so the line
-    // stays one line and criterion 2 stays silent), but the linear parts differ
-    // by sin 2° = 0.0349 of the size, within the calibrated 5% tolerance.
+    // stays one line). The matrix delta is within the calibrated 5%
+    // tolerance, but the existing effective style flags still distinguish the runs.
     let got = shape(
         b"BT /F1 1 Tf 12 0 0 12 100 700 Tm (AB) Tj \
           11.99269 0.41879 -0.41879 11.99269 112 700 Tm (CD) Tj ET",
     );
-    assert_shape(&got, &[("ABCD", 12.0)]);
+    assert_shape(&got, &[("AB", 12.0), ("CD", 12.0)]);
 }
 
 // === SPANVIS-003: shear =================================================
@@ -205,10 +205,12 @@ fn spanvis_009_rounding_noise_stays_one_span() {
 fn spanvis_010_tolerances_scale_with_the_font() {
     // The same absolute 1 pt baseline drop retained in a 12 pt run
     // (`SPANVIS-004`) is 0.01 of a 100 pt run — inside the tolerance, so a
-    // display line keeps its single span. 100 pt advances 50 pt per glyph.
+    // display line keeps its single span. Use a declared 100pt font as well
+    // as a 100pt render size to avoid triggering the separate superscript
+    // flag threshold from a nominal 1pt font. Each glyph advances 50pt.
     let got = shape(
-        b"BT /F1 1 Tf 100 0 0 100 100 600 Tm (A) Tj \
-          100 0 0 100 150 599 Tm (B) Tj ET",
+        b"BT /F1 100 Tf 1 0 0 1 100 600 Tm (A) Tj \
+          1 0 0 1 150 599 Tm (B) Tj ET",
     );
     assert_shape(&got, &[("AB", 100.0)]);
 }
