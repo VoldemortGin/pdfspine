@@ -217,6 +217,20 @@ that gates this ADR is:
    per candidate; this ADR's status then changes to Accepted with the chosen
    default written into the registry table above.
 
+**Status note (2026-09-08): the scorer for this gate has landed.**
+`conformance/gt/eval_tables.py` implements both modes required above — `--mode
+gold-crop` (each gold bbox handed straight to the structure stage; for the ONNX
+backend via the new `OnnxOptions.skip_layout`) and `--mode e2e` — over the
+150-page / 186-table FinTabNet.c slice, and reports GriTS_Top/Con alongside
+TEDS-Struct and a cell-alignment F1. It takes `--baseline` so the +0.02
+threshold in item 4 can be read off a delta table directly. Recorded baselines
+for the `lines`, `text` and `onnx` backends are in
+[`conformance/gt/GT-REPORT-tables-eval.md`](../../conformance/gt/GT-REPORT-tables-eval.md)
+and `docs/BENCHMARKS.md`; the harness also scores hand-annotated pages placed in
+`conformance/gt/corpus-finance/` (see its README). What remains for this gate is
+the candidate models themselves — no TATR or TableFormer weights are held
+locally yet, and the backends skip cleanly when their weights are absent.
+
 ## Consequences
 
 Positive:

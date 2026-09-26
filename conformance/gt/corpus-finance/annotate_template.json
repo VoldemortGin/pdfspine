@@ -1,0 +1,54 @@
+{
+  "_README": "Blank gold-annotation template. Copy to annotations/<document_id>.gold.json and fill in. Prefer `eval_tables.py draft-gold` over starting from this file: it pre-fills the cells from pdfspine's own output so you only correct what is wrong. Format reference: conformance/gt/corpus-finance/README.md. Delete every key starting with `_` except `_draft` before scoring.",
+  "_draft": true,
+  "document_id": "REPLACE_ME_matches_pdfs/<document_id>.pdf",
+  "page_index": 0,
+  "tables": [
+    {
+      "table_id": "REPLACE_ME_<document_id>_0",
+      "_bbox_help": "Table bounding box in PDF points, origin TOP-LEFT, y grows DOWNWARD (same space find_tables returns). Required for --mode gold-crop; a typical page is 612 x 792.",
+      "bbox": [0.0, 0.0, 0.0, 0.0],
+      "_tags_help": "Any of: plain, borderless, multi-header, spanning, wide, tall, multi-table. See TAG_VOCABULARY in conformance/gt/table_gold.py.",
+      "tags": [],
+      "comment": "",
+      "_cells_help": "One entry per cell, top-left position only. `row`/`col` are 0-based; `rowspan`/`colspan` default to 1 and are omitted when 1; `header` marks a header cell; `bbox` is optional (omit it and cell-alignment F1 is skipped for this table, GriTS and TEDS-Struct still score). A spanning cell is listed ONCE, at its top-left position. For a chart page or any page with no table, use \"tables\": [] and delete this whole object.",
+      "cells": [
+        {
+          "row": 0,
+          "col": 0,
+          "rowspan": 2,
+          "text": "(in millions)",
+          "bbox": [0.0, 0.0, 0.0, 0.0],
+          "header": true
+        },
+        {
+          "row": 0,
+          "col": 1,
+          "colspan": 3,
+          "text": "Year ended 31 December",
+          "bbox": [0.0, 0.0, 0.0, 0.0],
+          "header": true
+        },
+        {
+          "row": 1,
+          "col": 1,
+          "text": "2024",
+          "bbox": [0.0, 0.0, 0.0, 0.0],
+          "header": true
+        },
+        {
+          "row": 2,
+          "col": 0,
+          "text": "Gross written premium",
+          "bbox": [0.0, 0.0, 0.0, 0.0]
+        },
+        {
+          "row": 2,
+          "col": 1,
+          "text": "512,308",
+          "bbox": [0.0, 0.0, 0.0, 0.0]
+        }
+      ]
+    }
+  ]
+}

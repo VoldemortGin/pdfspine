@@ -125,6 +125,57 @@ similarity vs fitz:
 pdfspine's `find_tables` is at near-parity with fitz after gating detection on real ruling-line
 evidence (borderless prose no longer produces spurious tables).
 
+### Table cell structure vs FinTabNet.c gold (150 pages / 186 tables, scored 2026-09-08)
+
+The section above measures agreement with fitz. This one measures agreement with
+*truth*: published gold cell structure for real financial filings, scored by
+`conformance/gt/eval_tables.py` (branch `feat/table-eval-set` on `72b1d4a`,
+onnxruntime 1.29.0 CPU). Recall-weighted over all 186 gold tables — a missed
+table scores 0, the FinTabNet.c convention.
+
+| backend | mode | detection F1 | GriTS_Top | GriTS_Con | TEDS-Struct | cell-F1 | s/table |
+|---|---|---:|---:|---:|---:|---:|---:|
+| `lines` (default) | e2e | 0.089 | 0.045 | 0.045 | 0.041 | 0.042 | 0.003 |
+| `text` | e2e | 0.150 | 0.038 | 0.035 | 0.070 | 0.028 | 0.003 |
+| **`onnx`** | e2e | **0.787** | **0.782** | **0.692** | **0.759** | 0.319 | 2.197 |
+| fitz oracle | e2e | 0.098 | 0.046 | 0.040 | 0.046 | 0.043 | 0.159 |
+| `lines` | gold-crop\* | — | 0.076 | 0.072 | 0.075 | 0.062 | 0.003 |
+| `text` | gold-crop\* | — | 0.185 | 0.125 | 0.255 | 0.076 | 0.004 |
+| **`onnx`** | **gold-crop** | — | **0.863** | **0.766** | **0.836** | **0.371** | 0.177 |
+
+\* `clip=` is honoured only by the vision backends; the native strategies fall
+back to whole-page detection plus best-IoU pairing, so those two rows are not
+TSR-only numbers. Only `onnx/gold-crop` is a true structure-stage measurement.
+
+Three metrics because they fail differently: **GriTS** is the canonical
+FinTabNet metric (comparable with published Table-Transformer results),
+**TEDS-Struct** charges one edit per structural error where GriTS gives partial
+credit, and **cell-F1** matches predicted to gold cells by bbox IoU — the only
+one of the three that is not position-invariant.
+
+What the numbers say:
+
+- **The ONNX backend is the only one that finds these tables.** It matches 166
+  of 186 gold tables; `lines` matches 17, `text` 25, fitz 18. FinTabNet is
+  borderless financial tables and ruling-line evidence is largely absent —
+  `lines` scores **0.000** across all 139 borderless tables. `lines` staying
+  level with fitz (0.045 vs 0.046) is the parity result, not a ranking.
+- **Structure is good; cell geometry is not.** `onnx/gold-crop` reaches
+  GriTS_Con 0.766 and TEDS-S 0.836 but **cell-F1 0.371**: the predicted grid is
+  broadly right while the cell boxes are not, because SLANet emits grid-region
+  boxes against FinTabNet's tight text boxes, and the `$`-column split turns an
+  8-column table into 12–13. Downstream consumers that crop a cell feel the
+  0.371, not the 0.766. Closing that gap is the highest-value next move.
+- **Detection over-fires**: 236 predictions for 186 gold tables (precision
+  0.703, recall 0.892). Taking detection out of the loop lifts GriTS_Con from
+  0.692 to 0.766.
+- Still short of the ~0.98 GriTS Table-Transformer publishes on this dataset.
+
+Full machine report: `conformance/gt/GT-REPORT-tables-eval.md` (regenerate with
+the commands in its Reproduce section; the numbers above trace to that report —
+not hand-edited). Hand-annotating your own financial pages into
+`conformance/gt/corpus-finance/` is documented in that directory's README.
+
 ## 4. What changed (2026-06-16)
 
 Five extraction fixes closed the gap to fitz:

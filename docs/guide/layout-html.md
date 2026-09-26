@@ -231,8 +231,15 @@ PP-DocLayout-L too.
 - **Weak structure on borderless tables.** SLANet-plus was trained mostly on
   ruled or lightly ruled tables; long borderless statements may come back with
   merged or split columns.
-- **Models are not yet validated on an evaluation set.** The observations
-  above come from a handful of FinTabNet pages, not from a measured score.
+- **Cell boxes are much weaker than the grid.** Scored over 186 FinTabNet.c
+  gold tables, the ONNX backend reaches GriTS_Con **0.766** and TEDS-Struct
+  **0.836** on structure alone, but cell-alignment F1 only **0.371**: the grid
+  is broadly right while the individual cell boxes are not. If you crop cells
+  to read them, expect that lower number. Detection over-fires too (precision
+  0.703 at recall 0.892). Full table in
+  [BENCHMARKS §3](../BENCHMARKS.md) and
+  [`GT-REPORT-tables-eval.md`](https://github.com/VoldemortGin/pdfspine/blob/main/conformance/gt/GT-REPORT-tables-eval.md);
+  rerun with `conformance/gt/eval_tables.py`.
 - **CoreML crashes.** `CoreMLExecutionProvider` was tried with onnxruntime
   1.29 on macOS and aborted the process ("Error in building plan") while
   loading the models. `providers="auto"` therefore never selects it; use CPU
@@ -241,14 +248,20 @@ PP-DocLayout-L too.
 
 ## Next steps
 
-1. **Evaluation set.** 30–50 pages from real financial reports (statements,
-   notes with unit lines, two-column narrative pages, pages with charts), each
-   with hand-written correct HTML in the same tag vocabulary as
-   `get_layout_html()`.
-2. **Scorer.** TEDS (tree edit distance similarity) on the `<table>` elements
-   plus a cell-alignment score against the native words, and a block-level
-   reading-order score for the rest of the page. The existing GriTS harness
-   in `conformance/gt/` is the natural home.
+1. **Evaluation set — seeded, hand annotation outstanding.** The 150-page /
+   186-table FinTabNet.c slice is scored today, and a 40-page stratified subset
+   covering every table shape is listed in
+   `conformance/gt/corpus-finance/seed-subset.json`. What is still missing is
+   *your* documents: 30–50 pages from the financial reports you actually
+   process, annotated by hand. `conformance/gt/corpus-finance/README.md`
+   documents the gold format, the shape tags (including chart pages as negative
+   controls), and a `draft-gold` command that pre-fills a draft from pdfspine's
+   own output so a page takes minutes to correct.
+2. ~~**Scorer.**~~ **Done** — `conformance/gt/eval_tables.py` scores GriTS
+   Top/Con, TEDS-Struct and cell-alignment F1 per table, in `--mode e2e` or
+   `--mode gold-crop` (structure stage only), with `--baseline` for deltas.
+   A block-level reading-order score for the non-table parts of the page is
+   still absent.
 3. **Decide priorities from the numbers**, in whatever order the scores point
    to: whether the PP-DocLayoutV3 default holds up on a scored run; recursive
    XY-cut reading order for PP-DocLayout-L; a better `rows` / `cols` derivation;

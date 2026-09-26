@@ -11,6 +11,32 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
+### Added
+
+- **Table-structure evaluation harness** — `conformance/gt/eval_tables.py`
+  scores `find_tables` against gold cell structure on three metrics: GriTS
+  Top/Con (`grits.py`), **TEDS-Struct** (Zhang-Shasha tree edit distance over
+  the `<table>/<tr>/<td colspan rowspan>` tree, text ignored) and a
+  **cell-alignment F1** (predicted vs gold cells matched one-to-one at
+  IoU ≥ 0.5), the latter two new in `conformance/gt/table_metrics.py`. It runs
+  in `--mode e2e` (whole pipeline) or `--mode gold-crop` (gold bbox handed
+  straight to the structure stage — the apples-to-apples mode the ADR 0002
+  decision gate requires), takes `--backend lines|text|onnx|tatr`, `--jobs`,
+  `--oracle-fitz` and a `--baseline` delta table. `OnnxOptions` gains
+  **`skip_layout`** so the ONNX backend can score a supplied `clip=` without
+  running layout detection. `conformance/gt/corpus-finance/` documents how to
+  add hand-annotated financial pages (`.gold.json` / `.gold.html`, a fixed shape
+  tag vocabulary, and a `draft-gold` bootstrap that pre-fills a draft from
+  pdfspine's own output); a 40-page recommended subset of the FinTabNet.c slice
+  ships as `seed-subset.json`. Baselines in `docs/BENCHMARKS.md` §3 and
+  `conformance/gt/GT-REPORT-tables-eval.md`: the ONNX backend reaches GriTS_Con
+  **0.766** / TEDS-Struct **0.836** on the structure stage but only **0.371**
+  cell-alignment F1, while the heuristic `lines`/`text` strategies stay at
+  fitz parity (~0.045) because FinTabNet is borderless. `tables_diff.py` now
+  also rebuilds cells from fitz's row/cell bbox grid — fitz exposes neither
+  `spans` nor `to_html`, so every fitz table previously reached a cell-level
+  scorer as an empty prediction.
+
 ## [0.11.3] — 2026-09-25
 
 ### Fixed

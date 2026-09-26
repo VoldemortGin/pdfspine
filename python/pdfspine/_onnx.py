@@ -52,6 +52,7 @@ from ._tatr import (
     _intersects_clip,
     _iob,
     _make_crop,
+    _page_box_to_image,
     _render_page,
 )
 from .geometry import Rect
@@ -267,6 +268,10 @@ class OnnxOptions:
     table_min_score: float = 0.0
     channel_order: str = "bgr"
     crop_padding: int = 10
+    # skip_layout=True skips the layout detector entirely and treats the
+    # ``find_tables(clip=...)`` clip as the single table region (TSR-only
+    # evaluation on gold crops); ``clip`` is then required.
+    skip_layout: bool = False
     ocr_if_no_text: bool = True
     ocr_engine: str = "paddle"
     ocr_language: str = "eng"
@@ -308,8 +313,9 @@ class OnnxOptions:
             object.__setattr__(self, "providers", tuple(self.providers))
         else:
             raise TypeError("ONNX providers must be 'auto' or a sequence of strings")
-        if type(self.ocr_if_no_text) is not bool:
-            raise TypeError("ONNX ocr_if_no_text must be a bool")
+        for name in ("ocr_if_no_text", "skip_layout"):
+            if type(getattr(self, name)) is not bool:
+                raise TypeError(f"ONNX {name} must be a bool")
         self._validate()
 
     @classmethod
@@ -1260,13 +1266,31 @@ def find_tables(
     options: Mapping[str, object] | None = None,
     _runtime: Any = None,
 ) -> _TatrTableFinderRecord:
-    """PP-DocLayout table regions -> SLANet-plus cells -> text-layer words."""
+    """PP-DocLayout table regions -> SLANet-plus cells -> text-layer words.
+
+    With ``skip_layout=True`` the layout model is never loaded (sessions are
+    lazy), so only ``slanet-plus.onnx`` is needed and ``clip`` is the sole
+    table region.
+    """
 
     config, runtime, rendered = _prepare(page, options, _runtime)
     if _area(rendered.page_bbox) <= 0:
         return _TatrTableFinderRecord([])
+    if config.skip_layout:
+        if clip is None:
+            raise ValueError("ONNX skip_layout requires clip=")
+        detections: list[dict[str, Any]] = [
+            {
+                "label": "table",
+                "raw_label": "table",
+                "score": 1.0,
+                "bbox": _page_box_to_image(_box4(clip), rendered),
+            }
+        ]
+    else:
+        detections = runtime.detect_layout(rendered.image, config)
     tables: list[_TatrTableRecord] = []
-    for detection in runtime.detect_layout(rendered.image, config):
+    for detection in detections:
         if detection.get("label") != "table":
             continue
         table = _table_from_region(detection, rendered, runtime, config)

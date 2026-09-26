@@ -172,6 +172,32 @@ def _table_record(tbl) -> dict:
             rec.pop("cells", None)  # A legacy table without spans may use HTML.
         except Exception as exc:  # noqa: BLE001
             rec["serialization_error"] = f"{type(exc).__name__}: {exc}"
+    # fitz has no ``spans`` and no ``to_html``; its Table exposes a plain
+    # row-major grid of cell bboxes (``rows[i].cells``, ``None`` where it found
+    # no cell) and ``extract()`` text. Rebuild unspanned cells from those so the
+    # oracle is scoreable at all -- without this every fitz table reaches the
+    # scorer as an empty prediction and silently scores 0 on every metric.
+    if not rec.get("cells") and "serialization_error" not in rec and ext is not None:
+        try:
+            rec["cells"] = []
+            for row_index, row in enumerate(tbl.rows):
+                row_text = ext[row_index] if row_index < len(ext) else []
+                for col_index, cell_bbox in enumerate(row.cells or []):
+                    if cell_bbox is None:
+                        continue
+                    text = ""
+                    if col_index < len(row_text or []):
+                        text = str((row_text or [])[col_index] or "")
+                    rec["cells"].append({
+                        "row_nums": [row_index],
+                        "column_nums": [col_index],
+                        "bbox": _as_bbox(cell_bbox),
+                        "cell_text": text,
+                    })
+        except AttributeError:
+            rec.pop("cells", None)
+        except Exception as exc:  # noqa: BLE001
+            rec["serialization_error"] = f"{type(exc).__name__}: {exc}"
     for attr in ("confidence", "source", "text_source", "metadata"):
         try:
             rec[attr] = getattr(tbl, attr)
