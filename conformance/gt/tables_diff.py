@@ -177,7 +177,7 @@ def _table_record(tbl) -> dict:
     # no cell) and ``extract()`` text. Rebuild unspanned cells from those so the
     # oracle is scoreable at all -- without this every fitz table reaches the
     # scorer as an empty prediction and silently scores 0 on every metric.
-    if not rec.get("cells") and "serialization_error" not in rec and ext is not None:
+    if "cells" not in rec and "serialization_error" not in rec and ext is not None:
         try:
             rec["cells"] = []
             for row_index, row in enumerate(tbl.rows):

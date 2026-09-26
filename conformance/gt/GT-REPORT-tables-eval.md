@@ -1,10 +1,10 @@
 # Table structure eval set — pdfspine `find_tables` vs FinTabNet.c gold (GriTS / TEDS-Struct / cell-F1)
 
 > Historical source-annotation benchmark from 2026-09-08. This is not a current validation run or human-reviewed acceptance; the current review/provenance gates in docs/PRD-NEXT.md remain authoritative.
-Harness: `conformance/gt/eval_tables.py run` — backends `lines`, `text`, `onnx`, plus the PyMuPDF oracle; modes `e2e` and `gold-crop`.  
-Metrics: **GriTS_Top / GriTS_Con** (`conformance/gt/grits.py`), **TEDS-Struct** and **cell-alignment F1** (`conformance/gt/table_metrics.py`).  
-Dataset: **FinTabNet.c** — 150 pages / 186 structure-eligible gold tables; annotations `CDLA-Permissive-2.0`, source PDFs `CDLA-Permissive-1.0`.  
-Code: branch `feat/table-eval-set` on `72b1d4a`; pdfspine `0.7.1`; onnxruntime 1.29.0, **CPUExecutionProvider** (`auto` never selects CoreML).  
+Harness: `conformance/gt/eval_tables.py run` — backends `lines`, `text`, `onnx`, plus the PyMuPDF oracle; modes `e2e` and `gold-crop`.
+Metrics: **GriTS_Top / GriTS_Con** (`conformance/gt/grits.py`), **TEDS-Struct** and **cell-alignment F1** (`conformance/gt/table_metrics.py`).
+Dataset: **FinTabNet.c** — 150 pages / 186 structure-eligible gold tables; annotations `CDLA-Permissive-2.0`, source PDFs `CDLA-Permissive-1.0`.
+Code: branch `feat/table-eval-set` on `72b1d4a`; pdfspine `0.7.1`; onnxruntime 1.29.0, **CPUExecutionProvider** (`auto` never selects CoreML).
 Scored: 2026-09-08 on an Apple M-series mini (10 cores, `--jobs 5`). The scoring host held an rsync'd copy of the tree, so the harness recorded `commit: null`; the commit is stated here instead.
 
 ## Why these three metrics

@@ -6,6 +6,11 @@ This is the harness behind the table-structure evaluation set: it runs pdfspine
 financial-report pages, scores every gold table, and writes a machine-readable
 JSON plus a markdown report in the style of ``GT-REPORT-tables-gold.md``.
 
+This is a historical exploratory harness, not the current strict acceptance
+gate. It does not enforce the current human-review ledger or cropped-page
+provenance protocol. Use ``tables_diff.py`` and its ``gold-crop-tsr`` mode for
+current strict evaluation; these historical scores do not authorize model choice.
+
 Metrics (all pure stdlib, see the sibling modules)
 --------------------------------------------------
 * **GriTS_Top / GriTS_Con** (``grits.py``) — the canonical FinTabNet.c metric.
@@ -374,11 +379,14 @@ def _classify_error(exc: BaseException) -> str:
 
 
 def _slim_record(rec: dict) -> dict:
+    for field in ("serialization_error", "extract_error", "bbox_error"):
+        if rec.get(field):
+            raise ValueError(f"{field}: {rec[field]}")
     return {
         "bbox": rec.get("bbox"),
         "row_count": rec.get("row_count"),
         "col_count": rec.get("col_count"),
-        "cells": rec.get("cells") or [],
+        "cells": _pred_cells(rec),
         "html": rec.get("html"),
     }
 
@@ -432,21 +440,18 @@ def predict(
 # --------------------------------------------------------------------------- #
 def _pred_cells(record: dict) -> list[dict]:
     """Predicted GriTS cells *with* bbox (direct spans first, HTML fallback)."""
-    out: list[dict] = []
-    for cell in record.get("cells") or []:
-        rows = [int(v) for v in cell.get("row_nums") or []]
-        cols = [int(v) for v in cell.get("column_nums") or []]
-        if not rows or not cols:
-            continue
-        out.append(
-            {
-                "row_nums": rows,
-                "column_nums": cols,
-                "cell_text": " ".join(str(cell.get("cell_text") or "").split()),
-                "bbox": cell.get("bbox"),
-            }
-        )
-    return out if out else _pred_cells_from_html(record.get("html"))
+    from cell_alignment import topology_error
+
+    cells = record["cells"] if "cells" in record else _pred_cells_from_html(record.get("html"))
+    if not isinstance(cells, list):
+        raise ValueError("invalid predicted cell list")
+    error = topology_error(cells)
+    if error:
+        raise ValueError(f"invalid predicted cell: {error}")
+    return [
+        {**cell, "cell_text": " ".join(str(cell.get("cell_text") or "").split())}
+        for cell in cells
+    ]
 
 
 def score_table(

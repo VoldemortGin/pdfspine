@@ -54,7 +54,7 @@ fn line_spans(content: &[u8]) -> Vec<DictSpan> {
 
 /// A span's text, taken from its chars (rawdict moves the text there).
 fn span_text(s: &DictSpan) -> String {
-    s.chars.iter().map(|c| c.c).collect()
+    s.chars.iter().map(|c| c.c.as_str()).collect()
 }
 
 /// The `(text, rendered_size)` of every span on the line.

@@ -577,7 +577,9 @@ def test_tbleval_008_page_tags():
     )
 
 
-@pytest.mark.parametrize("field", ["serialization_error", "extract_error", "bbox_error"])
+@pytest.mark.parametrize(
+    "field", ["serialization_error", "extract_error", "bbox_error"]
+)
 def test_legacy_eval_rejects_record_errors(field):
     harness = _load("eval_tables")
     with pytest.raises(ValueError, match=field):

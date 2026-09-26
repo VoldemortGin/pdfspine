@@ -217,7 +217,11 @@ that gates this ADR is:
    per candidate; this ADR's status then changes to Accepted with the chosen
    default written into the registry table above.
 
-**Status note (2026-09-08): the scorer for this gate has landed.**
+**Historical status note (2026-09-08; superseded for acceptance).**
+The exploratory scorer below is preserved from its source branch. Current
+acceptance uses the strict `tables_diff.py` protocol and `gold-crop-tsr` mode,
+including review-ledger and crop-provenance checks; this historical harness
+does not satisfy those later requirements or authorize a model selection.
 `conformance/gt/eval_tables.py` implements both modes required above — `--mode
 gold-crop` (each gold bbox handed straight to the structure stage; for the ONNX
 backend via the new `OnnxOptions.skip_layout`) and `--mode e2e` — over the
