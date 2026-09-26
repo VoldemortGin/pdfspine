@@ -2,15 +2,17 @@
 
 from collections.abc import Sequence
 import math
-from typing import Literal
+from typing import Literal, TypeAlias
 
 from .geometry import Rect
 from .models import TableCell, TableSlot
 
-type CellRecord = tuple[
+CellRecord: TypeAlias = tuple[
     int, int, int, int, tuple[float, float, float, float], str | None
 ]
-type TableSnapshot = tuple[tuple[tuple[TableSlot, ...], ...], tuple[TableCell, ...]]
+TableSnapshot: TypeAlias = tuple[
+    tuple[tuple[TableSlot, ...], ...], tuple[TableCell, ...]
+]
 
 
 def table_snapshot(

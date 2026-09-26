@@ -105,7 +105,7 @@ let Hugging Face populate the cache on first use, pass
 `structure-recognition-v1.1-all/`. The two weights total roughly 230 MB and are
 never included in the base wheel.
 
-The optional runtime supports CPython 3.12–3.14 on glibc/manylinux Linux
+The optional runtime supports CPython 3.11–3.14 on glibc/manylinux Linux
 (x86_64/aarch64), Apple-silicon macOS, and x86_64 Windows. Intel macOS,
 musl/Alpine, Windows ARM64, and Python 3.15+ are not supported by this extra; the
 base package remains portable. See [Installation](../guide/installation.md#optional-table-transformer-backend)

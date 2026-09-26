@@ -48,7 +48,7 @@ The Cargo workspace has 13 crates; [Cargo.toml](Cargo.toml) is authoritative.
 ## Gate and local environment
 
 [rust-toolchain.toml](rust-toolchain.toml) pins Rust **1.96.0**, rustfmt and
-clippy. [pyproject.toml](pyproject.toml) requires Python **3.12+** and configures
+clippy. [pyproject.toml](pyproject.toml) requires Python **3.11+** and configures
 Maturin/PyO3. The maintained local `.venv` provides maturin, mypy, pytest and
 Ruff **0.14.14**; use its tools to avoid formatter drift. `.venv-oracle` holds
 real PyMuPDF for subprocess comparisons, separate from pdfspine's fitz shim.

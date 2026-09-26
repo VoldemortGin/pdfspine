@@ -950,7 +950,7 @@ Order: 001→002→003 (working decode) → 006/007 (errors) → predictors → 
 | test | ubuntu/macos/windows | — | `--all-features` |
 | coverage / mutants-diff | ubuntu | — | 90% diff gate; in-diff mutation |
 | fuzz-smoke | ubuntu (nightly) | — | libFuzzer; `mmap:Never` mode |
-| pytest | ubuntu/macos/windows | 3.12–3.14 | doctests + hypothesis |
+| pytest | ubuntu/macos/windows | 3.11–3.14 | doctests + hypothesis |
 | wheels | ubuntu/macos/windows | abi3-py310 | build+import+smoke; publish on tag |
 | conformance | ubuntu | — | qpdf/pikepdf/pdfminer/pdf.js/veraPDF |
 | supply-chain | ubuntu | — | cargo-vet/cargo-deny advisories + checksum pin verify (§11.4) |

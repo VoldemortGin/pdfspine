@@ -6,10 +6,10 @@
 
 ## Requirements
 
-- **Python ≥ 3.12** (`requires-python = ">=3.12"`). The wheel is an `abi3`
+- **Python ≥ 3.11** (`requires-python = ">=3.11"`). The wheel is an `abi3`
   (`abi3-py311`) wheel — the 3.11 ABI floor comes from the `Pixmap` zero-copy
   buffer protocol (the stable-ABI buffer slots landed in CPython 3.11) — so a
-  single build covers every supported interpreter; the 3.12 install floor is
+  single build covers every supported interpreter; the 3.11 install floor is
   set by the package metadata.
 - **Rust** (pinned by `rust-toolchain.toml`) and **maturin ≥ 1.12** — only needed
   to build from source.
@@ -44,7 +44,7 @@ loaded from the local Hugging Face cache (or `PDFSPINE_TATR_MODELS`) at runtime;
 see [Tables](../reference/tables.md#vision-table-transformer) for pinned download
 commands. This keeps a normal pdfspine wheel lightweight and offline-safe.
 
-The optional TATR runtime is supported on **CPython 3.12–3.14** for Linux
+The optional TATR runtime is supported on **CPython 3.11–3.14** for Linux
 (glibc/manylinux 2.28+, x86_64 or aarch64), macOS on Apple silicon, and Windows
 x86_64. It is not offered on Intel macOS, musl/Alpine Linux, Windows ARM64, or
 Python 3.15+. Those limits come from the available PyTorch wheels and do not

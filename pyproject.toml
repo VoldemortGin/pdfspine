@@ -12,7 +12,7 @@ dynamic = ["version"]
 description = "Apache-2.0-licensed, pure-Rust reimplementation of PyMuPDF (fitz) with PyO3 bindings."
 readme = "README.md"
 license = "Apache-2.0"
-requires-python = ">=3.12"
+requires-python = ">=3.11"
 authors = [{ name = "pdfspine contributors" }]
 keywords = ["pdf", "pymupdf", "fitz", "mupdf", "rust"]
 classifiers = [
@@ -27,6 +27,7 @@ classifiers = [
     "Operating System :: Microsoft :: Windows",
     "Programming Language :: Rust",
     "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
@@ -74,7 +75,7 @@ tatr = [
 # would make the base installation much heavier. `[all]` includes the TATR
 # runtime dependencies, but model weights remain in an explicitly populated
 # local Hugging Face cache / `PDFSPINE_TATR_MODELS` directory.
-# The tested wheel matrix is CPython 3.12-3.14 on glibc Linux x86_64/aarch64,
+# The tested wheel matrix is CPython 3.11-3.14 on glibc Linux x86_64/aarch64,
 # Apple-silicon macOS, and Windows x86_64. Mark all three runtime dependencies
 # consistently so unsupported OS/CPU/interpreter combinations do not make the
 # otherwise portable base package unsatisfiable. PEP 508 cannot distinguish
@@ -166,14 +167,14 @@ addopts = "--import-mode=importlib"
 filterwarnings = ["error"]
 
 [tool.ruff]
-target-version = "py312"
+target-version = "py311"
 src = ["python", "scripts"]
 
 [tool.ruff.lint]
 select = ["E4", "E7", "E9", "F"]
 
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.11"
 strict = true
 warn_unreachable = true
 files = ["python/pdfspine/*.pyi"]
