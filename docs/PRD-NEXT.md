@@ -52,9 +52,34 @@
   caption + dropped initial, SECCI label/value, fragmented running headers,
   full-width-title columns) plus Adobe RGB JPEG rendering, OCG Intent
   visibility, the documentation validation baselines and the TableFormer /
-  FinTabNet evaluation adapters. **`CHANGELOG.md` `[Unreleased]` is now empty**;
-  each release is captured under its own heading, from `## [0.11.2] — 2026-09-24`
-  back to the 0.9.0 slate under `## [0.9.0] — 2026-09-15`.
+  FinTabNet evaluation adapters. Each release is captured under its own `CHANGELOG.md`
+  heading, from `## [0.11.2] — 2026-09-24` back to the 0.9.0 slate under
+  `## [0.9.0] — 2026-09-15`.
+- **Unpublished state (checked 2026-10-02).** `main` is ahead of `v0.11.2`
+  (`78a64d6`); there is **no `v0.11.3` tag and nothing on PyPI beyond 0.11.2**
+  (`git tag -l 'v0.11*'` ends at `v0.11.2`).
+  - **0.11.3 — versioned but not released.** `473553f` (2026-09-25,
+    `fix(fonts): map Identity-H CJK CIDs via CIDSystemInfo collection (v0.11.3)`)
+    bumped `Cargo.toml` to `0.11.3` and added `## [0.11.3] — 2026-09-25` to
+    `CHANGELOG.md`; the tag / PyPI / GitHub Release step has not been done, so
+    `README.md` and `docs/index.md` correctly describe **v0.11.2** as the
+    published release. Cutting it still needs the usual release gate.
+  - **2026-09-26 branch-merge sweep.** Old branches were merged into `main` in one
+    pass (merge commits below); their user-visible changes sit under
+    `CHANGELOG.md` `## [Unreleased]` and are **not in any release** (each
+    symbol checked absent from `v0.11.2`):
+    transparency rendering (groups, soft masks, 16 blend modes) and image / mask /
+    shading clip — `1ae7bc6`; native `Pixmap` JPEG output (`jpg_quality`) —
+    `9e42eda`; rendering panic containment at `pdf-render` entry points
+    (ADR 0006) — `11118f3`; ONNX table cell post-processing
+    (`merge_symbol_columns`, `strip_dot_leaders`, `ONNX-016`–`ONNX-020`) —
+    `ade2adf`; Python 3.11 support (`requires-python >=3.11`) — `f22893c`;
+    table-structure evaluation harness (GriTS / TEDS-Struct / cell-F1,
+    `gold-crop` mode, `skip_layout`) — `4e4bd94`, followed by strictness fixes
+    `d11a845`, `e5f1f55`, `fe8a0c9`, `6e00275`. History-only merges with no
+    shipped change: `d317642` (visual-run), `25b03bf` (inhibit-spaces),
+    `afe21a6` (pre-3.12 backup), `7b4f62f` (reading-order stage 3 history),
+    `c1b1552` (archived OCG research handoff).
 - **Gate.** `./ci.sh` runs `scripts/quality_gate.py`, phases in order
   `rust → extension → python → drift → artifacts`. The `extension` phase
   fingerprints `crates/**`, `vendor/**`, `Cargo.toml`, `Cargo.lock`, `pyproject.toml` and
@@ -235,6 +260,12 @@
   `conformance/gt/RENDER-REPORT.md` (2026-09-10 update).
 
 - [ ] **3. Render, remaining cost.**
+  - *Transparency / image clip landed (2026-09-26, unreleased):* `pdf-render`
+    now implements transparency groups, ExtGState soft masks, all 16 blend modes,
+    text fill alpha `ca`, and clip-path handling for images, image masks and `sh`
+    shadings (merge `1ae7bc6`; panic containment `11118f3`, ADR 0006). This is a
+    correctness change, not the cost work below; no timing claim is made and
+    **item 3 stays open**. See `CHANGELOG.md` `[Unreleased]`.
   - *Mask coverage increment (2026-09-11, unreleased):* a complete, pinned
     tiny-skia 0.11.4 vendor specializes partial byte-mask blending. All 53
     validated outputs remain byte-identical; per-document ABBA/reverse BAAB
@@ -641,7 +672,9 @@
   - *Sub-tasks (from P3-6 / the baseline):* build a 30–50-page financial eval set
     with hand-written correct HTML + a TEDS / cell-alignment scorer; add the
     TSR-only gold-crop mode (implemented above); fix cell/column merging (fold `"$"`-only columns,
-    assign row-label words by row band, strip dotted-leader tokens); add the
+    assign row-label words by row band, strip dotted-leader tokens) — **landed**
+    (ONNX-016 to ONNX-020, merge `ade2adf`, unreleased; see the 2026-09-08 cell
+    post-processing note at `docs/PRD-NEXT.md` §4 P3-6); add the
     TableFormer backend + alias registry; then the benchmark report → flip ADR
     0002 to Accepted with the chosen default recorded.
   - *Acceptance:* a committed eval report with GriTS / TEDS numbers per backend
