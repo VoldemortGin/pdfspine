@@ -1687,46 +1687,87 @@ def find_tables(
     return _TatrTableFinderRecord(tables)
 
 
+def _xy_groups(
+    items: list[tuple[LayoutBlock, dict[str, Any]]], axis: int, min_gap: float
+) -> list[list[tuple[LayoutBlock, dict[str, Any]]]]:
+    """Split ``items`` at every empty projection band wider than ``min_gap``.
+
+    ``axis`` 0 projects on x (column cut), 1 on y (row cut). Zero-extent and
+    overlapping boxes are handled by sweeping with the running maximum end.
+    """
+
+    def span(item: tuple[LayoutBlock, dict[str, Any]]) -> tuple[float, float]:
+        rect = item[0].bbox
+        return (rect.x0, rect.x1) if axis == 0 else (rect.y0, rect.y1)
+
+    ordered = sorted(items, key=span)
+    groups: list[list[tuple[LayoutBlock, dict[str, Any]]]] = [[ordered[0]]]
+    reach = span(ordered[0])[1]
+    for item in ordered[1:]:
+        start, end = span(item)
+        if start - reach > min_gap:
+            groups.append([])
+        groups[-1].append(item)
+        reach = max(reach, end)
+    return groups
+
+
 def _reading_order(
     blocks: list[tuple[LayoutBlock, dict[str, Any]]],
     page_bbox: tuple[float, float, float, float],
 ) -> list[tuple[LayoutBlock, dict[str, Any]]]:
-    """Order blocks: full-width blocks split the page into bands; inside a band
-    the left column precedes the right column, each top-to-bottom.
+    """Recursive XY-cut: order blocks by splitting on empty projection bands.
 
-    TODO: replace with a recursive XY-cut for pages with three or more
-    columns and for column layouts that change mid-page.
+    A region is cut into columns first (empty vertical band wider than 1 % of
+    the page width, left to right); only when there is none is it cut into rows
+    (any empty horizontal band, top to bottom), and consecutive rows whose union
+    still has a column gutter stay together as one column band. Each part
+    recurses; a part that cannot be cut is sorted top-to-bottom, left-to-right.
+    So a two-column page is read left column then right column even where the
+    columns' rows line up, while a full-width block has no gutter and closes the
+    band above it. Blocks with a non-finite box are appended last in input
+    order, so no block is ever dropped.
     """
 
-    width = page_bbox[2] - page_bbox[0]
-    if width <= 0:
-        return sorted(blocks, key=lambda item: (item[0].bbox.y0, item[0].bbox.x0))
-    mid = page_bbox[0] + width / 2.0
-
-    def spans_page(block: LayoutBlock) -> bool:
+    def finite(block: LayoutBlock) -> bool:
         rect = block.bbox
-        centre = (rect.x0 + rect.x1) / 2.0
-        return (rect.x1 - rect.x0) > 0.6 * width or abs(centre - mid) < 0.08 * width
+        return all(math.isfinite(v) for v in (rect.x0, rect.y0, rect.x1, rect.y1))
 
-    def column(block: LayoutBlock) -> int:
-        return 0 if (block.bbox.x0 + block.bbox.x1) / 2.0 < mid else 1
+    def reading_key(item: tuple[LayoutBlock, dict[str, Any]]) -> tuple[float, float]:
+        return (item[0].bbox.y0, item[0].bbox.x0)
 
-    ordered: list[tuple[LayoutBlock, dict[str, Any]]] = []
-    band: list[tuple[LayoutBlock, dict[str, Any]]] = []
+    usable = [item for item in blocks if finite(item[0])]
+    stray = [item for item in blocks if not finite(item[0])]
+    width = page_bbox[2] - page_bbox[0]
+    if width <= 0 or not usable:
+        return sorted(usable, key=reading_key) + stray
+    min_gap = 0.01 * width
 
-    def flush() -> None:
-        band.sort(key=lambda item: (column(item[0]), item[0].bbox.y0, item[0].bbox.x0))
-        ordered.extend(band)
-        band.clear()
+    def cut(
+        region: list[tuple[LayoutBlock, dict[str, Any]]],
+    ) -> list[tuple[LayoutBlock, dict[str, Any]]]:
+        if len(region) < 2:
+            return list(region)
+        columns = _xy_groups(region, 0, min_gap)
+        if len(columns) > 1:
+            return [item for column in columns for item in cut(column)]
+        rows = _xy_groups(region, 1, 0.0)
+        if len(rows) == 1:
+            return sorted(region, key=reading_key)
+        # Consecutive rows whose union still splits into columns are one column
+        # band: its columns are read whole, left to right, not row by row.
+        runs: list[list[tuple[LayoutBlock, dict[str, Any]]]] = [rows[0]]
+        for row in rows[1:]:
+            merged = runs[-1] + row
+            if len(_xy_groups(merged, 0, min_gap)) > 1:
+                runs[-1] = merged
+            else:
+                runs.append(row)
+        if len(runs) == 1:
+            return sorted(region, key=reading_key)
+        return [item for run in runs for item in cut(run)]
 
-    for item in sorted(blocks, key=lambda item: (item[0].bbox.y0, item[0].bbox.x0)):
-        if spans_page(item[0]):
-            flush()
-            ordered.append(item)
-        else:
-            band.append(item)
-    flush()
-    return ordered
+    return cut(usable) + stray
 
 
 def _layout_blocks(

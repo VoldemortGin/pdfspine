@@ -198,16 +198,18 @@ With PP-DocLayoutV3 every detected box carries a reading-order key predicted
 by the model, and blocks are sorted by that key (ties broken top-to-bottom,
 left-to-right). This handles pages whose column layout changes mid-page.
 
-With PP-DocLayout-L (or whenever a box lacks the key) blocks are sorted with a
-two-column band rule: a block wider than 60 % of the page, or horizontally
-centred, is *full-width* and closes the current band; inside a band, blocks
-whose centre is left of the page middle come first, then the right column,
-each top-to-bottom. This handles the common single-column and two-column
-financial-report layouts.
-
-TODO: replace the band rule with a recursive XY-cut so that three-column pages
-and pages whose column layout changes mid-page are ordered correctly on
-PP-DocLayout-L too.
+With PP-DocLayout-L (or whenever a box lacks the key) blocks are ordered by a
+recursive XY-cut. A region is first cut into columns at every empty vertical
+band wider than 1 % of the page width (left to right); if there is none it is
+cut into rows at every empty horizontal band (top to bottom). Each part is cut
+again, and a part that cannot be cut is read top-to-bottom, left-to-right.
+Trying the column cut first keeps a two-column page in "left column, then right
+column" order even where the rows of the two columns line up, while a
+full-width block (title, wide figure) blocks the column cut and so closes the
+band above it. This orders single-column, two-column, three-or-more-column
+pages and pages whose column layout changes mid-page. Boxes with zero extent or
+overlapping boxes never raise, and a block with a non-finite box is kept and
+placed last.
 
 ### Table cell post-processing
 
