@@ -2865,6 +2865,9 @@ ruled fixture as ground truth.
 | `ONNX-018` | `_merge_symbol_columns` folds a `$`-only column into its right neighbour and a `%`-only column into its left, renumbers column indices and `colspan`; a dash-only column is not a symbol column; the merge is abandoned when a symbol cell has no partner cell | SLANet-plus post-processing | green |
 | `ONNX-019` | `_split_unsupported_spans` splits a hallucinated `rowspan` whose covered rows hold foreign words back into single cells; a span over genuinely empty rows is kept, as is one whose covered bands have no text range of their own | SLANet-plus post-processing | green |
 | `ONNX-020` | `_postprocess_cells` switches: `band_word_assignment`, `merge_symbol_columns`, `strip_dot_leaders`, `verify_spans` each disable their rule alone; `cell_postprocess=False` equals the legacy `_assign_words` path exactly | text-layer fill contract | green |
+| `ONNX-022` | `_reading_order` recursive XY-cut: three columns under a full-width title; single column, two columns, full-width block, three columns on one page | ONNX reading order | green |
+| `ONNX-023` | `_reading_order` two-column page (full band, interleaved columns, centred block) keeps the original band-rule order exactly | ONNX reading order | green |
+| `ONNX-024` | `_reading_order` degenerate boxes (zero width / height, overlap, coincident, NaN, empty, zero-width page) never raise and never drop a block; NaN boxes go last | ONNX reading order | green |
 
 ### Table-structure eval set — `TBLEVAL-*`
 

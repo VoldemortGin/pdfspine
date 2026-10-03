@@ -1357,6 +1357,86 @@ def test_onnx_021_skip_layout_uses_clip_as_table_region(monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
+# ONNX-022..024: recursive XY-cut fallback for ``_reading_order``
+# --------------------------------------------------------------------------- #
+def _order(blocks, page_bbox=(0.0, 0.0, 300.0, 400.0)):
+    return [block.label for block, _ in _onnx._reading_order(blocks, page_bbox)]
+
+
+def test_onnx_022_reading_order_three_columns_and_mid_page_change():
+    # Three columns under a full-width title.
+    blocks = [
+        _block(210, 60, 290, 120, "c-0"),
+        _block(110, 130, 190, 180, "b-1"),
+        _block(10, 130, 90, 180, "a-1"),
+        _block(10, 60, 90, 120, "a-0"),
+        _block(110, 60, 190, 120, "b-0"),
+        _block(210, 130, 290, 180, "c-1"),
+        _block(10, 10, 290, 40, "title"),
+    ]
+    assert _order(blocks) == ["title", "a-0", "a-1", "b-0", "b-1", "c-0", "c-1"]
+
+    # Single column, then two columns, then a full-width block, then three.
+    blocks = [
+        _block(10, 300, 90, 350, "t-a"),
+        _block(110, 300, 190, 350, "t-b"),
+        _block(210, 300, 290, 350, "t-c"),
+        _block(10, 250, 290, 270, "wide"),
+        _block(160, 120, 290, 220, "r-0"),
+        _block(10, 120, 140, 160, "l-0"),
+        _block(10, 170, 140, 220, "l-1"),
+        _block(10, 10, 290, 100, "top"),
+    ]
+    assert _order(blocks) == ["top", "l-0", "l-1", "r-0", "wide", "t-a", "t-b", "t-c"]
+
+
+def test_onnx_023_reading_order_two_columns_unchanged():
+    # The two-column rule of the original band implementation, pinned on a
+    # page that mixes a full-width band, interleaved columns and a centred block.
+    blocks = [
+        _block(160, 150, 290, 180, "r-1"),
+        _block(10, 150, 140, 190, "l-1"),
+        _block(10, 10, 290, 30, "full"),
+        _block(160, 40, 290, 140, "r-0"),
+        _block(10, 40, 140, 70, "l-0"),
+        _block(10, 80, 140, 140, "l-0b"),
+        _block(30, 250, 270, 280, "full-2"),
+        _block(130, 300, 170, 320, "centred"),
+    ]
+    assert _order(blocks) == [
+        "full",
+        "l-0",
+        "l-0b",
+        "l-1",
+        "r-0",
+        "r-1",
+        "full-2",
+        "centred",
+    ]
+
+
+def test_onnx_024_reading_order_degenerate_boxes_keep_every_block():
+    nan = float("nan")
+    blocks = [
+        _block(10, 100, 90, 140, "a"),
+        _block(50, 50, 50, 50, "point"),  # zero width and height
+        _block(100, 60, 100, 90, "zero-w"),  # zero width
+        _block(10, 10, 290, 10, "zero-h"),  # zero height
+        _block(20, 105, 80, 135, "inside-a"),  # overlaps ``a``
+        _block(nan, 0, 10, 10, "nan"),
+        _block(110, 100, 190, 140, "b"),
+    ]
+    ordered = _order(blocks)
+    assert sorted(ordered) == sorted(block.label for block, _ in blocks)
+    assert ordered[-1] == "nan"
+    assert _order([]) == []
+    assert _order(blocks[:1], (0.0, 0.0, 0.0, 0.0)) == ["a"]
+    # Fully coincident boxes neither loop nor drop anything.
+    same = [_block(10, 10, 50, 50, f"s{i}") for i in range(3)]
+    assert sorted(_order(same)) == ["s0", "s1", "s2"]
+
+
+# --------------------------------------------------------------------------- #
 # ONNX-016: dotted-leader stripping
 # --------------------------------------------------------------------------- #
 def test_onnx_016_strip_dot_leaders():
