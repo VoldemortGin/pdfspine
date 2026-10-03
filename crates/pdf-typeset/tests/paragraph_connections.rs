@@ -607,3 +607,318 @@ fn chain_consumes_each_separator_once_and_autofit_keeps_separator_geometry() {
         .fold(0.0, f64::max);
     assert!(bottom <= 40.0 + 0.001);
 }
+
+fn styled(
+    from: Vec<BlockPathStep>,
+    to: Vec<BlockPathStep>,
+    width: f64,
+    dash: [f64; 2],
+    space: f64,
+) -> ParagraphConnection {
+    ParagraphConnection::new(
+        from,
+        to,
+        BorderEdge {
+            width,
+            color: Rgb::new(0.0, 0.0, 1.0),
+        },
+    )
+    .unwrap()
+    .with_dash(dash[0], dash[1])
+    .unwrap()
+    .with_space(space)
+    .unwrap()
+}
+fn dashed_separators(ops: &[pdf_typeset::Op]) -> Vec<(f64, f64, Vec<f64>)> {
+    ops.iter()
+        .filter_map(|o| match o {
+            pdf_typeset::Op::Path {
+                segs,
+                stroke: Some(s),
+                fill: None,
+            } => match segs.as_slice() {
+                [pdf_typeset::PathSeg::MoveTo { y, .. }, pdf_typeset::PathSeg::LineTo { y: y2, .. }]
+                    if y == y2 =>
+                {
+                    Some((*y, s.width, s.dashes.clone()))
+                }
+                _ => None,
+            },
+            _ => None,
+        })
+        .collect()
+}
+fn baseline(ops: &[pdf_typeset::Op], wanted: &str) -> f64 {
+    ops.iter()
+        .find_map(|o| match o {
+            pdf_typeset::Op::Text { text, baseline, .. } if text == wanted => Some(*baseline),
+            _ => None,
+        })
+        .unwrap()
+}
+
+#[test]
+fn separator_dash_and_space_are_optional_validated_and_order_independent() {
+    let base = ParagraphConnection::new(
+        vec![BlockPathStep::Block(0)],
+        vec![BlockPathStep::Block(1)],
+        BorderEdge {
+            width: 2.0,
+            color: Rgb::BLACK,
+        },
+    )
+    .unwrap();
+    assert_eq!(base.dash(), None);
+    assert_eq!(base.space(), 0.0);
+    let reason = |r: Result<ParagraphConnection, ConnectionError>| {
+        let e = r.unwrap_err();
+        assert_eq!(e.path, vec![BlockPathStep::Block(1)]);
+        e.reason
+    };
+    for value in [0.0, -1.0, 0.00001, f64::NAN, f64::INFINITY, f64::MAX] {
+        for (on, off) in [(value, 1.0), (1.0, value)] {
+            assert_eq!(
+                reason(base.clone().with_dash(on, off)),
+                ConnectionReason::InvalidSeparatorDash
+            );
+        }
+    }
+    let big = f64::from(f32::MAX);
+    assert_eq!(
+        reason(base.clone().with_dash(big, big)),
+        ConnectionReason::InvalidSeparatorDash
+    );
+    for space in [-1.0, -0.001, f64::NAN, f64::INFINITY, f64::MAX, 1e39] {
+        assert_eq!(
+            reason(base.clone().with_space(space)),
+            ConnectionReason::InvalidSeparatorSpace
+        );
+    }
+    let a = base
+        .clone()
+        .with_dash(8.0, 2.5)
+        .unwrap()
+        .with_space(4.0)
+        .unwrap();
+    let b = base
+        .clone()
+        .with_space(4.0)
+        .unwrap()
+        .with_dash(8.0, 2.5)
+        .unwrap();
+    assert_eq!(a, b);
+    assert_eq!(a.dash(), Some([8.0, 2.5]));
+    assert_eq!(a.space(), 4.0);
+    assert_eq!(a.separator(), base.separator());
+    assert_eq!(base.clone().with_space(0.0).unwrap(), base);
+}
+
+#[test]
+fn same_page_dashed_separator_space_is_measured_reserved_painted_and_advanced_once() {
+    let mut a = bordered("A", Rgb::new(1.0, 0.0, 0.0));
+    set_props(&mut a).space_after = 6.0;
+    let blocks = [a, bordered("B", Rgb::BLACK), para("D", 12.0)];
+    let root = |i| vec![BlockPathStep::Block(i)];
+    let solid = connection(0, 1, 3.0);
+    let overlay = ParagraphConnections::new(vec![styled(root(0), root(1), 3.0, [8.0, 2.5], 4.0)]);
+    let height = |o: &ParagraphConnections| {
+        ts().try_measure_blocks_with_connections(&blocks[..2], 100.0, true, o)
+            .unwrap()
+            .height
+    };
+    assert_eq!(height(&solid), 39.0);
+    assert_eq!(height(&overlay), 43.0); // top1 + A14 + gap6 + separator3 + space4 + B14 + bottom1
+    let lay = |o: &ParagraphConnections| {
+        let mut engine = ts();
+        let pages = engine
+            .try_layout_flow_with_connections(&blocks, &mut fixed(100.0), o)
+            .unwrap();
+        let pdf = engine.emit(&pages).unwrap();
+        (pages, pdf)
+    };
+    let (old, _) = lay(&solid);
+    let (pages, pdf) = lay(&overlay);
+    assert_eq!(pages.len(), 1);
+    let ops = &pages[0].ops;
+    assert_eq!(dashed_separators(ops), vec![(22.5, 3.0, vec![8.0, 2.5])]);
+    assert!(raw(&pdf.pdf).contains("[8 2.5] 0 d"));
+    let lines: Vec<_> = ops
+        .iter()
+        .filter_map(|op| match op {
+            pdf_typeset::Op::Line { x1, y1, x2, y2, .. } => Some((*x1 == *x2, *y1, *y2)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        lines
+            .iter()
+            .filter(|l| !l.0)
+            .map(|l| l.1)
+            .collect::<Vec<_>>(),
+        vec![0.5, 42.5]
+    );
+    assert_eq!(
+        lines
+            .iter()
+            .filter(|l| l.0)
+            .map(|l| (l.1, l.2))
+            .collect::<Vec<_>>(),
+        vec![(0.0, 15.0), (0.0, 15.0), (21.0, 43.0), (21.0, 43.0)]
+    );
+    assert_eq!(baseline(ops, "A"), baseline(&old[0].ops, "A"));
+    for text in ["B", "D"] {
+        assert_eq!(baseline(ops, text) - baseline(&old[0].ops, text), 4.0);
+    }
+}
+
+#[test]
+fn explicit_break_opens_dashed_separator_with_space_at_phase_zero_and_fit_counts_space() {
+    use pdf_typeset::LayoutError;
+    let mut a = bordered("A", Rgb::BLACK);
+    set_props(&mut a).spacing = pdf_typeset::LineSpacing::Exact(20.0);
+    let mut b = bordered("B", Rgb::BLACK);
+    set_props(&mut b).spacing = pdf_typeset::LineSpacing::Exact(20.0);
+    let blocks = [a, Block::PageBreak, b];
+    let root = |i| vec![BlockPathStep::Block(i)];
+    let overlay =
+        |space| ParagraphConnections::new(vec![styled(root(0), root(2), 35.0, [6.0, 2.0], space)]);
+    let mut engine = ts();
+    let pages = engine
+        .try_layout_flow_with_connections(&blocks, &mut fixed(60.0), &overlay(4.0))
+        .unwrap();
+    assert_eq!(pages.len(), 2);
+    assert!(dashed_separators(&pages[0].ops).is_empty());
+    assert!(!pages[0]
+        .ops
+        .iter()
+        .any(|o| matches!(o,pdf_typeset::Op::Line{y1,y2,..} if y1==y2 && *y1>1.0)));
+    assert_eq!(
+        dashed_separators(&pages[1].ops),
+        vec![(17.5, 35.0, vec![6.0, 2.0])]
+    );
+    // separator35 + space4 + B20 + bottom1 = 60: B's text starts at 39.
+    let solid = ts()
+        .try_layout_flow_with_connections(&blocks, &mut fixed(60.0), &connection(0, 2, 35.0))
+        .unwrap();
+    assert_eq!(
+        baseline(&pages[1].ops, "B") - baseline(&solid[1].ops, "B"),
+        4.0
+    );
+    let pdf = raw(&engine.emit(&pages).unwrap().pdf);
+    assert_eq!(pdf.matches("[6 2] 0 d").count(), 1);
+    assert!(matches!(
+        ts().try_layout_flow_with_connections(&blocks, &mut fixed(60.0), &overlay(5.0)),
+        Err(LayoutError::Connection(ConnectionError {
+            reason: ConnectionReason::UnusableGeometry,
+            ..
+        }))
+    ));
+}
+
+#[test]
+fn cell_separator_space_drives_row_measurement_and_v_anchor() {
+    use pdf_typeset::{ColumnWidth, TableCell, TableRow, TableSpec, VAnchor};
+    let table = |min_height| {
+        let mut cell = TableCell::new(vec![bordered("A", Rgb::BLACK), bordered("B", Rgb::BLACK)]);
+        cell.padding = 2.0;
+        cell.v_align = VAnchor::Bottom;
+        let mut row = TableRow::new(vec![cell]);
+        row.min_height = min_height;
+        vec![Block::Table(TableSpec::new(
+            vec![ColumnWidth::Fixed(100.0)],
+            vec![row],
+        ))]
+    };
+    let overlay = ParagraphConnections::new(vec![styled(
+        cell_path(0),
+        cell_path(1),
+        3.0,
+        [4.0, 1.0],
+        4.0,
+    )]);
+    let m = ts()
+        .try_measure_blocks_with_connections(&table(None), 100.0, true, &overlay)
+        .unwrap();
+    assert_eq!(m.height, 41.0); // padding2 + content37 + padding2
+    let flow = ts()
+        .try_layout_flow_with_connections(&table(Some(80.0)), &mut fixed(100.0), &overlay)
+        .unwrap();
+    // bottom alignment: content37 starts41; separator center41+15+1.5
+    assert_eq!(
+        dashed_separators(&flow[0].ops),
+        vec![(57.5, 3.0, vec![4.0, 1.0])]
+    );
+}
+
+#[test]
+fn chained_dashed_spaced_separators_survive_autofit_without_scaling() {
+    use pdf_typeset::{Op, Rect, TextBoxSpec};
+    let mut blocks = vec![
+        bordered("A", Rgb::BLACK),
+        bordered("B", Rgb::BLACK),
+        bordered("C", Rgb::BLACK),
+    ];
+    for block in &mut blocks {
+        if let Block::Paragraph(p, runs) = block {
+            p.spacing = pdf_typeset::LineSpacing::Multiple(1.0);
+            runs[0].style.size = 24.0;
+        }
+    }
+    let root = |i| vec![BlockPathStep::Block(i)];
+    let chain = |s1, s2| {
+        ParagraphConnections::new(vec![
+            styled(root(0), root(1), 3.0, [8.0, 2.5], s1),
+            styled(root(1), root(2), 5.0, [3.0, 1.0], s2),
+        ])
+    };
+    let overlay = chain(4.0, 2.0);
+    let mut spec = TextBoxSpec::new(Rect::new(0.0, 0.0, 100.0, 40.0), blocks.clone());
+    spec.font_scale = Some(1.0);
+    let natural = |o: &ParagraphConnections| {
+        ts().try_measure_text_box_with_connections(&spec, o)
+            .unwrap()
+            .height
+    };
+    assert!(natural(&overlay) > 40.0);
+    assert!((natural(&overlay) - natural(&chain(0.0, 0.0)) - 6.0).abs() < 1e-9);
+    let ops = ts()
+        .try_layout_text_box_with_connections(&spec, &overlay)
+        .unwrap();
+    let separators = dashed_separators(&ops);
+    assert_eq!(separators.len(), 2);
+    assert_eq!(
+        (separators[0].1, separators[0].2.clone()),
+        (3.0, vec![8.0, 2.5])
+    );
+    assert_eq!(
+        (separators[1].1, separators[1].2.clone()),
+        (5.0, vec![3.0, 1.0])
+    );
+    assert!(ops
+        .iter()
+        .filter_map(|o| match o {
+            Op::Text { size, .. } => Some(*size),
+            _ => None,
+        })
+        .all(|size| size < 24.0));
+    let bottom = ops
+        .iter()
+        .filter_map(|o| match o {
+            Op::Line { y1, y2, .. } => Some(y1.max(*y2)),
+            _ => None,
+        })
+        .fold(0.0, f64::max);
+    assert!(bottom <= 40.0 + 0.001);
+    // A fixed font scale shrinks text, not separator space.
+    let mut half = TextBoxSpec::new(Rect::new(0.0, 0.0, 100.0, 400.0), blocks);
+    half.font_scale = Some(0.5);
+    let lay =
+        |o: &ParagraphConnections| ts().try_layout_text_box_with_connections(&half, o).unwrap();
+    let (spaced, zero) = (lay(&overlay), lay(&chain(0.0, 0.0)));
+    assert!(spaced
+        .iter()
+        .any(|o| matches!(o, Op::Text { size, .. } if *size == 12.0)));
+    for (text, shift) in [("A", 0.0), ("B", 4.0), ("C", 6.0)] {
+        assert!((baseline(&spaced, text) - baseline(&zero, text) - shift).abs() < 1e-9);
+    }
+}

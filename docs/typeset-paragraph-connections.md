@@ -45,18 +45,49 @@ against actual geometry.
 
 The separator has positive finite width and finite RGB components in `[0,1]`.
 Its actual PDF-number representation must also remain positive and finite in
-f32, preventing accidental zero-width hairlines or raster overflow. It is solid
-and has zero additional clearance. Its width is not scaled with text autofit.
-No dashed separator, nonzero separator space, double/art border, or automatic
-Word/LibreOffice policy is inferred. Each paragraph's ordinary side edges can
-retain their existing solid/dashed style, color, width and space.
+f32, preventing accidental zero-width hairlines or raster overflow. By default
+it is solid and has zero additional clearance. Its width is not scaled with text
+autofit. Each paragraph's ordinary side edges can retain their existing
+solid/dashed style, color, width and space.
+
+Two optional, chainable builders add caller-resolved separator styling; omitting
+them keeps the previous solid/zero-clearance output byte for byte:
+
+```rust
+let c = ParagraphConnection::new(from, to, edge)?
+    .with_dash(8.0, 2.5)?   // on/off lengths in points
+    .with_space(4.0)?;      // separator-to-text clearance in points
+assert_eq!((c.dash(), c.space()), (Some([8.0, 2.5]), 4.0));
+```
+
+- `with_dash(on, off)` follows `ParagraphBorder::with_dash`: both lengths finite
+  and positive after the PDF scalar formatter, positive finite `f32` values with
+  a finite `f32` cycle. The separator is one independent `Op::Path` segment with
+  butt caps and phase zero (`[on off] 0 d`); a separator opening a page after an
+  explicit break starts at phase zero too. Violations return
+  `ConnectionReason::InvalidSeparatorDash`.
+- `with_space(space)` is the distance between the separator's inner (lower)
+  stroke edge and the incoming paragraph's first line, like a top-border space.
+  The separator's opening extent becomes `width + space`; it is counted once in
+  natural measurement, page-fit reservation (for example 35 + 4 + 20 + 1 fits a
+  60pt page; 35 + 5 + 20 + 1 returns `UnusableGeometry`), the painted position of
+  B's text/side edges and the final cursor advance. The space is not scaled by
+  text autofit. It must be finite and nonnegative, and both it and
+  `width + space` must be finite `f32` PDF numbers; otherwise
+  `ConnectionReason::InvalidSeparatorSpace`.
+- Builder errors carry the incoming path, are returned before any layout, and
+  produce no output. Builder order does not matter; `dash()`/`space()` report the
+  values (`None` / `0.0` by default).
+
+No double/art border, other between-border policy, or automatic Word/LibreOffice
+mapping of dash enumerations or `w:space` is inferred.
 
 ## One transition shared by measurement and layout
 
 At the explicit A→B boundary, A's final bottom is suppressed in measurement,
 page-fit reservation, painting **and** final cursor advance. B's first opening
-is the separator, whose width is reserved exactly once. On the same page, the
-ordinary positive `A.space_after + B.space_before` gap remains. A's side edges
+is the separator, whose width (plus optional space) is reserved exactly once.
+On the same page, the ordinary positive `A.space_after + B.space_before` gap remains. A's side edges
 stop at A's content bottom; B's start at its separator's outer top. They do not
 use the ordinary same-style group's side bridge through this gap. Unspecified
 boundaries retain ordinary grouping.
@@ -129,3 +160,15 @@ It is advisory and is not a CI dependency. External diagnostic inputs, the
 14-case policy investigation and raw red/green logs live in the maintained
 machine's `typeset-between-readonly` evidence directory; the public engine
 contract is intentionally narrower than that exploratory LO matrix.
+
+### Dashed separators and separator space (unreleased increment)
+
+Five additional focused tests in `paragraph_connections.rs` cover builder
+validation/order independence and typed errors, a same-page 43pt boundary
+(`1 + 14 + 6 + 3 + 4 + 14 + 1`, with the following unconnected paragraph moved by
+exactly 4pt), an explicit page break opening a phase-zero dashed separator with the
+60/61pt fit limit including space, table-cell row measurement/bottom anchoring, and
+a dashed/spaced chain under textbox autofit whose space stays unscaled. Temporarily
+dropping the stored dash/space from the transition turns the four layout tests red.
+No new fixture or reference is added: all twelve generated typeset PDFs remain
+byte-identical, and the existing references pass 13/13 pages at 100dpi.

@@ -1,5 +1,8 @@
 //! Per-call, structural paragraph-boundary connections. No parser presence policy.
-use crate::{Block, BorderEdge, ParaProps, Run, SignedSpacingError, SpacingPathStep, Typesetter};
+use crate::{
+    Block, BorderEdge, ParaProps, ParagraphBorder, Run, SignedSpacingError, SpacingPathStep,
+    Typesetter,
+};
 use std::fmt;
 
 /// A structural step shared with the existing signed-spacing diagnostics.
@@ -9,12 +12,13 @@ pub type BlockPathStep = SpacingPathStep;
 pub type BlockPath = Vec<BlockPathStep>;
 
 /// One caller-resolved boundary: replace `from`'s final bottom and `to`'s first
-/// top by one solid separator at the incoming paragraph. No extra clearance.
+/// top by one separator at the incoming paragraph. Solid with zero clearance by
+/// default; [`Self::with_dash`] and [`Self::with_space`] are explicit opt-ins.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ParagraphConnection {
     from: BlockPath,
     to: BlockPath,
-    separator: BorderEdge,
+    separator: ParagraphBorder,
 }
 impl ParagraphConnection {
     /// Constructs a solid RGB separator. Paths are checked on every layout call.
@@ -45,8 +49,56 @@ impl ParagraphConnection {
         Ok(Self {
             from,
             to,
-            separator,
+            separator: ParagraphBorder::new(separator, 0.0).expect("validated separator"),
         })
+    }
+    /// Add caller-resolved on/off lengths in points, under the same rules as
+    /// [`ParagraphBorder::with_dash`]: butt caps, phase zero for the one emitted
+    /// separator segment, no automatic OOXML border-style mapping.
+    ///
+    /// # Errors
+    /// [`ConnectionReason::InvalidSeparatorDash`] for nonpositive/nonfinite
+    /// lengths, values rounded to zero by the PDF number formatter, or a
+    /// nonfinite f32 dash cycle.
+    pub fn with_dash(mut self, on: f64, off: f64) -> Result<Self, ConnectionError> {
+        match self.separator.with_dash(on, off) {
+            Ok(separator) => self.separator = separator,
+            Err(_) => return Err(self.invalid(ConnectionReason::InvalidSeparatorDash)),
+        }
+        Ok(self)
+    }
+    /// Set the clearance in points between the separator's inner (lower) stroke
+    /// edge and the incoming paragraph's first line, like a top-border space.
+    /// It is reserved once in measurement, page fit and cursor advance, and is
+    /// not scaled by text autofit. Zero is the default.
+    ///
+    /// # Errors
+    /// [`ConnectionReason::InvalidSeparatorSpace`] for negative/nonfinite space,
+    /// or when the space or separator extent is not a finite f32 PDF number.
+    pub fn with_space(mut self, space: f64) -> Result<Self, ConnectionError> {
+        let encoded = |v: f64| {
+            crate::ops::pdf_scalar(v)
+                .parse::<f32>()
+                .unwrap_or(f32::INFINITY)
+        };
+        let stroke = self.separator.stroke();
+        let separator = ParagraphBorder::new(stroke, space)
+            .ok()
+            .filter(|_| (encoded(space) + encoded(stroke.width)).is_finite());
+        let Some(mut separator) = separator else {
+            return Err(self.invalid(ConnectionReason::InvalidSeparatorSpace));
+        };
+        if let Some([on, off]) = self.separator.dash() {
+            separator = separator.with_dash(on, off).expect("validated dash");
+        }
+        self.separator = separator;
+        Ok(self)
+    }
+    fn invalid(self, reason: ConnectionReason) -> ConnectionError {
+        ConnectionError {
+            path: self.to,
+            reason,
+        }
     }
     /// Source paragraph path in the current model.
     #[must_use]
@@ -58,10 +110,20 @@ impl ParagraphConnection {
     pub fn to(&self) -> &[BlockPathStep] {
         &self.to
     }
-    /// Validated solid stroke; its width is not scaled by text autofit.
+    /// Validated stroke; its width is not scaled by text autofit.
     #[must_use]
     pub fn separator(&self) -> BorderEdge {
-        self.separator
+        self.separator.stroke()
+    }
+    /// Caller-resolved on/off point lengths; `None` (the default) is solid.
+    #[must_use]
+    pub fn dash(&self) -> Option<[f64; 2]> {
+        self.separator.dash()
+    }
+    /// Separator-to-text clearance in points; zero by default.
+    #[must_use]
+    pub fn space(&self) -> f64 {
+        self.separator.space()
     }
 }
 
@@ -74,7 +136,8 @@ impl ParagraphConnection {
 /// A connection suppresses only the source paragraph's final bottom and replaces
 /// only the incoming paragraph's first opening; internal page continuations keep
 /// their ordinary borders. Sides keep each paragraph's own style without bridging
-/// an explicit boundary's gap. Separators have zero extra clearance and are solid.
+/// an explicit boundary's gap. Separators are solid with zero clearance unless the
+/// connection opts into an explicit dash pair or nonnegative separator space.
 ///
 /// A connected endpoint moved before its first line is rewrapped at the new page
 /// geometry. Once any text of that endpoint has been emitted, a change of effective
@@ -113,6 +176,10 @@ impl ParagraphConnections {
 pub enum ConnectionReason {
     /// Separator width or RGB is outside its finite supported range.
     InvalidSeparator,
+    /// Separator dash lengths are not positive finite emitted PDF numbers.
+    InvalidSeparatorDash,
+    /// Separator space is negative, nonfinite or not a finite emitted extent.
+    InvalidSeparatorSpace,
     /// A structural step or index does not resolve in the current block tree.
     InvalidPath,
     /// A resolved endpoint is not a paragraph.
@@ -353,9 +420,7 @@ impl ParagraphConnections {
                 a.props.indent_right.max(0.0),
             ));
             if c.to == path {
-                result.incoming = Some(
-                    crate::ParagraphBorder::new(c.separator, 0.0).expect("validated separator"),
-                );
+                result.incoming = Some(c.separator);
             }
             if c.from == path {
                 result.outgoing = true;
