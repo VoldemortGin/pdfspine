@@ -64,6 +64,11 @@
     `CHANGELOG.md`; the tag / PyPI / GitHub Release step has not been done, so
     `README.md` and `docs/index.md` correctly describe **v0.11.2** as the
     published release. Cutting it still needs the usual release gate.
+  - **2026-10-02 feature merges (unreleased).** Dashed / nonzero-space paragraph
+    connection separators (`feat/typeset-connection-dash-space`, `05f02b5`) and
+    the recursive XY-cut ONNX reading-order fallback
+    (`feat/onnx-xycut-reading-order`, `93b3270`); see `CHANGELOG.md`
+    `## [Unreleased]`. Neither is in any release.
   - **2026-09-26 branch-merge sweep.** Old branches were merged into `main` in one
     pass (merge commits below); their user-visible changes sit under
     `CHANGELOG.md` `## [Unreleased]` and are **not in any release** (each
@@ -507,7 +512,13 @@
     including wheel/sdist installation. Source/fingerprint identities are in
     `docs/validation-baselines.md`; restrictions and real red/green cases are in
     `docs/typeset-paragraph-connections.md`.
-  - [ ] **Remaining:** dashed/nonzero-clearance connection separators, other
+  - [x] **Dashed / nonzero-space connection separators (unreleased).**
+    Additive `ParagraphConnection::with_dash` / `with_space` builders; typed
+    `InvalidSeparatorDash` / `InvalidSeparatorSpace` errors; five focused
+    tests; 235 crate tests, clippy and rustdoc green; 12/12 PDFs
+    byte-identical, 13/13 SSIM pages, 10/10 readback. See
+    `docs/typeset-paragraph-connections.md`.
+  - [ ] **Remaining:** other
     non-solid/raw between-border policies and pattern shading,
     automatic signed-spacing/script policy and consumer mappings, and verified
     Word `lineGap` placement.
@@ -1376,9 +1387,13 @@ oracle-cross-checked against real PyMuPDF 1.24.14 (`.venv-oracle`) with zero reg
     3. **Structure-model swap or fine-tune** — deferred until 1–2 land; SLANet-plus's merged-cell
        prediction is unreliable in both directions (ADI 22 spurious `colspan=2`; ADBE misses 3 gold
        `colspan=8` rows), but more than half the current rows×cols gap traces to 1–2, not the model.
-    4. **Recursive XY-cut reading order** — deferred; the one page with accurate table boxes (ADBE)
-       already ordered correctly, so the reading-order errors seen on the other two pages are downstream
-       of item 1, not a band-rule limitation.
+    4. **Recursive XY-cut reading order** — ✅ done (unreleased, `feat/onnx-xycut-reading-order`).
+       Originally deferred: the one page with accurate table boxes (ADBE) already ordered correctly, so
+       the reading-order errors seen on the other two pages were downstream of item 1, not a band-rule
+       limitation. Now implemented in `python/pdfspine/_onnx.py` as the fallback when the layout model
+       gives no `read_order` (PP-DocLayoutV3 `read_order` still wins). Not changed: Rust-side `get_text`
+       reading order. Not yet done: conformance comparison on real multi-column PDFs. The vertical-cut
+       minimum gap is 1% of page width, not calibrated on real data.
 
 ### Phase 4 — Post-launch capability / strategic
 

@@ -76,6 +76,16 @@ feature-complete, but the public API and on-disk formats may still change.
   restores the previous overlap → centre → nearest-box assignment.
   `ONNX-016`–`ONNX-020`.
 
+- **pdf-typeset**: `ParagraphConnection::with_dash(on, off)` /
+  `with_space(space)` (plus `dash()` / `space()`) add opt-in, caller-resolved
+  dashed separators and nonzero separator-to-text clearance. Dash pairs follow
+  `ParagraphBorder::with_dash` (emitted-number/f32 validation, butt caps,
+  phase zero per segment); space behaves like a top-border space and is
+  counted once in measurement, page-fit reservation, painting and cursor
+  advance, unscaled by autofit. Invalid values return
+  `ConnectionReason::InvalidSeparatorDash` / `InvalidSeparatorSpace`. Defaults
+  are unchanged; all 12 generated typeset PDFs are byte-identical.
+
 ### Fixed
 
 - `Page.get_pixmap()` (render fallback path), `DisplayList.get_pixmap()` and
@@ -103,6 +113,13 @@ feature-complete, but the public API and on-disk formats may still change.
   table-slot module) is rewritten with `typing.TypeAlias`, and CI now runs the
   pytest matrix on CPython 3.11 as well; release builds and smoke tests run on
   3.11, the oldest supported interpreter.
+
+- ONNX layout: when the layout model gives no `read_order` (PP-DocLayout-L),
+  blocks are now ordered by a recursive XY-cut instead of the full-width-band
+  + two-column rule, so three-or-more-column pages and mid-page column changes
+  read correctly; two-column output is unchanged (differential check over
+  3000 random two-column pages). PP-DocLayoutV3 `read_order` still takes
+  precedence. New cases `ONNX-022`–`ONNX-024`.
 
 ## [0.11.3] — 2026-09-25
 
