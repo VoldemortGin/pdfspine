@@ -11,6 +11,8 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
+## [0.12.0] — 2026-10-03
+
 ### Added
 
 - Page rendering (`get_pixmap`, `DisplayList`) implements PDF transparency:
@@ -104,6 +106,20 @@ feature-complete, but the public API and on-disk formats may still change.
   (`usgs-fs20183024.pdf`) translucent boxes, feathered shadows, the washed-out
   background photo and the rounded photo frame now match PDFium (page 1 mean
   pixel difference 67 → 11 levels at 144 dpi).
+- *Originally versioned as 0.11.3 (2026-09-25), which was never tagged or
+  published; folded into 0.12.0:*
+  - Text extraction from Type0 fonts with no `/ToUnicode` whose `/Encoding` is
+    `Identity-H` / `Identity-V` (or an embedded CMap) now falls back to the
+    bundled CID→Unicode table of the Adobe CJK collection named by the
+    descendant's `/CIDSystemInfo` (`Adobe-GB1`, `Adobe-CNS1`, `Adobe-Japan1`,
+    `Adobe-Korea1`), matching MuPDF. Previously these glyphs came out as U+FFFD
+    (e.g. ~74% of the characters in HK annual reports set in MHeiHK).
+    `/ToUnicode` and bundled predefined `Uni…-UCS2` encodings keep precedence;
+    `Adobe-KR` and unbundled legacy CMaps (e.g. `ETen-B5-H`) are unchanged.
+  - The bundled CJK CID→Unicode tables now resolve a CID shared by a CJK
+    Radicals Supplement code point and a unified ideograph to the ideograph
+    (e.g. Adobe-CNS1 月 / 角 / 骨 were extracted as ⺝ / ⻆ / ⻣; 44 Adobe-Japan1
+    CIDs likewise). This also affects the `Uni…-UCS2` predefined encodings.
 
 ### Changed
 
@@ -128,23 +144,6 @@ feature-complete, but the public API and on-disk formats may still change.
   build-only `tract-linalg` liquid-template build script, and never enters the
   runtime artifact. To be removed once tract drops liquid/anymap2 or ocrspine
   bumps tract.
-
-## [0.11.3] — 2026-09-25
-
-### Fixed
-
-- Text extraction from Type0 fonts with no `/ToUnicode` whose `/Encoding` is
-  `Identity-H` / `Identity-V` (or an embedded CMap) now falls back to the
-  bundled CID→Unicode table of the Adobe CJK collection named by the
-  descendant's `/CIDSystemInfo` (`Adobe-GB1`, `Adobe-CNS1`, `Adobe-Japan1`,
-  `Adobe-Korea1`), matching MuPDF. Previously these glyphs came out as U+FFFD
-  (e.g. ~74% of the characters in HK annual reports set in MHeiHK).
-  `/ToUnicode` and bundled predefined `Uni…-UCS2` encodings keep precedence;
-  `Adobe-KR` and unbundled legacy CMaps (e.g. `ETen-B5-H`) are unchanged.
-- The bundled CJK CID→Unicode tables now resolve a CID shared by a CJK
-  Radicals Supplement code point and a unified ideograph to the ideograph
-  (e.g. Adobe-CNS1 月 / 角 / 骨 were extracted as ⺝ / ⻆ / ⻣; 44 Adobe-Japan1
-  CIDs likewise). This also affects the `Uni…-UCS2` predefined encodings.
 
 ## [0.11.2] — 2026-09-24
 
@@ -1241,8 +1240,8 @@ published wheel's version is set from the `v0.1.0` git tag at build time.
   2858 ms → 819 ms). `rayon` is a feature-gated (`paddle-ocr`) optional dep and
   is not in the lean base wheel.
 
-[Unreleased]: https://github.com/VoldemortGin/pdfspine/compare/v0.11.3...HEAD
-[0.11.3]: https://github.com/VoldemortGin/pdfspine/compare/v0.11.2...v0.11.3
+[Unreleased]: https://github.com/VoldemortGin/pdfspine/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/VoldemortGin/pdfspine/compare/v0.11.2...v0.12.0
 [0.11.2]: https://github.com/VoldemortGin/pdfspine/compare/v0.11.1...v0.11.2
 [0.11.1]: https://github.com/VoldemortGin/pdfspine/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/VoldemortGin/pdfspine/compare/v0.10.0...v0.11.0

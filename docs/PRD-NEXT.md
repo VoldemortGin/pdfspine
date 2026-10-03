@@ -58,6 +58,15 @@
 - **Unpublished state (checked 2026-10-02).** `main` is ahead of `v0.11.2`
   (`78a64d6`); there is **no `v0.11.3` tag and nothing on PyPI beyond 0.11.2**
   (`git tag -l 'v0.11*'` ends at `v0.11.2`).
+  - **0.12.0 — prepared 2026-10-03, awaiting tag.** The release-prepare commit
+    folds the unreleased 0.11.3 and everything listed below into one release:
+    `Cargo.toml` / `Cargo.lock` are at `0.12.0`, `CHANGELOG.md` has
+    `## [0.12.0] — 2026-10-03` (the 0.11.3 CJK fix sits under its `### Fixed`;
+    the `[0.11.3]` heading is removed, since that version was never tagged), and
+    `README.md` names v0.12.0 as published. The `v0.12.0` tag, PyPI upload and
+    GitHub Release are still pending; the published hashes in this section,
+    `PARITY.md`, `docs/index.md` and `docs/validation-baselines.md` are recorded
+    in a separate commit after the tag, as for earlier releases.
   - **0.11.3 — versioned but not released.** `473553f` (2026-09-25,
     `fix(fonts): map Identity-H CJK CIDs via CIDSystemInfo collection (v0.11.3)`)
     bumped `Cargo.toml` to `0.11.3` and added `## [0.11.3] — 2026-09-25` to
