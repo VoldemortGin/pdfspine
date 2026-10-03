@@ -4,7 +4,7 @@
 > `~/startup/spine/docs/spine-family.md`，用根目录 `make family-doc-sync` 同步、`make family-doc-check` 校验；
 > 修改请改真源再同步，不要只改某一个副本。
 >
-> 数据截至 **2026-09-10**，由代码与配置实测得出（`pyproject.toml` / `Cargo.toml` / `Cargo.lock` / `uv.lock` /
+> 数据截至 **2026-09-10**（"当前事实"类陈述——各包版本、发布状态、依赖 rev——已于 **2026-10-03 最后核对**，见 §5 与 §6 G1 补记），由代码与配置实测得出（`pyproject.toml` / `Cargo.toml` / `Cargo.lock` / `uv.lock` /
 > 真实 `import` 与 `use` / `git log`），**不是仅凭意图文档**。证据路径写作 `<repo>/相对路径:行号`。
 
 > 2026-09-10 执行补记：§3/§4 与 §6 状态已按本轮本地提交更新；§2/§5 的提交数、旧工作树与环境描述保留为此前调研快照，当前迁移结果以 §6.15 的完成记录为准。未执行推送或新包发布。
@@ -39,7 +39,7 @@
 | 多 agent 编排、MCP / A2A 缝 | `spineagent` | 通用 agent 框架，不含 RAG 概念 |
 | 缝元模式、trace、LLM 协议、conformance 基座 | `corespine` | 薄共享核，零依赖 |
 | 应用层（聊天 / 知识库 / 管理台） | `spinestudio` | 唯一的产品应用；`pdfspine-studio` 是另一个独立的 PDF 桌面 GUI |
-| 文档站 | `rag-spine-web` | Fumadocs 静态站 monorepo，rag-spine.org |
+| 文档站 | `ragspine-web` | Fumadocs 静态站 monorepo，rag-spine.org |
 | 端到端示例 | `examples` | 一个离线 e2e demo |
 
 实测结论（详见 [§5.2 ragspine](#52-ragspine)）：这个目标目前做到约七成——PDF 表格、扫描 PDF OCR、`.docx`
@@ -55,14 +55,14 @@
 |---|---|---|---|---|---|---|---|
 | `corespine/` | `VoldemortGin/corespine` | Python（stdlib only，hatchling） | `corespine` 0.5.1 | 已发 PyPI（Trusted Publishing） | L0 底座 | 2026-09-06 / 33 | 活跃 |
 | `ocrspine/` | `VoldemortGin/ocrspine` | Rust 单 crate | crate `ocrspine` 0.0.1（`publish = false`）；数据包 `ocrspine-models` 0.0.3 | crate 仅 git dep；`ocrspine-models` 已发 PyPI | L0 底座 | 2026-09-06 / 11 | 活跃（小） |
-| `ragspine/` | `VoldemortGin/ragspine` | Python（hatchling，FastAPI，内置 Vite 前端） | **`rag-spine`**（import `ragspine`）0.13.0 | 已发 PyPI | L1 引擎 | 2026-09-03（实质功能停在 08-03）/ 245 | 活跃，最成熟 |
+| `ragspine/` | `VoldemortGin/ragspine` | Python（hatchling，FastAPI，内置 Vite 前端） | **`rag-spine`**（import `ragspine`）0.13.0；main 已改名 `ragspine`（0.17.3 未发；PyPI 当前发行名仍 `rag-spine` 0.17.2，**等待 PyPI support 处理项目改名**） | 已发 PyPI（旧名） | L1 引擎 | 2026-09-03（实质功能停在 08-03）/ 245 | 活跃，最成熟 |
 | `spineagent/` | `VoldemortGin/spineagent` | Python（hatchling） | `spineagent` 0.3.1 | 已发 PyPI | L1 引擎 | 2026-07-30 / 42 | 停滞约 5 周 |
-| `pdfspine/` | `VoldemortGin/pdfspine` | Rust 2021 + PyO3 0.29 + maturin | `pdfspine` 0.11.2（2026-09-24 发布）；13 个 crate 全 `publish = false` | 已发 PyPI；crates.io 未发 | L1 引擎（含 `pdf-typeset` / `pdf-fonts` 被 git dep） | 2026-09-24 / 535 | 最活跃 |
+| `pdfspine/` | `VoldemortGin/pdfspine` | Rust 2021 + PyO3 0.29 + maturin | `pdfspine` 0.12.0（2026-10-03 发布，tag `972e38c`）；13 个 crate 全 `publish = false` | 已发 PyPI；crates.io 未发 | L1 引擎（含 `pdf-typeset` / `pdf-fonts` 被 git dep） | 2026-09-24 / 535 | 最活跃 |
 | `docspine/` | `VoldemortGin/docspine` | Rust + PyO3 + maturin | `docspine`，tag v0.5.1（Cargo 内长期 0.0.1 占位） | 已发 PyPI | L2 文档引擎 | 2026-07-30 / 29 | 停滞 |
 | `pptspine/` | `VoldemortGin/pptspine` | Rust + PyO3 + maturin | `pptspine`，tag v0.5.1（Cargo 内 0.0.1 占位） | 已发 PyPI | L2 文档引擎 | 2026-07-30 / 37 | 停滞 |
 | `spinestudio/` | `VoldemortGin/spinestudio` | Python（FastAPI）+ TS（Next.js 16）+ Python SDK | `spinestudio` 0.3.1、`spinestudio-sdk` 0.2.1、`spinestudio-web` 0.1.0（private） | 有 `dist/` 与 tag，**无 release CI**，大概率未上 PyPI | L3 应用 | 2026-07-30 / 46 | 停滞 |
 | `pdfspine-studio/` | `VoldemortGin/pdfspine-studio`（private，2026-09-09 新建） | Rust 2024 + Tauri 2 + Vite/React/TS | workspace 0.1.0，私有 | 未发布 | L3 应用（GUI） | 2026-07-22 / 6 | 停滞，且当前构建不了 |
-| `rag-spine-web/` | `VoldemortGin/rag-spine-web` | TS（pnpm + Turborepo + Next.js 16 + Fumadocs） | `@rag-spine/*` 四个 app，不发布 | 部署到 Cloudflare Pages | 旁路：文档站 | 2026-07-20 / 33 | 明显偏冷 |
+| `ragspine-web/` | `VoldemortGin/ragspine-web` | TS（pnpm + Turborepo + Next.js 16 + Fumadocs） | `@ragspine/*` 四个 app，不发布 | 部署到 Cloudflare Pages | 旁路：文档站 | 2026-07-20 / 33 | 明显偏冷 |
 | `examples/` | `VoldemortGin/spine-examples` | Python 脚本 | 无包 | 未发布 | 旁路：示例 | 2026-06-23 / 1 | 只有 1 个 commit |
 
 远程地址与最近提交经 `git remote get-url origin` / `git log -1` 于 2026-09-07 逐仓核实。
@@ -87,7 +87,7 @@ graph TD
     subgraph L1["L1 引擎"]
         ragspine["ragspine (PyPI: rag-spine) 0.13.0"]
         spineagent["spineagent 0.3.1"]
-        pdfspine["pdfspine 0.11.2 (含 pdf-typeset / pdf-fonts)"]
+        pdfspine["pdfspine 0.12.0 (含 pdf-typeset / pdf-fonts)"]
     end
     subgraph L2["L2 文档引擎"]
         docspine["docspine v0.5.1"]
@@ -98,7 +98,7 @@ graph TD
         pdfstudio["pdfspine-studio 0.1.0 (Tauri GUI)"]
     end
     subgraph SIDE["旁路"]
-        web["rag-spine-web (文档站)"]
+        web["ragspine-web (文档站)"]
         examples["examples (e2e demo)"]
     end
 
@@ -109,15 +109,15 @@ graph TD
     ragspine -.->|"PyPI >=0.1.0 [ppt] 延迟 import, opt-in"| pptspine
     pdfspine -->|"git rev 041958a (2026-09-23), feature paddle-ocr"| ocrspine
     pdfspine -->|"PyPI >=0.0.1,<0.1 硬依赖"| ocrmodels
-    docspine -->|"git rev 732975f (2026-06-25)"| ocrspine
-    docspine -->|"git rev f1f6ab4 (v0.8.0) pdf-typeset + dev pdf-fonts"| pdfspine
+    docspine -->|"git rev 041958a (2026-09-23)"| ocrspine
+    docspine -->|"git rev 78a64d6 (v0.11.2) pdf-typeset + dev pdf-fonts"| pdfspine
     docspine -->|"PyPI >=0.0.1,<0.1 硬依赖"| ocrmodels
-    pptspine -->|"git rev 732975f (2026-06-25)"| ocrspine
-    pptspine -->|"git rev f1f6ab4 (v0.8.0) pdf-typeset + dev pdf-fonts"| pdfspine
+    pptspine -->|"git rev 041958a (2026-09-23)"| ocrspine
+    pptspine -->|"git rev 78a64d6 (v0.11.2) pdf-typeset + dev pdf-fonts"| pdfspine
     pptspine -->|"PyPI >=0.0.1,<0.1 硬依赖"| ocrmodels
     pptspine -.->|"test extra: PyPI >=0.8,<0.9"| pdfspine
     spinestudio -->|"PyPI >=0.4.0 + uv path editable"| corespine
-    spinestudio -->|"PyPI rag-spine>=0.10.0 + uv path editable"| ragspine
+    spinestudio -->|"PyPI rag-spine>=0.10.0 + uv path editable (分支 chore/ragspine-dist-rename 已改 ragspine>=0.17.3，未合)"| ragspine
     spinestudio -->|"PyPI >=0.2.0 + uv path editable"| spineagent
     spinestudio -.->|"PyPI >=0.4 [office] 延迟 import"| pdfspine
     spinestudio -.->|"PyPI >=0.4 [office] 延迟 import"| docspine
@@ -152,7 +152,7 @@ L1 引擎     ragspine   spineagent      pdfspine ◄────────┘
 L0 底座     corespine (deps=[])        ocrspine (crate, 零依赖)
                                         └── packages/ocrspine-models → PyPI（pdfspine/docspine/pptspine 硬依赖）
 
-旁路        rag-spine-web（4 站，手写 MDX，零代码依赖）   examples（发布包离线 E2E，串 corespine/pdfspine/ragspine/spineagent）
+旁路        ragspine-web（4 站，手写 MDX，零代码依赖）   examples（发布包离线 E2E，串 corespine/pdfspine/ragspine/spineagent）
 
 其他弱边    ragspine ··[pdf]/[doc]/[ppt] 延迟 import··> pdfspine / docspine / pptspine
             pptspine ··test extra >=0.8,<0.9··> pdfspine
@@ -181,7 +181,7 @@ L0 底座     corespine (deps=[])        ocrspine (crate, 零依赖)
 | **spinestudio** | PyPI `>=0.4.0` + uv path editable（`backend/pyproject.toml`）；5 imports | — | —（经 office 传递） | PyPI `rag-spine>=0.10.0` + uv path editable；12 imports（`chat/engine.py:5-7` 等） | PyPI `>=0.2.0` + uv path editable；6 imports（`admin/provider_factory.py:15` 等） | PyPI `>=0.4` `[office]` 延迟 import（`preview/renderer.py:56`）；不在 uv.sources | PyPI `>=0.4` `[office]` 延迟 import（`preview/renderer.py:36`） | PyPI `>=0.4` `[office]` 延迟 import（`preview/renderer.py:44`） |
 | **pdfspine-studio** | — | — | — | — | — | official git rev `f1f6ab4208876b0ba867edd76cc4e5da7ad8add2`、`pdf-api =0.8.0`、`default-features=false`；测试使用仓内带来源/hash/LICENSE 的两个 PDF fixture | — | — |
 | **examples** | PyPI `==0.5.1`，非 editable | — | — | PyPI `rag-spine==0.13.0`，非 editable | PyPI `==0.3.1`，非 editable | PyPI `==0.8.0`，非 editable；四包由 `requirements.txt` 固定、实际 wheel 来源/hash 验证 | — | — |
-| **rag-spine-web** | 手写 MDX | — | — | 手写 MDX（159 处文本命中） | 手写 MDX | 手写 MDX（含 docspine/pptspine 子目录） | 手写 MDX | 手写 MDX |
+| **ragspine-web** | 手写 MDX | — | — | 手写 MDX（159 处文本命中） | 手写 MDX | 手写 MDX（含 docspine/pptspine 子目录） | 手写 MDX | 手写 MDX |
 | **corespine / ocrspine** | — | — | — | — | — | — | — | — |
 
 要点：
@@ -223,7 +223,7 @@ L0 底座     corespine (deps=[])        ocrspine (crate, 零依赖)
 ### 5.2 ragspine
 
 - **角色与边界**：L1 RAG 引擎。framework-free、确定性双通道（结构化数值 + 叙事 RAG，agent 路由），反捏造 / 溯源是代码级不变量。
-  PyPI 名 **`rag-spine`**，import 名 **`ragspine`**（spinestudio 的 health 路由按 `"rag-spine"` 查版本）。
+  PyPI 发行名当前仍是 **`rag-spine`**（最新 0.17.2），import 名 **`ragspine`**（spinestudio 的 health 路由按 `"rag-spine"` 查版本）；main 已把发行名改为 `ragspine`（0.17.3 未发），**等待 PyPI support 处理项目改名**，期间消费者仍须用 `rag-spine`。
 - **对外暴露**：`src/ragspine/__init__.py:94` `__all__ = ("RAGSpine", "FactStore", "Fact", "MockProvider", "answer_question")`，其余惰性
   `__getattr__`；CLI `ragspine`（quick / ingest / ask / doctor / serve / dify / workflow…）；HTTP `src/ragspine/service/api/`
   （含 OpenAI 兼容 `POST /v1/chat/completions`）+ 内置 Studio 前端。无 MCP server（MCP/A2A 缝在 spineagent）。
@@ -282,20 +282,18 @@ L0 底座     corespine (deps=[])        ocrspine (crate, 零依赖)
   pdfspine-studio（path 取 `pdf-api`）；pptspine 测试（未声明）；examples。
 - **家族相关文档在哪**：**没有 `CLAUDE.md`**（`git ls-files | grep -i claude` 为空），与家族 README"各子项目另有自己的 CLAUDE.md"不符。
   家族关系散在 `README.md:7,70,104,213`、`llms.txt`、`docs/RELEASE-PYPI.md`、`crates/pdf-typeset/Cargo.toml:1-4`、`crates/pdf-ocr/Cargo.toml:29-40`。
-- **当前状态与注意事项**：0.11.2（2026-09-24 发布，浮点排序比较器改用 `total_cmp`（ADR 0006），修复 NaN 坐标导致的排序 panic；CHANGELOG 已归档到 [0.11.2]），535 commits，最活跃；2026-09-09 起只有 `main` 分支，
-  4 个未提交改动，本地 main 有 5 个 commit 未推。5 个 `.claude/worktrees/*` 仍钉 ocrspine 旧 rev `732975f`。
+- **当前状态与注意事项**：0.12.0（2026-10-03 发布，tag `972e38c`，release run 37115668323，PyPI 6 个文件 + GitHub Release；含透明度渲染、Pixmap JPEG 输出、Python 3.11 支持、ONNX 表格后处理、CJK CID 修复等，CHANGELOG 见 [0.12.0]；前一版 0.11.2 为 2026-09-24 的 `total_cmp` 排序修复），最活跃；2026-09-09 起只有 `main` 分支，发布基线文档已提交推送（原"4 个未提交改动 / 5 个未推 commit"已清）。5 个 `.claude/worktrees/*` 仍钉 ocrspine 旧 rev `732975f`。
   `packages/pdfspine-ocr-models/` 旧伴随包残留，与 `ocrspine-models` 重复，仅作第 3 顺位回退。`dist/` 残留 0.4.0。
 
 ### 5.5 docspine
 
 - **角色与边界**：L2 `.docx`（OOXML）结构化解析器（表格重点）+ 本地图片 OCR + 保真导出 PDF。crate：`doc-core` / `doc-parse` / `doc-ocr` / `doc-render` / `py-bindings`。
 - **对外暴露**：`Document, open, open_bytes, probe_doc, ocr_image, reconstruct_image_table, DocError…`；`Document.to_pdf / save_pdf` → `doc-render` → `pdf-typeset`。无 CLI。
-- **依赖谁**：ocrspine git rev `732975f` (2026-06-25)（`Cargo.toml:29`）；`pdf-typeset` git rev `509a932e` (2026-07-13)（`Cargo.toml:40`）；
-  dev-dep `pdf-fonts` git rev `93214453` (2026-07-08)（`crates/doc-render/Cargo.toml`，未走 workspace）；`ocrspine-models>=0.0.1,<0.1` 硬依赖。
+- **依赖谁**：ocrspine git rev `041958a` (2026-09-23)（`Cargo.toml:33`）；`pdf-typeset` / `pdf-fonts` git rev `78a64d6`（pdfspine v0.11.2，`Cargo.toml:41-42`）；`ocrspine-models>=0.0.1,<0.1` 硬依赖。
   脚本 `scripts/ssim_selfref.py:140`、`scripts/lo_oracle_ssim.py:137` `import pdfspine`（仅 SSIM 栅格化，未写进 pyproject）。
 - **被谁依赖**：ragspine `[doc]`（默认 docx 引擎）；spinestudio `[office]`。家族内无其他代码 import。
 - **家族相关文档在哪**：`docspine/CLAUDE.md`（"文档引擎三件套里的 doc，与 pdfspine / pptspine 共享 ocrspine"；"`../pdfspine/` 与 `../pptspine/` 只读"；
-  "依赖 `../ocrspine`（git dep，不是 path）"）；文档站在 `rag-spine-web/apps/pdfspine/content/docs/docspine/`。
+  "依赖 `../ocrspine`（git dep，不是 path）"）；文档站在 `ragspine-web/apps/pdfspine/content/docs/docspine/`。
 - **当前状态与注意事项**：tag v0.5.1（2026-07-30），Cargo 内 `0.0.1` 占位、由 `scripts/set_version_from_tag.py` 打戳（版本双轨）。
   **同仓两个 pdfspine rev**：`Cargo.lock` 同时锁 `509a932e` 与 `93214453` 两份 checkout，全量重复编译一遍 pdfspine 树；
   注释里"同 rev 复用 checkout"的说法与实际不符。`crates/doc-ocr/src/table.rs`（421 行）是 pdfspine `image_table` 的移植。
@@ -305,7 +303,7 @@ L0 底座     corespine (deps=[])        ocrspine (crate, 零依赖)
 - **角色与边界**：L2 `.pptx` 结构化解析器 + 本地图片 OCR + 逐 slide 导出 PDF。crate：`ppt-core` / `ppt-parse` / `ppt-ocr` / `ppt-render` / `py-bindings`（OCR 无条件编入，`ocr` feature 是 no-op）。
 - **对外暴露**：`Presentation, Slide, open, open_bytes, ocr_image, PptError…`；`Presentation.to_pdf / save_pdf` → `ppt-render` → `pdf-typeset`。
   `crates/ppt-render/src/lib.rs:28` **re-export** `pdf_typeset::{ExportResult, ExportWarning}` 进本仓公共 API。无 CLI。
-- **依赖谁**：ocrspine git rev `732975f`（`Cargo.toml:28`，与 docspine 同 rev）；`pdf-typeset` + dev `pdf-fonts` git rev `5f1640cb` (2026-07-13，`chore(release): 版本预备 0.3.1`)（`Cargo.toml:34,36`，Cargo.lock 一致）；
+- **依赖谁**：ocrspine git rev `041958a`（`Cargo.toml:30`，与 docspine 同 rev）；`pdf-typeset` + dev `pdf-fonts` git rev `78a64d6`（pdfspine v0.11.2，`Cargo.toml:35,38`）；
   `ocrspine-models>=0.0.1,<0.1` 硬依赖。
 - **被谁依赖**：ragspine `[ppt]`（**opt-in**，默认 python-pptx）；spinestudio `[office]`。
 - **家族相关文档在哪**：`pptspine/CLAUDE.md`（"姊妹 crate 走 git dep（非 path）"；"`../pdfspine/` 只读"；"PDF 导出读回测试需 venv 里 `pip install pdfspine`"）。
@@ -322,7 +320,7 @@ L0 底座     corespine (deps=[])        ocrspine (crate, 零依赖)
   `models/`（4 件默认 + 泰文 `ppocrv5_rec_th.onnx` / `ppocr_keys_th.txt` + PROVENANCE）是权重**唯一 git 真源**，运行时按 `OCRSPINE_MODELS` → `CARGO_MANIFEST_DIR/models` 解析。
   `packages/ocrspine-models/` 发 PyPI 数据包 `ocrspine-models` 0.0.3，暴露 `models_dir()/det_path()/rec_path()/cls_path()/keys_path()`。
 - **依赖谁**：无家族依赖（deps 仅 `tract-onnx / image / rayon / thiserror`）。
-- **被谁依赖**：pdfspine（rev `041958a`）、docspine / pptspine（rev `732975f`）；`ocrspine-models` 被三家硬依赖。
+- **被谁依赖**：pdfspine / docspine / pptspine（均 rev `041958a`）；`ocrspine-models` 被三家硬依赖。
 - **家族相关文档在哪**：`ocrspine/CLAUDE.md`（"任何 PDF/PPT/文档/页面概念一律不准进"；"代码核心从 pdfspine `pdf-ocr` 移植"）；README「Publishing」段。
 - **当前状态与注意事项**：crate 0.0.1 `publish = false`，11 commits，2026-09-06 加了 CI。`Cargo.toml:9` 与 README 仍写"intended as a local path dependency"，
   与三家消费者已全改 git dep 的现状不符。**泰文权重不打包**（`hatch_build.py:12`），pip 安装的下游拿不到泰文能力，仅源码 checkout 可用。
@@ -357,7 +355,7 @@ L0 底座     corespine (deps=[])        ocrspine (crate, 零依赖)
 - **当前状态与注意事项**：远程 `VoldemortGin/pdfspine-studio`（private，2026-09-09 新建并推送 main；此前为纯本地仓），2026-07-22 后停更。`=0.4.1` 与 pdfspine 当前 0.8.0 **不匹配，当前构建不了**
   （Cargo.lock 仍锁 0.4.1）。定位未在家族层被确认。
 
-### 5.10 rag-spine-web
+### 5.10 ragspine-web
 
 - **角色与边界**：旁路文档站 monorepo，每个成员一个 Fumadocs + Next.js 站，`output: 'export'` 静态导出到各自 Cloudflare Pages 项目。纯展示，不碰 LLM，`package.json` 无任何家族包。
 - **对外暴露**：4 站覆盖 6 成员——`apps/web`（ragspine，rag-spine.org）、`apps/corespine`（core.rag-spine.org）、`apps/spineagent`（agent.rag-spine.org）、
@@ -389,6 +387,7 @@ L0 底座     corespine (deps=[])        ocrspine (crate, 零依赖)
 按严重度排序。每条只描述现象与建议，不做决定。
 
 **G1 · rev 三向漂移，且没有 bump 机制（最大系统性风险）**
+- 2026-10-03 补记：docspine / pptspine main 已对齐 ocrspine `041958a` + pdfspine v0.11.2（`78a64d6`），与 pdfspine 同 OCR rev；PyPI 上 docspine / pptspine 仍是 0.5.1，今日 main 合入内容（依赖对齐、CI 修复、OCR 加固、zip 限额、fuzz；docspine 原生段落边框/上下标/字符间距/丢正文修复；pptspine 字符间距/上下标/箭头/custGeom 告警/母版形状/语义抽取/图表抽取）尚未发布；下方 rev 数字为 2026-09 修复前证据。
 - 2026-09-10 补记：本轮已统一 docspine/pptspine/studio 的 PDF 来源到支持的 v0.8.0 rev；下述 PDF 三向漂移是修复前证据。OCR rev 差异与定期 bump 机制未处理，**G1 不整体关闭**。
 - 现象：同一时刻家族并存 **三个 pdfspine rev**（docspine `509a932e` 07-13、docspine dev-dep `93214453` 07-08、pptspine `5f1640cb` 07-13）
   与 **两个 ocrspine rev**（pdfspine `041958a` 09-23、docspine/pptspine `732975f` 06-25）。
@@ -444,7 +443,7 @@ L0 底座     corespine (deps=[])        ocrspine (crate, 零依赖)
 - 影响："产品需求驱动薄核扩容"，与 D2"产品概念不回流引擎"有张力。
 - 建议：为 `credential` 找第二个消费者或标记 deprecated；`trigger` / `queue` 在第二家出现前视为试验性。
 
-**G9 · rag-spine-web 内容落后两个版本、无 ocrspine / spinestudio 站、无同步机制**
+**G9 · ragspine-web 内容落后两个版本、无 ocrspine / spinestudio 站、无同步机制**
 - 现象：站上 ragspine 0.11.0 vs 实际 0.13.0；`DOC-AUDIT-HANDOFF.md:38` 记录的 rev `7ccee8a` 已失效；4 站覆盖 6/11 成员；全靠人工审计。
 - 建议：至少加一个 drift guard（比对各仓 `pyproject`/CHANGELOG 版本号与站内声明）；决定是否为 ocrspine / spinestudio 建站。
 - → 见 §6.15 第 4 条。
@@ -507,11 +506,11 @@ L0 底座     corespine (deps=[])        ocrspine (crate, 零依赖)
 - 验收：离线跑通（§5.11 已粗判各包顶层导出仍在）；把输出差异（尤其块序/抽取文本）记录到示例仓或本文件；顺带修正 docstring 旧路径。
 - 规模：S。
 
-**4. rag-spine-web 文档站更新（关联 G9）**
+**4. ragspine-web 文档站更新（关联 G9）**
 - **本地文档部分完成（2026-09-10，main `680f5c8`，未推送/部署）**：pdfspine 首页与安装/迁移页已对齐真实发布 0.8.0（rev `f1f6ab4`、Python ≥3.12、694/769=90.2%），补 PDF→Markdown、layout 文本、ONNX 版面/表格、OCG 图层与 Markdown links/toc，四语言 rag 入口采用已发布 0.13.0 参考基线。公开例子在发布 0.8.0 wheel 验证；ONNX 仅验证缺 runtime 错误、未下载模型或新增精度承诺。完整 `bash ci.sh` 通过；历史 benchmark 分数未改，本轮未发布 main API/排版不混入0.8。部署流未改、Cloudflare 未部署，**本条及 G9 不整体关闭**。以下为执行前目标/证据。
 - 目标：把 pdfspine 0.8.0 新能力与落后的版本号补上文档站并部署。
 - 证据：站点实质停更 2026-07-20（§2；2026-09-10 仅家族文档同步提交）；`apps/web/content/docs/index.mdx:68` 仍写 ragspine `0.11.0`（实际 0.13.0，虽已加注"source-tree version"）；`apps/` 仅 `web`/`corespine`/`spineagent`/`pdfspine` 四站，无 ocrspine/spinestudio/pdfspine-studio 站（§5.10）；pdfspine 0.8.0 新增 OCG 图层面、ONNX 版面/表格后端、PDF→Markdown `to_markdown()`、`get_text("layout")` 等（`pdfspine/CHANGELOG.md [0.8.0]`）未上站。
-- 涉及：rag-spine-web（`apps/pdfspine/content/docs/…`、`apps/web/content/docs/index.mdx`、`.github/workflows/deploy.yml`）。
+- 涉及：ragspine-web（`apps/pdfspine/content/docs/…`、`apps/web/content/docs/index.mdx`、`.github/workflows/deploy.yml`）。
 - 验收：Cloudflare Pages 部署成功；pdfspine 站存在 0.8.0 新能力对应页面；站内版本号与各仓实际一致（或加 drift guard，关 G9）。
 - 规模：M。
 
@@ -575,11 +574,11 @@ L0 底座     corespine (deps=[])        ocrspine (crate, 零依赖)
 - 依赖方向只准 §3 的方向：引擎不得 import `spinestudio`；`corespine` / `ocrspine` 不得出现任何兄弟包或领域概念；`spineagent` 不得把 `ragspine` 写进 `dependencies`。
 - 查依赖的**实际**版本 / rev 以 §4 为准，不要按根 README 的"一律 git dep"去找 Python 侧的 rev——那里没有。
 - 分不清 `spinestudio` 与 `pdfspine-studio`：前者是 ragspine/spineagent 的平台应用，后者是 pdfspine 的 Tauri 桌面 GUI，两者无关。
-- PyPI 名 `rag-spine` 对应 import 名 `ragspine`；`ocrspine-models` 是数据包，由 `ocrspine/packages/` 发布，不是 ocrspine crate 的 Python 绑定。
+- PyPI 名 `rag-spine`（main 已改名 `ragspine`，待 PyPI support 处理项目改名）对应 import 名 `ragspine`；`ocrspine-models` 是数据包，由 `ocrspine/packages/` 发布，不是 ocrspine crate 的 Python 绑定。
 
 ---
 
 **数据来源**：四份只读调研（`family-part1.md` 根目录 + corespine + spineagent + spinestudio；`family-part2.md` pdfspine + pdfspine-studio + ocrspine；
-`family-part3.md` docspine + pptspine + examples；`family-part4.md` ragspine + rag-spine-web），均于 2026-09-07 由 Explore 子代理对
+`family-part3.md` docspine + pptspine + examples；`family-part4.md` ragspine + ragspine-web），均于 2026-09-07 由 Explore 子代理对
 `~/startup/spine/` 只读扫描得出；远程地址与最近提交另经 `git remote get-url origin` / `git log -1` 逐仓复核。调研原文不入库。
 两份报告统计口径不同处（如 ragspine 对 corespine 的引用：全家族 grep 41 处 import vs 分仓统计 src 25 / tests 24 行）以带命令输出的一方为准并同时注明。

@@ -39,7 +39,7 @@
 
 **Current local source: 703 / 769 implemented (91.4% coverage).**
 
-Published v0.11.2 (`78a64d6e252ab739fcbad66c0d7f5328a080d667`) is
+Published v0.12.0 (`972e38c9dd9e5433bae41614b3f188965472700e`) is
 703/769 (91.4%), with 0 deferred. See
 [validation baselines](docs/validation-baselines.md) for the separate release
 and named local full-gate checkpoints; catalog counts are not full-suite counts.

@@ -20,11 +20,15 @@
   worktree, preserving other active tasks. Inspect with
   `git -C /Users/linhan/startup/spine/pdfspine log --oneline --first-parent -6`
   and `git -C /Users/linhan/startup/spine/pdfspine worktree list`.
-- **Released vs unreleased.** The published release is **`v0.11.2`** (annotated
-  tag at commit `78a64d6`, 2026-09-24; release run `35970760425`, published via
-  PyPI Trusted Publishing / OIDC; on PyPI as `pdfspine` 0.11.2 — **6 files**:
+- **Released vs unreleased.** The published release is **`v0.12.0`** (annotated
+  tag at commit `972e38c`, 2026-10-03; release run `37115668323`, published via
+  PyPI Trusted Publishing / OIDC; on PyPI as `pdfspine` 0.12.0 — **6 files**:
   five cp311-abi3 wheels [macOS x86_64/arm64, manylinux x86_64/aarch64,
-  win_amd64] + sdist; plus a GitHub Release `v0.11.2`). It is a bug-fix release
+  win_amd64] + sdist; plus a GitHub Release `v0.12.0`). It folds the
+  never-tagged 0.11.3 CJK fix and every post-0.11.2 merge listed under
+  "Published state" below. Before it, **`v0.11.2`** (annotated
+  tag at commit `78a64d6`, 2026-09-24; release run `35970760425`; GitHub
+  Release `v0.11.2`) was a bug-fix release
   on top of **`v0.11.1`** (tag `4dd50bd`, 2026-09-23; release run
   `35836561369`; GitHub Release `v0.11.1`), which fixed the `engine="paddle"`
   OCR sort panic (`ocrspine` bumped to `041958a`; engine panics become
@@ -53,35 +57,35 @@
   full-width-title columns) plus Adobe RGB JPEG rendering, OCG Intent
   visibility, the documentation validation baselines and the TableFormer /
   FinTabNet evaluation adapters. Each release is captured under its own `CHANGELOG.md`
-  heading, from `## [0.11.2] — 2026-09-24` back to the 0.9.0 slate under
+  heading, from `## [0.12.0] — 2026-10-03` back to the 0.9.0 slate under
   `## [0.9.0] — 2026-09-15`.
-- **Unpublished state (checked 2026-10-02).** `main` is ahead of `v0.11.2`
-  (`78a64d6`); there is **no `v0.11.3` tag and nothing on PyPI beyond 0.11.2**
-  (`git tag -l 'v0.11*'` ends at `v0.11.2`).
-  - **0.12.0 — prepared 2026-10-03, awaiting tag.** The release-prepare commit
+- **Published state (baseline `v0.12.0`, checked 2026-10-03).** `main` is at or
+  just past the `v0.12.0` baseline (`972e38c`); there is **no `v0.11.3` tag**
+  (that version was folded into 0.12.0) and nothing on PyPI beyond 0.12.0.
+  - **0.12.0 — published 2026-10-03.** The release-prepare commit
     folds the unreleased 0.11.3 and everything listed below into one release:
     `Cargo.toml` / `Cargo.lock` are at `0.12.0`, `CHANGELOG.md` has
     `## [0.12.0] — 2026-10-03` (the 0.11.3 CJK fix sits under its `### Fixed`;
     the `[0.11.3]` heading is removed, since that version was never tagged), and
-    `README.md` names v0.12.0 as published. The `v0.12.0` tag, PyPI upload and
-    GitHub Release are still pending; the published hashes in this section,
-    `PARITY.md`, `docs/index.md` and `docs/validation-baselines.md` are recorded
-    in a separate commit after the tag, as for earlier releases.
-  - **0.11.3 — versioned but not released.** `473553f` (2026-09-25,
+    `README.md` names v0.12.0 as published. Tag `v0.12.0` (`972e38c`), PyPI
+    upload (6 files, release run `37115668323`) and the GitHub Release are done;
+    the published hashes in this section, `PARITY.md`, `docs/index.md` and
+    `docs/validation-baselines.md` were recorded in a follow-up commit after
+    the tag, as for earlier releases.
+  - **0.11.3 — versioned but never released (folded into 0.12.0).** `473553f` (2026-09-25,
     `fix(fonts): map Identity-H CJK CIDs via CIDSystemInfo collection (v0.11.3)`)
     bumped `Cargo.toml` to `0.11.3` and added `## [0.11.3] — 2026-09-25` to
     `CHANGELOG.md`; the tag / PyPI / GitHub Release step has not been done, so
-    `README.md` and `docs/index.md` correctly describe **v0.11.2** as the
-    published release. Cutting it still needs the usual release gate.
-  - **2026-10-02 feature merges (unreleased).** Dashed / nonzero-space paragraph
+    `README.md` and `docs/index.md` described **v0.11.2** as the published release
+    until 0.12.0 shipped; the fix is now part of 0.12.0.
+  - **2026-10-02 feature merges (released in 0.12.0).** Dashed / nonzero-space paragraph
     connection separators (`feat/typeset-connection-dash-space`, `05f02b5`) and
     the recursive XY-cut ONNX reading-order fallback
     (`feat/onnx-xycut-reading-order`, `93b3270`); see `CHANGELOG.md`
-    `## [Unreleased]`. Neither is in any release.
+    `## [Unreleased]`. Both shipped in 0.12.0.
   - **2026-09-26 branch-merge sweep.** Old branches were merged into `main` in one
-    pass (merge commits below); their user-visible changes sit under
-    `CHANGELOG.md` `## [Unreleased]` and are **not in any release** (each
-    symbol checked absent from `v0.11.2`):
+    pass (merge commits below); their user-visible changes shipped in 0.12.0
+    (see `CHANGELOG.md` `## [0.12.0]`; each symbol was absent from `v0.11.2`):
     transparency rendering (groups, soft masks, 16 blend modes) and image / mask /
     shading clip — `1ae7bc6`; native `Pixmap` JPEG output (`jpg_quality`) —
     `9e42eda`; rendering panic containment at `pdf-render` entry points
@@ -163,6 +167,7 @@
   commit was re-pushed with `--no-verify`.
   **The next open backlog item is #3.**
 
+- [x] **Cut release `v0.12.0`** — annotated tag `v0.12.0` at `972e38c` (2026-10-03); release run `37115668323` (Trusted Publishing / OIDC); on PyPI (6 files) + GitHub Release `v0.12.0`.
 - [x] **Cut release `v0.11.2`** — annotated tag `v0.11.2` at `78a64d6` (2026-09-24); release run `35970760425` (Trusted Publishing / OIDC); on PyPI (6 files) + GitHub Release `v0.11.2`.
 
 - [x] **Cut release `v0.11.1`** — annotated tag `v0.11.1` at `4dd50bd` (2026-09-23); release run `35836561369` (Trusted Publishing / OIDC); on PyPI (6 files) + GitHub Release `v0.11.1`. (`v0.11.0` at `5a1f22e`, 2026-09-19, shipped to PyPI with a tag but no GitHub Release.)
