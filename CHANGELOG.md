@@ -121,6 +121,14 @@ feature-complete, but the public API and on-disk formats may still change.
   3000 random two-column pages). PP-DocLayoutV3 `read_order` still takes
   precedence. New cases `ONNX-022`–`ONNX-024`.
 
+### Security
+
+- **`deny.toml` ignores RUSTSEC-2026-0319** (`anymap2` unmaintained, no
+  vulnerability): it is only a transitive dependency of `liquid-core`, i.e. the
+  build-only `tract-linalg` liquid-template build script, and never enters the
+  runtime artifact. To be removed once tract drops liquid/anymap2 or ocrspine
+  bumps tract.
+
 ## [0.11.3] — 2026-09-25
 
 ### Fixed
