@@ -38,6 +38,22 @@ pub struct Limits {
     /// 200 (§9.6.2). A stream whose output exceeds `input * max_decode_ratio`
     /// (and is non-trivially large) trips [`crate::error::LimitKind::DecodeRatio`].
     pub max_decode_ratio: u64,
+    /// Per-page content work budget: content-stream tokens (operands and
+    /// operators) interpreted for one page, across its content streams, Form
+    /// XObjects, annotation appearances and (when rendering) Type 3 glyph
+    /// procedures; each Form / glyph-procedure invocation additionally costs
+    /// [`Limits::CONTENT_INVOCATION_COST`]. Exhausting it truncates the page's
+    /// interpretation (what was produced so far is kept). Default 25,000,000:
+    /// at ~3.3 bytes per token a page would need ~80 MB of decoded content to
+    /// reach it (the largest fixture page has 0.21 M tokens in 0.7 MB, ~120×
+    /// below), while Form XObject fan-out — `Do` trees that re-run shared forms
+    /// 10× per level — stops at a fixed cost (about a second of interpretation)
+    /// however deep it goes, instead of growing 10× per level.
+    pub max_page_content_ops: u64,
+    /// Per-page output budget: glyphs, vector paths and images emitted by one
+    /// page's interpretation. Default 5,000,000 (≈0.5–1 GB of extracted
+    /// geometry; the busiest fixture page emits ~14 k glyphs and ~4 k paths).
+    pub max_page_content_items: u64,
 }
 
 impl Limits {
@@ -51,7 +67,15 @@ impl Limits {
         max_total_decompressed: 4 * GIB,
         max_objstm_objects: 1_048_576,
         max_decode_ratio: 200,
+        max_page_content_ops: 25_000_000,
+        max_page_content_items: 5_000_000,
     };
+
+    /// The [`Limits::max_page_content_ops`] charge for invoking one Form
+    /// XObject or Type 3 glyph procedure, on top of its own tokens: resolving
+    /// the XObject, decoding its stream and cloning its resources measured at
+    /// ~3.5 µs per invocation, roughly the cost of interpreting 35–70 tokens.
+    pub const CONTENT_INVOCATION_COST: u64 = 64;
 
     /// A permissive instance for trusted inputs / tests that intentionally
     /// decode large outputs. `max_decompressed_stream` is `usize::MAX` and the
@@ -90,6 +114,20 @@ impl Limits {
     #[must_use]
     pub fn with_max_objects(mut self, v: u64) -> Self {
         self.max_objects = v;
+        self
+    }
+
+    /// Returns a copy with [`Limits::max_page_content_ops`] overridden.
+    #[must_use]
+    pub fn with_max_page_content_ops(mut self, v: u64) -> Self {
+        self.max_page_content_ops = v;
+        self
+    }
+
+    /// Returns a copy with [`Limits::max_page_content_items`] overridden.
+    #[must_use]
+    pub fn with_max_page_content_items(mut self, v: u64) -> Self {
+        self.max_page_content_items = v;
         self
     }
 }

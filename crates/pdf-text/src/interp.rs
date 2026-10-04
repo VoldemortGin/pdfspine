@@ -39,7 +39,7 @@ use std::sync::Arc;
 use pdf_core::colorspace::ColorSpace;
 use pdf_core::geom::{Matrix, Point, Rect};
 use pdf_core::ocg::OcVisibility;
-use pdf_core::{Dict, DocumentStore, Name, Object};
+use pdf_core::{Dict, DocumentStore, Limits, Name, Object};
 use pdf_fonts::FontMapper;
 use smol_str::SmolStr;
 
@@ -217,6 +217,68 @@ impl CurrentPath {
     }
 }
 
+/// The remaining per-page content work ([`Limits::max_page_content_ops`] /
+/// [`Limits::max_page_content_items`]). A fresh budget is taken for every page
+/// run; the render path hands one budget through a page's Type 3 glyph
+/// procedures so they share it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ContentBudget {
+    ops_left: u64,
+    items_left: u64,
+    exhausted: bool,
+}
+
+impl ContentBudget {
+    /// A full budget for one page under `limits`.
+    #[must_use]
+    pub fn for_page(limits: &Limits) -> Self {
+        ContentBudget {
+            ops_left: limits.max_page_content_ops,
+            items_left: limits.max_page_content_items,
+            exhausted: false,
+        }
+    }
+
+    /// Whether the budget ran out (the interpretation was truncated).
+    #[must_use]
+    pub fn is_exhausted(&self) -> bool {
+        self.exhausted
+    }
+
+    /// Charges `n` units of content work; `false` (and exhausted) when the
+    /// budget cannot cover them.
+    pub fn charge_ops(&mut self, n: u64) -> bool {
+        if self.exhausted || n > self.ops_left {
+            self.ops_left = 0;
+            self.exhausted = true;
+            return false;
+        }
+        self.ops_left -= n;
+        true
+    }
+
+    /// Charges `n` emitted items; `false` (and exhausted) once the item budget
+    /// is used up.
+    fn charge_items(&mut self, n: u64) -> bool {
+        if n >= self.items_left {
+            self.items_left = 0;
+            self.exhausted = true;
+            return false;
+        }
+        self.items_left -= n;
+        true
+    }
+
+    /// The number of tokens that may still be interpreted (0 once exhausted).
+    fn ops_left(&self) -> u64 {
+        if self.exhausted {
+            0
+        } else {
+            self.ops_left
+        }
+    }
+}
+
 /// Runs a page (or a form/resources pair) and produces positioned glyphs.
 pub struct ContentInterpreter<'a> {
     doc: &'a DocumentStore,
@@ -237,6 +299,10 @@ pub struct ContentInterpreter<'a> {
     hidden_depth: u32,
     /// Own-AP textbox extraction retains all glyphs before the query clip.
     ignore_text_scissor: bool,
+    /// The remaining per-page work budget (fan-out / output-size guard).
+    budget: ContentBudget,
+    /// Output items (glyphs + paths + images) already charged to `budget`.
+    items_charged: usize,
 }
 
 impl<'a> ContentInterpreter<'a> {
@@ -254,6 +320,8 @@ impl<'a> ContentInterpreter<'a> {
             oc: OcVisibility::read(doc),
             hidden_depth: 0,
             ignore_text_scissor: false,
+            budget: ContentBudget::for_page(doc.limits()),
+            items_charged: 0,
         }
     }
 
@@ -272,6 +340,8 @@ impl<'a> ContentInterpreter<'a> {
             oc: OcVisibility::read(doc),
             hidden_depth: 0,
             ignore_text_scissor: false,
+            budget: ContentBudget::for_page(doc.limits()),
+            items_charged: 0,
         }
     }
 
@@ -298,6 +368,21 @@ impl<'a> ContentInterpreter<'a> {
     #[must_use]
     pub fn run_page_render(mut self, page: &Dict) -> Vec<RenderOp> {
         self.run_recorded_content(page);
+        self.render_ops.take().unwrap_or_default()
+    }
+
+    /// [`ContentInterpreter::run_page_render`] drawing on (and updating) a
+    /// caller-held `budget` instead of a fresh per-page one — the render path
+    /// shares one budget across a page's Type 3 glyph procedures.
+    #[must_use]
+    pub fn run_page_render_budgeted(
+        mut self,
+        page: &Dict,
+        budget: &mut ContentBudget,
+    ) -> Vec<RenderOp> {
+        self.budget = *budget;
+        self.run_recorded_content(page);
+        *budget = self.budget;
         self.render_ops.take().unwrap_or_default()
     }
 
@@ -605,6 +690,19 @@ impl<'a> ContentInterpreter<'a> {
     ) {
         let events = tokenize(content);
 
+        // Work budget: every token of this buffer is charged up front (so a
+        // shared Form re-run by a `Do` fan-out pays for each tokenization);
+        // past the budget only the affordable prefix runs.
+        let affordable = usize::try_from(self.budget.ops_left()).unwrap_or(usize::MAX);
+        let events = if events.len() > affordable {
+            self.budget.charge_ops(u64::MAX);
+            self.out.truncated = true;
+            events.into_iter().take(affordable).collect()
+        } else {
+            self.budget.charge_ops(events.len() as u64);
+            events
+        };
+
         // Graphics-state stack (q/Q). The top is `gs`.
         let mut stack: Vec<GraphicsState> = Vec::new();
 
@@ -629,6 +727,9 @@ impl<'a> ContentInterpreter<'a> {
         let mut mc_stack: Vec<bool> = Vec::new();
 
         for ev in events {
+            if !self.charge_output() {
+                break;
+            }
             match ev {
                 Event::Operand(o) => ops.push(o),
                 Event::InlineImage { params, data } => {
@@ -656,11 +757,27 @@ impl<'a> ContentInterpreter<'a> {
             }
         }
 
+        self.charge_output();
+
         // Unwind sections left open by the buffer (missing `EMC`).
         let open_hidden = mc_stack.iter().filter(|&&h| h).count();
         self.hidden_depth = self
             .hidden_depth
             .saturating_sub(u32::try_from(open_hidden).unwrap_or(u32::MAX));
+    }
+
+    /// Charges the glyphs / paths / images emitted since the last call to the
+    /// item budget. `false` once the budget is exhausted (by items, or by a
+    /// nested Form having run out of tokens): the caller stops interpreting.
+    fn charge_output(&mut self) -> bool {
+        let produced = self.out.glyphs.len() + self.out.drawings.len() + self.out.images.len();
+        let fresh = produced.saturating_sub(self.items_charged);
+        self.items_charged = produced;
+        if self.budget.is_exhausted() || !self.budget.charge_items(fresh as u64) {
+            self.out.truncated = true;
+            return false;
+        }
+        true
     }
 
     /// Applies a single operator with its accumulated operands.
@@ -1461,8 +1578,12 @@ impl<'a> ContentInterpreter<'a> {
         depth: u32,
         visited: &mut HashSet<u32>,
     ) {
-        // Depth + cycle guards.
+        // Depth + cycle guards, then the invocation's share of the work budget.
         if depth + 1 > MAX_FORM_DEPTH {
+            return;
+        }
+        if !self.budget.charge_ops(Limits::CONTENT_INVOCATION_COST) {
+            self.out.truncated = true;
             return;
         }
         if let Some(num) = obj_num {

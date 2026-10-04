@@ -4,7 +4,7 @@ use std::collections::HashSet;
 use std::fmt::Write;
 use std::sync::Arc;
 
-use pdf_core::{Dict, DocumentStore, Name, ObjRef, Object};
+use pdf_core::{Dict, DocumentStore, Limits, Name, ObjRef, Object};
 use sha2::{Digest, Sha256};
 
 use crate::tokenizer::{tokenize_audited, Event, TokenIssueKind};
@@ -189,6 +189,8 @@ struct Builder<'a> {
     operators: Vec<PaintOperator>,
     inline_images: Vec<InlineImageProfile>,
     diagnostics: Vec<PaintDiagnostic>,
+    /// Remaining per-page content work ([`Limits::max_page_content_ops`]).
+    ops_left: u64,
 }
 
 /// Builds a strict profile from the page leaf and its already-resolved effective
@@ -208,6 +210,7 @@ pub fn build_paint_profile(
         operators: Vec::new(),
         inline_images: Vec::new(),
         diagnostics: Vec::new(),
+        ops_left: doc.limits().max_page_content_ops,
     };
     let origin = if inherited {
         ResourceOrigin::Inherited
@@ -320,12 +323,21 @@ impl Builder<'_> {
             };
             self.diagnostic(code, scope_id, None);
         }
+        let mut events = tokenized.events;
+        let tokens = events.len() as u64;
+        if tokens > self.ops_left {
+            self.diagnostic("content_work_budget_exceeded", scope_id, None);
+            events.truncate(usize::try_from(self.ops_left).unwrap_or(usize::MAX));
+            self.ops_left = 0;
+        } else {
+            self.ops_left -= tokens;
+        }
         let mut operands = Vec::new();
         let mut ordinal = 0usize;
         let mut graphics_depth = 0usize;
         let mut text_depth = 0usize;
         let mut marked_content_depth = 0usize;
-        for event in tokenized.events {
+        for event in events {
             match event {
                 Event::Operand(value) => operands.push(value),
                 Event::InlineImage { params, .. } => {
@@ -593,6 +605,12 @@ impl Builder<'_> {
                     self.diagnostic("form_depth_exceeded", parent_scope, Some(ordinal));
                     return PaintDisposition::Malformed;
                 }
+                if self.ops_left < Limits::CONTENT_INVOCATION_COST {
+                    self.ops_left = 0;
+                    self.diagnostic("content_work_budget_exceeded", parent_scope, Some(ordinal));
+                    return PaintDisposition::Malformed;
+                }
+                self.ops_left -= Limits::CONTENT_INVOCATION_COST;
                 if let Some(reference) = object_ref {
                     if !visited.insert(reference.num) {
                         self.diagnostic("form_cycle", parent_scope, Some(ordinal));

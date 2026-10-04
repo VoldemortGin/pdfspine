@@ -32,7 +32,7 @@ pub mod words;
 use pdf_core::geom::Matrix;
 use pdf_core::{Dict, DocumentStore};
 
-pub use interp::ContentInterpreter;
+pub use interp::{ContentBudget, ContentInterpreter};
 pub use layout::{
     build_textpage, build_textpage_flagged, page_size, page_transform, textpage_from_glyphs,
     textpage_from_glyphs_clipped, textpage_from_glyphs_flagged, textpage_from_glyphs_transformed,
@@ -74,6 +74,17 @@ pub fn interpret_page(doc: &DocumentStore, page: &Dict) -> InterpretResult {
 #[must_use]
 pub fn interpret_page_render(doc: &DocumentStore, page: &Dict) -> Vec<RenderOp> {
     ContentInterpreter::new_recording(doc).run_page_render(page)
+}
+
+/// [`interpret_page_render`] drawing on a caller-held per-page `budget` (see
+/// [`ContentInterpreter::run_page_render_budgeted`]).
+#[must_use]
+pub fn interpret_page_render_budgeted(
+    doc: &DocumentStore,
+    page: &Dict,
+    budget: &mut ContentBudget,
+) -> Vec<RenderOp> {
+    ContentInterpreter::new_recording(doc).run_page_render_budgeted(page, budget)
 }
 
 /// Interprets an explicit content buffer + resource dict under `base_ctm`.

@@ -233,6 +233,11 @@ pub struct InterpretResult {
     pub images: Vec<ImageRef>,
     /// Every painted vector path, in content order (PRD §8.8 `get_drawings`).
     pub drawings: Vec<DrawPath>,
+    /// Whether interpretation stopped early because the page exhausted its
+    /// [`ContentBudget`](crate::ContentBudget) (`Limits::max_page_content_ops`
+    /// / `max_page_content_items`); everything above is what was produced up
+    /// to that point.
+    pub truncated: bool,
 }
 
 // === M2c — the PyMuPDF-shaped TextPage model =============================

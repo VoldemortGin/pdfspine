@@ -48,6 +48,27 @@ feature-complete, but the public API and on-disk formats may still change.
   super/subscript reattachment stops after 10⁹ steps — both far above any real
   page, so ordinary pages are laid out exactly as before.
 
+- **Form XObject fan-out is bounded by a per-page work budget.** The Form
+  cycle guard only stopped cycles, not shared forms: a 2 KB file whose forms
+  each call the next one 10 times grew 10× per level (7 levels: 7.6 s and
+  807 MB for one page; 8 levels: ~10× that). Interpretation now draws on a
+  per-page budget, `Limits::max_page_content_ops` (default 25,000,000 content
+  tokens — ~80 MB of decoded page content — with each Form XObject / Type 3
+  glyph-procedure invocation costing an extra
+  `Limits::CONTENT_INVOCATION_COST` = 64) and
+  `Limits::max_page_content_items` (default 5,000,000 glyphs + paths +
+  images). When either runs out the page's interpretation stops, keeps what it
+  produced, and sets the new `InterpretResult::truncated` flag. The budget is
+  fresh for every page; rendering shares one budget between the page content
+  and the Type 3 glyph procedures it replays (new
+  `ContentInterpreter::run_page_render_budgeted` /
+  `pdf_text::interpret_page_render_budgeted` / `pdf_text::ContentBudget`),
+  `Page.get_paint_profile()` charges the same budget (diagnostic
+  `content_work_budget_exceeded`), and the image-only-page check behind
+  `get_pixmap` follows at most 4096 `Do`s. The busiest fixture page uses
+  under 1 % of either budget; the 7-level file now stops after ~1.5 s with
+  300 000 glyphs, and deeper fan-out costs no more.
+
 ## [0.12.0] — 2026-10-03
 
 ### Added

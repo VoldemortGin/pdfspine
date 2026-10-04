@@ -42,14 +42,16 @@
 //!   `PositionedGlyph` keeps only the axis-aligned origin/bbox) — a documented
 //!   approximation; positions are correct.
 
+use std::cell::Cell;
 use std::collections::HashMap;
 
 use pdf_core::geom::{IRect, Matrix, Rect};
-use pdf_core::{Dict, DocumentStore, Name, ObjRef, Object, Page};
+use pdf_core::{Dict, DocumentStore, Limits, Name, ObjRef, Object, Page};
 use pdf_image::codecs::{decode_image_stream, pixmap_from_decoded};
 use pdf_image::pixmap::{Colorspace, Pixmap};
 use pdf_text::{
-    interpret_page_render, ImageOp, PathItem, RenderOp, ShadingOp, SoftMaskOp, TextRun,
+    interpret_page_render, interpret_page_render_budgeted, ContentBudget, ImageOp, PathItem,
+    RenderOp, ShadingOp, SoftMaskOp, TextRun,
 };
 
 use crate::canvas::Canvas;
@@ -221,11 +223,12 @@ impl DisplayList {
             return Ok(target.clone());
         }
         let mut canvas = Canvas::from_rgb_pixmap(target, base)?;
+        let budget = Cell::new(ContentBudget::for_page(doc.limits()));
         replay_iter(
             &mut canvas,
             doc,
             selected.iter().map(|i| &self.ops[*i]),
-            &RenderCtx::page(),
+            &RenderCtx::page(&budget),
         )?;
         finish(&canvas)?;
         let result = canvas.into_pixmap_preserving(Some(target))?;
@@ -249,7 +252,8 @@ impl DisplayList {
             "pdf-render: DisplayList::get_pixmap panicked on malformed content",
             || {
                 let mut canvas = build_canvas(self.cropbox, self.rotate, opts)?;
-                replay(&mut canvas, doc, &self.ops, &RenderCtx::page())?;
+                let budget = Cell::new(ContentBudget::for_page(doc.limits()));
+                replay(&mut canvas, doc, &self.ops, &RenderCtx::page(&budget))?;
                 canvas.into_pixmap()
             },
         )
@@ -279,11 +283,15 @@ pub fn render_page(doc: &DocumentStore, page: &Page, opts: &RenderOptions) -> Re
             let rotate = page.rotation();
             let mut canvas = build_canvas(cropbox, rotate, opts)?;
 
+            // One work budget covers the page content and every Type 3 glyph
+            // procedure replayed for it.
+            let mut page_budget = ContentBudget::for_page(doc.limits());
             let ops = match page.dict() {
-                Some(dict) => interpret_page_render(doc, &dict),
+                Some(dict) => interpret_page_render_budgeted(doc, &dict, &mut page_budget),
                 None => Vec::new(),
             };
-            replay(&mut canvas, doc, &ops, &RenderCtx::page())?;
+            let budget = Cell::new(page_budget);
+            replay(&mut canvas, doc, &ops, &RenderCtx::page(&budget))?;
             canvas.into_pixmap()
         },
     )
@@ -371,7 +379,7 @@ const MAX_TYPE3_DEPTH: u32 = 8;
 /// `fill_override` that forces every fill to the text's current fill color
 /// (`d1` glyphs take their color from the text state, not the proc).
 #[derive(Clone, Copy)]
-struct RenderCtx {
+struct RenderCtx<'b> {
     /// Glyph-space → user-space matrix to compose on top of each op's geometry
     /// (identity for the page; `FontMatrix · Trm` inside a Type3 glyph proc).
     extra_ctm: Matrix,
@@ -380,15 +388,20 @@ struct RenderCtx {
     fill_override: Option<u32>,
     /// Current Type3 glyph-proc recursion depth (0 at the page).
     depth: u32,
+    /// The page's content work budget, shared by every Type 3 glyph procedure
+    /// interpreted during this replay (fan-out guard: each glyph of a Type 3
+    /// font may show more Type 3 text, up to [`MAX_TYPE3_DEPTH`] levels).
+    budget: &'b Cell<ContentBudget>,
 }
 
-impl RenderCtx {
+impl<'b> RenderCtx<'b> {
     /// The page-level context: no extra transform, no color override, depth 0.
-    fn page() -> Self {
+    fn page(budget: &'b Cell<ContentBudget>) -> Self {
         RenderCtx {
             extra_ctm: Matrix::IDENTITY,
             fill_override: None,
             depth: 0,
+            budget,
         }
     }
 }
@@ -937,7 +950,14 @@ fn draw_type3_run(
 
         // Interpret the CharProc into an ordered op stream (glyph space, the
         // proc's own coordinates; base CTM identity), using the font Resources.
-        let proc_ops = interpret_charproc(doc, &proc_bytes, &resources);
+        // Each procedure run is charged to the page's shared work budget.
+        let mut budget = ctx.budget.get();
+        if !budget.charge_ops(Limits::CONTENT_INVOCATION_COST) {
+            ctx.budget.set(budget);
+            return Ok(()); // page work budget exhausted: stop drawing Type 3 text.
+        }
+        let proc_ops = interpret_charproc(doc, &proc_bytes, &resources, &mut budget);
+        ctx.budget.set(budget);
         if proc_ops.is_empty() {
             continue;
         }
@@ -955,6 +975,7 @@ fn draw_type3_run(
             extra_ctm: glyph_to_user,
             fill_override,
             depth: ctx.depth + 1,
+            budget: ctx.budget,
         };
         // Isolate the glyph proc's graphics state (it must not leak q/Q or clip
         // into the surrounding text).
@@ -1048,7 +1069,12 @@ fn resolve_charproc(doc: &DocumentStore, char_procs: &Dict, name: &Name) -> Opti
 /// `/Resources`, returning the ordered op stream in glyph space (base CTM
 /// identity). Wraps the bytes in a synthetic page dict so the existing
 /// recording interpreter can run them.
-fn interpret_charproc(doc: &DocumentStore, proc_bytes: &[u8], resources: &Dict) -> Vec<RenderOp> {
+fn interpret_charproc(
+    doc: &DocumentStore,
+    proc_bytes: &[u8],
+    resources: &Dict,
+    budget: &mut ContentBudget,
+) -> Vec<RenderOp> {
     // A synthetic single-content "page" whose /Contents is an inline decoded
     // stream and whose /Resources are the font's. The interpreter decodes a
     // Decoded payload verbatim and runs it with an identity base CTM.
@@ -1062,7 +1088,7 @@ fn interpret_charproc(doc: &DocumentStore, proc_bytes: &[u8], resources: &Dict) 
         Name::new("Resources"),
         Object::Dictionary(resources.clone()),
     );
-    interpret_page_render(doc, &page)
+    interpret_page_render_budgeted(doc, &page, budget)
 }
 
 /// Whether a CharProc is **uncolored** (`d1`) vs colored (`d0`).

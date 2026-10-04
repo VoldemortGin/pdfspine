@@ -54,7 +54,17 @@ pub fn classify_page(doc: &DocumentStore, page: &Dict) -> PageClass {
     let content = page_content(doc, page);
     let mut refs: Vec<ObjRef> = Vec::new();
     let mut visited = HashSet::new();
-    if scan_image_only(doc, &content, &resources, 0, &mut visited, &mut refs) && !refs.is_empty() {
+    let mut budget = MAX_IMAGE_ONLY_SCAN_STEPS;
+    if scan_image_only(
+        doc,
+        &content,
+        &resources,
+        0,
+        &mut visited,
+        &mut refs,
+        &mut budget,
+    ) && !refs.is_empty()
+    {
         PageClass::ImageOnly { refs }
     } else {
         PageClass::Vector
@@ -258,9 +268,17 @@ fn append_decoded(doc: &DocumentStore, s: &StreamObj, out: &mut Vec<u8>) {
     }
 }
 
+/// Upper bound on the `Do` operators (images and Form invocations) the
+/// image-only classification follows. A real scanned page paints a handful of
+/// images (at most a few hundred strips); a Form shared many times per level
+/// would otherwise be re-scanned exponentially. Past the bound the page is
+/// simply not classified as image-only and takes the ordinary render path.
+const MAX_IMAGE_ONLY_SCAN_STEPS: u32 = 4096;
+
 /// Recursively scans `content` for image-only-ness. Returns `false` the moment a
 /// disqualifying operator (text/path/shading/inline-image) or a `Do` of a
 /// non-image XObject is seen; pushes image refs in `Do` order otherwise.
+/// `budget` counts the `Do`s still allowed ([`MAX_IMAGE_ONLY_SCAN_STEPS`]).
 fn scan_image_only(
     doc: &DocumentStore,
     content: &[u8],
@@ -268,10 +286,17 @@ fn scan_image_only(
     depth: u32,
     visited: &mut HashSet<u32>,
     refs: &mut Vec<ObjRef>,
+    budget: &mut u32,
 ) -> bool {
     let ops = scan_operators(content);
     let xobjects = resolve_dict(doc, resources, "XObject").unwrap_or_default();
     for op in &ops {
+        if matches!(op, Operator::Do(_)) {
+            if *budget == 0 {
+                return false; // too many Do's to classify: not image-only.
+            }
+            *budget -= 1;
+        }
         match op {
             Operator::Disqualifying => return false,
             Operator::Allowed => {}
@@ -304,8 +329,15 @@ fn scan_image_only(
                         };
                         let form_res = resolve_dict(doc, xdict, "Resources")
                             .unwrap_or_else(|| resources.clone());
-                        if !scan_image_only(doc, &form_content, &form_res, depth + 1, visited, refs)
-                        {
+                        if !scan_image_only(
+                            doc,
+                            &form_content,
+                            &form_res,
+                            depth + 1,
+                            visited,
+                            refs,
+                            budget,
+                        ) {
                             return false;
                         }
                         visited.remove(&xref.num);
