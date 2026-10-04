@@ -780,6 +780,34 @@
 
 ## History (completed records, newest first)
 
+### Completed 2026-10-04: resource bounds for content-controlled recursion and work (branch `fix/resource-bounds`, not merged)
+
+- **Why.** A read-only probe found four inputs a few KB long that crash or
+  explode existing entry points, none reachable from the then-current fuzz
+  targets: ~20k `[` in an object body / ~100k in a content stream (stack
+  overflow → process abort), `1e30 Tz` (`capacity overflow` in the gutter
+  histogram; a glyph at x ≈ −2·10⁹ hung `build_textpage` with ~2 GB), Form
+  XObject fan-out (10× per level; 7 levels 7.6 s / 807 MB) and unclosed
+  rulings in lattice table detection (O(N⁵); N = 240 ~1.5–2 min).
+- **What landed** (one commit each; details in `CHANGELOG.md` `[Unreleased]`):
+  syntactic nesting capped at `Limits::max_recursion_depth` plus bounds on the
+  other file-driven recursion (functions, `/VE`, Type 1 subrs / `seac`,
+  XY-cut, outline / name / number trees); layout histogram and quadratic
+  passes bounded; per-page content work budget
+  (`Limits::max_page_content_ops` / `max_page_content_items`, shared with
+  Type 3 rendering and the paint profile); indexed lattice search (identical
+  cells); `max_file_size` / `max_total_decompressed` / `max_decode_ratio`
+  enforced; `fuzz_content` / `fuzz_filters` / `fuzz_cmap` targets and a daily
+  fuzz workflow; text / table entry points contain panics (ADR 0006 scope
+  extension).
+- **Evidence.** For every commit the text, rawjson, render-op stream and
+  `lines` / `text` tables of all 7144 local corpus pages (`fixtures/corpus`,
+  `conformance/gt/corpus-*`, gitignored) hash identically to `cb336c4`; the
+  lattice search is also checked against the exhaustive search on 3000 random
+  rule sets. Fuzz targets were only `cargo check`ed (no cargo-fuzz locally).
+- **Not done here** (next batch): `pdf-typeset` shading, table cell merging
+  and row breaks, ONNX table backend evaluation, worktree / branch cleanup.
+
 ### Completed 2026-09-09: reading order stage 3 + D4 (stage 4 measured and dropped) (branch `worktree-agent-ae07f5282e4af72f5`, HEAD `372213a`)
 
 - **Stage 3 — geometric reading order** (`2dcbea5`, `crates/pdf-text/src/layout.rs`).
