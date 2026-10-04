@@ -162,6 +162,11 @@ pub fn decode_stream(dict: &Dict, raw: &[u8], limits: &Limits) -> Result<DecodeO
             Some(params) => predictor::unpredict(&decoded, &params, limits)?,
             None => decoded,
         };
+        // Chain-level ratio guard: stacked filters (Flate over Flate, …)
+        // multiply their ratios beyond what any single codec can reach.
+        if limits.decode_ratio_exceeded(raw.len(), data.len()) {
+            return Err(Error::LimitExceeded(crate::error::LimitKind::DecodeRatio));
+        }
     }
 
     Ok(DecodeOutcome::Decoded(data))

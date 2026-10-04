@@ -54,7 +54,9 @@ const SCRATCH: usize = 64 * 1024;
 /// - [`Error::Decode`] (`FILTER`) if the input is neither a valid zlib stream
 ///   nor valid raw deflate (truncated or corrupt).
 /// - [`Error::LimitExceeded`] ([`LimitKind::DecompressedStream`]) if the output
-///   would exceed `limits.max_decompressed_stream`.
+///   would exceed `limits.max_decompressed_stream`, or
+///   ([`LimitKind::DecodeRatio`]) if it outgrows the ratio guard
+///   ([`Limits::decode_ratio_exceeded`]).
 pub fn decode(input: &[u8], limits: &Limits) -> Result<Vec<u8>> {
     // An empty stream is legal and decodes to nothing (PRD §8.3): don't even
     // hand it to the decompressor, which would report a truncated header.
@@ -124,6 +126,10 @@ fn inflate(input: &[u8], zlib_header: bool, limits: &Limits) -> Result<Vec<u8>> 
             // Bomb guard: refuse to grow past the configured ceiling.
             if out.len().saturating_add(produced) > limits.max_decompressed_stream {
                 return Err(Error::LimitExceeded(LimitKind::DecompressedStream));
+            }
+            // Incremental ratio trip (only past the floor; see `Limits`).
+            if limits.decode_ratio_exceeded(input.len(), out.len().saturating_add(produced)) {
+                return Err(Error::LimitExceeded(LimitKind::DecodeRatio));
             }
             out.extend_from_slice(&scratch[..produced]);
         }

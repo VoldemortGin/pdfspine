@@ -7,10 +7,11 @@
 //! instead of OOMing. The shipped defaults are **pinned in PRD §9.6.2** so the
 //! gate is testable (`LIMITS-DEFAULT-*`).
 //!
-//! M1b consumes only the fields the filter layer needs
-//! ([`Limits::max_decompressed_stream`] and [`Limits::max_decode_ratio`]); the
-//! remaining ceilings from §9.6.2 are carried so later units (xref / objstm /
-//! open) share one struct rather than re-deriving constants.
+//! The filter layer enforces [`Limits::max_decompressed_stream`] and
+//! [`Limits::max_decode_ratio`]; the document store enforces
+//! [`Limits::max_file_size`] at open and [`Limits::max_total_decompressed`]
+//! across its stream decodes; the parser and graph walks enforce
+//! [`Limits::max_recursion_depth`].
 
 /// Resource ceilings for parsing and decoding (PRD §9.6.2).
 ///
@@ -20,7 +21,8 @@
 #[non_exhaustive]
 pub struct Limits {
     /// Largest accepted source file, in bytes. Default 4 GiB (§9.6.2:
-    /// i32-offset safety + practical ceiling).
+    /// i32-offset safety + practical ceiling). Checked when a document is
+    /// opened ([`crate::error::LimitKind::FileSize`]).
     pub max_file_size: u64,
     /// Largest accepted object count. Default 2²³ (§9.6.2: xref/object-count
     /// bomb bound).
@@ -31,12 +33,28 @@ pub struct Limits {
     /// (§9.6.2: single-stream bomb cap). Enforced by every M1b decoder.
     pub max_decompressed_stream: usize,
     /// Whole-document decompression budget, in bytes. Default 4 GiB (§9.6.2).
+    /// Enforced by [`crate::DocumentStore::decode_stream`] over the **distinct**
+    /// non-image streams a document decodes: decoding the same stream again
+    /// (another page using a shared Form, a re-render) is not charged twice.
+    /// Image XObjects are exempt: rendering a long scanned document legitimately
+    /// decodes far more image data than this over a document's lifetime, and
+    /// each image decode is already bounded by
+    /// [`Limits::max_decompressed_stream`] and [`Limits::max_decode_ratio`].
+    /// Past the budget, decoding a not-yet-seen stream fails with
+    /// [`crate::error::LimitKind::TotalDecompressed`]. The largest fixture
+    /// decodes ~26 MB of distinct streams.
     pub max_total_decompressed: u64,
     /// Per-ObjStm member cap. Default 1,048,576 (§9.6.2).
     pub max_objstm_objects: u64,
     /// Incremental decode-ratio trip for zip bombs (output : input). Default
     /// 200 (§9.6.2). A stream whose output exceeds `input * max_decode_ratio`
-    /// (and is non-trivially large) trips [`crate::error::LimitKind::DecodeRatio`].
+    /// trips [`crate::error::LimitKind::DecodeRatio`] — checked while
+    /// inflating (Flate, LZW) and across the whole filter chain — but only
+    /// once the output is past [`Limits::decode_ratio_floor`]: real streams
+    /// are routinely far more compressible than 200:1 (a fixture form carries
+    /// a 25 MB stream at 320:1, a near-blank page image can approach deflate's
+    /// ~1032:1 maximum), so the ratio only cuts off decodes already a quarter
+    /// of the way to the single-stream cap.
     pub max_decode_ratio: u64,
     /// Per-page content work budget: content-stream tokens (operands and
     /// operators) interpreted for one page, across its content streams, Form
@@ -95,6 +113,22 @@ impl Limits {
     // `Limits` is `#[non_exhaustive]`, so downstream crates/tests cannot use a
     // struct-update literal to tweak one field. These consuming setters provide
     // that ergonomics without exposing the field set as a stable constructor.
+
+    /// The decoded size past which [`Limits::max_decode_ratio`] applies: a
+    /// quarter of [`Limits::max_decompressed_stream`] (256 MiB by default, 10×
+    /// the largest fixture stream).
+    #[must_use]
+    pub fn decode_ratio_floor(&self) -> usize {
+        self.max_decompressed_stream / 4
+    }
+
+    /// Whether `out_len` decoded bytes from `in_len` encoded bytes trip the
+    /// decode-ratio guard (see [`Limits::max_decode_ratio`]).
+    #[must_use]
+    pub fn decode_ratio_exceeded(&self, in_len: usize, out_len: usize) -> bool {
+        out_len > self.decode_ratio_floor()
+            && out_len as u64 > (in_len as u64).saturating_mul(self.max_decode_ratio)
+    }
 
     /// Returns a copy with [`Limits::max_recursion_depth`] overridden.
     #[must_use]

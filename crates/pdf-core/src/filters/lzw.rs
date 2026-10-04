@@ -70,6 +70,12 @@ struct CapWriter {
     cap: usize,
     /// Set once a write would have exceeded `cap`.
     overflow: bool,
+    /// Encoded input length, for the decode-ratio guard.
+    input_len: usize,
+    /// The ceilings in force (decode-ratio guard).
+    limits: Limits,
+    /// Set once the output outgrew the decode-ratio guard.
+    ratio_tripped: bool,
 }
 
 impl Write for CapWriter {
@@ -79,6 +85,13 @@ impl Write for CapWriter {
         if self.out.len().saturating_add(buf.len()) > self.cap {
             self.overflow = true;
             return Err(io::Error::other("decompressed-stream limit"));
+        }
+        if self
+            .limits
+            .decode_ratio_exceeded(self.input_len, self.out.len().saturating_add(buf.len()))
+        {
+            self.ratio_tripped = true;
+            return Err(io::Error::other("decode-ratio limit"));
         }
         self.out.extend_from_slice(buf);
         Ok(buf.len())
@@ -120,6 +133,9 @@ pub fn decode(input: &[u8], early_change: bool, limits: &Limits) -> Result<Vec<u
         out: Vec::new(),
         cap: limits.max_decompressed_stream,
         overflow: false,
+        input_len: input.len(),
+        limits: *limits,
+        ratio_tripped: false,
     };
 
     // Stream the decode into the capped writer. `&[u8]` implements `BufRead`,
@@ -132,6 +148,7 @@ pub fn decode(input: &[u8], early_change: bool, limits: &Limits) -> Result<Vec<u
         // The bomb guard is authoritative: if the writer tripped, the surfaced
         // io error is *our* limit error regardless of its kind.
         Err(_) if cw.overflow => Err(Error::LimitExceeded(LimitKind::DecompressedStream)),
+        Err(_) if cw.ratio_tripped => Err(Error::LimitExceeded(LimitKind::DecodeRatio)),
         // Anything else (an invalid code, or no end marker before EOF) is a
         // genuine decode failure.
         Err(_) => Err(Error::decode(FILTER, "corrupt or truncated LZW stream")),

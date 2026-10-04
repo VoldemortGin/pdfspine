@@ -25,9 +25,14 @@ pub enum LimitKind {
     /// A document declared/contained more objects than `Limits::max_objects`
     /// (xref/object-count bomb bound, PRD §9.6.2).
     Objects,
-    /// Indirect-object resolution nested deeper than
+    /// Indirect-object resolution or array/dict syntax nested deeper than
     /// `Limits::max_recursion_depth` (PRD §9.6.2).
     RecursionDepth,
+    /// The source file is larger than `Limits::max_file_size` (PRD §9.6.2).
+    FileSize,
+    /// The distinct streams a document decoded exceeded
+    /// `Limits::max_total_decompressed` (PRD §9.6.2).
+    TotalDecompressed,
 }
 
 impl LimitKind {
@@ -40,6 +45,8 @@ impl LimitKind {
             LimitKind::ObjstmObjects => "objstm-objects",
             LimitKind::Objects => "objects",
             LimitKind::RecursionDepth => "recursion-depth",
+            LimitKind::FileSize => "file-size",
+            LimitKind::TotalDecompressed => "total-decompressed",
         }
     }
 }

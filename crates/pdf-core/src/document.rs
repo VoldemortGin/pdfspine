@@ -91,6 +91,25 @@ pub struct DocumentStore {
     /// reference (so its own strings are never decrypted — PRD §8.4 exemption).
     #[cfg(feature = "encryption")]
     encrypt_obj_num: Option<u32>,
+    /// Decoded bytes charged against [`Limits::max_total_decompressed`], and the
+    /// streams already charged (each distinct stream is charged once). The lock
+    /// is held only for one set insert / counter update, never across decoding.
+    decoded_total: std::sync::Mutex<DecodedTotal>,
+}
+
+/// The [`Limits::max_total_decompressed`] ledger of one store.
+#[derive(Debug, Default)]
+struct DecodedTotal {
+    bytes: u64,
+    seen: HashSet<StreamKey>,
+}
+
+/// The identity a decoded stream is charged under: a source-backed body by its
+/// byte range, an owned (e.g. decrypted) body by its length and content hash.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum StreamKey {
+    Source { offset: usize, len: usize },
+    Owned { len: usize, hash: u64 },
 }
 
 impl DocumentStore {
@@ -146,6 +165,7 @@ impl DocumentStore {
             arena_generation: std::sync::atomic::AtomicU64::new(0),
             #[cfg(feature = "encryption")]
             encrypt_obj_num: self.encrypt_obj_num,
+            decoded_total: std::sync::Mutex::new(DecodedTotal::default()),
         })
     }
 
@@ -223,6 +243,9 @@ impl DocumentStore {
     fn open_source(source: Source, mode: ParseMode, limits: Limits) -> Result<Self> {
         if source.is_empty() {
             return Err(Error::source("empty document"));
+        }
+        if source.len() as u64 > limits.max_file_size {
+            return Err(Error::LimitExceeded(LimitKind::FileSize));
         }
         let (version, header_offset) = parse_header(&source)?;
         let mut diagnostics = Diagnostics::new();
@@ -381,6 +404,7 @@ impl DocumentStore {
             arena_generation: std::sync::atomic::AtomicU64::new(0),
             #[cfg(feature = "encryption")]
             encrypt_obj_num,
+            decoded_total: std::sync::Mutex::new(DecodedTotal::default()),
         };
         // The catalog `/Version`, if present, overrides the header (PRD §8.2).
         store.apply_catalog_version();
@@ -1418,15 +1442,65 @@ impl DocumentStore {
     /// a `Raw` body from the [`Source`] first (PRD §8.3 / §9.2). Ties the M1b
     /// codec layer to the source-backed `Raw` variant.
     ///
+    /// The first decode of each distinct non-image stream is charged against
+    /// [`Limits::max_total_decompressed`]; once the document has decoded more
+    /// than that, decoding a not-yet-charged stream fails (streams already
+    /// charged keep decoding).
+    ///
     /// # Errors
     ///
-    /// [`Error::Source`] on a bad `Raw` range; decode errors propagate.
+    /// [`Error::Source`] on a bad `Raw` range; decode errors propagate;
+    /// [`Error::LimitExceeded`]`(`[`LimitKind::TotalDecompressed`]`)` past the
+    /// whole-document budget.
     pub fn decode_stream(&self, stream: &StreamObj) -> Result<crate::filters::DecodeOutcome> {
         let raw = self.stream_raw_bytes(stream)?;
-        match &stream.data {
-            StreamData::Decoded(b) => Ok(crate::filters::DecodeOutcome::Decoded(b.to_vec())),
-            _ => crate::filters::decode_stream(&stream.dict, &raw, &self.limits),
+        let key = match &stream.data {
+            StreamData::Decoded(b) => {
+                return Ok(crate::filters::DecodeOutcome::Decoded(b.to_vec()))
+            }
+            StreamData::Raw { offset, len } => StreamKey::Source {
+                offset: *offset,
+                len: *len,
+            },
+            StreamData::Encoded(b) => {
+                use std::hash::{Hash, Hasher};
+                let mut h = std::collections::hash_map::DefaultHasher::new();
+                b.as_ref().hash(&mut h);
+                StreamKey::Owned {
+                    len: b.len(),
+                    hash: h.finish(),
+                }
+            }
+        };
+        let outcome = crate::filters::decode_stream(&stream.dict, &raw, &self.limits)?;
+        if let crate::filters::DecodeOutcome::Decoded(bytes) = &outcome {
+            let is_image =
+                stream.dict.get(&Name::new("Subtype")) == Some(&Object::Name(Name::new("Image")));
+            if !is_image {
+                self.charge_decoded(key, bytes.len())?;
+            }
         }
+        Ok(outcome)
+    }
+
+    /// Charges a stream's first decode against [`Limits::max_total_decompressed`].
+    fn charge_decoded(&self, key: StreamKey, len: usize) -> Result<()> {
+        // A poisoned ledger (impossible: nothing panics while it is held) is
+        // recovered rather than turned into a spurious failure.
+        let mut total = self
+            .decoded_total
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if total.seen.contains(&key) {
+            return Ok(());
+        }
+        let bytes = total.bytes.saturating_add(len as u64);
+        if bytes > self.limits.max_total_decompressed {
+            return Err(Error::LimitExceeded(LimitKind::TotalDecompressed));
+        }
+        total.bytes = bytes;
+        total.seen.insert(key);
+        Ok(())
     }
 
     // --- internal loading -------------------------------------------------

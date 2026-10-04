@@ -74,13 +74,28 @@ feature-complete, but the public API and on-disk formats may still change.
   bottom × right candidate against every edge — O(N⁵) for N rules: N long
   vertical rules plus N short horizontal rules that never meet them took 3.1 s
   at N = 120 and ~1.5–2 minutes at N = 240, for zero tables (chart grids,
-  scales and barcodes look like this); it now takes ~1 ms. Each grid line now gets a sorted reach index
-  and only real intersections are visited; the result — cells and their order
-  — is identical to the exhaustive search (checked against it on random rule
-  sets and on every fixture page), at near-linear cost. A work bound of
+  scales and barcodes look like this); it now takes ~1 ms. Each grid line
+  now gets a sorted reach index and only real intersections are visited; the
+  result — cells and their order — is identical to the exhaustive search
+  (checked against it on random rule sets and on every fixture page), at
+  near-linear cost. A work bound of
   2·10⁷ candidate checks remains as a backstop: past it the page reports no
   `lines` tables (that strategy never falls back to text clustering) and the
   new `TableFinder::lattice_abandoned` flag is set.
+
+- **`Limits::max_file_size`, `max_total_decompressed` and `max_decode_ratio`
+  are enforced.** They were declared (PRD §9.6.2) but never checked; only the
+  1 GiB single-stream cap was. Opening a file larger than `max_file_size`
+  (4 GiB) now fails with `LimitExceeded(FileSize)`.
+  `DocumentStore::decode_stream` charges the first decode of every distinct non-image stream against
+  `max_total_decompressed` (4 GiB; repeat decodes of the same stream are free,
+  image XObjects are exempt — see the field docs) and fails past it with
+  `LimitExceeded(TotalDecompressed)`. Flate and LZW check `max_decode_ratio`
+  (200:1) incrementally, and the whole filter chain is checked after each
+  step, but only once the output passes `Limits::decode_ratio_floor()` — a
+  quarter of `max_decompressed_stream`, 256 MiB by default — because real
+  streams are routinely more compressible than 200:1 (a fixture form carries a
+  25 MB stream at 320:1). Python raises `PdfLimitError` for all three.
 
 ## [0.12.0] — 2026-10-03
 
