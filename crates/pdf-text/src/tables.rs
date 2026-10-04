@@ -363,6 +363,9 @@ impl Table {
 pub struct TableFinder {
     /// The detected tables.
     pub tables: Vec<Table>,
+    /// Whether the `Lines` lattice search hit its work bound on this page and
+    /// was abandoned (no `Lines` tables are reported then).
+    pub lattice_abandoned: bool,
 }
 
 impl TableFinder {
@@ -399,8 +402,11 @@ pub fn find_tables(
                       // default behavior, and it is what keeps borderless prose (multi-column body
                       // text with no rulings) from being mistaken for a table. Only the explicit
                       // `Text` strategy infers a grid from word alignment.
+    let mut lattice_abandoned = false;
     let mut tables = match options.strategy {
-        Strategy::Lines | Strategy::LinesStrict => detect_lines(drawings, options),
+        Strategy::Lines | Strategy::LinesStrict => {
+            detect_lines(drawings, options, &mut lattice_abandoned)
+        }
         Strategy::Text => detect_text(words, options),
     };
     // Populate each table's header from its first row's cell text (PyMuPDF
@@ -413,7 +419,10 @@ pub fn find_tables(
                 .collect();
         }
     }
-    TableFinder { tables }
+    TableFinder {
+        tables,
+        lattice_abandoned,
+    }
 }
 
 /// Maps the interpreter's user-space [`DrawPath`]s into PyMuPDF device space via
@@ -487,7 +496,7 @@ impl Segment {
 /// Each surviving table's row/column grid lines are taken from *its own* cells'
 /// coordinates, so the grid shape tracks the real ruled structure instead of
 /// the page-wide line product.
-fn detect_lines(drawings: &[DrawPath], opt: &TableOptions) -> Vec<Table> {
+fn detect_lines(drawings: &[DrawPath], opt: &TableOptions, abandoned: &mut bool) -> Vec<Table> {
     let (h_segs, v_segs) = collect_segments(drawings, opt);
     if h_segs.is_empty() || v_segs.is_empty() {
         return Vec::new();
@@ -503,7 +512,12 @@ fn detect_lines(drawings: &[DrawPath], opt: &TableOptions) -> Vec<Table> {
     }
 
     // The unit cells (smallest ruled rectangles) recovered from the edge graph.
-    let unit_cells = lattice_cells(&h_edges, &v_edges, opt.snap_tolerance);
+    // A line set too pathological to search within the work bound yields no
+    // lattice tables for the page.
+    let Some(unit_cells) = lattice_cells(&h_edges, &v_edges, opt.snap_tolerance) else {
+        *abandoned = true;
+        return Vec::new();
+    };
     if unit_cells.is_empty() {
         return Vec::new();
     }
@@ -583,6 +597,12 @@ fn merge_edges(segs: &[Segment], tol: f64) -> Vec<Edge> {
     edges
 }
 
+/// Upper bound on the candidate checks [`lattice_cells`] may spend on one page.
+/// A ruled table costs about one check per cell; the bound only trips on
+/// adversarial line sets, where lattice detection is abandoned for the page
+/// (no `Lines` tables — this strategy never falls back to text clustering).
+const MAX_LATTICE_WORK: u64 = 20_000_000;
+
 /// Recovers the smallest ruled rectangles ("unit cells") from the merged edge
 /// graph, mirroring PyMuPDF's `intersections_to_cells`.
 ///
@@ -592,31 +612,65 @@ fn merge_edges(segs: &[Segment], tol: f64) -> Vec<Edge> {
 /// are ruled (an edge crosses each side over its full length, within `tol`).
 /// The first such rectangle is the unit cell; larger spans are left to the merge
 /// pass. A corner with no enclosing unit cell contributes nothing.
-fn lattice_cells(h_edges: &[Edge], v_edges: &[Edge], tol: f64) -> Vec<Rect> {
+///
+/// Rather than testing every corner × bottom × right combination against every
+/// edge (O(N⁵) for N lines), each grid line gets a [`ReachIndex`] answering "is
+/// this side ruled" in O(log E), and only real intersections are visited: a
+/// cell's corners must lie where a ruling continues past the next grid line, so
+/// anchors, bottom rows and right columns are drawn from those intersection
+/// lists, and both scans stop as soon as a side can no longer be ruled. The
+/// result — cells and their order — is identical to the exhaustive search.
+/// `None` when the search exceeds [`MAX_LATTICE_WORK`].
+fn lattice_cells(h_edges: &[Edge], v_edges: &[Edge], tol: f64) -> Option<Vec<Rect>> {
     let rows = unique_positions(h_edges.iter().map(|e| e.pos), tol);
     let cols = unique_positions(v_edges.iter().map(|e| e.pos), tol);
     if rows.len() < 2 || cols.len() < 2 {
-        return Vec::new();
+        return Some(Vec::new());
     }
-    let h_at = |y: f64, x0: f64, x1: f64| edge_spans(h_edges, y, x0, x1, tol);
-    let v_at = |x: f64, y0: f64, y1: f64| edge_spans(v_edges, x, y0, y1, tol);
+    // Ruled-side oracles: `h_reach[ri]` answers h_at(rows[ri], ..), `v_reach[ci]`
+    // answers v_at(cols[ci], ..).
+    let h_reach = ReachIndex::per_line(h_edges, &rows, tol);
+    let v_reach = ReachIndex::per_line(v_edges, &cols, tol);
+    // `down[ri]`: columns (ascending) whose vertical ruling, starting at row ri,
+    // reaches row ri + 1. `right[ci]`: rows (ascending) whose horizontal ruling,
+    // starting at column ci, reaches column ci + 1. A cell anchored at
+    // (ci, ri) needs ci ∈ down[ri] and ri ∈ right[ci]; its right side lies on a
+    // column of down[ri] and its bottom on a row of right[ci].
+    let down = crossings(&v_reach, &rows, tol);
+    let right = crossings(&h_reach, &cols, tol);
 
+    let mut work: u64 = 0;
     let mut cells = Vec::new();
-    // Anchor each unit cell at a top-left grid corner `(x0, y0)`.
     for (ci, &x0) in cols.iter().enumerate().take(cols.len() - 1) {
-        for (ri, &y0) in rows.iter().enumerate().take(rows.len() - 1) {
-            // The smallest rectangle anchored at (x0, y0) whose four sides are all
-            // ruled. We scan bottom row lines (top→down), and for each the right
-            // column lines (left→right), taking the first `(bottom, right)` pair
-            // that fully closes a cell (mirrors PyMuPDF `find_smallest_cell`, which
-            // tries every below/right point until the box is enclosed).
-            'found: for &y1 in &rows[ri + 1..] {
-                if !v_at(x0, y0, y1) {
-                    continue; // left side not ruled down to y1
+        for &ri in &right[ci] {
+            if ri + 1 >= rows.len() || down[ri].binary_search(&ci).is_err() {
+                continue;
+            }
+            let y0 = rows[ri];
+            let left_reach = v_reach[ci].reach(y0, tol);
+            let top_reach = h_reach[ri].reach(x0, tol);
+            let first_right = down[ri].partition_point(|&c| c <= ci);
+            let first_bottom = right[ci].partition_point(|&r| r <= ri);
+            // The smallest rectangle anchored at (x0, y0) whose four sides are
+            // all ruled: bottom rows top→down, then right columns left→right
+            // (PyMuPDF `find_smallest_cell`).
+            'found: for &r1 in &right[ci][first_bottom..] {
+                let y1 = rows[r1];
+                if !ruled(left_reach, y1, tol) {
+                    break; // left side not ruled down to y1 (nor any lower row)
                 }
-                for &x1 in &cols[ci + 1..] {
-                    // Top + bottom must be ruled across, right ruled down.
-                    if h_at(y0, x0, x1) && h_at(y1, x0, x1) && v_at(x1, y0, y1) {
+                let bottom_reach = h_reach[r1].reach(x0, tol);
+                for &c1 in &down[ri][first_right..] {
+                    work += 1;
+                    if work > MAX_LATTICE_WORK {
+                        return None;
+                    }
+                    let x1 = cols[c1];
+                    // Top + bottom must be ruled across (monotone in x1).
+                    if !(ruled(top_reach, x1, tol) && ruled(bottom_reach, x1, tol)) {
+                        break;
+                    }
+                    if ruled(v_reach[c1].reach(y0, tol), y1, tol) {
                         cells.push(Rect::new(x0, y0, x1, y1));
                         break 'found;
                     }
@@ -624,15 +678,138 @@ fn lattice_cells(h_edges: &[Edge], v_edges: &[Edge], tol: f64) -> Vec<Rect> {
             }
         }
     }
-    cells
+    Some(cells)
 }
 
 /// Whether some edge at constant `pos` (±tol) spans the **whole** of `[lo, hi]`
-/// (its extent reaches both ends within `tol`), i.e. the side is fully ruled.
+/// (its extent reaches both ends within `tol`), i.e. the side is fully ruled —
+/// the exhaustive search's predicate, kept as the oracle [`ReachIndex`] must
+/// reproduce.
+#[cfg(test)]
 fn edge_spans(edges: &[Edge], pos: f64, lo: f64, hi: f64, tol: f64) -> bool {
     edges
         .iter()
         .any(|e| (e.pos - pos).abs() <= tol && e.lo <= lo + tol && e.hi >= hi - tol)
+}
+
+/// Whether a ruling that reaches `reach` covers a side ending at `end` — the
+/// `e.hi >= hi - tol` half of `edge_spans`.
+fn ruled(reach: Option<f64>, end: f64, tol: f64) -> bool {
+    reach.is_some_and(|r| r >= end - tol)
+}
+
+/// The rulings on one grid line, sorted by start, with the running maximum of
+/// their ends: `reach(start)` is the farthest end among rulings that begin by
+/// `start` (within `tol`), so a side `[start, end]` is ruled exactly when
+/// `reach(start) >= end - tol` — the same predicate as `edge_spans`.
+struct ReachIndex {
+    /// `(lo, max hi of every entry up to here)`, sorted by `lo`.
+    entries: Vec<(f64, f64)>,
+}
+
+impl ReachIndex {
+    /// One index per position in `lines` (sorted), holding every edge whose
+    /// constant coordinate is within `tol` of that line (an edge may sit near
+    /// two lines). Edges with a NaN extent never satisfy `edge_spans` and are
+    /// left out.
+    fn per_line(edges: &[Edge], lines: &[f64], tol: f64) -> Vec<ReachIndex> {
+        let mut per: Vec<Vec<(f64, f64)>> = vec![Vec::new(); lines.len()];
+        // A NaN grid line never matches an edge; skip the (sorted-to-the-ends)
+        // NaN lines so the binary search sees a monotone sequence.
+        let (a, b) = non_nan_span(lines);
+        for e in edges {
+            if e.lo.is_nan() || e.hi.is_nan() {
+                continue;
+            }
+            // Candidate window (a superset), then the exact `edge_spans` test.
+            let margin = 2.0 * tol + 1e-6 * (1.0 + e.pos.abs());
+            let start = a + lines[a..b].partition_point(|&l| l < e.pos - margin);
+            for (k, &l) in lines.iter().enumerate().take(b).skip(start) {
+                if l > e.pos + margin {
+                    break;
+                }
+                if (e.pos - l).abs() <= tol {
+                    per[k].push((e.lo, e.hi));
+                }
+            }
+        }
+        per.into_iter()
+            .map(|mut v| {
+                v.sort_by(|a, b| a.0.total_cmp(&b.0));
+                let mut best = f64::NEG_INFINITY;
+                for entry in &mut v {
+                    best = best.max(entry.1);
+                    entry.1 = best;
+                }
+                ReachIndex { entries: v }
+            })
+            .collect()
+    }
+
+    /// The farthest end among rulings starting at or before `start + tol`, or
+    /// `None` when there is none.
+    fn reach(&self, start: f64, tol: f64) -> Option<f64> {
+        let k = self.entries.partition_point(|&(lo, _)| lo <= start + tol);
+        k.checked_sub(1).map(|i| self.entries[i].1)
+    }
+}
+
+/// For each grid line `k` of one orientation, the lines of the other
+/// orientation (ascending) at which `k`'s ruling continues to the next grid
+/// position: `out[p]` lists every line `k` with `reach[k]` covering
+/// `[positions[p], positions[p + 1]]`. Built from each line's rulings, so the
+/// cost is proportional to the real crossings, not to the full grid.
+fn crossings(reach: &[ReachIndex], positions: &[f64], tol: f64) -> Vec<Vec<usize>> {
+    let mut out: Vec<Vec<usize>> = vec![Vec::new(); positions.len()];
+    // Segments touching a NaN position are never ruled (`edge_spans`
+    // compares false); restrict to the NaN-free middle of the sorted positions.
+    let (a, b) = non_nan_span(positions);
+    if b < a + 2 {
+        return out;
+    }
+    let span = &positions[a..b];
+    let last = span.len() - 1;
+    for (k, index) in reach.iter().enumerate() {
+        // Each ruling spans a contiguous run of segments [p, p + 1]; merge the
+        // runs of this line's rulings and emit each covered `p` once.
+        let mut runs: Vec<(usize, usize)> = Vec::new();
+        let mut prev_max = f64::NEG_INFINITY;
+        for &(lo, max_hi) in &index.entries {
+            // `entries` carries running maxima; recover this ruling's own reach
+            // as the running max (a ruling only extends coverage when it raises
+            // it, and earlier-starting rulings already cover the rest).
+            let hi = max_hi;
+            if hi <= prev_max {
+                continue;
+            }
+            prev_max = hi;
+            // p ≥ first with lo <= positions[p] + tol ...
+            // (No NaN on either side here, so `y + tol < lo` is `!(lo <= y + tol)`.)
+            let from = span.partition_point(|&y| y + tol < lo);
+            // ... and hi >= positions[p + 1] - tol.
+            let to = span[1..].partition_point(|&y| hi >= y - tol).min(last);
+            if from < to {
+                runs.push((a + from, a + to));
+            }
+        }
+        runs.sort_unstable();
+        let mut emitted_to = 0usize;
+        for (from, to) in runs {
+            for slot in out.iter_mut().take(to).skip(from.max(emitted_to)) {
+                slot.push(k);
+            }
+            emitted_to = emitted_to.max(to);
+        }
+    }
+    out
+}
+
+/// The index range of `sorted` (ordered by `total_cmp`, so NaNs sit at the
+/// ends) that holds no NaN.
+fn non_nan_span(sorted: &[f64]) -> (usize, usize) {
+    let a = sorted.iter().take_while(|v| v.is_nan()).count();
+    let b = sorted.len() - sorted[a..].iter().rev().take_while(|v| v.is_nan()).count();
+    (a, b)
 }
 
 /// Clusters a stream of 1-D positions into unique sorted coordinates within
@@ -1315,6 +1492,124 @@ mod tests {
             for b in xs {
                 assert_eq!(Some(cmp_f64(a, b)), a.partial_cmp(&b), "{a} vs {b}");
             }
+        }
+    }
+
+    /// The pre-index lattice search (exhaustive corner × bottom × right scan
+    /// over every edge), kept as the equivalence oracle for [`lattice_cells`].
+    fn lattice_cells_reference(h_edges: &[Edge], v_edges: &[Edge], tol: f64) -> Vec<Rect> {
+        let rows = unique_positions(h_edges.iter().map(|e| e.pos), tol);
+        let cols = unique_positions(v_edges.iter().map(|e| e.pos), tol);
+        if rows.len() < 2 || cols.len() < 2 {
+            return Vec::new();
+        }
+        let h_at = |y: f64, x0: f64, x1: f64| edge_spans(h_edges, y, x0, x1, tol);
+        let v_at = |x: f64, y0: f64, y1: f64| edge_spans(v_edges, x, y0, y1, tol);
+        let mut cells = Vec::new();
+        for (ci, &x0) in cols.iter().enumerate().take(cols.len() - 1) {
+            for (ri, &y0) in rows.iter().enumerate().take(rows.len() - 1) {
+                'found: for &y1 in &rows[ri + 1..] {
+                    if !v_at(x0, y0, y1) {
+                        continue;
+                    }
+                    for &x1 in &cols[ci + 1..] {
+                        if h_at(y0, x0, x1) && h_at(y1, x0, x1) && v_at(x1, y0, y1) {
+                            cells.push(Rect::new(x0, y0, x1, y1));
+                            break 'found;
+                        }
+                    }
+                }
+            }
+        }
+        cells
+    }
+
+    /// The indexed search returns exactly the exhaustive search's cells, in
+    /// the same order, on random ruling sets (broken / overlapping rules,
+    /// near-coincident positions, non-finite coordinates).
+    #[test]
+    fn lattice_cells_match_the_exhaustive_search() {
+        let mut seed = 0x2545_f491_4f6c_dd1d_u64;
+        let mut next = move || {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            seed
+        };
+        let special = [f64::NAN, f64::INFINITY, f64::NEG_INFINITY, 1e300, -0.0];
+        for case in 0..3000_usize {
+            let grid = 2 + (next() % 9) as usize;
+            let edge = |next: &mut dyn FnMut() -> u64| {
+                let r = next();
+                let pick = |v: u64| (v % grid as u64) as f64 * 20.0 + ((v >> 8) % 3) as f64 * 0.7;
+                let pos = pick(r);
+                let (mut lo, mut hi) = (pick(r >> 16), pick(r >> 32));
+                if lo > hi {
+                    std::mem::swap(&mut lo, &mut hi);
+                }
+                let mut e = Edge { pos, lo, hi };
+                if case.is_multiple_of(7) && r.is_multiple_of(11) {
+                    let v = special[(r >> 40) as usize % special.len()];
+                    match (r >> 48) % 3 {
+                        0 => e.pos = v,
+                        1 => e.lo = v,
+                        _ => e.hi = v,
+                    }
+                }
+                e
+            };
+            let nh = (next() % 14) as usize;
+            let nv = (next() % 14) as usize;
+            let h: Vec<Edge> = (0..nh).map(|_| edge(&mut next)).collect();
+            let v: Vec<Edge> = (0..nv).map(|_| edge(&mut next)).collect();
+            let tol = [0.0, 0.5, 3.0][case % 3];
+            let fast = lattice_cells(&h, &v, tol).expect("small sets stay within the work bound");
+            let slow = lattice_cells_reference(&h, &v, tol);
+            let bits = |cells: &[Rect]| -> Vec<[u64; 4]> {
+                cells
+                    .iter()
+                    .map(|c| {
+                        [
+                            c.x0.to_bits(),
+                            c.y0.to_bits(),
+                            c.x1.to_bits(),
+                            c.y1.to_bits(),
+                        ]
+                    })
+                    .collect()
+            };
+            assert_eq!(
+                bits(&fast),
+                bits(&slow),
+                "case {case}: h={h:?} v={v:?} tol={tol}"
+            );
+        }
+    }
+
+    /// N long vertical rules and N short horizontal rules that never meet
+    /// them (no cell anywhere) finish within the work bound — the exhaustive
+    /// search was O(N⁵) (N = 240: ~2 minutes).
+    #[test]
+    fn unclosed_rulings_stay_within_the_work_bound() {
+        for n in [60usize, 120, 240, 2000] {
+            // The probe geometry: rules 4.5 pt apart; every vertical spans all
+            // rows, every horizontal lies to the right of the last vertical.
+            let right_of = 20.0 + 4.5 * n as f64 + 400.0;
+            let v: Vec<Edge> = (0..n)
+                .map(|i| Edge {
+                    pos: 20.0 + 4.5 * i as f64,
+                    lo: 20.0,
+                    hi: 20.0 + 4.5 * n as f64 + 900.0,
+                })
+                .collect();
+            let h: Vec<Edge> = (0..n)
+                .map(|i| Edge {
+                    pos: 20.0 + 4.5 * i as f64,
+                    lo: right_of,
+                    hi: right_of + 60.0,
+                })
+                .collect();
+            assert_eq!(lattice_cells(&h, &v, 3.0), Some(Vec::new()), "n = {n}");
         }
     }
 }

@@ -69,6 +69,19 @@ feature-complete, but the public API and on-disk formats may still change.
   under 1 % of either budget; the 7-level file now stops after ~1.5 s with
   300 000 glyphs, and deeper fan-out costs no more.
 
+- **Lattice table detection no longer explodes on rulings that never close a
+  cell.** `find_tables()` (default `lines` strategy) searched every corner ×
+  bottom × right candidate against every edge — O(N⁵) for N rules: N long
+  vertical rules plus N short horizontal rules that never meet them took 3.1 s
+  at N = 120 and ~1.5–2 minutes at N = 240, for zero tables (chart grids,
+  scales and barcodes look like this); it now takes ~1 ms. Each grid line now gets a sorted reach index
+  and only real intersections are visited; the result — cells and their order
+  — is identical to the exhaustive search (checked against it on random rule
+  sets and on every fixture page), at near-linear cost. A work bound of
+  2·10⁷ candidate checks remains as a backstop: past it the page reports no
+  `lines` tables (that strategy never falls back to text clustering) and the
+  new `TableFinder::lattice_abandoned` flag is set.
+
 ## [0.12.0] — 2026-10-03
 
 ### Added
