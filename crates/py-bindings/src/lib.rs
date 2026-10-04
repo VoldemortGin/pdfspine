@@ -655,10 +655,14 @@ fn text_output_to_py(
     // TextPage under the detached GIL, then serialize its lines directly.
     if sort && opt.eq_ignore_ascii_case("text") {
         let flags = flags.unwrap_or(pdf_api::defaults::TEXT);
-        let text = py.detach(|| match tp {
-            Some(tp) => sorted_plain_text(tp, flags),
-            None => sorted_plain_text(&pdf_api::textpage(page, flags, None), flags),
-        });
+        let text = py
+            .detach(|| -> pdf_api::Result<String> {
+                Ok(match tp {
+                    Some(tp) => sorted_plain_text(tp, flags),
+                    None => sorted_plain_text(&pdf_api::try_textpage(page, flags, None)?, flags),
+                })
+            })
+            .map_err(map_err)?;
         return Ok(text.into_pyobject(py)?.into_any().unbind());
     }
 
@@ -676,7 +680,9 @@ fn text_output_to_py(
     }
 
     // Heavy: build-or-reuse the model + serialize, GIL released (PRD §9.4).
-    let out = py.detach(|| pdf_api::get_text(page, opt, flags, tp));
+    let out = py
+        .detach(|| pdf_api::try_get_text(page, opt, flags, tp))
+        .map_err(map_err)?;
     text_value_to_py(py, out, sort)
 }
 
@@ -737,7 +743,9 @@ fn dict_to_py<'py>(
     let tp = match tp {
         Some(tp) => tp,
         None => {
-            owned = py.detach(|| pdf_api::textpage(page, flags.unwrap_or(0), None));
+            owned = py
+                .detach(|| pdf_api::try_textpage(page, flags.unwrap_or(0), None))
+                .map_err(map_err)?;
             &owned
         }
     };
@@ -2175,15 +2183,17 @@ impl PyPage {
         py: Python<'_>,
         flags: Option<u32>,
         clip: Option<(f64, f64, f64, f64)>,
-    ) -> PyTextPage {
+    ) -> PyResult<PyTextPage> {
         let clip = clip.map(|(x0, y0, x1, y1)| Rect::new(x0, y0, x1, y1));
         let page = self.page.clone();
         // Heavy: interpret + layout. GIL released (PRD §9.4).
-        let tp = py.detach(move || pdf_api::textpage(&page, flags.unwrap_or(0), clip));
-        PyTextPage {
+        let tp = py
+            .detach(move || pdf_api::try_textpage(&page, flags.unwrap_or(0), clip))
+            .map_err(map_err)?;
+        Ok(PyTextPage {
             source: TextPageSource::Page(self.page.clone()),
             tp,
-        }
+        })
     }
 
     /// Constructs an atomic replacement for the public wrapper's append.
@@ -2289,7 +2299,9 @@ impl PyPage {
                 // build flags the unclipped paths use (only `TEXT_INHIBIT_SPACES`
                 // reaches the layout), so the clip is the only difference.
                 let flags = flags.unwrap_or(0);
-                clipped = py.detach(|| pdf_api::textpage(&self.page, flags, Some(clip)));
+                clipped = py
+                    .detach(|| pdf_api::try_textpage(&self.page, flags, Some(clip)))
+                    .map_err(map_err)?;
                 Some(&clipped)
             }
             _ => None,
@@ -2323,8 +2335,9 @@ impl PyPage {
         let needle_owned = needle.to_string();
         let tp = textpage.map(|t| t.tp.clone());
         // Heavy: build-or-reuse + search, GIL released (PRD §9.4).
-        let hits: Vec<Quad> =
-            py.detach(move || pdf_api::search(&page, &needle_owned, opts, tp.as_ref()));
+        let hits: Vec<Quad> = py
+            .detach(move || pdf_api::try_search(&page, &needle_owned, opts, tp.as_ref()))
+            .map_err(map_err)?;
         let list = PyList::empty(py);
         for q in &hits {
             list.append(quad_tuple(q))?;
@@ -2679,7 +2692,7 @@ impl PyPage {
         line_max_thickness: f64,
         snap_tolerance: f64,
         min_line_length: f64,
-    ) -> PyTableFinder {
+    ) -> PyResult<PyTableFinder> {
         let opts = TableOptions {
             strategy: pdf_api::strategy_from_str(strategy),
             line_max_thickness,
@@ -2687,8 +2700,10 @@ impl PyPage {
             min_line_length,
         };
         let page = self.page.clone();
-        let finder = py.detach(move || pdf_api::page_find_tables(&page, &opts));
-        PyTableFinder { finder }
+        let finder = py
+            .detach(move || pdf_api::try_page_find_tables(&page, &opts))
+            .map_err(map_err)?;
+        Ok(PyTableFinder { finder })
     }
 
     /// Reconstructs tables that live **inside a raster image** on this page

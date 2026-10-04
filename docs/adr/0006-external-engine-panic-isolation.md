@@ -138,6 +138,39 @@ not call tiny-skia or ttf-parser, and its third-party decoders are already
 contained by the codec wrappers. No test forces a real panic through these
 entry points (no known trigger exists); the helper itself is unit-tested.
 
+### Scope extension (2026-10-04): text and table entry points
+
+Decision 1 now also covers text extraction and table detection, which
+interpret and lay out untrusted page content entirely in pdfspine code. Before
+this, `pdf_api::textpage` / `get_text` / `search` / `page_find_tables` were
+infallible and the bindings called them directly, so a panic anywhere in
+`pdf-text` (interpreter, layout, serializers, table detection) reached Python
+as `PanicException`. The fallible entry points `pdf_api::try_textpage`,
+`try_get_text`, `try_search` and `try_page_find_tables` (`crates/pdf-api/src/text.rs`,
+`crates/pdf-api/src/tables.rs`) run the infallible ones inside the crate-private
+`contain_text_panic`, which turns a panic into `pdf_api::Error::Unsupported`
+with a static per-entry-point message (e.g. `"pdf-api: get_text panicked on
+malformed content"`); the bindings' `Page.get_text`, `Page.get_textpage`,
+`Page.search_for` and `Page.find_tables` call these and raise
+`PdfUnsupportedError`. The infallible functions stay for Rust callers that
+prefer them. As for rendering, containment sits at the component boundary, not
+in the PyO3 layer.
+
+Unwind safety: the contained closures borrow the page and options and build
+fresh values. The shared mutable state they reach is the `DocumentStore` object
+cache (`RwLock`, see above) and its decode ledger for
+`Limits::max_total_decompressed` (a `Mutex` held only for one set lookup /
+insert and counter update, never across decoding; a poisoned ledger is
+recovered with `PoisonError::into_inner` rather than failing). Neither is held
+across interpretation or layout code.
+
+This is a backstop, not a substitute for bounded algorithms: a stack overflow
+aborts the process and cannot be caught, which is why syntactic nesting,
+function / visibility-expression / Type 1 subroutine recursion and graph walks
+carry explicit depth or visited-set guards (2026-10-04, `CHANGELOG.md`
+`[Unreleased]`). No test forces a real panic through these entry points (no
+known trigger remains); the helper itself is unit-tested.
+
 ## Consequences and follow-up
 
 No test currently forces a panic through the PaddleOCR adapter; the `ocrspine`

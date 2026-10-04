@@ -849,6 +849,49 @@ pub fn textpage(page: &Page, flags: u32, clip: Option<Rect>) -> TextPage {
     }
 }
 
+/// Runs a text / table entry point, turning a panic raised while interpreting
+/// or laying out untrusted page content into [`crate::Error::Unsupported`]
+/// carrying the static per-entry-point `ctx` (ADR 0006, scope extension to text
+/// and tables). Unwind safety: the closures only borrow the page / options and
+/// build fresh values; the shared state they reach is the `DocumentStore`
+/// object cache and decode ledger, whose locks are held only across a single
+/// map operation (see ADR 0006).
+pub(crate) fn contain_text_panic<T>(ctx: &'static str, f: impl FnOnce() -> T) -> crate::Result<T> {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(f))
+        .map_err(|_| crate::Error::Unsupported(ctx.to_string()))
+}
+
+/// [`textpage`] with panic containment: a panic while building the model
+/// becomes [`crate::Error::Unsupported`] instead of unwinding into the caller
+/// (where PyO3 would raise `PanicException`, a `BaseException`).
+///
+/// # Errors
+///
+/// [`crate::Error::Unsupported`] when text extraction panicked on malformed
+/// content.
+pub fn try_textpage(page: &Page, flags: u32, clip: Option<Rect>) -> crate::Result<TextPage> {
+    contain_text_panic("pdf-api: textpage panicked on malformed content", || {
+        textpage(page, flags, clip)
+    })
+}
+
+/// [`get_text`] with panic containment (see [`try_textpage`]).
+///
+/// # Errors
+///
+/// [`crate::Error::Unsupported`] when text extraction panicked on malformed
+/// content.
+pub fn try_get_text(
+    page: &Page,
+    opt: &str,
+    flags: Option<u32>,
+    tp: Option<&TextPage>,
+) -> crate::Result<TextOutput> {
+    contain_text_panic("pdf-api: get_text panicked on malformed content", || {
+        get_text(page, opt, flags, tp)
+    })
+}
+
 /// Extracts text in the given PyMuPDF `opt` ("text", "html", "xhtml", "xml",
 /// "json", "rawjson", "dict", "rawdict", "blocks", "words"), optionally reusing
 /// a pre-built `tp` instead of rebuilding the [`TextPage`].
@@ -1037,6 +1080,23 @@ pub fn search(
     pdf_text::search(tp, needle, opts)
 }
 
+/// [`search`] with panic containment (see [`try_textpage`]).
+///
+/// # Errors
+///
+/// [`crate::Error::Unsupported`] when text extraction panicked on malformed
+/// content.
+pub fn try_search(
+    page: &Page,
+    needle: &str,
+    opts: pdf_text::SearchOptions,
+    tp: Option<&TextPage>,
+) -> crate::Result<Vec<Quad>> {
+    contain_text_panic("pdf-api: search panicked on malformed content", || {
+        search(page, needle, opts, tp)
+    })
+}
+
 // === resource helpers =====================================================
 
 /// The page's `/Resources /<sub>` dictionary, resolving each level. `None` when
@@ -1074,4 +1134,23 @@ fn dict_int(dict: &Dict, key: &str) -> i32 {
         .and_then(Object::as_i64)
         .and_then(|v| i32::try_from(v).ok())
         .unwrap_or(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn contain_text_panic_converts_panic_to_unsupported() {
+        let r: crate::Result<()> = contain_text_panic("test: injected panic", || panic!("boom"));
+        match r {
+            Err(crate::Error::Unsupported(msg)) => assert_eq!(msg, "test: injected panic"),
+            other => panic!("expected Unsupported, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn contain_text_panic_passes_values_through() {
+        assert_eq!(contain_text_panic("unused", || 7).ok(), Some(7));
+    }
 }

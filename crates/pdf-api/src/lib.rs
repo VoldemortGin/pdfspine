@@ -66,8 +66,8 @@ pub use pdf_crypto::{EncryptMethod, EncryptSpec};
 pub use text::{
     dict_blocks, extract_imginfo, extract_selection, extract_textbox, get_fonts, get_image_bbox,
     get_image_info, get_image_rects, get_images, get_text, get_xobjects, search, textpage,
-    textpage_poolsize, FontInfo, ImageInfo, ImageInfoEntry, ImageRect, ImgInfoEntry, TextOutput,
-    XObjectInfo,
+    textpage_poolsize, try_get_text, try_search, try_textpage, FontInfo, ImageInfo, ImageInfoEntry,
+    ImageRect, ImgInfoEntry, TextOutput, XObjectInfo,
 };
 
 // Image path (M5): `Pixmap`, `get_pixmap`, `extract_image`, image documents
@@ -93,8 +93,8 @@ pub use pdf_fonts::{Font, BASE14_FONTNAMES};
 // Table detection (M7): `find_tables`, `TableFinder`, `Table` (PRD §7). The
 // bindings depend only on `pdf-api`.
 pub use tables::{
-    page_find_tables, strategy_from_str, CellRecord, CellSpan, Strategy, Table, TableFinder,
-    TableOptions,
+    page_find_tables, strategy_from_str, try_page_find_tables, CellRecord, CellSpan, Strategy,
+    Table, TableFinder, TableOptions,
 };
 
 // Image-table reconstruction (opt-in OCR build only): parse a table living

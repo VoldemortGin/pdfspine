@@ -109,6 +109,17 @@ feature-complete, but the public API and on-disk formats may still change.
   streams are routinely more compressible than 200:1 (a fixture form carries a
   25 MB stream at 320:1). Python raises `PdfLimitError` for all three.
 
+- **Text and table extraction no longer surface Rust panics as
+  `PanicException`.** `get_text`, `get_textpage`, `search_for` and
+  `find_tables` contain a panic raised while interpreting or laying out
+  malformed content at the `pdf-api` boundary (ADR 0006, now extended to text
+  and tables) and raise `PdfUnsupportedError` (an `Exception`) instead of
+  PyO3's `PanicException` (a `BaseException` that `except Exception` misses).
+  New fallible Rust entry points `pdf_api::try_textpage`, `try_get_text`,
+  `try_search` and `try_page_find_tables`; the infallible ones are unchanged.
+  This cannot contain a stack overflow (an abort) — that is what the nesting
+  caps above are for.
+
 ## [0.12.0] — 2026-10-03
 
 ### Added

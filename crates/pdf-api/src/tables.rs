@@ -184,6 +184,19 @@ impl TableFinder {
     }
 }
 
+/// [`page_find_tables`] with panic containment: a panic while detecting tables
+/// on malformed content becomes [`crate::Error::Unsupported`] (ADR 0006).
+///
+/// # Errors
+///
+/// [`crate::Error::Unsupported`] when table detection panicked on malformed
+/// content.
+pub fn try_page_find_tables(page: &Page, opts: &TableOptions) -> crate::Result<TableFinder> {
+    crate::text::contain_text_panic("pdf-api: find_tables panicked on malformed content", || {
+        page_find_tables(page, opts)
+    })
+}
+
 /// Detects the tables on `page` under `opts` (PyMuPDF `Page.find_tables`).
 ///
 /// Assembles the inputs the [`pdf_text::tables`] finder needs: the page
