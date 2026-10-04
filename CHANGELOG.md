@@ -34,6 +34,20 @@ feature-complete, but the public API and on-disk formats may still change.
   labels), which now visit each node once — a self-referencing outline item
   used to expand into ~2^200 entries.
 
+- **Extreme text-state / CTM values no longer panic or allocate gigabytes in
+  layout.** The column-gutter histogram sized its bin vector from the page's
+  glyph extent, which content controls: `1e30 Tz` (or a `Tm` / font size of
+  similar magnitude) panicked with `capacity overflow`, `1e8 Tz` allocated
+  ~60 MB per page, and a glyph placed at x ≈ −2·10⁹ allocated ~8 GB. The
+  histogram is now capped at 65 536 one-point bins (wider regions get
+  proportionally wider bins; ISO 32000 pages are at most 14 400 pt wide) and
+  is filled through a difference array (O(glyphs + bins) however wide a glyph
+  is), and a non-finite extent disables gutter detection. The two quadratic
+  layout passes are bounded too: baseline clustering switches from its exact
+  first-match scan to nearest-cluster matching after 2·10⁹ comparisons, and
+  super/subscript reattachment stops after 10⁹ steps — both far above any real
+  page, so ordinary pages are laid out exactly as before.
+
 ## [0.12.0] — 2026-10-03
 
 ### Added

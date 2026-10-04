@@ -165,6 +165,14 @@ const TABLE_GRID_MIN_CELL_GAP_FRAC: f64 = 6.0;
 /// into row bands and destroy column-major reading order.
 const REGION_BAND_GAP_FRAC: f64 = 1.3;
 
+/// Upper bound on the column-gutter occupancy histogram's bin count
+/// ([`detect_page_gutters`]). Bins are 1 pt wide, so this covers a region of
+/// 65 536 pt (~23 m) — far beyond the 14 400 pt maximum page side of ISO
+/// 32000-1 Annex C.2. Only a pathologically wide glyph extent (from extreme
+/// `Tz`/`Tm`/font-size values) reaches it; such regions get wider bins
+/// instead of a multi-gigabyte allocation.
+const MAX_GUTTER_BINS: usize = 1 << 16;
+
 /// Recursion cap for the XY-cut region partition ([`cut_lines`] /
 /// [`cut_column_subtree`]). Each level needs a real band or column split, so
 /// real pages stay within a handful of levels; a crafted nested layout could
@@ -796,6 +804,13 @@ fn group_lines(dev: &[DevGlyph], inhibit_spaces: bool) -> (Vec<Line>, Vec<Header
     // so the output is identical.
     let mut cluster_size: Vec<f64> = Vec::new();
     let mut cluster_dir: Vec<(f64, f64)> = Vec::new();
+    // The first-match scan is O(glyphs × clusters). Past
+    // `MAX_LINE_CLUSTER_SCAN` comparisons (far beyond any real page) the
+    // remaining glyphs only test the clusters nearest in cross value, via an
+    // ordered index, so a crafted page with a million distinct baselines stays
+    // near-linear instead of quadratic.
+    let mut scanned: u64 = 0;
+    let mut nearest: Option<std::collections::BTreeSet<(u64, usize)>> = None;
 
     for (i, g) in dev.iter().enumerate() {
         if dropped_indices.contains(&i) {
@@ -805,18 +820,44 @@ fn group_lines(dev: &[DevGlyph], inhibit_spaces: bool) -> (Vec<Line>, Vec<Header
         let g_size = dev_glyph_effective_size(g);
         let g_dir = g.dir;
         let mut found = None;
-        for ci in 0..cluster_cross.len() {
-            let tol = cluster_size[ci].max(g_size).max(1.0) * LINE_TOL_FRAC;
-            if (cluster_cross[ci] - cross).abs() <= tol + LINE_BASELINE_EPSILON
-                && dir_matches(&cluster_dir[ci], &g_dir)
-            {
-                found = Some(ci);
-                break;
+        if scanned <= MAX_LINE_CLUSTER_SCAN {
+            scanned += cluster_cross.len() as u64;
+            for ci in 0..cluster_cross.len() {
+                if baseline_matches(
+                    (cluster_cross[ci], cluster_size[ci], &cluster_dir[ci]),
+                    (cross, g_size, &g_dir),
+                ) {
+                    found = Some(ci);
+                    break;
+                }
             }
+        } else {
+            let index = nearest.get_or_insert_with(|| {
+                (0..cluster_cross.len())
+                    .map(|ci| (ordered_bits(cluster_cross[ci]), ci))
+                    .collect()
+            });
+            let key = (ordered_bits(cross), 0);
+            found = index
+                .range(..key)
+                .rev()
+                .take(NEAREST_CLUSTERS)
+                .chain(index.range(key..).take(NEAREST_CLUSTERS))
+                .map(|&(_, ci)| ci)
+                .filter(|&ci| {
+                    baseline_matches(
+                        (cluster_cross[ci], cluster_size[ci], &cluster_dir[ci]),
+                        (cross, g_size, &g_dir),
+                    )
+                })
+                .min();
         }
         match found {
             Some(ci) => clusters[ci].push(i),
             None => {
+                if let Some(index) = nearest.as_mut() {
+                    index.insert((ordered_bits(cross), clusters.len()));
+                }
                 clusters.push(vec![i]);
                 cluster_cross.push(cross);
                 cluster_size.push(g_size);
@@ -927,6 +968,34 @@ fn group_lines(dev: &[DevGlyph], inhibit_spaces: bool) -> (Vec<Line>, Vec<Header
         .map(|run| line_from_run(run, dev, inhibit_spaces))
         .collect();
     (lines, header_replacements)
+}
+
+/// Comparisons [`group_lines`] spends on its exact first-match baseline scan
+/// before switching to nearest-cluster matching. A dense real page (tens of
+/// thousands of glyphs on hundreds to a few thousand baselines) needs at most
+/// ~10⁸; the cap bounds a pathological page to a few seconds of scanning.
+const MAX_LINE_CLUSTER_SCAN: u64 = 2_000_000_000;
+
+/// Clusters tested on each side of a glyph's cross value once
+/// [`MAX_LINE_CLUSTER_SCAN`] is exhausted.
+const NEAREST_CLUSTERS: usize = 8;
+
+/// Whether a glyph `(cross, size, dir)` joins a baseline cluster `(cross,
+/// size, dir)`: within half the larger size (at least 1 pt) on the cross axis,
+/// in the same writing direction.
+fn baseline_matches(cluster: (f64, f64, &(f64, f64)), glyph: (f64, f64, &(f64, f64))) -> bool {
+    let tol = cluster.1.max(glyph.1).max(1.0) * LINE_TOL_FRAC;
+    (cluster.0 - glyph.0).abs() <= tol + LINE_BASELINE_EPSILON && dir_matches(cluster.2, glyph.2)
+}
+
+/// Maps a float to a `u64` with the same total order (for the ordered index).
+fn ordered_bits(x: f64) -> u64 {
+    let bits = x.to_bits();
+    if bits >> 63 == 1 {
+        !bits
+    } else {
+        bits | (1 << 63)
+    }
 }
 
 fn line_from_run(mut run: Vec<usize>, dev: &[DevGlyph], inhibit_spaces: bool) -> Line {
@@ -1053,7 +1122,13 @@ fn reattach_fragment_runs(runs: &mut Vec<Vec<usize>>, dev: &[DevGlyph]) {
         }
     }
     let mut merge_into: Vec<Option<usize>> = vec![None; n];
+    // The host search is O(runs² × host length); past `MAX_REATTACH_WORK`
+    // (far beyond any real page) the remaining fragments stay where they are.
+    let mut work: u64 = 0;
     for a in 0..n {
+        if work > MAX_REATTACH_WORK {
+            break;
+        }
         if runs[a].is_empty() {
             continue;
         }
@@ -1064,6 +1139,7 @@ fn reattach_fragment_runs(runs: &mut Vec<Vec<usize>>, dev: &[DevGlyph]) {
         let a_mid = (x0[a] + x1[a]) * 0.5;
         let mut best: Option<(usize, f64)> = None;
         for b in 0..n {
+            work += 1;
             if b == a || runs[b].is_empty() || merge_into[b].is_some() {
                 continue;
             }
@@ -1080,6 +1156,7 @@ fn reattach_fragment_runs(runs: &mut Vec<Vec<usize>>, dev: &[DevGlyph]) {
             // x-contained in a wider line would x-overlap that line's glyphs (no
             // gap), so it is never pulled in. This is the discriminator that height-
             // ratio could not provide (a `Ts`-raised full-size digit is not shorter).
+            work += runs[b].len() as u64;
             if runs[b].iter().any(|&i| {
                 let gb = dev[i].bbox.normalize();
                 gb.x0 <= a_mid && a_mid <= gb.x1
@@ -1120,6 +1197,10 @@ fn reattach_fragment_runs(runs: &mut Vec<Vec<usize>>, dev: &[DevGlyph]) {
         }
     }
 }
+
+/// Work bound for [`reattach_fragment_runs`] (host candidates + host glyphs
+/// examined). Real pages need well under 10⁷.
+const MAX_REATTACH_WORK: u64 = 1_000_000_000;
 
 /// Separates a column run into its **distinct baselines**, returning each as its
 /// own advance-ordered sub-run (top baseline first).
@@ -1253,7 +1334,7 @@ fn detect_page_gutters(runs: &[Vec<usize>], dev: &[DevGlyph]) -> Vec<Gutter> {
             n_glyphs += 1;
         }
     }
-    if n_lines < 4 || n_glyphs < 16 || rx1 <= rx0 {
+    if n_lines < 4 || n_glyphs < 16 || rx1 <= rx0 || !(rx1 - rx0).is_finite() {
         return Vec::new();
     }
     let typ_size = (size_sum / n_glyphs as f64).max(1.0);
@@ -1261,12 +1342,17 @@ fn detect_page_gutters(runs: &[Vec<usize>], dev: &[DevGlyph]) -> Vec<Gutter> {
 
     // Per-x glyph-occupancy histogram (1pt bins): how many lines have a glyph over
     // each x. Space glyphs count, so a column stays high across its whole width.
-    let bin_w = 1.0_f64;
-    let nbins = ((region_w / bin_w).ceil() as usize).max(1);
+    // The bin count follows the glyph extent, which content controls (a huge
+    // `Tz`/`Tm`/font size makes it astronomically wide), so it is capped: a wider
+    // region gets proportionally wider bins. Real pages never reach the cap.
+    let (nbins, bin_w) = gutter_bins(region_w);
     let bin_of = |x: f64| -> usize {
         (((x - rx0) / bin_w).floor() as isize).clamp(0, nbins as isize - 1) as usize
     };
-    let mut occ = vec![0u32; nbins];
+    // Accumulate each glyph's `[lo, hi]` bin span through a difference array, so
+    // the cost is O(glyphs + bins) however wide a glyph is (same counts as
+    // incrementing every covered bin).
+    let mut delta = vec![0i64; nbins + 1];
     for idxs in runs {
         if idxs.is_empty() || dev[idxs[0]].wmode == 1 {
             continue;
@@ -1277,10 +1363,15 @@ fn detect_page_gutters(runs: &[Vec<usize>], dev: &[DevGlyph]) -> Vec<Gutter> {
                 continue;
             }
             let (lo, hi) = (bin_of(b.x0), bin_of(b.x1));
-            for c in occ.iter_mut().take(hi + 1).skip(lo) {
-                *c += 1;
-            }
+            delta[lo] += 1;
+            delta[hi + 1] -= 1;
         }
+    }
+    let mut occ = vec![0u32; nbins];
+    let mut running = 0i64;
+    for (c, d) in occ.iter_mut().zip(&delta) {
+        running += d;
+        *c = u32::try_from(running).unwrap_or(u32::MAX);
     }
 
     // Typical column occupancy = median of the populated bins (robust to gutters
@@ -1393,6 +1484,19 @@ fn detect_page_gutters(runs: &[Vec<usize>], dev: &[DevGlyph]) -> Vec<Gutter> {
     }
     gutters.sort_by(|a, b| a.mid().total_cmp(&b.mid()));
     gutters
+}
+
+/// The gutter histogram's `(bin count, bin width)` for a region `region_w` pt
+/// wide: 1 pt bins, or — past [`MAX_GUTTER_BINS`] — that many proportionally
+/// wider bins.
+fn gutter_bins(region_w: f64) -> (usize, f64) {
+    let bin_w = 1.0_f64;
+    let nbins = ((region_w / bin_w).ceil() as usize).max(1);
+    if nbins > MAX_GUTTER_BINS {
+        (MAX_GUTTER_BINS, region_w / MAX_GUTTER_BINS as f64)
+    } else {
+        (nbins, bin_w)
+    }
 }
 
 /// Only an isolated, strictly horizontal top band may suppress a false word-gap
@@ -3669,6 +3773,20 @@ mod tests {
     /// The index of the first block whose joined text contains `needle`.
     fn find(texts: &[String], needle: &str) -> Option<usize> {
         texts.iter().position(|t| t.contains(needle))
+    }
+
+    /// The gutter histogram keeps 1 pt bins for any real page and caps the bin
+    /// count (proportionally wider bins) for content-inflated extents.
+    #[test]
+    fn gutter_bins_are_capped_for_astronomical_extents() {
+        assert_eq!(gutter_bins(612.0), (612, 1.0));
+        assert_eq!(gutter_bins(14_400.5), (14_401, 1.0));
+        assert_eq!(gutter_bins(0.2), (1, 1.0));
+        for w in [1e8, 6.5e4 * 1e3, 1e30, f64::MAX] {
+            let (n, bw) = gutter_bins(w);
+            assert_eq!(n, MAX_GUTTER_BINS, "{w}");
+            assert!((bw * n as f64 - w).abs() <= w * 1e-12, "{w}");
+        }
     }
 
     // A US-Letter page.
