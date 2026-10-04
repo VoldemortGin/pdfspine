@@ -7,14 +7,16 @@ publish = false
 
 # cargo-fuzz target crate. Excluded from the main workspace (see root
 # Cargo.toml): it requires the nightly toolchain and `libfuzzer-sys`. Drive it
-# with `cargo +nightly fuzz run <target>`. Real targets land in M1
-# (fuzz_open / fuzz_lexer / fuzz_xref / per-filter, PRD §9.6).
+# with `cargo +nightly fuzz run <target>`; `.github/workflows/fuzz.yml` runs
+# every target daily (PRD §9.6).
 [package.metadata]
 cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
 pdf-core = { path = "../crates/pdf-core" }
+pdf-text = { path = "../crates/pdf-text" }
+pdf-fonts = { path = "../crates/pdf-fonts" }
 
 [[bin]]
 name = "fuzz_geom"
@@ -34,6 +36,30 @@ bench = false
 [[bin]]
 name = "fuzz_repair"
 path = "fuzz_targets/fuzz_repair.rs"
+test = false
+doc = false
+bench = false
+
+# Content stream → tokenize → interpret → TextPage → table detection.
+[[bin]]
+name = "fuzz_content"
+path = "fuzz_targets/fuzz_content.rs"
+test = false
+doc = false
+bench = false
+
+# Every stream decoder, predictor and short filter chains.
+[[bin]]
+name = "fuzz_filters"
+path = "fuzz_targets/fuzz_filters.rs"
+test = false
+doc = false
+bench = false
+
+# Embedded CMap / ToUnicode programs.
+[[bin]]
+name = "fuzz_cmap"
+path = "fuzz_targets/fuzz_cmap.rs"
 test = false
 doc = false
 bench = false

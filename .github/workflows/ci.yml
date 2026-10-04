@@ -187,7 +187,11 @@ jobs:
   fuzz-smoke:
     name: fuzz-smoke (nightly, mmap:Never)
     runs-on: ubuntu-latest
-    # Allowed-fail in M0 (only the placeholder geom target exists).
+    # A 60 s smoke per target (fuzz_open, fuzz_repair, fuzz_geom, fuzz_content,
+    # fuzz_filters, fuzz_cmap). Still allowed-fail: libFuzzer timing on shared
+    # runners is noisy; the daily `fuzz` workflow (.github/workflows/fuzz.yml)
+    # runs every target for 10 minutes with a persisted corpus and fails on a
+    # crash.
     continue-on-error: true
     env:
       PDFSPINE_MMAP: never
@@ -202,7 +206,7 @@ jobs:
         run: |
           for target in $(cargo +nightly fuzz list); do
             echo "::group::fuzz $target"
-            cargo +nightly fuzz run "$target" -- -max_total_time=60 -rss_limit_mb=2048
+            cargo +nightly fuzz run "$target" -- -max_total_time=60 -rss_limit_mb=2048 -max_len=65536
             echo "::endgroup::"
           done
 

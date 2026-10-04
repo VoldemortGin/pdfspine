@@ -1,0 +1,111 @@
+# Daily cargo-fuzz run over the untrusted-input surfaces: document open /
+# repair (pdf-core), content streams through interpretation, layout and table
+# detection (pdf-text), every stream filter (pdf-core) and CMap programs
+# (pdf-fonts). Deliberately NOT part of ci.yml (nightly-only, time-boxed,
+# non-deterministic); ci.yml keeps a 60 s per-target smoke.
+#
+# The corpus persists across runs through actions/cache (restored from the
+# newest previous run, saved under this run's id). Seeds are the born-digital
+# fixtures (fixtures/born) plus a few content / CMap snippets written below —
+# no binary seeds are committed. On a crash the artifacts are uploaded and the
+# job fails. Reproduce locally with
+#   cargo +nightly fuzz run <target> fuzz/artifacts/<target>/<crash-file>
+
+name: fuzz
+
+on:
+  schedule:
+    - cron: "41 3 * * *"
+  workflow_dispatch:
+    inputs:
+      seconds:
+        description: "max_total_time per target (seconds)"
+        default: "600"
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  # The never-panic gate measures our code, not OS mmap faults (PRD §9.6.1).
+  PDFSPINE_MMAP: never
+
+jobs:
+  fuzz:
+    name: fuzz (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # -max_len large enough for deep `[` / `<<` runs, long xref chains
+          # and Form fan-out shells to be reachable.
+          - target: fuzz_open
+            max_len: 1048576
+          - target: fuzz_repair
+            max_len: 1048576
+          - target: fuzz_content
+            max_len: 65536
+          - target: fuzz_filters
+            max_len: 65536
+          - target: fuzz_cmap
+            max_len: 65536
+          - target: fuzz_geom
+            max_len: 4096
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: fuzz
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --locked
+      - name: Restore corpus
+        uses: actions/cache/restore@v4
+        with:
+          path: fuzz/corpus/${{ matrix.target }}
+          key: fuzz-corpus-${{ matrix.target }}-${{ github.run_id }}
+          restore-keys: fuzz-corpus-${{ matrix.target }}-
+      - name: Seed corpus
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          dir="fuzz/corpus/$TARGET"
+          mkdir -p "$dir"
+          case "$TARGET" in
+            fuzz_open|fuzz_repair)
+              cp fixtures/born/*.pdf "$dir/" ;;
+            fuzz_content)
+              printf 'BT /F1 12 Tf 72 720 Td (Hello) Tj ET' > "$dir/seed-text"
+              printf 'q 1 0 0 1 10 10 cm /X0 Do Q' > "$dir/seed-form"
+              printf '0.5 w 50 100 m 50 700 l S 50 100 m 500 100 l S 50 100 450 600 re S' > "$dir/seed-rules"
+              printf 'BT /F1 12 Tf 150 Tz 2 Tc 1 Tw 14 TL 5 Ts [(A) -120 (B)] TJ T* (C) Tj ET' > "$dir/seed-textstate"
+              printf 'BI /W 2 /H 2 /BPC 8 /CS /G ID \x00\xff\xff\x00 EI' > "$dir/seed-inline" ;;
+            fuzz_filters)
+              printf '\x01\x00\x00x\x9c\x03\x00\x00\x00\x00\x01' > "$dir/seed-flate-empty"
+              printf '\x02\x00\x0048656c6c6f>' > "$dir/seed-ahx" ;;
+            fuzz_cmap)
+              printf '1 begincodespacerange <0000> <FFFF> endcodespacerange\n1 beginbfrange <0020> <007E> <0020> endbfrange\n1 begincidrange <0000> <FFFF> 0 endcidrange\n' > "$dir/seed-cmap" ;;
+          esac
+      - name: Fuzz ${{ matrix.target }}
+        run: >
+          cargo +nightly fuzz run ${{ matrix.target }} --
+          -max_total_time=${{ github.event.inputs.seconds || '600' }}
+          -max_len=${{ matrix.max_len }}
+          -rss_limit_mb=2048
+          -timeout=60
+        working-directory: fuzz
+      - name: Save corpus
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: fuzz/corpus/${{ matrix.target }}
+          key: fuzz-corpus-${{ matrix.target }}-${{ github.run_id }}
+      - name: Upload crash artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-artifacts-${{ matrix.target }}
+          path: fuzz/artifacts/${{ matrix.target }}
+          if-no-files-found: ignore

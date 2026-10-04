@@ -11,6 +11,18 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
+### Added
+
+- Fuzzing covers the content, filter and CMap layers: new `fuzz_content`
+  (content bytes in a minimal PDF shell → tokenize → interpret → TextPage →
+  tables), `fuzz_filters` (every decoder, predictors, chains) and `fuzz_cmap`
+  targets, and a daily `fuzz` workflow (`.github/workflows/fuzz.yml`) over all
+  six targets with a corpus persisted through `actions/cache` (seeds from
+  `fixtures/born`) and `-max_len` large enough for deep nesting; the CI smoke
+  passes `-max_len=65536`. The reproducers for the bounds listed under
+  Fixed are ordinary `cargo test` regression tests that rebuild their inputs
+  in code.
+
 ### Fixed
 
 - **Deep syntactic nesting no longer overflows the stack.** The object parser
