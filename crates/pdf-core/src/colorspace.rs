@@ -492,31 +492,75 @@ fn index_to_rgb(base: &ColorSpace, hival: usize, lookup: &[u8], index: usize) ->
     base.to_rgb8(&comps)
 }
 
+/// Maximum nesting of function definitions (a type-3 stitching function whose
+/// `/Functions` hold further stitching functions). Real shadings nest one or
+/// two levels; the cap stops a self-referencing `/Functions` entry from
+/// recursing until the stack overflows.
+const MAX_FUNCTION_DEPTH: u32 = 16;
+
+/// Maximum number of function definitions parsed for one top-level
+/// `/Function`. A stitching function shared many times through references
+/// (a DAG) would otherwise expand exponentially; real gradients have at most a
+/// few hundred stops.
+const MAX_FUNCTION_NODES: u32 = 4096;
+
+/// Recursion state for one [`parse_function`] call.
+struct FunctionBudget {
+    depth: u32,
+    nodes_left: u32,
+}
+
 /// Parses a `/Function` object (dict, stream, or array of single-output
 /// functions) into a [`PdfFunction`]. Types 0/2/3; type 4 (PostScript) is
-/// deferred (`None`).
+/// deferred (`None`). A definition nested deeper than [`MAX_FUNCTION_DEPTH`]
+/// or past [`MAX_FUNCTION_NODES`] parses as `None` (malformed).
 #[must_use]
 pub fn parse_function(doc: &DocumentStore, obj: &Object) -> Option<PdfFunction> {
-    let obj = resolve_obj(doc, obj)?;
-    match obj.as_ref() {
-        Object::Array(arr) => combine_function_array(doc, arr),
-        Object::Dictionary(d) => function_from_dict(doc, d, None),
+    let mut budget = FunctionBudget {
+        depth: 0,
+        nodes_left: MAX_FUNCTION_NODES,
+    };
+    parse_function_in(doc, obj, &mut budget)
+}
+
+fn parse_function_in(
+    doc: &DocumentStore,
+    obj: &Object,
+    budget: &mut FunctionBudget,
+) -> Option<PdfFunction> {
+    if budget.depth >= MAX_FUNCTION_DEPTH || budget.nodes_left == 0 {
+        return None;
+    }
+    budget.nodes_left -= 1;
+    budget.depth += 1;
+    let out = resolve_obj(doc, obj).and_then(|obj| match obj.as_ref() {
+        Object::Array(arr) => combine_function_array(doc, arr, budget),
+        Object::Dictionary(d) => function_from_dict(doc, d, None, budget),
         Object::Stream(s) => {
             let data = doc.decode_stream(s).and_then(|o| o.into_decoded()).ok();
-            function_from_dict(doc, &s.dict, data.as_deref())
+            function_from_dict(doc, &s.dict, data.as_deref(), budget)
         }
         _ => None,
-    }
+    });
+    budget.depth -= 1;
+    out
 }
 
 /// Combines an array of single-output `/Function`s (e.g. `[f_r f_g f_b]`) into
 /// one multi-output [`PdfFunction`]. Merges a vector of type-2 exponentials into
 /// one (concatenated outputs); else takes the first.
-fn combine_function_array(doc: &DocumentStore, arr: &[Object]) -> Option<PdfFunction> {
+fn combine_function_array(
+    doc: &DocumentStore,
+    arr: &[Object],
+    budget: &mut FunctionBudget,
+) -> Option<PdfFunction> {
     if arr.is_empty() {
         return None;
     }
-    let funcs: Vec<PdfFunction> = arr.iter().filter_map(|o| parse_function(doc, o)).collect();
+    let funcs: Vec<PdfFunction> = arr
+        .iter()
+        .filter_map(|o| parse_function_in(doc, o, budget))
+        .collect();
     if funcs.is_empty() {
         return None;
     }
@@ -550,7 +594,12 @@ fn combine_function_array(doc: &DocumentStore, arr: &[Object]) -> Option<PdfFunc
 
 /// Builds a [`PdfFunction`] from a function dict + optional decoded stream data
 /// (for a type-0 sampled function). `None` for type 4 or a malformed dict.
-fn function_from_dict(doc: &DocumentStore, d: &Dict, data: Option<&[u8]>) -> Option<PdfFunction> {
+fn function_from_dict(
+    doc: &DocumentStore,
+    d: &Dict,
+    data: Option<&[u8]>,
+    budget: &mut FunctionBudget,
+) -> Option<PdfFunction> {
     let ftype = d.get(&Name::new("FunctionType")).and_then(Object::as_i64)?;
     match ftype {
         2 => {
@@ -566,8 +615,10 @@ fn function_from_dict(doc: &DocumentStore, d: &Dict, data: Option<&[u8]>) -> Opt
         3 => {
             let domain = read_pair(d, "Domain").unwrap_or([0.0, 1.0]);
             let sub = d.get(&Name::new("Functions")).and_then(Object::as_array)?;
-            let functions: Vec<PdfFunction> =
-                sub.iter().filter_map(|o| parse_function(doc, o)).collect();
+            let functions: Vec<PdfFunction> = sub
+                .iter()
+                .filter_map(|o| parse_function_in(doc, o, budget))
+                .collect();
             if functions.is_empty() {
                 return None;
             }

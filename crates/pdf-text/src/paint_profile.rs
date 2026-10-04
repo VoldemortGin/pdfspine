@@ -316,6 +316,7 @@ impl Builder<'_> {
                 TokenIssueKind::UnterminatedArray => "unterminated_array",
                 TokenIssueKind::UnterminatedDictionary => "unterminated_dictionary",
                 TokenIssueKind::MissingDictionaryValue => "missing_dictionary_value",
+                TokenIssueKind::NestingTooDeep => "content_nesting_too_deep",
             };
             self.diagnostic(code, scope_id, None);
         }

@@ -6,8 +6,9 @@
 
 use bytes::Bytes;
 
-use crate::error::{Error, Result};
+use crate::error::{Error, LimitKind, Result};
 use crate::lexer::{is_whitespace, Keyword, Lexer, Token};
+use crate::limits::Limits;
 
 use super::{Dict, Name, ObjRef, Object, PdfString, StreamObj};
 
@@ -18,16 +19,20 @@ pub struct Parser<'a> {
     /// buffer) — captured for the lazy source-backed (`Raw`) path so the
     /// `DocumentStore` can record `(offset, len)` instead of copying the body.
     last_stream_body: Option<(usize, usize)>,
+    /// Current array/dict nesting depth (0 at the top level).
+    depth: u32,
+    /// Maximum array/dict nesting depth ([`Limits::max_recursion_depth`],
+    /// PRD §9.6.2). Parsing is recursive descent, so without this cap a run of
+    /// `[` / `<<` in the input recurses once per byte and overflows the stack
+    /// (a process abort no `catch_unwind` can contain).
+    max_depth: u32,
 }
 
 impl<'a> Parser<'a> {
     /// Creates a parser over `buf`.
     #[must_use]
     pub fn new(buf: &'a [u8]) -> Self {
-        Parser {
-            lexer: Lexer::new(buf),
-            last_stream_body: None,
-        }
+        Self::from_lexer(Lexer::new(buf))
     }
 
     /// Creates a parser from an existing lexer (sharing position).
@@ -36,7 +41,18 @@ impl<'a> Parser<'a> {
         Parser {
             lexer,
             last_stream_body: None,
+            depth: 0,
+            max_depth: Limits::DEFAULT.max_recursion_depth,
         }
+    }
+
+    /// Returns the parser with its array/dict nesting cap overridden (default
+    /// [`Limits::DEFAULT`]`.max_recursion_depth`). Nesting deeper than `max`
+    /// yields [`Error::LimitExceeded`]`(`[`LimitKind::RecursionDepth`]`)`.
+    #[must_use]
+    pub fn with_max_depth(mut self, max: u32) -> Self {
+        self.max_depth = max;
+        self
     }
 
     /// The `(start, len)` byte range, **within the parse buffer**, of the most
@@ -72,8 +88,8 @@ impl<'a> Parser<'a> {
             Token::LiteralString(b) => Ok(Object::String(PdfString::literal(b))),
             Token::HexString(b) => Ok(Object::String(PdfString::hex(b))),
             Token::Name(b) => Ok(Object::Name(Name::from_decoded(b))),
-            Token::ArrayOpen => self.parse_array(),
-            Token::DictOpen => self.parse_dict_or_stream(),
+            Token::ArrayOpen => self.nested(Self::parse_array),
+            Token::DictOpen => self.nested(Self::parse_dict_or_stream),
             Token::Keyword(Keyword::True) => Ok(Object::Boolean(true)),
             Token::Keyword(Keyword::False) => Ok(Object::Boolean(false)),
             Token::Keyword(Keyword::Null) => Ok(Object::Null),
@@ -87,6 +103,19 @@ impl<'a> Parser<'a> {
                 "unexpected keyword where object expected",
             )),
         }
+    }
+
+    /// Runs one array/dict (or nested indirect-object) body one nesting level
+    /// deeper, refusing to exceed `max_depth` (the recursion guard for `[` /
+    /// `<<` runs).
+    fn nested(&mut self, body: impl FnOnce(&mut Self) -> Result<Object>) -> Result<Object> {
+        if self.depth >= self.max_depth {
+            return Err(Error::LimitExceeded(LimitKind::RecursionDepth));
+        }
+        self.depth += 1;
+        let out = body(self);
+        self.depth -= 1;
+        out
     }
 
     /// After reading an integer, look ahead for `G R` (reference) or `G obj`
@@ -103,8 +132,9 @@ impl<'a> Parser<'a> {
                         Ok(Object::Reference(ObjRef::new(first as u32, gen as u16)))
                     }
                     Token::Keyword(Keyword::Obj) => {
+                        // A nested `N G obj` recurses too (`1 0 obj 1 0 obj …`).
                         let r = ObjRef::new(first as u32, gen as u16);
-                        self.parse_indirect_body(r).map(|(_, obj)| obj)
+                        self.nested(|p| p.parse_indirect_body(r).map(|(_, obj)| obj))
                     }
                     _ => {
                         // Not a ref/obj: the integer was a plain integer.

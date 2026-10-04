@@ -103,7 +103,8 @@ pub fn resolve_named(
         if let Some(nd) = names.as_dict() {
             if let Some(dests_tree) = nd.get(&Name::new("Dests")) {
                 let root = deref(doc, dests_tree);
-                if let Some(v) = name_tree_lookup(doc, &root, name, 0) {
+                let mut visited = std::collections::HashSet::new();
+                if let Some(v) = name_tree_lookup(doc, &root, name, 0, &mut visited) {
                     return dest_value_to_page(doc, &v, pages);
                 }
             }
@@ -158,7 +159,8 @@ pub fn resolve_names(doc: &DocumentStore) -> Vec<(String, ResolvedName)> {
         if let Some(nd) = names.as_dict() {
             if let Some(dests_tree) = nd.get(&Name::new("Dests")) {
                 let root = deref(doc, dests_tree);
-                name_tree_collect(doc, &root, &pages, 0, &mut out);
+                let mut visited = std::collections::HashSet::new();
+                name_tree_collect(doc, &root, &pages, 0, &mut visited, &mut out);
             }
         }
     }
@@ -171,6 +173,7 @@ fn name_tree_collect(
     node: &Object,
     pages: &HashMap<u32, usize>,
     depth: usize,
+    visited: &mut std::collections::HashSet<u32>,
     out: &mut Vec<(String, ResolvedName)>,
 ) {
     if depth > 50 {
@@ -197,8 +200,13 @@ fn name_tree_collect(
         let kids = deref(doc, kids);
         if let Some(arr) = kids.as_array() {
             for kid in arr {
+                // A kid already walked (a `/Kids` cycle or shared subtree) is
+                // skipped: the depth cap alone still allows exponential re-walks.
+                if kid.as_reference().is_some_and(|r| !visited.insert(r.num)) {
+                    continue;
+                }
                 let kid = deref(doc, kid);
-                name_tree_collect(doc, &kid, pages, depth + 1, out);
+                name_tree_collect(doc, &kid, pages, depth + 1, visited, out);
             }
         }
     }
@@ -297,6 +305,7 @@ fn name_tree_lookup(
     node: &Object,
     key: &[u8],
     depth: usize,
+    visited: &mut std::collections::HashSet<u32>,
 ) -> Option<Object> {
     if depth > 50 {
         return None;
@@ -324,6 +333,10 @@ fn name_tree_lookup(
         let kids = deref(doc, kids);
         if let Some(arr) = kids.as_array() {
             for kid in arr {
+                // Skip a kid already walked (cycle / shared subtree).
+                if kid.as_reference().is_some_and(|r| !visited.insert(r.num)) {
+                    continue;
+                }
                 let kid = deref(doc, kid);
                 if let Some(kd) = kid.as_dict() {
                     let in_range = match kd.get(&Name::new("Limits")) {
@@ -334,7 +347,7 @@ fn name_tree_lookup(
                         None => true,
                     };
                     if in_range {
-                        if let Some(v) = name_tree_lookup(doc, &kid, key, depth + 1) {
+                        if let Some(v) = name_tree_lookup(doc, &kid, key, depth + 1, visited) {
                             return Some(v);
                         }
                     }

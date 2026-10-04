@@ -44,7 +44,8 @@ pub(crate) fn parse_xref_stream_at(
         .get(off..)
         .ok_or_else(|| Error::xref(off, "xref stream offset past end of file"))?;
 
-    let mut parser = Parser::from_lexer(Lexer::new(tail));
+    let mut parser =
+        Parser::from_lexer(Lexer::new(tail)).with_max_depth(limits.max_recursion_depth);
     let (_r, obj) = parser
         .parse_indirect_object()
         .map_err(|_| Error::xref(off, "malformed xref stream object"))?;

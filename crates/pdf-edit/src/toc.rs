@@ -6,7 +6,7 @@
 //! (Count/First/Last/Next/Prev/Parent, `/Dest` to a page) from such a flat list,
 //! **rejecting level jumps** (e.g. 1→3) with a typed error.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use pdf_core::object::Name;
 use pdf_core::{Dict, DocumentStore, ObjRef, Object, PdfString, StringKind};
@@ -55,17 +55,20 @@ pub fn get_outline(doc: &DocumentStore) -> Option<OutlineNode> {
     let od = outlines.as_dict()?;
     let first = od.get(&Name::new("First")).and_then(Object::as_reference)?;
     let pages = page_index_map(doc);
-    build_outline(doc, first, &pages, 0).map(|b| *b)
+    build_outline(doc, first, &pages, 0, &mut HashSet::new()).map(|b| *b)
 }
 
 /// Builds the [`OutlineNode`] at `r`, following `/Next` and recursing `/First`.
+/// `visited` stops a `/First` / `/Next` cycle or shared item: the depth cap alone
+/// still lets a self-referencing item expand into 2^200 nodes.
 fn build_outline(
     doc: &DocumentStore,
     r: ObjRef,
     pages: &HashMap<u32, usize>,
     depth: usize,
+    visited: &mut HashSet<u32>,
 ) -> Option<Box<OutlineNode>> {
-    if depth > 200 {
+    if depth > 200 || !visited.insert(r.num) {
         return None;
     }
     let item = doc.resolve(r).ok()?;
@@ -87,11 +90,11 @@ fn build_outline(
     let down = d
         .get(&Name::new("First"))
         .and_then(Object::as_reference)
-        .and_then(|c| build_outline(doc, c, pages, depth + 1));
+        .and_then(|c| build_outline(doc, c, pages, depth + 1, visited));
     let next = d
         .get(&Name::new("Next"))
         .and_then(Object::as_reference)
-        .and_then(|n| build_outline(doc, n, pages, depth + 1));
+        .and_then(|n| build_outline(doc, n, pages, depth + 1, visited));
 
     Some(Box::new(OutlineNode {
         title,
@@ -201,11 +204,13 @@ pub fn get_toc(doc: &DocumentStore) -> Vec<TocEntry> {
         return out;
     };
     let pages = page_index_map(doc);
-    walk_siblings(doc, first, 1, &pages, &mut out, 0);
+    walk_siblings(doc, first, 1, &pages, &mut out, 0, &mut HashSet::new());
     out
 }
 
 /// Follows the `/Next` chain at one level, recursing into `/First` children.
+/// An item already listed (a `/First` / `/Next` cycle or shared item) ends its
+/// chain: the depth and sibling caps alone still allow exponential re-walks.
 fn walk_siblings(
     doc: &DocumentStore,
     start: ObjRef,
@@ -213,6 +218,7 @@ fn walk_siblings(
     pages: &HashMap<u32, usize>,
     out: &mut Vec<TocEntry>,
     depth: usize,
+    visited: &mut HashSet<u32>,
 ) {
     if depth > 200 {
         return;
@@ -221,7 +227,7 @@ fn walk_siblings(
     let mut guard = 0usize;
     while let Some(r) = cur {
         guard += 1;
-        if guard > 100_000 {
+        if guard > 100_000 || !visited.insert(r.num) {
             break;
         }
         let Ok(item) = doc.resolve(r) else { break };
@@ -236,7 +242,7 @@ fn walk_siblings(
         out.push(TocEntry { level, title, page });
 
         if let Some(child) = d.get(&Name::new("First")).and_then(Object::as_reference) {
-            walk_siblings(doc, child, level + 1, pages, out, depth + 1);
+            walk_siblings(doc, child, level + 1, pages, out, depth + 1, visited);
         }
         cur = d.get(&Name::new("Next")).and_then(Object::as_reference);
     }

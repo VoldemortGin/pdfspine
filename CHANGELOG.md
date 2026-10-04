@@ -11,6 +11,29 @@ feature-complete, but the public API and on-disk formats may still change.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Deep syntactic nesting no longer overflows the stack.** The object parser
+  and the content-stream tokenizer descended once per `[` / `<<`, so ~20 000
+  `[` in an object body (`DocumentStore` open / object load) or ~100 000 in a
+  content stream (`get_text`, rendering, …) aborted the whole process with a
+  stack overflow — something no `catch_unwind` (ADR 0006) can contain. Array /
+  dictionary (and folded `N G obj`) nesting is now capped at `Limits::max_recursion_depth` (256, the
+  pinned PRD §9.6.2 default that already documented "dict/array nesting"):
+  past it the object parser returns `LimitExceeded(RecursionDepth)` (the object
+  is unreadable, the rest of the document still opens; `Parser::with_max_depth`
+  overrides the cap), and the content tokenizer skips the over-deep operand,
+  records a `NestingTooDeep` token issue (`content_nesting_too_deep` in
+  `Page.get_paint_profile()` diagnostics) and keeps interpreting. Other
+  content-driven recursion is bounded as well: self-referencing / shared
+  stitching functions (`/FunctionType 3`, depth 16 and 4096 definitions per
+  function), shared `/VE` visibility expressions (1024 nodes), Type 1
+  `callsubr` (64 levels) and `seac` (4 levels) in the renderer, the XY-cut
+  region partition (64 levels), and outline, name-tree and number-tree walks
+  (`get_toc`, `Document.outline`, named destinations, embedded files, page
+  labels), which now visit each node once — a self-referencing outline item
+  used to expand into ~2^200 entries.
+
 ## [0.12.0] — 2026-10-03
 
 ### Added

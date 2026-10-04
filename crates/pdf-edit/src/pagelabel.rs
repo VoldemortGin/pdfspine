@@ -155,14 +155,20 @@ fn read_ranges(doc: &DocumentStore) -> Vec<LabelRange> {
         return out;
     };
     let pl = deref(doc, pl);
-    collect_nums(doc, &pl, &mut out, 0);
+    collect_nums(doc, &pl, &mut out, 0, &mut std::collections::HashSet::new());
     out.sort_by_key(|r| r.start_page);
     out
 }
 
 /// Walks a number tree (`/Nums` leaf pairs or `/Kids` branches), pushing label
 /// ranges. Depth-guarded.
-fn collect_nums(doc: &DocumentStore, node: &Object, out: &mut Vec<LabelRange>, depth: usize) {
+fn collect_nums(
+    doc: &DocumentStore,
+    node: &Object,
+    out: &mut Vec<LabelRange>,
+    depth: usize,
+    visited: &mut std::collections::HashSet<u32>,
+) {
     if depth > 50 {
         return;
     }
@@ -190,8 +196,12 @@ fn collect_nums(doc: &DocumentStore, node: &Object, out: &mut Vec<LabelRange>, d
         let kids = deref(doc, kids);
         if let Some(arr) = kids.as_array() {
             for kid in arr {
+                // Skip a kid already walked (cycle / shared subtree).
+                if kid.as_reference().is_some_and(|r| !visited.insert(r.num)) {
+                    continue;
+                }
                 let kid = deref(doc, kid);
-                collect_nums(doc, &kid, out, depth + 1);
+                collect_nums(doc, &kid, out, depth + 1, visited);
             }
         }
     }

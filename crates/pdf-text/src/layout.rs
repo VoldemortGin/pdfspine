@@ -165,6 +165,13 @@ const TABLE_GRID_MIN_CELL_GAP_FRAC: f64 = 6.0;
 /// into row bands and destroy column-major reading order.
 const REGION_BAND_GAP_FRAC: f64 = 1.3;
 
+/// Recursion cap for the XY-cut region partition ([`cut_lines`] /
+/// [`cut_column_subtree`]). Each level needs a real band or column split, so
+/// real pages stay within a handful of levels; a crafted nested layout could
+/// otherwise recurse once per line and exhaust the stack. A region reaching
+/// the cap is emitted whole, as when no clean cut exists.
+const MAX_XY_CUT_DEPTH: u32 = 64;
+
 // === public API ===========================================================
 
 /// Builds a [`TextPage`] for a page: runs the interpreter, applies the page
@@ -2221,7 +2228,7 @@ fn group_blocks_columned(lines: Vec<Line>, width: f64, height: f64) -> Vec<Block
     if is_table_dominant(&lines) {
         regions.push(idxs);
     } else {
-        cut_lines(&lines, &idxs, width, height, &mut regions);
+        cut_lines(&lines, &idxs, width, height, 0, &mut regions);
     }
 
     // Regions come out of the XY-cut in reading order — bands top to bottom,
@@ -2583,8 +2590,15 @@ fn line_starts_with_plausible_bullet(line: &Line) -> bool {
 /// each band recurses. Regions are emitted in geometric reading order (bands top
 /// before bottom, columns left before right), which [`group_blocks_columned`]
 /// keeps.
-fn cut_lines(lines: &[Line], idxs: &[usize], width: f64, height: f64, out: &mut Vec<Vec<usize>>) {
-    if idxs.len() <= 1 {
+fn cut_lines(
+    lines: &[Line],
+    idxs: &[usize],
+    width: f64,
+    height: f64,
+    depth: u32,
+    out: &mut Vec<Vec<usize>>,
+) {
+    if idxs.len() <= 1 || depth >= MAX_XY_CUT_DEPTH {
         if !idxs.is_empty() {
             out.push(idxs.to_vec());
         }
@@ -2597,7 +2611,16 @@ fn cut_lines(lines: &[Line], idxs: &[usize], width: f64, height: f64, out: &mut 
         // regions. Paragraph grouping still performs its fine 1.5x splits
         // inside each atomic column. Nested X-cuts remain supported for
         // three-or-more columns.
-        emit_column_cut(lines, &left, &right, &spanning, width, height, out);
+        emit_column_cut(
+            lines,
+            &left,
+            &right,
+            &spanning,
+            width,
+            height,
+            depth + 1,
+            out,
+        );
         return;
     }
 
@@ -2612,12 +2635,12 @@ fn cut_lines(lines: &[Line], idxs: &[usize], width: f64, height: f64, out: &mut 
             let mut pending = Vec::new();
             for group in groups {
                 if !pending.is_empty() && !same_body_columns(lines, &pending, &group) {
-                    cut_lines(lines, &pending, width, height, out);
+                    cut_lines(lines, &pending, width, height, depth + 1, out);
                     pending.clear();
                 }
                 pending.extend(group);
             }
-            cut_lines(lines, &pending, width, height, out);
+            cut_lines(lines, &pending, width, height, depth + 1, out);
         }
         return;
     }
@@ -2680,6 +2703,7 @@ fn same_body_columns(lines: &[Line], above: &[usize], below: &[usize]) -> bool {
 /// Otherwise (float semantics) the bands no column line lies above come first,
 /// the bands no column line lies below come last, and every other band sits
 /// between the whole left column subtree and the whole right one.
+#[allow(clippy::too_many_arguments)]
 fn emit_column_cut(
     lines: &[Line],
     left: &[usize],
@@ -2687,14 +2711,15 @@ fn emit_column_cut(
     spanning: &[usize],
     width: f64,
     height: f64,
+    depth: u32,
     out: &mut Vec<Vec<usize>>,
 ) {
     if spanning.is_empty() {
         if emit_label_value_rows(lines, left, right, out) {
             return;
         }
-        cut_column_subtree(lines, left, width, height, out);
-        cut_column_subtree(lines, right, width, height, out);
+        cut_column_subtree(lines, left, width, height, depth, out);
+        cut_column_subtree(lines, right, width, height, depth, out);
         return;
     }
     let min_gap = (typical_line_height_idx(lines, spanning) * REGION_BAND_GAP_FRAC).max(1.0);
@@ -2706,8 +2731,8 @@ fn emit_column_cut(
         let mut bands = bands.into_iter();
         for (left_row, right_row) in left_rows.iter().zip(&right_rows) {
             if !emit_label_value_rows(lines, left_row, right_row, out) {
-                cut_column_subtree(lines, left_row, width, height, out);
-                cut_column_subtree(lines, right_row, width, height, out);
+                cut_column_subtree(lines, left_row, width, height, depth, out);
+                cut_column_subtree(lines, right_row, width, height, depth, out);
             }
             if let Some(band) = bands.next() {
                 out.push(band);
@@ -2730,9 +2755,9 @@ fn emit_column_cut(
                 below.push(band);
             }
         }
-        cut_column_subtree(lines, left, width, height, out);
+        cut_column_subtree(lines, left, width, height, depth, out);
         out.extend(middle);
-        cut_column_subtree(lines, right, width, height, out);
+        cut_column_subtree(lines, right, width, height, depth, out);
         out.extend(below);
     }
 }
@@ -2897,9 +2922,10 @@ fn cut_column_subtree(
     idxs: &[usize],
     width: f64,
     height: f64,
+    depth: u32,
     out: &mut Vec<Vec<usize>>,
 ) {
-    if idxs.len() <= 1 {
+    if idxs.len() <= 1 || depth >= MAX_XY_CUT_DEPTH {
         if !idxs.is_empty() {
             out.push(idxs.to_vec());
         }
@@ -2907,7 +2933,16 @@ fn cut_column_subtree(
     }
     let typ_h = typical_line_height_idx(lines, idxs);
     if let Some((_, left, right, spanning)) = find_column_cut(lines, idxs, typ_h) {
-        emit_column_cut(lines, &left, &right, &spanning, width, height, out);
+        emit_column_cut(
+            lines,
+            &left,
+            &right,
+            &spanning,
+            width,
+            height,
+            depth + 1,
+            out,
+        );
     } else {
         out.push(idxs.to_vec());
     }

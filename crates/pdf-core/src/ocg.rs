@@ -393,7 +393,12 @@ pub fn get_ocmd(doc: &DocumentStore, xref: u32) -> Result<OcmdInfo> {
         .resolve_dict_key(d, &Name::new("VE"))
         .ok()
         .flatten()
-        .and_then(|o| o.as_array().map(|a| parse_ve(doc, a, 0)));
+        .and_then(|o| {
+            o.as_array().map(|a| {
+                let mut budget = MAX_VE_NODES;
+                parse_ve(doc, a, 0, &mut budget)
+            })
+        });
     Ok(OcmdInfo {
         xref,
         ocgs: ocmd_ocgs(doc, d),
@@ -503,7 +508,8 @@ impl OcVisibility {
     fn ocmd_hidden(&self, doc: &DocumentStore, d: &Dict, depth: u32) -> bool {
         if let Ok(Some(ve)) = doc.resolve_dict_key(d, &Name::new("VE")) {
             if let Some(arr) = ve.as_array() {
-                return !self.eval_ve(doc, arr, depth + 1);
+                let budget = std::cell::Cell::new(MAX_VE_NODES);
+                return !self.eval_ve(doc, arr, depth + 1, &budget);
             }
         }
         let ocgs = ocmd_ocgs(doc, d).unwrap_or_default();
@@ -524,11 +530,19 @@ impl OcVisibility {
     }
 
     /// Evaluates a `/VE` array to its visibility (`true` = visible). Malformed
-    /// nodes evaluate to visible.
-    fn eval_ve(&self, doc: &DocumentStore, arr: &[Object], depth: u32) -> bool {
-        if depth > MAX_VE_DEPTH {
+    /// nodes evaluate to visible. `budget` counts the nodes still allowed in
+    /// this expression ([`MAX_VE_NODES`]); an exhausted budget is malformed.
+    fn eval_ve(
+        &self,
+        doc: &DocumentStore,
+        arr: &[Object],
+        depth: u32,
+        budget: &std::cell::Cell<u32>,
+    ) -> bool {
+        if depth > MAX_VE_DEPTH || budget.get() == 0 {
             return true;
         }
+        budget.set(budget.get() - 1);
         let Some(op) = arr.first().and_then(Object::as_name) else {
             return true;
         };
@@ -536,12 +550,12 @@ impl OcVisibility {
             match o {
                 Object::Reference(r) => match doc.resolve(*r).ok() {
                     Some(obj) => match obj.as_array() {
-                        Some(nested) => self.eval_ve(doc, nested, depth + 1),
+                        Some(nested) => self.eval_ve(doc, nested, depth + 1, budget),
                         None => !self.hidden.contains(&r.num),
                     },
                     None => true,
                 },
-                Object::Array(nested) => self.eval_ve(doc, nested, depth + 1),
+                Object::Array(nested) => self.eval_ve(doc, nested, depth + 1, budget),
                 _ => true,
             }
         };
@@ -556,6 +570,11 @@ impl OcVisibility {
 
 /// Nesting cap for `/VE` / OCMD evaluation and parsing (defensive).
 const MAX_VE_DEPTH: u32 = 32;
+
+/// Node cap for one `/VE` expression. Operands may be references, so a shared
+/// sub-expression (a DAG) would otherwise be re-walked exponentially within
+/// [`MAX_VE_DEPTH`]; real expressions have a handful of nodes.
+const MAX_VE_NODES: u32 = 1024;
 
 // --- internal helpers -----------------------------------------------------
 
@@ -612,24 +631,27 @@ fn ocmd_ocgs(doc: &DocumentStore, d: &Dict) -> Option<Vec<u32>> {
 }
 
 /// Parses a `/VE` array into a [`VeExpr`] (unknown operands are dropped).
-fn parse_ve(doc: &DocumentStore, arr: &[Object], depth: u32) -> VeExpr {
+/// `budget` counts the nodes still allowed ([`MAX_VE_NODES`]); once exhausted,
+/// further operator nodes are emitted without operands.
+fn parse_ve(doc: &DocumentStore, arr: &[Object], depth: u32, budget: &mut u32) -> VeExpr {
     let op = arr
         .first()
         .and_then(Object::as_name)
         .map(name_string)
         .unwrap_or_default();
     let mut args = Vec::new();
-    if depth <= MAX_VE_DEPTH {
+    if depth <= MAX_VE_DEPTH && *budget > 0 {
+        *budget -= 1;
         for item in arr.iter().skip(1) {
             match item {
                 Object::Reference(r) => match doc.resolve(*r).ok() {
                     Some(obj) if obj.as_array().is_some() => {
                         let nested = obj.as_array().unwrap_or(&[]);
-                        args.push(parse_ve(doc, nested, depth + 1));
+                        args.push(parse_ve(doc, nested, depth + 1, budget));
                     }
                     _ => args.push(VeExpr::Ocg(r.num)),
                 },
-                Object::Array(nested) => args.push(parse_ve(doc, nested, depth + 1)),
+                Object::Array(nested) => args.push(parse_ve(doc, nested, depth + 1, budget)),
                 _ => {}
             }
         }

@@ -177,7 +177,23 @@ struct Interp<'a, 'b> {
     in_flex: bool,
     /// Recursion / step guard against malformed subrs.
     steps: u32,
+    /// Current `callsubr` nesting depth (bounded by [`MAX_SUBR_DEPTH`]).
+    subr_depth: u32,
+    /// `seac` composition nesting depth of this interpreter (bounded by
+    /// [`MAX_SEAC_DEPTH`]).
+    seac_depth: u32,
 }
+
+/// Maximum `callsubr` nesting. The Type 1 spec allows 10 levels; the step guard
+/// alone does not bound recursion depth (a self-calling subr recurses once per
+/// two steps, i.e. ~100k frames), so the depth is capped separately with ample
+/// headroom over the spec.
+const MAX_SUBR_DEPTH: u32 = 64;
+
+/// Maximum `seac` nesting. The spec forbids accented base/accent components;
+/// a self-referencing `seac` would otherwise recurse without bound (each
+/// component runs in a fresh interpreter, resetting the step guard).
+const MAX_SEAC_DEPTH: u32 = 4;
 
 impl<'a, 'b> Interp<'a, 'b> {
     fn new(font: &'a Type1Font, builder: &'b mut dyn OutlineBuilder) -> Self {
@@ -194,6 +210,8 @@ impl<'a, 'b> Interp<'a, 'b> {
             flex_pts: Vec::with_capacity(8),
             in_flex: false,
             steps: 0,
+            subr_depth: 0,
+            seac_depth: 0,
         }
     }
 
@@ -340,8 +358,14 @@ impl<'a, 'b> Interp<'a, 'b> {
                     .ok()
                     .and_then(|u| self.font.subrs.get(u))
                 {
+                    if self.subr_depth >= MAX_SUBR_DEPTH {
+                        return Flow::Stop; // runaway / self-calling subr.
+                    }
                     let sub = sub.clone();
-                    if matches!(self.run(&sub), Flow::Stop) {
+                    self.subr_depth += 1;
+                    let flow = self.run(&sub);
+                    self.subr_depth -= 1;
+                    if matches!(flow, Flow::Stop) {
                         return Flow::Stop;
                     }
                 }
@@ -534,10 +558,14 @@ impl<'a, 'b> Interp<'a, 'b> {
             self.builder.close();
             self.open = false;
         }
+        if self.seac_depth >= MAX_SEAC_DEPTH {
+            return; // self-referencing accented component.
+        }
         let base_sbx = self.sbx;
         if let Some(base) = self.font.charstring_by_std_code(bchar) {
             let base = base.to_vec();
             let mut sub = Interp::new(self.font, self.builder);
+            sub.seac_depth = self.seac_depth + 1;
             sub.run(&base);
             if sub.open {
                 sub.builder.close();
@@ -554,6 +582,7 @@ impl<'a, 'b> Interp<'a, 'b> {
                 dy: ady,
             };
             let mut exec = Interp::new(self.font, &mut sub);
+            exec.seac_depth = self.seac_depth + 1;
             exec.run(&acc);
             if exec.open {
                 exec.builder.close();
@@ -1268,5 +1297,154 @@ mod tests {
         assert_eq!(font.glyph_for_code(0x41), None);
         // The glyph is still reachable by name (the normal path).
         assert!(font.glyph_for_name("A").is_some());
+    }
+
+    /// Like [`build_type1`] but with a populated `/Subrs` array.
+    fn build_type1_with_subrs(glyphs: &[(&str, Vec<u8>)], subrs: &[Vec<u8>]) -> Vec<u8> {
+        let mut table = format!("/Subrs {} array\n", subrs.len()).into_bytes();
+        for (i, sub) in subrs.iter().enumerate() {
+            let enc = encrypt_cs(sub, 4);
+            table.extend_from_slice(format!("dup {i} {} RD ", enc.len()).as_bytes());
+            table.extend_from_slice(&enc);
+            table.extend_from_slice(b" NP\n");
+        }
+        // Re-encrypt the private dict with the populated table spliced in.
+        let base = build_type1(glyphs);
+        let marker = b"currentfile eexec\n";
+        let pos = super::find(&base, marker).expect("eexec marker") + marker.len();
+        let end = super::find(&base, b"\n0000000000000000\ncleartomark").expect("trailer");
+        let mut clear = eexec_decrypt_for_test(&base[pos..end]);
+        let at = super::find(&clear, b"/Subrs 0 array\n").expect("empty subrs");
+        clear.splice(at..at + b"/Subrs 0 array\n".len(), table);
+        let mut out = base[..pos].to_vec();
+        out.extend_from_slice(&encrypt(&clear, EEXEC_R));
+        out.extend_from_slice(&base[end..]);
+        out
+    }
+
+    /// The plaintext (lead bytes kept) of an eexec section — the inverse of
+    /// [`encrypt`] with `EEXEC_R`.
+    fn eexec_decrypt_for_test(cipher: &[u8]) -> Vec<u8> {
+        let mut r = EEXEC_R;
+        cipher
+            .iter()
+            .map(|&c| {
+                let p = c ^ (r >> 8) as u8;
+                r = (u16::from(c).wrapping_add(r))
+                    .wrapping_mul(C1)
+                    .wrapping_add(C2);
+                p
+            })
+            .collect()
+    }
+
+    /// Runs `body` in a child copy of the test binary on a 2 MiB-stack thread,
+    /// so a stack overflow (a process abort) fails the test instead of taking
+    /// the harness down.
+    fn in_child(test_name: &str, body: fn()) {
+        const CHILD_ENV: &str = "PDFSPINE_TYPE1_CHILD";
+        if std::env::var(CHILD_ENV).as_deref() == Ok(test_name) {
+            std::thread::Builder::new()
+                .stack_size(2 * 1024 * 1024)
+                .spawn(body)
+                .expect("spawn child thread")
+                .join()
+                .expect("child body panicked");
+            return;
+        }
+        let out = std::process::Command::new(std::env::current_exe().expect("current exe"))
+            .args([test_name, "--exact", "--nocapture", "--test-threads=1"])
+            .env(CHILD_ENV, test_name)
+            .output()
+            .expect("spawn child test process");
+        assert!(
+            out.status.success(),
+            "child `{test_name}` failed ({:?}):\n{}",
+            out.status,
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+
+    /// A glyph that only calls subr #0 (after `hsbw`), then `endchar`.
+    fn calls_subr0() -> Vec<u8> {
+        let mut cs = Vec::new();
+        enc_int(&mut cs, 0);
+        enc_int(&mut cs, 500);
+        cs.push(13); // hsbw
+        enc_int(&mut cs, 0);
+        cs.push(10); // callsubr 0
+        cs.push(14); // endchar
+        cs
+    }
+
+    /// A subr that draws a box and returns.
+    fn box_subr() -> Vec<u8> {
+        let mut cs = Vec::new();
+        enc_int(&mut cs, 0);
+        enc_int(&mut cs, 0);
+        cs.push(21); // rmoveto
+        enc_int(&mut cs, 300);
+        enc_int(&mut cs, 0);
+        cs.push(5); // rlineto
+        enc_int(&mut cs, 0);
+        enc_int(&mut cs, 300);
+        cs.push(5); // rlineto
+        cs.push(9); // closepath
+        cs.push(11); // return
+        cs
+    }
+
+    /// A subr that calls itself forever stops at the nesting cap instead of
+    /// recursing ~100k frames (the step guard alone) and overflowing the stack.
+    #[test]
+    fn type1_self_calling_subr_terminates() {
+        in_child("type1::tests::type1_self_calling_subr_terminates", || {
+            let mut forever = Vec::new();
+            enc_int(&mut forever, 0);
+            forever.push(10); // callsubr 0 (itself)
+            let prog = build_type1_with_subrs(&[("A", calls_subr0())], &[forever]);
+            let font = Type1Font::parse(&prog).expect("parse");
+            let gid = font.glyph_for_name("A").expect("glyph A");
+            let _ = font.outline(gid, &mut CountBuilder::default());
+        });
+    }
+
+    /// Ordinary nested subrs (glyph → subr 0 → subr 1) still draw.
+    #[test]
+    fn type1_nested_subrs_still_draw() {
+        let mut call1 = Vec::new();
+        enc_int(&mut call1, 1);
+        call1.push(10); // callsubr 1
+        call1.push(11); // return
+        let prog = build_type1_with_subrs(&[("A", calls_subr0())], &[call1, box_subr()]);
+        let font = Type1Font::parse(&prog).expect("parse");
+        let gid = font.glyph_for_name("A").expect("glyph A");
+        let mut b = CountBuilder::default();
+        assert!(font.outline(gid, &mut b));
+        assert!(b.drawn());
+    }
+
+    /// A `seac` whose base component is the glyph itself stops at the seac
+    /// nesting cap (each component runs in a fresh interpreter, so the step
+    /// guard never trips).
+    #[test]
+    fn type1_self_referencing_seac_terminates() {
+        in_child(
+            "type1::tests::type1_self_referencing_seac_terminates",
+            || {
+                let mut comp = Vec::new();
+                enc_int(&mut comp, 0);
+                enc_int(&mut comp, 500);
+                comp.push(13); // hsbw
+                for v in [0, 0, 0, 0x41, 0x41] {
+                    enc_int(&mut comp, v); // asb adx ady bchar achar ('A' = itself)
+                }
+                comp.extend_from_slice(&[12, 6]); // seac
+                let prog = build_type1(&[("A", comp)]);
+                let font = Type1Font::parse(&prog).expect("parse");
+                let gid = font.glyph_for_name("A").expect("glyph A");
+                let _ = font.outline(gid, &mut CountBuilder::default());
+            },
+        );
     }
 }

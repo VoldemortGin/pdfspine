@@ -10,7 +10,14 @@
 //! lexer error it skips one byte and resyncs (PRD §8.1).
 
 use pdf_core::lexer::{Keyword, Lexer, Token};
-use pdf_core::Object;
+use pdf_core::{Limits, Object};
+
+/// Maximum operand array/dict nesting depth. Operand collection is recursive,
+/// so an unbounded run of `[` / `<<` would recurse once per byte and overflow
+/// the stack. Real content nests a couple of levels (a `TJ` array, a `BDC`
+/// property dict); this shares the object parser's pinned
+/// [`Limits::max_recursion_depth`] default (PRD §9.6.2).
+const MAX_OPERAND_NESTING: u32 = Limits::DEFAULT.max_recursion_depth;
 
 /// One parsed content event, in postfix order.
 #[derive(Clone, Debug, PartialEq)]
@@ -42,6 +49,9 @@ pub enum TokenIssueKind {
     UnterminatedDictionary,
     /// A dictionary key had no operand value.
     MissingDictionaryValue,
+    /// An operand array/dict nested deeper than the tokenizer's cap; the whole
+    /// over-deep operand was skipped.
+    NestingTooDeep,
 }
 
 /// One bounded tokenizer recovery, at a byte offset in the decoded content.
@@ -109,11 +119,11 @@ pub fn tokenize_audited(content: &[u8]) -> TokenizedContent {
             }
             Token::Name(n) => events.push(Event::Operand(Object::Name(name_from(n)))),
             Token::ArrayOpen => {
-                let arr = collect_array(&mut lexer, &mut issues);
+                let arr = collect_array(&mut lexer, &mut issues, 1);
                 events.push(Event::Operand(Object::Array(arr)));
             }
             Token::DictOpen => {
-                let d = collect_dict(&mut lexer, &mut issues);
+                let d = collect_dict(&mut lexer, &mut issues, 1);
                 events.push(Event::Operand(Object::Dictionary(d)));
             }
             // Stray closers: ignore (resync).
@@ -141,7 +151,10 @@ pub fn tokenize_audited(content: &[u8]) -> TokenizedContent {
 
 /// Collects array elements until `]` / EOF (operands only; nested arrays/dicts
 /// supported). Tolerant: stray operators inside an array are dropped.
-fn collect_array(lexer: &mut Lexer, issues: &mut Vec<TokenIssue>) -> Vec<Object> {
+///
+/// `depth` is this array's nesting level (1 for a top-level operand); a nested
+/// array/dict beyond [`MAX_OPERAND_NESTING`] is skipped whole.
+fn collect_array(lexer: &mut Lexer, issues: &mut Vec<TokenIssue>, depth: u32) -> Vec<Object> {
     let mut out = Vec::new();
     loop {
         let before = lexer.offset();
@@ -175,8 +188,13 @@ fn collect_array(lexer: &mut Lexer, issues: &mut Vec<TokenIssue>) -> Vec<Object>
                 out.push(Object::String(pdf_core::PdfString::literal(b)))
             }
             Token::Name(n) => out.push(Object::Name(name_from(n))),
-            Token::ArrayOpen => out.push(Object::Array(collect_array(lexer, issues))),
-            Token::DictOpen => out.push(Object::Dictionary(collect_dict(lexer, issues))),
+            Token::ArrayOpen | Token::DictOpen if depth >= MAX_OPERAND_NESTING => {
+                skip_nested(lexer, issues, before);
+            }
+            Token::ArrayOpen => out.push(Object::Array(collect_array(lexer, issues, depth + 1))),
+            Token::DictOpen => {
+                out.push(Object::Dictionary(collect_dict(lexer, issues, depth + 1)));
+            }
             Token::Keyword(Keyword::True) => out.push(Object::Boolean(true)),
             Token::Keyword(Keyword::False) => out.push(Object::Boolean(false)),
             Token::Keyword(Keyword::Null) => out.push(Object::Null),
@@ -191,7 +209,8 @@ fn collect_array(lexer: &mut Lexer, issues: &mut Vec<TokenIssue>) -> Vec<Object>
 }
 
 /// Collects a `<< … >>` dictionary's key/value pairs until `>>` / EOF.
-fn collect_dict(lexer: &mut Lexer, issues: &mut Vec<TokenIssue>) -> pdf_core::Dict {
+/// `depth` is this dictionary's nesting level (see [`collect_array`]).
+fn collect_dict(lexer: &mut Lexer, issues: &mut Vec<TokenIssue>, depth: u32) -> pdf_core::Dict {
     let mut d = pdf_core::Dict::new();
     loop {
         // A key must be a name.
@@ -226,7 +245,7 @@ fn collect_dict(lexer: &mut Lexer, issues: &mut Vec<TokenIssue>) -> pdf_core::Di
         };
         let Some(key) = key else { break };
         // The value is one object.
-        let Some(val) = read_value(lexer, issues) else {
+        let Some(val) = read_value(lexer, issues, depth) else {
             issues.push(TokenIssue {
                 offset: lexer.offset(),
                 kind: TokenIssueKind::MissingDictionaryValue,
@@ -238,8 +257,9 @@ fn collect_dict(lexer: &mut Lexer, issues: &mut Vec<TokenIssue>) -> pdf_core::Di
     d
 }
 
-/// Reads a single operand value (used for dict values).
-fn read_value(lexer: &mut Lexer, issues: &mut Vec<TokenIssue>) -> Option<Object> {
+/// Reads a single operand value (used for dict values). `depth` is the nesting
+/// level of the container the value sits in (0 for an inline-image parameter).
+fn read_value(lexer: &mut Lexer, issues: &mut Vec<TokenIssue>, depth: u32) -> Option<Object> {
     loop {
         let before = lexer.offset();
         let tok = match lexer.next_token() {
@@ -264,8 +284,12 @@ fn read_value(lexer: &mut Lexer, issues: &mut Vec<TokenIssue>) -> Option<Object>
                 Object::String(pdf_core::PdfString::literal(b))
             }
             Token::Name(n) => Object::Name(name_from(n)),
-            Token::ArrayOpen => Object::Array(collect_array(lexer, issues)),
-            Token::DictOpen => Object::Dictionary(collect_dict(lexer, issues)),
+            Token::ArrayOpen | Token::DictOpen if depth >= MAX_OPERAND_NESTING => {
+                skip_nested(lexer, issues, before);
+                Object::Null
+            }
+            Token::ArrayOpen => Object::Array(collect_array(lexer, issues, depth + 1)),
+            Token::DictOpen => Object::Dictionary(collect_dict(lexer, issues, depth + 1)),
             Token::Keyword(Keyword::True) => Object::Boolean(true),
             Token::Keyword(Keyword::False) => Object::Boolean(false),
             Token::Keyword(Keyword::Null) => Object::Null,
@@ -278,6 +302,33 @@ fn read_value(lexer: &mut Lexer, issues: &mut Vec<TokenIssue>) -> Option<Object>
                 Object::Null
             }
         });
+    }
+}
+
+/// Skips one over-deep operand whose opening `[` / `<<` was just consumed at
+/// `offset`: consumes tokens **iteratively** (no recursion) until the matching
+/// closer or EOF, and records a [`TokenIssueKind::NestingTooDeep`] issue.
+fn skip_nested(lexer: &mut Lexer, issues: &mut Vec<TokenIssue>, offset: usize) {
+    issues.push(TokenIssue {
+        offset,
+        kind: TokenIssueKind::NestingTooDeep,
+    });
+    let mut open = 1usize;
+    while open > 0 {
+        let before = lexer.offset();
+        match lexer.next_token() {
+            Ok(Token::ArrayOpen | Token::DictOpen) => open += 1,
+            Ok(Token::ArrayClose | Token::DictClose) => open -= 1,
+            Ok(Token::Eof) => break,
+            Ok(_) => {}
+            Err(_) => {
+                let next = lexer.offset().max(before).saturating_add(1);
+                lexer.seek(next);
+                if next >= lexer.buffer().len() {
+                    break;
+                }
+            }
+        }
     }
 }
 
@@ -325,7 +376,7 @@ fn parse_inline_image(lexer: &mut Lexer, issues: &mut Vec<TokenIssue>) -> Event 
             }
             Token::Name(n) => {
                 let key = name_from(n);
-                let val = read_value(lexer, issues).unwrap_or(Object::Null);
+                let val = read_value(lexer, issues, 0).unwrap_or(Object::Null);
                 params.insert(key, val);
             }
             // Anything else before `ID`: tolerate / skip.

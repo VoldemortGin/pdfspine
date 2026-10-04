@@ -433,14 +433,15 @@ impl DocumentStore {
     fn load_encrypt_object(
         source: &Source,
         xref: &XrefTable,
-        _limits: &Limits,
+        limits: &Limits,
         num: u32,
     ) -> Option<Object> {
         let XrefEntry::Uncompressed { offset, .. } = xref.get(num)? else {
             return None; // /Encrypt is never inside an ObjStm
         };
         let tail = source.slice_from(offset).ok()?;
-        let mut parser = Parser::from_lexer(Lexer::new(tail));
+        let mut parser =
+            Parser::from_lexer(Lexer::new(tail)).with_max_depth(limits.max_recursion_depth);
         let (_r, obj) = parser.parse_indirect_object().ok()?;
         Some(obj)
     }
@@ -1452,7 +1453,8 @@ impl DocumentStore {
     /// the decode pipeline is unchanged.
     fn load_uncompressed(&self, num: u32, offset: usize) -> Result<Object> {
         let tail = self.source.slice_from(offset)?;
-        let mut parser = Parser::from_lexer(Lexer::new(tail));
+        let mut parser =
+            Parser::from_lexer(Lexer::new(tail)).with_max_depth(self.limits.max_recursion_depth);
         let (r, obj) = parser
             .parse_indirect_object()
             .map_err(|_| Error::xref(offset, "malformed object at xref offset"))?;

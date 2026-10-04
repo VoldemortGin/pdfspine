@@ -327,7 +327,13 @@ fn collect_pairs(doc: &DocumentStore) -> Vec<(Vec<u8>, ObjRef)> {
     let Some(root) = embeddedfiles_root(doc) else {
         return out;
     };
-    collect_node(doc, &root, 0, &mut out);
+    collect_node(
+        doc,
+        &root,
+        0,
+        &mut std::collections::HashSet::new(),
+        &mut out,
+    );
     out
 }
 
@@ -345,6 +351,7 @@ fn collect_node(
     doc: &DocumentStore,
     node: &Object,
     depth: usize,
+    visited: &mut std::collections::HashSet<u32>,
     out: &mut Vec<(Vec<u8>, ObjRef)>,
 ) {
     if depth > 50 {
@@ -373,8 +380,12 @@ fn collect_node(
         let kids = deref(doc, kids);
         if let Some(arr) = kids.as_array() {
             for kid in arr {
+                // Skip a kid already walked (cycle / shared subtree).
+                if kid.as_reference().is_some_and(|r| !visited.insert(r.num)) {
+                    continue;
+                }
                 let kid = deref(doc, kid);
-                collect_node(doc, &kid, depth + 1, out);
+                collect_node(doc, &kid, depth + 1, visited, out);
             }
         }
     }
